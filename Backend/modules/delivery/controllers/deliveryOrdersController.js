@@ -2194,8 +2194,11 @@ export const completeDelivery = asyncHandler(async (req, res) => {
     let restaurantWalletTransaction = null;
     let adminCommissionRecord = null;
     try {
-      // Get order total amount (subtotal, excluding delivery fee and tax for commission calculation)
-      const orderTotal = order.pricing?.subtotal || order.pricing?.total || 0;
+      // Get food price for commission calculation:
+      // use subtotal (food amount) minus discount, and do NOT include delivery fee, tax or platform fee
+      const subtotal = order.pricing?.subtotal || order.pricing?.total || 0;
+      const discount = order.pricing?.discount || 0;
+      const foodPrice = Math.max(0, subtotal - discount);
 
       // Find restaurant by restaurantId (can be string or ObjectId)
       let restaurant = null;
@@ -2216,16 +2219,16 @@ export const completeDelivery = asyncHandler(async (req, res) => {
         const commissionResult =
           await RestaurantCommission.calculateCommissionForOrder(
             restaurant._id,
-            orderTotal,
+            foodPrice,
           );
 
         const commissionAmount = commissionResult.commission || 0;
-        const restaurantEarning = orderTotal - commissionAmount;
+        const restaurantEarning = foodPrice - commissionAmount;
 
         console.log(
           `💰 Restaurant commission calculation for order ${orderIdForLog}:`,
           {
-            orderTotal: orderTotal,
+            foodPrice,
             commissionPercentage: commissionResult.value,
             commissionAmount: commissionAmount,
             restaurantEarning: restaurantEarning,
@@ -2256,7 +2259,7 @@ export const completeDelivery = asyncHandler(async (req, res) => {
               amount: restaurantEarning,
               type: "payment",
               status: "Completed",
-              description: `Order #${orderIdForLog} - Amount: ₹${orderTotal.toFixed(2)}, Commission: ₹${commissionAmount.toFixed(2)}`,
+              description: `Order #${orderIdForLog} - Food: ₹${foodPrice.toFixed(2)}, Commission: ₹${commissionAmount.toFixed(2)}`,
               orderId: orderMongoId || order._id,
             });
 

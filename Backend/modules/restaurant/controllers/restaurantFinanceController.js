@@ -54,78 +54,24 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
       ]
     };
 
-    // Get commission setup for restaurant
+    // Get commission setup for restaurant using the central commission engine
     let restaurantCommission = null;
     try {
       restaurantCommission = await RestaurantCommission.findOne({
         restaurant: restaurantId,
         status: true
-      }).lean();
+      });
     } catch (commissionError) {
       console.warn('⚠️ Could not fetch commission setup:', commissionError.message);
     }
 
-    // Helper function to calculate commission for an order
-    const calculateCommissionForOrder = (orderAmount) => {
-      if (!restaurantCommission || !restaurantCommission.status) {
-        // Default 10% if no commission setup
-        return {
-          commission: (orderAmount * 10) / 100,
-          type: 'percentage',
-          value: 10
-        };
+    // Helper to calculate commission for an order amount, always delegating to RestaurantCommission logic
+    const calculateCommissionForOrder = async (orderAmount) => {
+      if (restaurantCommission) {
+        return restaurantCommission.calculateCommission(orderAmount);
       }
-
-      // Find matching commission rule
-      const sortedRules = [...(restaurantCommission.commissionRules || [])]
-        .filter(rule => rule.isActive)
-        .sort((a, b) => {
-          if (b.priority !== a.priority) {
-            return b.priority - a.priority;
-          }
-          return a.minOrderAmount - b.minOrderAmount;
-        });
-
-      let matchingRule = null;
-      for (const rule of sortedRules) {
-        if (orderAmount >= rule.minOrderAmount) {
-          if (rule.maxOrderAmount === null || orderAmount <= rule.maxOrderAmount) {
-            matchingRule = rule;
-            break;
-          }
-        }
-      }
-
-      let commission = 0;
-      let commissionType = 'percentage';
-      let commissionValue = 10;
-
-      if (matchingRule) {
-        commissionType = matchingRule.type;
-        commissionValue = matchingRule.value;
-        if (matchingRule.type === 'percentage') {
-          commission = (orderAmount * matchingRule.value) / 100;
-        } else {
-          commission = matchingRule.value;
-        }
-      } else if (restaurantCommission.defaultCommission) {
-        commissionType = restaurantCommission.defaultCommission.type || 'percentage';
-        commissionValue = restaurantCommission.defaultCommission.value || 10;
-        if (commissionType === 'percentage') {
-          commission = (orderAmount * commissionValue) / 100;
-        } else {
-          commission = commissionValue;
-        }
-      } else {
-        // Default 10%
-        commission = (orderAmount * 10) / 100;
-      }
-
-      return {
-        commission: Math.round(commission * 100) / 100,
-        type: commissionType,
-        value: commissionValue
-      };
+      // Falls back to model static which itself uses defaultCommission or 10%
+      return RestaurantCommission.calculateCommissionForOrder(restaurantId, orderAmount);
     };
 
     // Get current cycle orders (delivered orders in current week)
@@ -206,7 +152,7 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
     const currentCycleOrdersData = await Promise.all(currentCycleOrders.map(async (order) => {
       // Food price = subtotal - discount (this is what commission is calculated on)
       const foodPrice = (order.pricing?.subtotal || 0) - (order.pricing?.discount || 0);
-      const commissionData = calculateCommissionForOrder(foodPrice);
+      const commissionData = await calculateCommissionForOrder(foodPrice);
       const payout = foodPrice - commissionData.commission;
       
       currentCycleTotal += foodPrice; // Use food price, not total
@@ -390,7 +336,7 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
       const pastCycleOrdersData = await Promise.all(pastCycleOrders.map(async (order) => {
         // Food price = subtotal - discount (this is what commission is calculated on)
         const foodPrice = (order.pricing?.subtotal || 0) - (order.pricing?.discount || 0);
-        const commissionData = calculateCommissionForOrder(foodPrice);
+        const commissionData = await calculateCommissionForOrder(foodPrice);
         const payout = foodPrice - commissionData.commission;
         
         pastCycleTotal += foodPrice; // Use food price, not total
