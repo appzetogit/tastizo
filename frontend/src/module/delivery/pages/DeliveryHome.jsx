@@ -617,8 +617,20 @@ export default function DeliveryHome() {
   const [customerReviewText, setCustomerReviewText] = useState("")
   const [orderEarnings, setOrderEarnings] = useState(0) // Store earnings from completed order
   const [routePolyline, setRoutePolyline] = useState([])
-   const [showRoutePath, setShowRoutePath] = useState(false) // Toggle to show/hide route path - disabled by default
-   const [directionsResponse, setDirectionsResponse] = useState(null) // Directions API response for road-based routing
+  const [showRoutePath, setShowRoutePath] = useState(false) // Toggle to show/hide route path - disabled by default
+  const [directionsResponse, setDirectionsResponse] = useState(null) // Directions API response for road-based routing
+
+  // Reset per-order earnings whenever the active order changes
+  useEffect(() => {
+    if (!selectedRestaurant) {
+      setOrderEarnings(0)
+      return
+    }
+    const key = selectedRestaurant.id || selectedRestaurant.orderId
+    if (key) {
+      setOrderEarnings(0)
+    }
+  }, [selectedRestaurant?.id, selectedRestaurant?.orderId])
   const [reachedPickupButtonProgress, setreachedPickupButtonProgress] = useState(0)
   const [reachedPickupIsAnimatingToComplete, setreachedPickupIsAnimatingToComplete] = useState(false)
   const reachedPickupButtonRef = useRef(null)
@@ -3675,12 +3687,15 @@ export default function DeliveryHome() {
                       deliveryTime: deliveryDuration
                     });
                     
-                    setDirectionsResponse(directionsResult)
-                    directionsResponseRef.current = directionsResult
+                    // Clear pickup route state so polyline shows delivery route only
+                    setRoutePolyline([]);
+                    fullRoutePolylineRef.current = [];
+                    setDirectionsResponse(directionsResult);
+                    directionsResponseRef.current = directionsResult;
 
                     // Initialize / update live tracking polyline for customer delivery route
-                    updateLiveTrackingPolyline(directionsResult, currentLocation)
-                    console.log('✅ Live tracking polyline initialized for customer delivery route')
+                    updateLiveTrackingPolyline(directionsResult, currentLocation);
+                    console.log('✅ Live tracking polyline initialized for customer delivery route');
 
                     // Show route polyline on main Feed map
                     if (window.deliveryMapInstance && window.google?.maps) {
@@ -6310,6 +6325,7 @@ export default function DeliveryHome() {
         }
 
         // Verify order still exists in database before restoring
+        let order = null;
         try {
           console.log('🔍 Verifying order exists in database:', orderId);
           const orderResponse = await deliveryAPI.getOrderDetails(orderId);
@@ -6321,7 +6337,7 @@ export default function DeliveryHome() {
             return;
           }
 
-          const order = orderResponse.data.data;
+          order = orderResponse.data.data;
           
           // Check if order is cancelled or deleted
           if (order.status === 'cancelled' || order.status === 'delivered') {
@@ -6357,9 +6373,35 @@ export default function DeliveryHome() {
           return;
         }
 
-        // Restore selectedRestaurant state
-        if (activeOrderData.restaurantInfo) {
-          setSelectedRestaurant(activeOrderData.restaurantInfo);
+        // Determine current delivery phase and destination from API order (single source of truth)
+        let restaurantInfoToRestore = activeOrderData.restaurantInfo || {};
+        let destinationForRoute = { lat: restaurantInfoToRestore.lat, lng: restaurantInfoToRestore.lng };
+        if (order) {
+          const deliveryPhase = order.deliveryState?.currentPhase || order.deliveryState?.status || restaurantInfoToRestore.deliveryPhase || '';
+          const coords = order.address?.location?.coordinates; // GeoJSON: [lng, lat]
+          const customerLat = coords?.[1];
+          const customerLng = coords?.[0];
+          const isDeliveryPhase = order.status === 'out_for_delivery' ||
+            ['en_route_to_delivery', 'at_delivery', 'en_route_to_drop'].includes(deliveryPhase);
+          if (isDeliveryPhase && customerLat != null && customerLng != null) {
+            destinationForRoute = { lat: customerLat, lng: customerLng };
+            restaurantInfoToRestore = {
+              ...restaurantInfoToRestore,
+              deliveryPhase: deliveryPhase || 'en_route_to_delivery',
+              customerLat,
+              customerLng,
+              customerName: order.userId?.name || restaurantInfoToRestore.customerName,
+              customerAddress: order.address?.formattedAddress || restaurantInfoToRestore.customerAddress,
+            };
+            console.log('🗺️ Restoring in delivery phase – route to customer');
+          } else {
+            console.log('🗺️ Restoring in pickup phase – route to restaurant');
+          }
+        }
+
+        // Restore selectedRestaurant state (with merged delivery phase and customer coords when applicable)
+        if (restaurantInfoToRestore && Object.keys(restaurantInfoToRestore).length > 0) {
+          setSelectedRestaurant(restaurantInfoToRestore);
           console.log('✅ Restored selectedRestaurant from localStorage');
         }
 
@@ -6373,14 +6415,14 @@ export default function DeliveryHome() {
           console.log('🗺️ Map ready, restoring route...');
 
           // Recalculate route using Directions API (preferred) or use saved coordinates (fallback)
-          // Don't restore directionsResponse from localStorage - Google Maps objects can't be serialized
-          if (activeOrderData.restaurantInfo && activeOrderData.restaurantInfo.lat && activeOrderData.restaurantInfo.lng && riderLocation && riderLocation.length === 2) {
+          // Use destinationForRoute so we restore pickup route OR delivery route based on phase
+          if (activeOrderData.restaurantInfo && destinationForRoute.lat != null && destinationForRoute.lng != null && riderLocation && riderLocation.length === 2) {
             // Try to recalculate with Directions API first (if flag indicates we had Directions API before)
             if (activeOrderData.hasDirectionsAPI) {
-              console.log('🔄 Recalculating route with Directions API for restored order...');
+              console.log('🔄 Recalculating route with Directions API for restored order...', destinationForRoute);
               calculateRouteWithDirectionsAPI(
                 riderLocation,
-                { lat: activeOrderData.restaurantInfo.lat, lng: activeOrderData.restaurantInfo.lng }
+                destinationForRoute
               ).then(result => {
                 if (result && result.routes && result.routes.length > 0) {
                   setDirectionsResponse(result);
@@ -7182,6 +7224,9 @@ export default function DeliveryHome() {
         ).then(directionsResult => {
           if (directionsResult) {
             console.log('✅ Route to customer calculated after pickup');
+            // Clear pickup route state so polyline shows delivery route only
+            setRoutePolyline([]);
+            fullRoutePolylineRef.current = [];
             setDirectionsResponse(directionsResult);
             directionsResponseRef.current = directionsResult;
             
@@ -10522,9 +10567,31 @@ export default function DeliveryHome() {
                     if (response.data?.success) {
                       // Get updated earnings from response
                       // Note: completeDelivery API already adds earnings and COD cash collected to wallet
-                      const earnings = response.data.data?.earnings?.amount || 
-                                     response.data.data?.totalEarning ||
-                                     orderEarnings
+                      let earnings = response.data.data?.earnings?.amount
+                      if (earnings == null) {
+                        earnings = response.data.data?.totalEarning
+                      }
+                      // Fallback to estimated earnings from response
+                      if (earnings == null) {
+                        const backendEstimated = response.data.data?.estimatedEarnings
+                        if (typeof backendEstimated === 'object' && backendEstimated?.totalEarning != null) {
+                          earnings = Number(backendEstimated.totalEarning) || 0
+                        } else if (typeof backendEstimated === 'number') {
+                          earnings = Number(backendEstimated) || 0
+                        }
+                      }
+                      // Fallback to estimated earnings from current order state
+                      if (earnings == null) {
+                        const est = selectedRestaurant?.estimatedEarnings
+                        if (typeof est === 'object' && est?.totalEarning != null) {
+                          earnings = Number(est.totalEarning) || 0
+                        } else if (typeof est === 'number') {
+                          earnings = Number(est) || 0
+                        }
+                      }
+                      if (earnings == null) {
+                        earnings = 0
+                      }
                       setOrderEarnings(earnings)
                       
                       console.log('✅ Delivery completed and earnings added to wallet:', earnings)
@@ -10652,6 +10719,8 @@ export default function DeliveryHome() {
               <button
                 onClick={() => {
                   setShowPaymentPage(false)
+                  // Reset earnings so next order's payment page doesn't show this order's amount
+                  setOrderEarnings(0)
                   // CRITICAL: Clear all order-related popups and states when completing
                   setShowreachedPickupPopup(false)
                   setShowOrderIdConfirmationPopup(false)

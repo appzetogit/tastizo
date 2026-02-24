@@ -50,7 +50,9 @@ export const getWallet = asyncHandler(async (req, res) => {
       .reduce((sum, t) => sum + t.amount, 0);
 
     // Global cash limit and withdrawal limit (same for all delivery partners)
-    let totalCashLimit = 0;
+    // Use schema default 750 when deliveryCashLimit is missing so "Available cash limit" is not wrong (₹0)
+    const DEFAULT_CASH_LIMIT = 750;
+    let totalCashLimit = DEFAULT_CASH_LIMIT;
     let withdrawalLimit = 100;
     try {
       const settings = await BusinessSettings.getSettings();
@@ -63,7 +65,7 @@ export const getWallet = asyncHandler(async (req, res) => {
         withdrawalLimit = wl;
       }
     } catch (e) {
-      totalCashLimit = 0;
+      totalCashLimit = DEFAULT_CASH_LIMIT;
     }
 
     // ANYHOW FIX (end-to-end): compute COD cash collected from Orders so "Cash in hand" shows real amount.

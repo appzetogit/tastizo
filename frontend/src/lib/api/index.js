@@ -975,6 +975,18 @@ export const deliveryAPI = {
     return apiClient.get(endpoint);
   },
 
+  // Claim earning addon bonus (Earnings Guarantee) to add amount into Pocket balance
+  claimEarningAddon: (offerId) => {
+    const endpoint = API_ENDPOINTS.DELIVERY.EARNINGS_ACTIVE_OFFER_CLAIM.replace(
+      ":offerId",
+      offerId
+    );
+    if (import.meta.env.DEV) {
+      console.log("📡 Claiming earning addon bonus from:", endpoint);
+    }
+    return apiClient.post(endpoint);
+  },
+
   // Update location
   updateLocation: (latitude, longitude, isOnline = null) => {
     const payload = {

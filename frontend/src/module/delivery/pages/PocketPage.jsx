@@ -304,18 +304,25 @@ export default function PocketPage() {
   }
 
   // Earnings Guarantee - Use active earning addon if available, otherwise show 0
-  // When no offer is active, show 0 of 0 and ₹0
+  // Cap progress: show "5 of 5" not "7 of 5"; when achieved show full circle and earned amount (e.g. ₹50)
   const earningsGuaranteeTarget = activeEarningAddon?.earningAmount || 0
-  const earningsGuaranteeOrdersTarget = activeEarningAddon?.requiredOrders || 0
-  // Only show current orders/earnings if there's an active offer
-  const earningsGuaranteeCurrentOrders = activeEarningAddon ? (activeEarningAddon.currentOrders ?? weeklyOrders) : 0
-  // Show only bonus earnings from the offer, not total weekly earnings
-  const earningsGuaranteeCurrentEarnings = activeEarningAddon ? calculateBonusEarnings() : 0
+  const earningsGuaranteeOrdersTarget = activeEarningAddon?.requiredOrders || activeEarningAddon?.targetOrders || 0
+  const completedOrders = activeEarningAddon ? (activeEarningAddon.completedOrders ?? activeEarningAddon.currentOrders ?? weeklyOrders) : 0
+  // progressOrders = min(completed, target) so UI shows "5 of 5" not "7 of 5"
+  const progressOrders = activeEarningAddon
+    ? (activeEarningAddon.progressOrders ?? Math.min(completedOrders, earningsGuaranteeOrdersTarget || 0))
+    : 0
+  const isAchieved = activeEarningAddon?.isAchieved ?? (earningsGuaranteeOrdersTarget > 0 && completedOrders >= earningsGuaranteeOrdersTarget)
+  // When achieved: show guarantee amount (earnedAmount); otherwise show bonus already credited
+  const earningsGuaranteeCurrentEarnings = activeEarningAddon
+    ? (isAchieved ? (activeEarningAddon.earnedAmount ?? earningsGuaranteeTarget) : calculateBonusEarnings())
+    : 0
+  // Full circle when achieved; otherwise cap at 1
   const ordersProgress = earningsGuaranteeOrdersTarget > 0
-    ? Math.min(earningsGuaranteeCurrentOrders / earningsGuaranteeOrdersTarget, 1)
+    ? Math.min(progressOrders / earningsGuaranteeOrdersTarget, 1)
     : 0
   const earningsProgress = earningsGuaranteeTarget > 0
-    ? Math.min(earningsGuaranteeCurrentEarnings / earningsGuaranteeTarget, 1)
+    ? (isAchieved ? 1 : Math.min(earningsGuaranteeCurrentEarnings / earningsGuaranteeTarget, 1))
     : 0
 
   // Get week end date for valid till - use offer end date if available
@@ -337,35 +344,20 @@ export default function PocketPage() {
   const weekEndDate = getWeekEndDate()
   // Offer is live if it's valid (started) or upcoming (not started yet but active)
   const isOfferLive = activeEarningAddon?.isValid || activeEarningAddon?.isUpcoming || false
+  const canRedeem = !!(activeEarningAddon && activeEarningAddon.canRedeem)
 
   // Calculate total bonus amount from all bonus transactions
   const totalBonus = walletState?.transactions
     ?.filter(t => t.type === 'bonus' && t.status === 'Completed')
     .reduce((sum, t) => sum + (t.amount || 0), 0) || 0
 
-  // Pocket balance - shows total balance (includes bonus)
-  // Total balance = all earnings + bonus - withdrawals
-  // This is what delivery partner can withdraw
-  // IMPORTANT: Use walletState.pocketBalance if available (from API), otherwise use totalBalance
+  // Pocket balance = total available (all earnings + bonuses - withdrawals). Source: API.
+  // ₹150 "Earnings" = this week only; ₹175 "Pocket balance" = total (all time).
   let pocketBalance = walletState?.pocketBalance !== undefined
-    ? walletState.pocketBalance
-    : (walletState?.totalBalance || balances.totalBalance || 0)
-
-  // IMPORTANT: Ensure pocket balance includes bonus
-  // If backend totalBalance is 0 but we have bonus, calculate it manually
-  // This ensures bonus is always reflected in pocket balance
+    ? Number(walletState.pocketBalance)
+    : Number(walletState?.totalBalance ?? balances.totalBalance ?? 0)
   if (pocketBalance === 0 && totalBonus > 0) {
-    // If totalBalance is 0 but we have bonus, pocket balance = bonus
     pocketBalance = totalBonus
-  } else if (pocketBalance > 0 && totalBonus > 0) {
-    // Verify pocket balance includes bonus
-    // Calculate expected: Earnings + Bonus - Withdrawals
-    const totalWithdrawn = balances.totalWithdrawn || 0
-    const expectedBalance = weeklyEarnings + totalBonus - totalWithdrawn
-    // Use the higher value to ensure bonus is included
-    if (expectedBalance > pocketBalance) {
-      pocketBalance = expectedBalance
-    }
   }
 
   // Debug: Log pocket balance calculation
@@ -818,11 +810,14 @@ export default function PocketPage() {
         <Card onClick={() => navigate("/delivery/earnings")} className="py-4 bg-white border-0 shadow-none mb-4">
           <CardContent className="p-4 text-center">
 
-            {/* Top text */}
-            <div className="flex justify-center mb-2">
+            {/* Top text - this week only */}
+            <div className="flex justify-center mb-1">
               <span className="text-black text-sm">
                 Earnings: {getCurrentWeekRange()}
               </span>
+            </div>
+            <div className="flex justify-center mb-2">
+              <span className="text-gray-500 text-xs">This week only</span>
             </div>
 
             {/* Earnings number */}
@@ -899,7 +894,7 @@ export default function PocketPage() {
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-xl font-bold text-gray-900">{earningsGuaranteeCurrentOrders} of {earningsGuaranteeOrdersTarget || 0}</span>
+                    <span className="text-xl font-bold text-gray-900">{progressOrders} of {earningsGuaranteeOrdersTarget || 0}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-3">
@@ -952,6 +947,38 @@ export default function PocketPage() {
                 </div>
               </motion.div>
             </div>
+
+            {/* Claim button – appears only after guarantee is achieved and can be redeemed */}
+            {activeEarningAddon && canRedeem && (
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={async () => {
+                    try {
+                      const offerId = activeEarningAddon._id || activeEarningAddon.id
+                      if (!offerId) return
+                      const response = await deliveryAPI.claimEarningAddon(offerId)
+                      const amount = response?.data?.data?.amount
+                      if (amount != null) {
+                        toast.success(`₹${Number(amount).toFixed(0)} added to your Pocket balance`)
+                      } else {
+                        toast.success('Bonus added to your Pocket balance')
+                      }
+                      // Refresh wallet and active offers so UI updates immediately
+                      walletRefetchRef.current?.()
+                      addonRefetchRef.current?.()
+                      // Notify other listeners (Pocket balance, etc.)
+                      window.dispatchEvent(new Event('deliveryWalletStateUpdated'))
+                    } catch (error) {
+                      console.error('❌ Error claiming earning addon bonus:', error)
+                      toast.error(error?.response?.data?.message || 'Failed to claim bonus. Please try again.')
+                    }
+                  }}
+                  className="px-6 py-2.5 rounded-full bg-black text-white text-sm font-semibold shadow-md hover:bg-gray-900 transition-colors"
+                >
+                  Claim ₹{earningsGuaranteeTarget.toFixed(0)}
+                </button>
+              </div>
+            )}
           </div>
         </motion.div>
 
@@ -966,9 +993,12 @@ export default function PocketPage() {
         </div>
         <Card className="py-0  bg-white border-0 shadow-none" >
           <CardContent className="p-4 space-y-4">
-            {/* Pocket Balance */}
+            {/* Pocket Balance - total available (all earnings + bonuses - withdrawals) */}
             <div onClick={() => navigate("/delivery/pocket-balance")} className="flex items-center justify-between">
-              <span className="text-black text-sm">Pocket balance</span>
+              <div>
+                <span className="text-black text-sm">Pocket balance</span>
+                <p className="text-gray-500 text-xs mt-0.5">Total available</p>
+              </div>
               <div className="flex items-center gap-2">
                 <span className="text-black text-sm font-medium">₹{pocketBalance.toFixed(2)}</span>
                 <ArrowRight className="w-4 h-4 text-gray-600" />

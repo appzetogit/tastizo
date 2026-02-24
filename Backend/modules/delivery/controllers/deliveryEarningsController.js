@@ -252,14 +252,25 @@ export const getActiveEarningAddons = asyncHandler(async (req, res) => {
           // Check if offer is upcoming (not started yet)
           const isUpcoming = addon.status === 'active' && now < offerStartDate;
 
+          const completedOrders = orderCount || 0;
+          const targetOrders = addon.requiredOrders || 0;
+          const progressOrders = Math.min(completedOrders, targetOrders);
+          const isAchieved = completedOrders >= targetOrders;
+          const earnedAmount = isAchieved ? (addon.earningAmount || 0) : 0;
+
           return {
             ...addon,
             isValid,
             isUpcoming,
-            currentOrders: orderCount || 0,
-            progress: addon.requiredOrders > 0 ? Math.min((orderCount || 0) / addon.requiredOrders, 1) : 0,
+            currentOrders: completedOrders,
+            targetOrders,
+            completedOrders,
+            progressOrders,
+            isAchieved,
+            earnedAmount,
+            progress: targetOrders > 0 ? Math.min(completedOrders / targetOrders, 1) : 0,
             redeemed: !!redeemed,
-            canRedeem: !redeemed && (orderCount || 0) >= addon.requiredOrders && isValid
+            canRedeem: !redeemed && isAchieved && isValid
           };
         } catch (addonError) {
           logger.error(`Error processing addon ${addon._id}:`, addonError);
@@ -269,6 +280,11 @@ export const getActiveEarningAddons = asyncHandler(async (req, res) => {
             isValid: false,
             isUpcoming: false,
             currentOrders: 0,
+            targetOrders: addon.requiredOrders || 0,
+            completedOrders: 0,
+            progressOrders: 0,
+            isAchieved: false,
+            earnedAmount: 0,
             progress: 0,
             redeemed: false,
             canRedeem: false,
@@ -286,6 +302,79 @@ export const getActiveEarningAddons = asyncHandler(async (req, res) => {
   } catch (error) {
     logger.error(`Error fetching active earning addons: ${error.message}`, { stack: error.stack });
     return errorResponse(res, 500, 'Failed to fetch active earning addons');
+  }
+});
+
+/**
+ * Claim Earning Addon Bonus (credit to delivery partner wallet)
+ * POST /api/delivery/earnings/active-offers/:offerId/claim
+ */
+export const claimEarningAddonBonus = asyncHandler(async (req, res) => {
+  try {
+    const delivery = req.delivery;
+    const { offerId } = req.params;
+
+    if (!offerId) {
+      return errorResponse(res, 400, 'Offer ID is required');
+    }
+
+    // Find pending history record for this offer and delivery partner
+    const history = await EarningAddonHistory.findOne({
+      earningAddonId: offerId,
+      deliveryPartnerId: delivery._id,
+      status: 'pending'
+    });
+
+    if (!history) {
+      return errorResponse(res, 404, 'No pending bonus found to claim for this offer');
+    }
+
+    // Find or create wallet
+    const wallet = await DeliveryWallet.findOrCreateByDeliveryId(history.deliveryPartnerId);
+
+    // Add earning_addon transaction and update balances
+    const transaction = wallet.addTransaction({
+      amount: history.earningAmount,
+      type: 'earning_addon',
+      status: 'Completed',
+      description: `Earning Addon: ${history.offerSnapshot?.title || 'Offer'}`,
+      processedAt: new Date(),
+      metadata: {
+        earningAddonId: history.earningAddonId.toString(),
+        earningAddonHistoryId: history._id.toString(),
+        ordersCompleted: history.ordersCompleted,
+        ordersRequired: history.ordersRequired,
+        claimedBy: 'delivery'
+      }
+    });
+
+    await wallet.save();
+
+    // Update history record to credited
+    history.status = 'credited';
+    history.transactionId = transaction?._id;
+    history.walletId = wallet._id;
+    history.processedBy = delivery._id;
+    history.processedAt = new Date();
+    await history.save();
+
+    logger.info(
+      `💰 Earning addon bonus credited via delivery claim: history=${history._id} delivery=${delivery._id}`
+    );
+
+    return successResponse(res, 200, 'Earning addon bonus claimed successfully', {
+      historyId: history._id,
+      offerId: history.earningAddonId,
+      amount: history.earningAmount,
+      wallet: {
+        totalBalance: wallet.totalBalance,
+        totalEarned: wallet.totalEarned
+      },
+      transaction
+    });
+  } catch (error) {
+    logger.error(`Error claiming earning addon bonus: ${error.message}`, { stack: error.stack });
+    return errorResponse(res, 500, 'Failed to claim earning addon bonus');
   }
 });
 

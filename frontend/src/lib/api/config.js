@@ -269,6 +269,7 @@ export const API_ENDPOINTS = {
     TRIP_HISTORY: "/delivery/trip-history",
     EARNINGS: "/delivery/earnings",
     EARNINGS_ACTIVE_OFFERS: "/delivery/earnings/active-offers",
+    EARNINGS_ACTIVE_OFFER_CLAIM: "/delivery/earnings/active-offers/:offerId/claim",
     LOCATION: "/delivery/location",
     ZONES_IN_RADIUS: "/delivery/zones/in-radius",
     REVERIFY: "/delivery/reverify",
