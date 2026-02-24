@@ -765,11 +765,19 @@ export default function Home() {
           // Keep single image for backward compatibility
           const image = allImages[0]
 
+          const rawRating = typeof restaurant.rating === "number"
+            ? restaurant.rating
+            : (typeof restaurant.averageRating === "number" ? restaurant.averageRating : null)
+
+          const normalizedRating = rawRating !== null
+            ? Math.round(rawRating * 10) / 10
+            : 0
+
           return {
             id: restaurant.restaurantId || restaurant._id,
             name: restaurant.name,
             cuisine: cuisine,
-            rating: restaurant.rating || 4.5,
+            rating: normalizedRating,
             deliveryTime: deliveryTime,
             distance: distance,
             distanceInKm: distanceInKm, // Store numeric distance for sorting

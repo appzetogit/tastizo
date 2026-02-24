@@ -124,15 +124,13 @@ export const authAPI = {
     return apiClient.post(API_ENDPOINTS.AUTH.LOGOUT);
   },
 
-  // Register / refresh FCM device token for authenticated user
-  registerFcmToken: (deviceId, platform, fcmToken) => {
+  // Register / refresh FCM token for authenticated user
+  registerFcmToken: (platform, fcmToken) => {
     console.log("[FCM] Sending token to backend", {
-      deviceId,
       platform,
       hasToken: !!fcmToken,
     });
     return apiClient.post(API_ENDPOINTS.AUTH.FCM_TOKEN, {
-      deviceId,
       platform,
       fcmToken,
     });

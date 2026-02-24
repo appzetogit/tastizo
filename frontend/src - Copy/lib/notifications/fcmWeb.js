@@ -5,21 +5,6 @@ import { authAPI } from "@/lib/api";
 const FCM_SW_PATH = "/firebase-messaging-sw.js";
 const FCM_SW_SCOPE = "/firebase-cloud-messaging-push-scope/";
 
-// Generate / reuse a stable deviceId for this browser
-export function getOrCreateWebDeviceId() {
-  try {
-    const key = "web_device_id";
-    let existing = localStorage.getItem(key);
-    if (existing) return existing;
-    const id = crypto.randomUUID();
-    localStorage.setItem(key, id);
-    return id;
-  } catch (err) {
-    console.warn("[FCM] Could not access localStorage for deviceId", err);
-    return null;
-  }
-}
-
 export async function registerFcmTokenForLoggedInUser() {
   try {
     console.log("[FCM] Starting web FCM registration flow");
@@ -44,15 +29,9 @@ export async function registerFcmTokenForLoggedInUser() {
       console.log("[FCM] Notification permission:", permission);
       if (permission !== "granted") {
         return;
-      }
+    }
     } else {
       console.warn("[FCM] Notification API not available");
-      return;
-    }
-
-    const deviceId = getOrCreateWebDeviceId();
-    if (!deviceId) {
-      console.warn("[FCM] No deviceId, cannot register token");
       return;
     }
 
@@ -80,7 +59,7 @@ export async function registerFcmTokenForLoggedInUser() {
 
     // Send token to backend
     console.log("[FCM] Token to send:", token.substring(0, 30) + "...");
-    const res = await authAPI.registerFcmToken(deviceId, "web", token);
+    const res = await authAPI.registerFcmToken("web", token);
     const saved = res?.data?.data?.fcmTokenWeb ?? res?.data?.data?.fcmtokenWeb;
     console.log("[FCM] Backend saved fcmTokenWeb:", saved ? saved.substring(0, 30) + "..." : "null");
   } catch (error) {

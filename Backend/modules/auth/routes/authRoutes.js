@@ -72,7 +72,6 @@ const resetPasswordSchema = Joi.object({
 });
 
 const fcmRegisterSchema = Joi.object({
-  deviceId: Joi.string().required(),
   platform: Joi.string().valid('web', 'android', 'ios').required(),
   fcmToken: Joi.string().required(),
 });
