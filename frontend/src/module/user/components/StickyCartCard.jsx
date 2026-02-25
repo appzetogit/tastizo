@@ -3,12 +3,14 @@ import { X, ChevronRight } from "lucide-react"
 import { useCart } from "../context/CartContext"
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { isModuleAuthenticated } from "@/lib/utils/auth"
 
 export default function StickyCartCard() {
   const { cart, getCartCount } = useCart()
   const [isVisible, setIsVisible] = useState(true)
   const [bottomPosition, setBottomPosition] = useState("bottom-[70px]") // Fixed above bottom navigation
   const cartCount = getCartCount()
+  const isUserAuthenticated = isModuleAuthenticated("user")
 
   // Set fixed position above bottom navigation (no scroll-based movement)
   useEffect(() => {
@@ -80,8 +82,8 @@ export default function StickyCartCard() {
     },
   }
 
-  // Don't render if cart is empty
-  if (cartCount === 0) return null
+  // Don't render if cart is empty or user is not logged in
+  if (!isUserAuthenticated || cartCount === 0) return null
 
   return (
     <AnimatePresence>
