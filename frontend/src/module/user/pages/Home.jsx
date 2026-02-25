@@ -381,26 +381,22 @@ export default function Home() {
     }
   }, [heroBannerImages.length])
 
-  // Lenis smooth scrolling initialization
-  useEffect(() => {
-    const lenis = new Lenis({
-      duration: 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      smoothWheel: true,
-      smoothTouch: true,
-    })
-
-    function raf(time) {
-      lenis.raf(time)
-      requestAnimationFrame(raf)
-    }
-
-    requestAnimationFrame(raf)
-
-    return () => {
-      lenis.destroy()
-    }
-  }, [])
+  // Lenis disabled on Home so the sticky categories+filters bar doesn't shake with transform-based smooth scroll
+  // (sticky + Lenis transform conflict on scroll)
+  // useEffect(() => {
+  //   const lenis = new Lenis({
+  //     duration: 1.2,
+  //     easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+  //     smoothWheel: true,
+  //     smoothTouch: false,
+  //   })
+  //   function raf(time) {
+  //     lenis.raf(time)
+  //     requestAnimationFrame(raf)
+  //   }
+  //   requestAnimationFrame(raf)
+  //   return () => { lenis.destroy() }
+  // }, [])
 
   // Helper function to reset auto-slide timer
   const resetAutoSlide = useCallback(() => {
@@ -1163,8 +1159,8 @@ export default function Home() {
         `}</style>
       </div>
 
-      {/* Unified Navbar & Hero Section */}
-      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] md:pt-16">
+      {/* Unified Navbar & Hero Section - rounded bottom on mobile for green area */}
+      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] md:pt-16 rounded-b-2xl md:rounded-b-none">
         {/* Hero Banner Carousel Background */}
         {loadingBanners ? (
           <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
@@ -1344,21 +1340,23 @@ export default function Home() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.6, delay: 0.4 }}
       >
-        {/* Sticky Section - Food Categories and Filters */}
+        {/* Sticky Section - Food Categories and Filters (no Lenis on this page so sticky is stable) */}
         <div
           className="sticky top-0 z-40 bg-white dark:bg-[#0a0a0a]"
           style={{
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
+            transform: 'translateZ(0)',
+            WebkitTransform: 'translateZ(0)',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
+            contain: 'layout style paint',
           }}
         >
           {/* Food Categories - Horizontal Scroll */}
           <motion.section
             className="space-y-1 sm:space-y-1.5 lg:space-y-2"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.5 }}
+            initial={{ opacity: 1, y: 0 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0 }}
           >
             <div
               ref={categoryScrollRef}
@@ -1374,10 +1372,9 @@ export default function Home() {
               {/* Special Offer Badge - Meals Under 200 */}
               <motion.div
                 className="flex-shrink-0 flex flex-col items-center gap-2 cursor-pointer group"
-                initial={{ opacity: 0, scale: 0.8 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.4 }}
+                initial={{ opacity: 1, scale: 1 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0 }}
                 onClick={() => navigate("/under-250")}
               >
                 <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 flex items-center justify-center relative overflow-hidden">
@@ -1399,14 +1396,11 @@ export default function Home() {
                     <motion.div
                       key={category.id || index}
                       className="flex-shrink-0"
-                      initial={{ opacity: 0, y: 20, scale: 0.9 }}
-                      whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                      viewport={{ once: true }}
+                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
                       transition={{
-                        duration: 0.4,
-                        delay: index * 0.05,
-                        type: "spring",
-                        stiffness: 100
+                        duration: 0.3,
+                        delay: index * 0.03,
                       }}
                       whileHover={{ scale: 1.05, y: -5 }}
                       whileTap={{ scale: 0.95 }}
@@ -1433,10 +1427,9 @@ export default function Home() {
                   {realCategories.length > 10 && (
                     <motion.div
                       className="flex-shrink-0 cursor-pointer"
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      whileInView={{ opacity: 1, scale: 1 }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.4, delay: 0.1 }}
+                      initial={{ opacity: 1, scale: 1 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0 }}
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => setShowAllCategoriesModal(true)}
@@ -1483,10 +1476,9 @@ export default function Home() {
                   {landingCategories.length > 10 && (
                     <motion.div
                       className="flex-shrink-0 cursor-pointer"
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      whileInView={{ opacity: 1, scale: 1 }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.4, delay: 0.1 }}
+                      initial={{ opacity: 1, scale: 1 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0 }}
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => setShowAllCategoriesModal(true)}
@@ -1516,10 +1508,9 @@ export default function Home() {
           {/* Filters */}
           <motion.section
             className="py-1 lg:py-2"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.5, delay: 0.2 }}
+            initial={{ opacity: 1, y: 0 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0 }}
           >
             <div
               className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 overflow-x-auto scrollbar-hide pb-1 lg:pb-2"
@@ -1555,10 +1546,9 @@ export default function Home() {
                 return (
                   <motion.div
                     key={filter.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.4, delay: index * 0.1 }}
+                    initial={{ opacity: 1, x: 0 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0 }}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
