@@ -1,4 +1,5 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useEffect, useRef, useState } from 'react';
@@ -415,27 +416,26 @@ export default function AddToCartAnimation({
         </div>
       )}
 
-      <AnimatePresence>
-        {itemCount > 0 && !shouldHidePill && (
+      {/* View cart pill: show whenever cart has items (portaled to body so it floats above Menu button) */}
+      {itemCount > 0 && !shouldHidePill && typeof document !== 'undefined' && createPortal(
           <motion.div
-            initial={{ y: 60, opacity: 0, scale: 0.8 }}
+            initial={{ y: 100, opacity: 0 }}
             animate={{
               y: 0,
               opacity: 1,
-              scale: 1,
             }}
-            exit={{ y: 60, opacity: 0, scale: 0.8 }}
             transition={{
               type: 'spring',
-              stiffness: 400,
-              damping: 30,
-              mass: 0.8,
+              stiffness: 320,
+              damping: 28,
+              mass: 0.6,
             }}
             style={{
-              bottom: dynamicBottom ? undefined : `${bottomOffset || 20}px`,
+              bottom: dynamicBottom ? undefined : `${bottomOffset || 24}px`,
             }}
-            className={`fixed ${dynamicBottom || ''} left-0 right-0 z-[60] flex justify-center px-4 pb-4 md:pb-6 transition-all duration-300 ease-in-out bg-transparent`}
+            className={`fixed ${dynamicBottom || ''} left-0 right-0 z-[9990] flex justify-center px-4 pb-4 md:pb-6 transition-all duration-300 ease-in-out bg-transparent pointer-events-none`}
           >
+            <div className="pointer-events-auto">
             <button
               ref={linkRef}
               onClick={(e) => {
@@ -515,9 +515,10 @@ export default function AddToCartAnimation({
                 </svg>
               </motion.div>
             </button>
-          </motion.div>
+            </div>
+          </motion.div>,
+          document.body
         )}
-      </AnimatePresence>
     </>
   );
 }
