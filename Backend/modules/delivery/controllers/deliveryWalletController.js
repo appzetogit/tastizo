@@ -50,15 +50,20 @@ export const getWallet = asyncHandler(async (req, res) => {
       .reduce((sum, t) => sum + t.amount, 0);
 
     // Global cash limit and withdrawal limit (same for all delivery partners)
-    // Use schema default 750 when deliveryCashLimit is missing so "Available cash limit" is not wrong (₹0)
+    // IMPORTANT:
+    // - If deliveryCashLimit is missing, NaN, 0 or negative, fall back to DEFAULT_CASH_LIMIT.
+    // - This prevents "Available cash limit" from incorrectly showing ₹0 when config is not set properly.
     const DEFAULT_CASH_LIMIT = 750;
     let totalCashLimit = DEFAULT_CASH_LIMIT;
     let withdrawalLimit = 100;
     try {
       const settings = await BusinessSettings.getSettings();
       const configured = Number(settings?.deliveryCashLimit);
-      if (Number.isFinite(configured) && configured >= 0) {
+      if (Number.isFinite(configured) && configured > 0) {
+        // Only use a positive configured value; treat 0 / negative as "not configured"
         totalCashLimit = configured;
+      } else {
+        totalCashLimit = DEFAULT_CASH_LIMIT;
       }
       const wl = Number(settings?.deliveryWithdrawalLimit);
       if (Number.isFinite(wl) && wl >= 0) {

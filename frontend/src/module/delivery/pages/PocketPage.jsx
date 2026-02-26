@@ -376,16 +376,19 @@ export default function PocketPage() {
     })
     // Only depend on walletState and balances - totalBonus and weeklyEarnings are derived from these
   }, [pocketBalance, walletState, balances])
-  // Available cash limit: same formula as "Available Cash Limit?" modal (total - cash in hand + pocket withdrawals)
+  // Available cash limit:
+  // Prefer the backend-calculated value (walletState.availableCashLimit),
+  // which already applies the global cash limit minus current cash-in-hand.
+  // Fall back to a simple totalCashLimit - cashInHand calculation if needed.
   const totalCashLimit = Number.isFinite(Number(walletState?.totalCashLimit))
     ? Number(walletState.totalCashLimit)
     : 0
   const cashInHandForLimit = Number(balances.cashInHand) || 0
-  const pocketWithdrawalsForLimit = Number(balances.totalWithdrawn) || 0
-  const availableCashLimit = Math.max(
-    0,
-    totalCashLimit - cashInHandForLimit + pocketWithdrawalsForLimit
+  const availableCashLimit = Number.isFinite(
+    Number(walletState?.availableCashLimit),
   )
+    ? Number(walletState.availableCashLimit)
+    : Math.max(0, totalCashLimit - cashInHandForLimit)
   const depositAmount = pocketBalance < 0 ? Math.abs(pocketBalance) : 0
 
   // Customer tips balance - calculate from transactions

@@ -5700,11 +5700,11 @@ export default function DeliveryHome() {
           return;
         }
         
-        // Create main polyline with high-contrast color (visible on blue map background)
+        // Create main polyline with Google-style blue color
         liveTrackingPolylineRef.current = new window.google.maps.Polyline({
           path: path,
           geodesic: true,
-          strokeColor: '#FF4081', // High-contrast pink for maximum visibility
+          strokeColor: '#4285F4', // Google blue for route line
           strokeOpacity: 1.0,
           strokeWeight: 6, // Optimal thickness for visibility
           zIndex: 1000, // High z-index to be above other map elements
@@ -7684,7 +7684,7 @@ export default function DeliveryHome() {
           routePolylineRef.current = new window.google.maps.Polyline({
             path,
             geodesic: true,
-            strokeColor: '#FF4081', // High-contrast fallback route color
+            strokeColor: '#4285F4', // Same Google blue for fallback route
             strokeOpacity: 0.9,
             strokeWeight: 5,
             zIndex: 900,
