@@ -16,6 +16,7 @@ dotenv.config();
 // Import configurations
 import { connectDB } from "./config/database.js";
 import { connectRedis } from "./config/redis.js";
+import { initializeFirebaseRealtime } from "./config/firebaseRealtime.js";
 
 // Import middleware
 import { errorHandler } from "./shared/middleware/errorHandler.js";
@@ -97,6 +98,23 @@ if (missingEnvVars.length > 0) {
   console.error("\nPlease update your .env file with valid values.");
   console.error("You can copy .env.example to .env and update the values.\n");
   process.exit(1);
+}
+
+// Initialize Firebase Realtime Database BEFORE creating Express app, routes, or Socket.IO
+// This ensures getDb() can be used safely in any module (controllers, services, sockets).
+try {
+  const firebaseDb = initializeFirebaseRealtime();
+  if (!firebaseDb) {
+    console.warn(
+      "⚠️ Firebase Realtime Database initialization returned null. " +
+        "Live tracking features depending on Firebase will be disabled.",
+    );
+  }
+} catch (err) {
+  console.error(
+    "❌ Firebase Realtime Database initialization threw an error:",
+    err.message,
+  );
 }
 
 // Initialize Express app

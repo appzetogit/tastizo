@@ -1,4 +1,4 @@
-import express from 'express';
+import express from "express";
 import {
   sendOTP,
   verifyOTP,
@@ -9,11 +9,15 @@ import {
   logout,
   getCurrentRestaurant,
   reverifyRestaurant,
-  firebaseGoogleLogin
-} from '../controllers/restaurantAuthController.js';
-import { authenticate } from '../middleware/restaurantAuth.js';
-import { validate } from '../../../shared/middleware/validate.js';
-import Joi from 'joi';
+  firebaseGoogleLogin,
+} from "../controllers/restaurantAuthController.js";
+import {
+  registerRestaurantFcmToken,
+  removeRestaurantFcmToken,
+} from "../controllers/restaurantAuthFcmController.js";
+import { authenticate } from "../middleware/restaurantAuth.js";
+import { validate } from "../../../shared/middleware/validate.js";
+import Joi from "joi";
 
 const router = express.Router();
 
@@ -69,18 +73,32 @@ const firebaseGoogleLoginSchema = Joi.object({
 });
 
 // Public routes
-router.post('/send-otp', validate(sendOTPSchema), sendOTP);
-router.post('/verify-otp', validate(verifyOTPSchema), verifyOTP);
-router.post('/register', validate(registerSchema), register);
-router.post('/login', validate(loginSchema), login);
-router.post('/reset-password', validate(resetPasswordSchema), resetPassword);
-router.post('/firebase/google-login', validate(firebaseGoogleLoginSchema), firebaseGoogleLogin);
+router.post("/send-otp", validate(sendOTPSchema), sendOTP);
+router.post("/verify-otp", validate(verifyOTPSchema), verifyOTP);
+router.post("/register", validate(registerSchema), register);
+router.post("/login", validate(loginSchema), login);
+router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
+router.post(
+  "/firebase/google-login",
+  validate(firebaseGoogleLoginSchema),
+  firebaseGoogleLogin,
+);
 
 // Protected routes
-router.post('/refresh-token', refreshToken);
-router.post('/logout', logout);
-router.get('/me', authenticate, getCurrentRestaurant);
-router.post('/reverify', authenticate, reverifyRestaurant);
+router.post("/refresh-token", refreshToken);
+router.post("/logout", logout);
+router.get("/me", authenticate, getCurrentRestaurant);
+router.post("/reverify", authenticate, reverifyRestaurant);
+router.post(
+  "/fcm-token",
+  authenticate,
+  registerRestaurantFcmToken,
+);
+router.delete(
+  "/fcm-token",
+  authenticate,
+  removeRestaurantFcmToken,
+);
 
 export default router;
 

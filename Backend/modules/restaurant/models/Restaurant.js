@@ -3,16 +3,21 @@ import bcrypt from "bcryptjs";
 import { normalizePhoneNumber } from "../../../shared/utils/phoneUtils.js";
 
 const locationSchema = new mongoose.Schema({
+  // Deprecated scalar lat/lng (kept for backward compatibility)
   latitude: Number,
   longitude: Number,
-  // GeoJSON coordinates [longitude, latitude] for spatial queries
-  coordinates: {
-    type: [Number],
-    default: undefined,
+  // GeoJSON Point for geospatial queries: [longitude, latitude]
+  type: {
+    type: String,
+    enum: ["Point"],
+    default: "Point",
   },
-  // Live address from Google Maps reverse geocoding
+  coordinates: {
+    type: [Number], // [longitude, latitude]
+    index: "2dsphere",
+  },
+  // Stored / reverse-geocoded address fields (provider-agnostic)
   formattedAddress: String,
-  // Stored address fields
   address: String, // Full address string
   addressLine1: String,
   addressLine2: String,
@@ -160,6 +165,19 @@ const restaurantSchema = new mongoose.Schema(
     offer: {
       type: String,
       default: "Flat ₹50 OFF above ₹199",
+    },
+    // FCM tokens for sending push notifications to restaurant dashboard/app
+    fcmTokenWeb: {
+      type: String,
+      default: null,
+    },
+    fcmTokenIos: {
+      type: String,
+      default: null,
+    },
+    fcmTokenAndroid: {
+      type: String,
+      default: null,
     },
     // Onboarding fields (merged from RestaurantOnboarding)
     onboarding: {
@@ -319,6 +337,8 @@ const restaurantSchema = new mongoose.Schema(
 restaurantSchema.index({ email: 1 }, { unique: true, sparse: true });
 restaurantSchema.index({ phone: 1 }, { unique: true, sparse: true });
 restaurantSchema.index({ googleId: 1 }, { unique: true, sparse: true });
+// Geospatial index for nearby restaurant search
+restaurantSchema.index({ "location.coordinates": "2dsphere" });
 
 // Hash password before saving
 restaurantSchema.pre("save", async function (next) {

@@ -379,6 +379,29 @@ export const restaurantAPI = {
     });
   },
 
+  // Register / refresh FCM token for authenticated restaurant
+  registerFcmToken: (platform, fcmToken) => {
+    console.log("[FCM][Restaurant] Sending token to backend", {
+      platform,
+      hasToken: !!fcmToken,
+    });
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.AUTH.FCM_TOKEN, {
+      platform,
+      fcmToken,
+    });
+  },
+
+  // Remove FCM token for this restaurant platform on logout
+  removeFcmToken: (platform = "web") => {
+    console.log(
+      "[FCM][Restaurant] Removing token on backend for platform",
+      platform,
+    );
+    return apiClient.delete(API_ENDPOINTS.RESTAURANT.AUTH.FCM_TOKEN, {
+      data: { platform },
+    });
+  },
+
   // Get restaurant profile
   getProfile: () => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.PROFILE);

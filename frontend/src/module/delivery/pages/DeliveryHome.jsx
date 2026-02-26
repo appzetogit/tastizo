@@ -438,6 +438,27 @@ export default function DeliveryHome() {
   const [mapLoading, setMapLoading] = useState(false)
   const [directionsMapLoading, setDirectionsMapLoading] = useState(false)
   const isInitializingMapRef = useRef(false)
+  const [mapReady, setMapReady] = useState(false)
+  const mapReadyRef = useRef(false)
+
+  // Fix: sometimes map shows solid color until user zooms.
+  // Force a resize + recenter once tiles are loaded or viewport changes.
+  const forceMapResize = useCallback(() => {
+    try {
+      if (!window.google || !window.google.maps) return
+      const map = window.deliveryMapInstance
+      if (!map || !mapContainerRef.current) return
+
+      const currentCenter = map.getCenter()
+      window.google.maps.event.trigger(map, "resize")
+      if (currentCenter) {
+        map.setCenter(currentCenter)
+      }
+      console.log("✅ Forced Google Map resize/recenter for delivery view")
+    } catch (err) {
+      console.warn("⚠️ Error forcing Google Map resize:", err)
+    }
+  }, [])
 
   // Safety timeout: hide "Loading map..." overlay after max 2 seconds
   useEffect(() => {
@@ -4822,30 +4843,28 @@ export default function DeliveryHome() {
       return;
     }
 
-    // Store preserved state for re-initialization after navigation
+    // Store preserved state for potential future enhancements (do NOT tear down map)
     let preservedState = null;
     
-    // If map instance exists, preserve state before re-initializing
+    // If map instance exists and is already attached to this container, skip initialization
     if (window.deliveryMapInstance) {
       const existingMap = window.deliveryMapInstance;
       const existingBikeMarker = bikeMarkerRef.current;
       const existingPolyline = routePolylineRef.current;
       
-      console.log('📍 Map instance exists, preserving state for re-initialization...');
+      console.log('📍 Map instance exists, checking attachment to current container...');
       
-      // Check if map is already attached to current container
       try {
         const mapDiv = existingMap.getDiv();
         if (mapDiv && mapDiv === mapContainerRef.current) {
-          console.log('📍 Map already attached to current container, skipping re-initialization');
-          return; // Map is already properly attached, no need to re-initialize
+          console.log('📍 Map already attached to current container, skipping initialization');
+          return; // Map already set up, no need to re-initialize
         }
       } catch (error) {
-        // Map div check failed, will re-initialize
-        console.log('📍 Map container check failed, will re-initialize');
+        console.log('📍 Map container check failed, but keeping existing map:', error);
       }
       
-      // Store map state safely
+      // Optionally preserve some state; we intentionally do NOT clear the map instance
       try {
         preservedState = {
           center: existingMap.getCenter(),
@@ -4855,12 +4874,10 @@ export default function DeliveryHome() {
           hasPolyline: !!existingPolyline
         };
         
-        // Store bike marker state
         if (existingBikeMarker) {
           const pos = existingBikeMarker.getPosition();
           if (pos) {
             preservedState.bikeMarkerPosition = { lat: pos.lat(), lng: pos.lng() };
-            // Get heading from icon rotation if available
             const icon = existingBikeMarker.getIcon();
             if (icon && typeof icon === 'object' && icon.rotation !== undefined) {
               preservedState.bikeMarkerHeading = icon.rotation;
@@ -4872,21 +4889,8 @@ export default function DeliveryHome() {
         preservedState = null;
       }
       
-      // Remove markers from old map before clearing (safely)
-      try {
-        if (existingBikeMarker && typeof existingBikeMarker.setMap === 'function') {
-          existingBikeMarker.setMap(null);
-        }
-        if (existingPolyline && typeof existingPolyline.setMap === 'function') {
-          existingPolyline.setMap(null);
-        }
-      } catch (error) {
-        console.warn('⚠️ Error removing markers from old map:', error);
-      }
-      
-      // Clear old map instance reference (will be re-created below)
-      // Markers preserved in refs, will be re-attached after map initialization
-      window.deliveryMapInstance = null;
+      // IMPORTANT: we do NOT clear window.deliveryMapInstance here,
+      // to avoid double-initialization (especially under React StrictMode).
     }
 
     console.log('📍 Starting map initialization...');
@@ -5118,16 +5122,19 @@ export default function DeliveryHome() {
           if (window.google.maps.event) {
             window.google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
               console.log('✅ Map tiles loaded successfully');
+              mapReadyRef.current = true;
+              setMapReady(true);
+
+              // Important: force one resize after tiles load to avoid
+              // the solid pink screen that disappears only after manual zoom.
+              // This also handles Chrome DevTools device emulation.
+              forceMapResize()
+              setTimeout(forceMapResize, 300)
             });
           }
         } catch (eventError) {
           console.warn('⚠️ Could not add map event listeners:', eventError);
         }
-        
-        // Add error listener for map errors
-        window.google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
-          console.log('✅ Map tiles loaded successfully');
-        });
         
         // Handle map errors
         window.google.maps.event.addListener(map, 'error', (error) => {
@@ -5313,52 +5320,12 @@ export default function DeliveryHome() {
   }, [showHomeSections, mapInitRetry]) // Re-run when showHomeSections or container retry
 
   // Initialize map when riderLocation becomes available (if map not already initialized)
+  // NOTE: Actual map creation is handled in the main useEffect above.
+  // This effect is intentionally left as a no-op to avoid double initialization,
+  // especially in React StrictMode where effects can run twice in development.
   useEffect(() => {
-    if (showHomeSections) return
-    if (!riderLocation || riderLocation.length !== 2) return
-    if (window.deliveryMapInstance) return // Map already initialized
-    if (!window.google || !window.google.maps) return // Google Maps not loaded yet
-    if (!mapContainerRef.current) return // Container not ready
-
-    console.log('📍 Rider location available, initializing map...')
-    // Map initialization will happen in the main useEffect, but we can trigger it
-    // by calling initializeGoogleMap directly
-    const initializeMap = async () => {
-      try {
-        const initialCenter = { lat: riderLocation[0], lng: riderLocation[1] }
-        console.log('📍 Initializing map with rider location:', initialCenter)
-        
-        if (!window.google || !window.google.maps) return
-        
-        const map = new window.google.maps.Map(mapContainerRef.current, {
-          center: initialCenter,
-          zoom: 18,
-          minZoom: 10,
-          maxZoom: 21,
-          mapTypeId: window.google.maps.MapTypeId?.ROADMAP || 'roadmap',
-          tilt: 45,
-          heading: 0,
-          disableDefaultUI: false,
-          zoomControl: true,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false
-        })
-        
-        window.deliveryMapInstance = map
-        console.log('✅ Map initialized with rider location')
-        
-        // Create bike marker
-        createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null, true)
-        setMapLoading(false)
-      } catch (error) {
-        console.error('❌ Error initializing map with rider location:', error)
-        setMapLoading(false)
-      }
-    }
-    
-    initializeMap()
-  }, [riderLocation, showHomeSections]) // Initialize when location is available
+    // No-op: map initialization is centralized in the main effect.
+  }, [riderLocation, showHomeSections])
 
   // Update bike marker when going online - ensure bike appears immediately
   useEffect(() => {
@@ -5369,7 +5336,7 @@ export default function DeliveryHome() {
       riderLocation 
     });
 
-    if (showHomeSections || !window.deliveryMapInstance) {
+    if (showHomeSections || !window.deliveryMapInstance || !mapReadyRef.current) {
       return;
     }
 
@@ -5733,11 +5700,11 @@ export default function DeliveryHome() {
           return;
         }
         
-        // Create main polyline with vibrant blue color (Zomato style)
+        // Create main polyline with high-contrast color (visible on blue map background)
         liveTrackingPolylineRef.current = new window.google.maps.Polyline({
           path: path,
           geodesic: true,
-          strokeColor: '#1E88E5', // Vibrant blue like Zomato (more visible than #4285F4)
+          strokeColor: '#FF4081', // High-contrast pink for maximum visibility
           strokeOpacity: 1.0,
           strokeWeight: 6, // Optimal thickness for visibility
           zIndex: 1000, // High z-index to be above other map elements
@@ -7692,8 +7659,8 @@ export default function DeliveryHome() {
       return;
     }
 
-    if (!window.google || !window.google.maps || !window.deliveryMapInstance) {
-      console.warn('⚠️ Map not ready for polyline update');
+    if (!mapReadyRef.current || !window.google || !window.google.maps || !window.deliveryMapInstance) {
+      // Map not ready yet; silently skip polyline update
       return;
     }
 
@@ -7717,7 +7684,7 @@ export default function DeliveryHome() {
           routePolylineRef.current = new window.google.maps.Polyline({
             path,
             geodesic: true,
-            strokeColor: '#1E88E5', // Visible blue fallback route
+            strokeColor: '#FF4081', // High-contrast fallback route color
             strokeOpacity: 0.9,
             strokeWeight: 5,
             zIndex: 900,

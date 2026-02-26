@@ -176,6 +176,7 @@ export const API_ENDPOINTS = {
       ME: "/restaurant/auth/me",
       REVERIFY: "/restaurant/auth/reverify",
       RESET_PASSWORD: "/restaurant/auth/reset-password",
+      FCM_TOKEN: "/restaurant/auth/fcm-token",
     },
     PROFILE: "/restaurant/profile",
     DELIVERY_STATUS: "/restaurant/delivery-status",

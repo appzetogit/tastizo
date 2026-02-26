@@ -3,6 +3,9 @@ import { successResponse, errorResponse } from '../../../shared/utils/response.j
 import Delivery from '../models/Delivery.js';
 import Zone from '../../admin/models/Zone.js';
 import { validate } from '../../../shared/middleware/validate.js';
+import {
+  setDeliveryBoyStatus,
+} from "../../../services/firebaseRealtimeService.js";
 import Joi from 'joi';
 import winston from 'winston';
 
@@ -94,6 +97,25 @@ export const updateLocation = asyncHandler(async (req, res) => {
     }
 
     const currentLocation = updatedDelivery.availability?.currentLocation;
+
+    // Sync status + location to Firebase delivery_boys table
+    try {
+      await setDeliveryBoyStatus(delivery._id.toString(), {
+        lat:
+          typeof latitude === "number"
+            ? latitude
+            : currentLocation?.coordinates?.[1],
+        lng:
+          typeof longitude === "number"
+            ? longitude
+            : currentLocation?.coordinates?.[0],
+        status: updatedDelivery.availability?.isOnline,
+      });
+    } catch (firebaseErr) {
+      logger.warn(
+        `Firebase setDeliveryBoyStatus failed: ${firebaseErr.message}`,
+      );
+    }
 
     return successResponse(res, 200, 'Status updated successfully', {
       location: currentLocation ? {

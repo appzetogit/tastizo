@@ -212,6 +212,13 @@ export async function generateRoutePolyline(start, waypoint, end) {
       return cached.route;
     }
     
+    // Optional Google Directions usage gated by env flag
+    const enabled = process.env.ENABLE_GOOGLE_DIRECTIONS === "true";
+    if (!enabled || !apiKey) {
+      console.warn("⚠️ Google Directions disabled or API key missing, skipping route generation");
+      return null;
+    }
+
     const response = await axios.get(
       `https://maps.googleapis.com/maps/api/directions/json`,
       {

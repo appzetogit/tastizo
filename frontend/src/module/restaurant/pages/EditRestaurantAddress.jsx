@@ -149,41 +149,34 @@ export default function EditRestaurantAddress() {
         alert("For major address updates, FSSAI verification may be required. Please contact support.")
         setShowSelectOptionDialog(false)
         return
-      } else {
-        // Minor correction - update location coordinates
-        // Fetch live address from coordinates using Google Maps API
-        try {
-          // Get Google Maps API key
-          const { getGoogleMapsApiKey } = await import('@/lib/utils/googleMapsApiKey.js')
-          const GOOGLE_MAPS_API_KEY = await getGoogleMapsApiKey()
-          
-          let formattedAddress = location?.formattedAddress || ""
-          
-          // Fetch formattedAddress from coordinates if API key available
-          if (GOOGLE_MAPS_API_KEY && lat && lng) {
-            try {
-              const response = await fetch(
-                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}&language=en&region=in&result_type=street_address|premise|point_of_interest|establishment`
-              )
-              const data = await response.json()
-              
-              if (data.status === 'OK' && data.results && data.results.length > 0) {
-                formattedAddress = data.results[0].formatted_address
-                console.log("✅ Fetched formattedAddress from coordinates:", formattedAddress)
+        } else {
+          // Minor correction - update location coordinates
+          // Fetch live address from coordinates using backend reverse geocode (no direct Google call)
+          try {
+            let formattedAddress = location?.formattedAddress || ""
+
+            if (lat && lng) {
+              try {
+                const response = await locationAPI.reverseGeocode(lat, lng)
+                const backendData = response?.data?.data
+                const result = backendData?.results?.[0] || backendData?.result?.[0] || null
+
+                if (result) {
+                  formattedAddress = result.formatted_address || result.formattedAddress || formattedAddress
+                }
+              } catch (backendError) {
+                console.warn("⚠️ Failed to fetch formattedAddress from backend, using existing:", backendError)
               }
-            } catch (error) {
-              console.warn("⚠️ Failed to fetch formattedAddress, using existing:", error)
             }
-          }
-          
-          // Update location with coordinates array and formattedAddress
-          const updatedLocation = {
-            ...location,
-            latitude: lat,
-            longitude: lng,
-            coordinates: [lng, lat], // GeoJSON format: [longitude, latitude]
-            formattedAddress: formattedAddress || location?.formattedAddress || ""
-          }
+            
+            // Update location with coordinates array and formattedAddress
+            const updatedLocation = {
+              ...location,
+              latitude: lat,
+              longitude: lng,
+              coordinates: [lng, lat], // GeoJSON format: [longitude, latitude]
+              formattedAddress: formattedAddress || location?.formattedAddress || ""
+            }
           
           const response = await restaurantAPI.updateProfile({ location: updatedLocation })
           

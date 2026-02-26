@@ -193,160 +193,8 @@ export const reverseGeocode = async (req, res) => {
           );
 
           try {
-            // Try Google Maps Geocoding API first (better sublocality data)
-            let fallbackResponse = null;
-            // Get Google Maps API key from database (NO FALLBACK)
-            const { getGoogleMapsApiKey } =
-              await import("../../../shared/utils/envService.js");
-            const googleApiKey = await getGoogleMapsApiKey();
-
-            if (googleApiKey) {
-              try {
-                fallbackResponse = await axios.get(
-                  `https://maps.googleapis.com/maps/api/geocode/json`,
-                  {
-                    params: {
-                      latlng: `${latNum},${lngNum}`,
-                      key: googleApiKey,
-                      language: "en",
-                    },
-                    timeout: 5000,
-                  },
-                );
-
-                // Transform Google Maps response
-                if (
-                  fallbackResponse.data &&
-                  fallbackResponse.data.results &&
-                  fallbackResponse.data.results.length > 0
-                ) {
-                  const googleResult = fallbackResponse.data.results[0];
-                  const addressComponents =
-                    googleResult.address_components || [];
-
-                  // Extract components
-                  let city = "";
-                  let state = "";
-                  let country = "";
-                  let area = "";
-
-                  addressComponents.forEach((comp) => {
-                    const types = comp.types || [];
-                    if (types.includes("locality")) city = comp.long_name;
-                    if (types.includes("administrative_area_level_1"))
-                      state = comp.long_name;
-                    if (types.includes("country")) country = comp.long_name;
-                    if (
-                      types.includes("sublocality") ||
-                      types.includes("sublocality_level_1") ||
-                      types.includes("neighborhood")
-                    ) {
-                      area = comp.long_name;
-                    }
-                  });
-
-                  // If no sublocality, try all sublocality levels and neighborhood
-                  if (!area) {
-                    // Try sublocality_level_2, sublocality_level_3, neighborhood
-                    const sublocality = addressComponents.find((c) => {
-                      const types = c.types || [];
-                      return (
-                        types.includes("sublocality_level_2") ||
-                        types.includes("sublocality_level_3") ||
-                        types.includes("neighborhood") ||
-                        (types.includes("political") &&
-                          !types.includes("administrative_area_level_1") &&
-                          !types.includes("locality"))
-                      );
-                    });
-                    if (
-                      sublocality &&
-                      sublocality.long_name !== city &&
-                      sublocality.long_name !== state &&
-                      !sublocality.long_name.toLowerCase().includes("district")
-                    ) {
-                      area = sublocality.long_name;
-                    }
-                  }
-
-                  // If still no area, try Google Places Nearby Search for more specific location
-                  if (!area && googleApiKey) {
-                    try {
-                      const placesResponse = await axios.get(
-                        `https://maps.googleapis.com/maps/api/place/nearbysearch/json`,
-                        {
-                          params: {
-                            location: `${latNum},${lngNum}`,
-                            radius: 100, // 100 meters - very close
-                            type: "neighborhood|sublocality",
-                            key: googleApiKey,
-                          },
-                          timeout: 3000,
-                        },
-                      );
-
-                      if (
-                        placesResponse.data &&
-                        placesResponse.data.results &&
-                        placesResponse.data.results.length > 0
-                      ) {
-                        const place = placesResponse.data.results[0];
-                        if (
-                          place.name &&
-                          place.name !== city &&
-                          place.name !== state &&
-                          !place.name.toLowerCase().includes("district")
-                        ) {
-                          area = place.name;
-                          logger.info(
-                            "Found area from Google Places Nearby Search",
-                            { area },
-                          );
-                        }
-                      }
-                    } catch (placesErr) {
-                      // Silently fail - this is optional enhancement
-                    }
-                  }
-
-                  const transformedData = {
-                    results: [
-                      {
-                        formatted_address: googleResult.formatted_address,
-                        address_components: {
-                          city: city,
-                          state: state,
-                          country: country,
-                          area: area,
-                        },
-                        geometry: {
-                          location: {
-                            lat: latNum,
-                            lng: lngNum,
-                          },
-                        },
-                      },
-                    ],
-                  };
-
-                  return res.json({
-                    success: true,
-                    data: transformedData,
-                    source: "google_maps",
-                  });
-                }
-              } catch (googleErr) {
-                logger.warn(
-                  "Google Maps geocoding failed, using bigdatacloud fallback",
-                  {
-                    error: googleErr.message,
-                  },
-                );
-              }
-            }
-
-            // Fallback to bigdatacloud if Google Maps not available or failed
-            fallbackResponse = await axios.get(
+            // Use BigDataCloud reverse-geocode client (no Google Geocoding / Places)
+            const fallbackResponse = await axios.get(
               `https://api.bigdatacloud.net/data/reverse-geocode-client`,
               {
                 params: {
@@ -423,7 +271,7 @@ export const reverseGeocode = async (req, res) => {
             return res.json({
               success: true,
               data: transformedData,
-              source: "fallback",
+              source: "bigdatacloud",
             });
           } catch (fallbackError) {
             // Even fallback failed, return minimal data
@@ -773,78 +621,10 @@ export const getNearbyLocations = async (req, res) => {
     }
 
     const apiKey = process.env.OLA_MAPS_API_KEY;
-    // Get Google Maps API key from database (NO FALLBACK)
-    const { getGoogleMapsApiKey } =
-      await import("../../../shared/utils/envService.js");
-    const googleApiKey = await getGoogleMapsApiKey();
 
     let nearbyPlaces = [];
 
-    // Try Google Places API first (better results)
-    if (googleApiKey) {
-      try {
-        const response = await axios.get(
-          "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
-          {
-            params: {
-              location: `${latNum},${lngNum}`,
-              radius: radiusNum,
-              type: "establishment|point_of_interest",
-              key: googleApiKey,
-              ...(query && { keyword: query }),
-            },
-            timeout: 5000,
-          },
-        );
-
-        if (response.data && response.data.results) {
-          nearbyPlaces = response.data.results
-            .slice(0, 10)
-            .map((place, index) => {
-              // Calculate distance
-              const placeLat = place.geometry.location.lat;
-              const placeLng = place.geometry.location.lng;
-              const distance = calculateDistance(
-                latNum,
-                lngNum,
-                placeLat,
-                placeLng,
-              );
-
-              return {
-                id: place.place_id || `place_${index}`,
-                name: place.name || "",
-                address: place.vicinity || place.formatted_address || "",
-                distance:
-                  distance < 1000
-                    ? `${Math.round(distance)} m`
-                    : `${(distance / 1000).toFixed(2)} km`,
-                distanceMeters: Math.round(distance),
-                latitude: placeLat,
-                longitude: placeLng,
-                types: place.types || [],
-              };
-            });
-
-          // Sort by distance
-          nearbyPlaces.sort((a, b) => a.distanceMeters - b.distanceMeters);
-
-          return res.json({
-            success: true,
-            data: {
-              locations: nearbyPlaces,
-              source: "google_places",
-            },
-          });
-        }
-      } catch (googleError) {
-        logger.warn("Google Places API failed, trying OLA Maps", {
-          error: googleError.message,
-        });
-      }
-    }
-
-    // Fallback to OLA Maps (if available) or return empty
+    // Use only OLA Maps (or other non‑Google provider) for nearby POIs
     if (apiKey) {
       try {
         // Note: OLA Maps might have different endpoint structure

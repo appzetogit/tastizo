@@ -13,6 +13,11 @@ import RestaurantWallet from "../../restaurant/models/RestaurantWallet.js";
 import RestaurantCommission from "../../admin/models/RestaurantCommission.js";
 import AdminCommission from "../../admin/models/AdminCommission.js";
 import { calculateRoute } from "../../order/services/routeCalculationService.js";
+import {
+  upsertActiveOrder,
+  updateDeliveryBoyLocation,
+} from "../../../services/firebaseRealtimeService.js";
+import { encodePolyline } from "../../../shared/utils/polylineEncoder.js";
 import mongoose from "mongoose";
 import winston from "winston";
 
@@ -1227,6 +1232,13 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
       return errorResponse(res, 404, "Order not found or not assigned to you");
     }
 
+    // Pre-compute restaurant coordinates (for Firebase + routing)
+    let restaurantLat = null;
+    let restaurantLng = null;
+    if (order.restaurantId?.location?.coordinates?.length >= 2) {
+      [restaurantLng, restaurantLat] = order.restaurantId.location.coordinates;
+    }
+
     // Verify order ID matches
     if (confirmedOrderId && confirmedOrderId !== order.orderId) {
       return errorResponse(res, 400, "Order ID does not match");
@@ -1316,6 +1328,51 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
           {
             useDijkstra: true,
           },
+        );
+      }
+
+      // Sync already-confirmed order to Firebase Realtime Database
+      try {
+        if (
+          routeData &&
+          routeData.coordinates &&
+          routeData.coordinates.length > 0 &&
+          restaurantLat !== null &&
+          restaurantLng !== null &&
+          customerLat &&
+          customerLng &&
+          deliveryLat &&
+          deliveryLng
+        ) {
+          const rtdbOrderId =
+            order.orderId || (order._id && order._id.toString()) || orderId;
+          const polyline = encodePolyline(routeData.coordinates);
+
+          await upsertActiveOrder({
+            orderId: rtdbOrderId,
+            boy_id: delivery._id.toString(),
+            boy_lat: deliveryLat,
+            boy_lng: deliveryLng,
+            restaurant_lat: restaurantLat,
+            restaurant_lng: restaurantLng,
+            customer_lat: customerLat,
+            customer_lng: customerLng,
+            polyline,
+            distance: routeData.distance,
+            duration: routeData.duration,
+            status: "assigned"
+          });
+
+          await updateDeliveryBoyLocation(
+            delivery._id.toString(),
+            deliveryLat,
+            deliveryLng,
+            rtdbOrderId
+          );
+        }
+      } catch (firebaseErr) {
+        console.warn(
+          "Firebase sync (already-confirmed order) failed: " + firebaseErr.message
         );
       }
 
@@ -1535,6 +1592,53 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
       } catch (notifError) {
         console.error("Error sending customer notification:", notifError);
         // Don't fail the response if notification fails
+      }
+
+      // Also sync active_orders + delivery_boys in Firebase for live tracking
+      try {
+        if (
+          routeData &&
+          routeData.coordinates &&
+          routeData.coordinates.length > 0 &&
+          restaurantLat !== null &&
+          restaurantLng !== null &&
+          customerLat &&
+          customerLng &&
+          deliveryLat &&
+          deliveryLng
+        ) {
+          const rtdbOrderId =
+            order.orderId ||
+            (updatedOrder && updatedOrder._id && updatedOrder._id.toString()) ||
+            orderId;
+          const polyline = encodePolyline(routeData.coordinates);
+
+          await upsertActiveOrder({
+            orderId: rtdbOrderId,
+            boy_id: delivery._id.toString(),
+            boy_lat: deliveryLat,
+            boy_lng: deliveryLng,
+            restaurant_lat: restaurantLat,
+            restaurant_lng: restaurantLng,
+            customer_lat: customerLat,
+            customer_lng: customerLng,
+            polyline,
+            distance: routeData.distance,
+            duration: routeData.duration,
+            status: "assigned"
+          });
+
+          await updateDeliveryBoyLocation(
+            delivery._id.toString(),
+            deliveryLat,
+            deliveryLng,
+            rtdbOrderId
+          );
+        }
+      } catch (firebaseErr) {
+        console.warn(
+          "Firebase sync (order ID confirmed) failed: " + firebaseErr.message
+        );
       }
     })();
 

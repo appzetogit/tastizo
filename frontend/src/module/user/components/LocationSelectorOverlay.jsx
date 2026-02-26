@@ -1523,7 +1523,26 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         let pointOfInterest = ""
         let premise = ""
 
-        if (GOOGLE_MAPS_API_KEY) {
+        // NEW: Always use backend reverse geocoding (BigDataCloud via Node) instead of calling
+        // Google Geocoding / Places APIs directly from the frontend.
+        try {
+          const response = await locationAPI.reverseGeocode(roundedLat, roundedLng)
+          const backendData = response?.data?.data
+          const result = backendData?.results?.[0] || backendData?.result?.[0] || null
+
+          if (result) {
+            formattedAddress = result.formatted_address || result.formattedAddress || ""
+            const addressComponents = result.address_components || {}
+            city = addressComponents.city || ""
+            state = addressComponents.state || ""
+            area = addressComponents.area || ""
+          }
+        } catch (backendError) {
+          console.error("❌ Backend reverse geocode failed:", backendError)
+        }
+
+        // Legacy Google Maps implementation below is intentionally left for reference only.
+        if (GOOGLE_MAPS_API_KEY && false) {
           try {
             // Step 1: Use Google Geocoding API for address components
             // Get API key dynamically from backend

@@ -1224,11 +1224,9 @@ export default function Cart() {
       <AnimatedPage className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a]">
         <div className="bg-white dark:bg-[#1a1a1a] border-b dark:border-gray-800 sticky top-0 z-10">
           <div className="flex items-center gap-3 px-4 py-3">
-            <Link onClick={() => navigate(-1)}>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(-1)}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
             <span className="font-semibold text-gray-800 dark:text-white">Cart</span>
           </div>
         </div>
@@ -1238,7 +1236,7 @@ export default function Cart() {
           </div>
           <h2 className="text-lg font-semibold text-gray-800 dark:text-white mb-1">Your cart is empty</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">Add items from a restaurant to start a new order</p>
-          <Link>
+          <Link to="/">
             <Button className="bg-primary-orange hover:opacity-90 text-white">Browse Restaurants</Button>
           </Link>
         </div>
@@ -1253,11 +1251,9 @@ export default function Cart() {
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between px-3 md:px-6 py-2 md:py-3">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <Link onClick={() => navigate(-1)}>
-                <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8 flex-shrink-0">
-                  <ArrowLeft className="h-4 w-4 md:h-5 md:w-5" />
-                </Button>
-              </Link>
+              <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8 flex-shrink-0" onClick={() => navigate(-1)}>
+                <ArrowLeft className="h-4 w-4 md:h-5 md:w-5" />
+              </Button>
               <div className="min-w-0">
                 <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">{restaurantName}</p>
                 <p className="text-sm md:text-base font-medium text-gray-800 dark:text-white truncate">
@@ -1613,8 +1609,8 @@ export default function Cart() {
                               }}
                               disabled={!addressExists}
                               className={`text-xs md:text-sm px-2 md:px-3 py-1 md:py-1.5 rounded-md border transition-colors ${addressExists
-                                  ? 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 bg-white dark:bg-[#1a1a1a]'
-                                  : 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-50'
+                                ? 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 bg-white dark:bg-[#1a1a1a]'
+                                : 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-50'
                                 }`}
                             >
                               {label}

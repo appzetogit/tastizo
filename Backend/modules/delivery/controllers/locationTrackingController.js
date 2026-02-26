@@ -12,6 +12,7 @@ import {
   clearLocationHistory,
   clearRouteCache
 } from '../services/locationProcessingService.js';
+import { updateDeliveryBoyLocation } from "../../../services/firebaseRealtimeService.js";
 import Order from '../../order/models/Order.js';
 
 /**
@@ -105,6 +106,23 @@ export const receiveLocationUpdate = asyncHandler(async (req, res) => {
         progress: processedLocation.progress,
         timestamp: processedLocation.timestamp
       });
+    }
+
+    // Sync live location to Firebase Realtime Database for this delivery boy and order
+    try {
+      if (deliveryBoyId) {
+        await updateDeliveryBoyLocation(
+          deliveryBoyId.toString(),
+          processedLocation.lat,
+          processedLocation.lng,
+          orderId,
+        );
+      }
+    } catch (firebaseErr) {
+      console.warn(
+        "Firebase updateDeliveryBoyLocation failed:",
+        firebaseErr.message,
+      );
     }
     
     return successResponse(res, 200, 'Location updated successfully', {

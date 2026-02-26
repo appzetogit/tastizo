@@ -33,6 +33,13 @@ class GoogleMapsService {
    * @returns {Promise<Object>} - { distance (km), duration (minutes), trafficLevel }
    */
   async getTravelTime(origin, destination, mode = 'driving', trafficModel = 'best_guess') {
+    // Env flag gate – default OFF to save cost
+    const enabled = process.env.ENABLE_GOOGLE_DISTANCE_MATRIX === 'true';
+    if (!enabled) {
+      // Never call Google API when disabled; use haversine fallback instead
+      return this.calculateHaversineDistance(origin, destination);
+    }
+
     const apiKey = await this.getApiKey();
     if (!apiKey) {
       // Fallback to haversine distance calculation if API key not available
