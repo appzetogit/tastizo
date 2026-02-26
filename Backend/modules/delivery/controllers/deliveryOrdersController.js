@@ -2070,9 +2070,10 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       let wallet = await DeliveryWallet.findOrCreateByDeliveryId(delivery._id);
 
       // Check if transaction already exists for this order
-      const orderIdForTransaction = orderMongoId?.toString
-        ? orderMongoId.toString()
-        : orderMongoId;
+      const orderIdForTransaction =
+        (orderMongoId && orderMongoId.toString()) ||
+        (order && order._id && order._id.toString()) ||
+        null;
       const existingTransaction = wallet.transactions?.find(
         (t) =>
           t.orderId &&
@@ -2080,7 +2081,7 @@ export const completeDelivery = asyncHandler(async (req, res) => {
           t.type === "payment",
       );
 
-      if (existingTransaction) {
+      if (orderIdForTransaction && existingTransaction) {
         console.warn(
           `⚠️ Earning already added for order ${orderIdForLog}, skipping wallet update`,
         );
@@ -2240,12 +2241,19 @@ export const completeDelivery = asyncHandler(async (req, res) => {
           const restaurantWallet =
             await RestaurantWallet.findOrCreateByRestaurantId(restaurant._id);
 
-          // Check if transaction already exists for this order
+          // Build a safe orderIdForTransaction for restaurant wallet
+          const restaurantOrderIdForTransaction =
+            (orderMongoId && orderMongoId.toString()) ||
+            (order && order._id && order._id.toString()) ||
+            null;
+
+          // Check if transaction already exists for this order (only if we have an ID)
           const existingRestaurantTransaction =
+            restaurantOrderIdForTransaction &&
             restaurantWallet.transactions?.find(
               (t) =>
                 t.orderId &&
-                t.orderId.toString() === orderIdForTransaction &&
+                t.orderId.toString() === restaurantOrderIdForTransaction &&
                 t.type === "payment",
             );
 

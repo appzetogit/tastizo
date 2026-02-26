@@ -3740,6 +3740,16 @@ export default function DeliveryHome() {
                     setRoutePolyline(routeData.coordinates)
                     updateRoutePolyline(routeData.coordinates)
                     setShowRoutePath(true)
+                  } else {
+                    // Ultimate fallback: draw a simple straight line between rider and customer
+                    const fallbackRoute = [
+                      [currentLocation[0], currentLocation[1]],
+                      [customerLat, customerLng]
+                    ]
+                    setRoutePolyline(fallbackRoute)
+                    updateRoutePolyline(fallbackRoute)
+                    setShowRoutePath(true)
+                    console.log('⚠️ Using simple straight-line fallback route between rider and customer')
                   }
                 } catch (routeError) {
                   if (routeError.message?.includes('REQUEST_DENIED') || routeError.message?.includes('not available')) {
@@ -3751,6 +3761,16 @@ export default function DeliveryHome() {
                     setRoutePolyline(routeData.coordinates)
                     updateRoutePolyline(routeData.coordinates)
                     setShowRoutePath(true)
+                  } else if (currentLocation && currentLocation.length === 2 && customerLat && customerLng) {
+                    // Same straight-line fallback when Directions API fails
+                    const fallbackRoute = [
+                      [currentLocation[0], currentLocation[1]],
+                      [customerLat, customerLng]
+                    ]
+                    setRoutePolyline(fallbackRoute)
+                    updateRoutePolyline(fallbackRoute)
+                    setShowRoutePath(true)
+                    console.log('⚠️ Directions API failed and no backend route, using straight-line fallback route')
                   }
                 }
               }
@@ -7661,17 +7681,8 @@ export default function DeliveryHome() {
 
   // Create or update route polyline (blue line showing traveled path) - LEGACY/FALLBACK
   // Accepts optional coordinates parameter to draw route immediately without waiting for state update
-  // This is a FALLBACK polyline - should only be used when DirectionsRenderer is NOT available
+  // This is a FALLBACK polyline - used when Directions API result is not available
   const updateRoutePolyline = (coordinates = null) => {
-    // Only show route if there's an active order (selectedRestaurant)
-    if (!selectedRestaurant) {
-      // Clear route if no active order
-      if (routePolylineRef.current) {
-        routePolylineRef.current.setMap(null);
-      }
-      return;
-    }
-
     // Don't show fallback polyline if DirectionsRenderer is active (it handles road-snapped routes)
     if (directionsRendererRef.current && directionsRendererRef.current.getDirections()) {
       // DirectionsRenderer is active, hide fallback polyline
@@ -7701,28 +7712,37 @@ export default function DeliveryHome() {
       }).filter(coord => coord !== null);
 
       if (path.length > 0) {
-        // Don't create main route polyline - only live tracking polyline will be shown
-        // Remove old custom polyline if exists (cleanup)
-        if (routePolylineRef.current) {
-          routePolylineRef.current.setMap(null);
-          routePolylineRef.current = null;
+        // Create or update fallback polyline on the map
+        if (!routePolylineRef.current) {
+          routePolylineRef.current = new window.google.maps.Polyline({
+            path,
+            geodesic: true,
+            strokeColor: '#1E88E5', // Visible blue fallback route
+            strokeOpacity: 0.9,
+            strokeWeight: 5,
+            zIndex: 900,
+            map
+          });
+        } else {
+          routePolylineRef.current.setPath(path);
+          if (!routePolylineRef.current.getMap()) {
+            routePolylineRef.current.setMap(map);
+          }
         }
 
         // Fit map bounds to show entire route - but preserve zoom if user has zoomed in
         if (path.length > 1) {
           const bounds = new window.google.maps.LatLngBounds();
           path.forEach(point => bounds.extend(point));
-          // Add padding to bounds for better visibility
           const currentZoomBeforeFit = map.getZoom();
           map.fitBounds(bounds, { padding: 50 });
-          // Preserve zoom if user had zoomed in more than fitBounds would set
           setTimeout(() => {
             const newZoom = map.getZoom();
             if (currentZoomBeforeFit > newZoom && currentZoomBeforeFit >= 18) {
               map.setZoom(currentZoomBeforeFit);
             }
           }, 100);
-          console.log('✅ Map bounds adjusted to show route');
+          console.log('✅ Fallback route polyline drawn and map bounds adjusted');
         }
       }
     } else {
