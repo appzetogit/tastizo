@@ -108,6 +108,29 @@ export default function CategoryPage() {
     fetchCategories()
   }, [])
 
+  // When a category is selected (including from homepage redirect),
+  // auto-scroll the horizontal list so the selected category appears first in view.
+  useEffect(() => {
+    if (!categoryScrollRef.current || !categories || categories.length === 0) return
+    if (!selectedCategory) return
+
+    try {
+      const container = categoryScrollRef.current
+      const target = container.querySelector(
+        `[data-category-id="${selectedCategory}"]`,
+      )
+      if (target && typeof target.scrollIntoView === "function") {
+        target.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "start",
+        })
+      }
+    } catch (e) {
+      console.warn("Failed to scroll selected category into view:", e)
+    }
+  }, [selectedCategory, categories])
+
   // Helper function to check if menu has dishes matching category keywords
   const checkCategoryInMenu = (menu, categoryId) => {
     if (!menu || !menu.sections || !Array.isArray(menu.sections)) {
@@ -697,6 +720,7 @@ export default function CategoryPage() {
                 return (
                   <button
                     key={cat.id}
+                    data-category-id={categorySlug}
                     onClick={() => handleCategorySelect(cat)}
                     className={`flex flex-col items-center gap-1.5 flex-shrink-0 pb-2 transition-all ${isSelected ? 'border-b-2 border-green-600' : ''
                       }`}

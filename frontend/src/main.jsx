@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import './index.css'
 import App from './App.jsx'
+import OfflineBanner from './components/OfflineBanner.jsx'
 import { getGoogleMapsApiKey } from './lib/utils/googleMapsApiKey.js'
 import { loadBusinessSettings } from './lib/utils/businessSettings.js'
 
@@ -233,6 +234,7 @@ createRoot(rootElement).render(
     <BrowserRouter>
       <App />
       <Toaster position="top-center" richColors offset="80px" />
+      <OfflineBanner />
     </BrowserRouter>
   </StrictMode>,
 )
