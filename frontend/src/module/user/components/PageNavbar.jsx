@@ -568,19 +568,23 @@ export default function PageNavbar({
       }
     }
     // Priority 6: Use city ONLY if nothing else worked (last resort)
-    // Skip if city is "Current Location" or "Select location" - these are placeholders
     else if (!mainLocation && location?.city &&
       location.city.trim() !== "" &&
       location.city !== "Unknown City" &&
-      location.city !== "Current Location" &&
       location.city !== "Select location") {
+      // Even if city is "Current Location", prefer showing that instead of placeholder
       mainLocation = location.city
       console.log("⚠️⚠️⚠️ FALLBACK: Using city (no locality found):", mainLocation)
     }
-    // Final fallback: Show "Select location" instead of coordinates
+    // Final fallback: if we STILL have nothing, fall back to city or generic placeholder
     else if (!mainLocation) {
-      mainLocation = "Select location"
-      console.log("⚠️ No valid location found, showing placeholder")
+      if (location?.city && location.city.trim() !== "") {
+        mainLocation = location.city
+        console.log("⚠️ Final fallback using city only:", mainLocation)
+      } else {
+        mainLocation = "Select location"
+        console.log("⚠️ No valid location found, showing placeholder")
+      }
     }
 
     // If mainLocation is still coordinates, replace with area or city
