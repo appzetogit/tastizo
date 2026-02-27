@@ -527,9 +527,9 @@ apiClient.interceptors.response.use(
           networkErrorState.lastToastTime = now;
           networkErrorState.toastShown = true;
 
-          // Show helpful error message (only once per minute)
+          // Show helpful, user-facing error message (only once per minute)
           toast.error(
-            `Backend not connected! Start server: cd tastizo/backend && npm run dev`,
+            "Server connection failed. Please check your internet",
             {
               duration: 10000,
               id: "network-error-toast", // Use ID to prevent duplicate toasts

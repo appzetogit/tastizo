@@ -106,6 +106,9 @@ export default function Cart() {
   const [orderProgress, setOrderProgress] = useState(0)
   const [showOrderSuccess, setShowOrderSuccess] = useState(false)
   const [placedOrderId, setPlacedOrderId] = useState(null)
+  const [isEditingContact, setIsEditingContact] = useState(false)
+  const [contactName, setContactName] = useState(userProfile?.name || "")
+  const [contactPhoneInput, setContactPhoneInput] = useState(userProfile?.phone || "")
 
   // Restaurant and pricing state
   const [restaurantData, setRestaurantData] = useState(null)
@@ -129,6 +132,7 @@ export default function Cart() {
     gstRate: 5,
   })
   const [showAddressPicker, setShowAddressPicker] = useState(false)
+  const [selectedAddressType, setSelectedAddressType] = useState(null)
 
 
   const cartCount = getCartCount()
@@ -169,7 +173,21 @@ export default function Cart() {
     return null
   }, [restaurantData])
 
+  // Keep local contact details in sync with profile when it changes,
+  // but edits made here are ONLY for this checkout view (not saved to profile).
+  useEffect(() => {
+    setContactName(userProfile?.name || "")
+    setContactPhoneInput(userProfile?.phone || "")
+  }, [userProfile?.name, userProfile?.phone])
 
+  // Sync selected address type from saved default address (for initial render / refresh)
+  useEffect(() => {
+    const baseAddress = savedAddress
+    const serverType = baseAddress?.type || baseAddress?.label || null
+    if (serverType && serverType !== selectedAddressType) {
+      setSelectedAddressType(serverType)
+    }
+  }, [savedAddress, selectedAddressType])
 
   // Lock body scroll and scroll to top when any full-screen modal opens
   useEffect(() => {
@@ -624,7 +642,7 @@ export default function Cart() {
   // Restaurant name from data or cart
   const restaurantName = restaurantData?.name || cart[0]?.restaurant || "Restaurant"
 
-  // Handler to select address by label (Home, Office, Other)
+  // Handler to select address by label (used in address picker list to switch location)
   const handleSelectAddressByLabel = async (label) => {
     try {
       // Find address with matching label
@@ -684,6 +702,41 @@ export default function Cart() {
       console.error(`Error selecting ${label} address:`, error)
       const message = error.response?.data?.message || error.response?.data?.error || error.message
       toast.error(message || `Failed to update address. Please try again.`)
+    }
+  }
+
+  // Handler to update address type (Home, Office, Other) just for this cart/session.
+  // No backend update is performed to avoid route/404 errors; this is purely UI state.
+  const handleAddressTypeChange = (nextType) => {
+    const baseAddress = savedAddress
+    const currentType = selectedAddressType || baseAddress?.type || baseAddress?.label || null
+    if (!nextType || currentType === nextType) {
+      // No change
+      return
+    }
+
+    // If there is NO saved address with this label (e.g. "Office"),
+    // open the add-address flow pre-configured for that label.
+    const hasAddressForType = addresses?.some(
+      (addr) => addr.label === nextType,
+    )
+
+    if (!hasAddressForType) {
+      setSelectedAddressType(nextType)
+      try {
+        localStorage.setItem("preferredAddressLabel", nextType)
+      } catch {
+        // ignore storage errors
+      }
+      openLocationSelector()
+      return
+    }
+
+    setSelectedAddressType(nextType)
+    try {
+      localStorage.setItem("lastAddressType", nextType)
+    } catch {
+      // ignore storage errors
     }
   }
 
@@ -1594,10 +1647,10 @@ export default function Cart() {
                       <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
                         {defaultAddress ? (formatFullAddress(defaultAddress) || defaultAddress?.formattedAddress || defaultAddress?.address || "Add delivery address") : "Add delivery address"}
                       </p>
-                      {/* Quick-select: Home, Office, Other */}
+                      {/* Address type selector: Home, Office, Other */}
                       <div className="flex gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
                         {["Home", "Office", "Other"].map((label) => {
-                          const addressExists = addresses.some(addr => addr.label === label)
+                          const isActive = selectedAddressType === label
                           return (
                             <button
                               key={label}
@@ -1605,13 +1658,13 @@ export default function Cart() {
                               onClick={(e) => {
                                 e.preventDefault()
                                 e.stopPropagation()
-                                handleSelectAddressByLabel(label)
+                                handleAddressTypeChange(label)
                               }}
-                              disabled={!addressExists}
-                              className={`text-xs md:text-sm px-2 md:px-3 py-1 md:py-1.5 rounded-md border transition-colors ${addressExists
-                                ? 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 bg-white dark:bg-[#1a1a1a]'
-                                : 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-50'
-                                }`}
+                              className={`text-xs md:text-sm px-2 md:px-3 py-1 md:py-1.5 rounded-md border transition-colors ${
+                                isActive
+                                  ? 'border-green-600 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20'
+                                  : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 bg-white dark:bg-[#1a1a1a] hover:bg-gray-100 dark:hover:bg-gray-800'
+                              }`}
                             >
                               {label}
                             </button>
@@ -1698,15 +1751,95 @@ export default function Cart() {
 
               {/* Contact */}
               <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
-                <Link to="/user/profile" className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 md:gap-4">
-                    <Phone className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
-                    <p className="text-sm md:text-base text-gray-800 dark:text-gray-200">
-                      {userProfile?.name || "Your Name"}, <span className="font-medium">{userProfile?.phone || "+91-XXXXXXXXXX"}</span>
-                    </p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-gray-400" />
-                </Link>
+                {!isEditingContact ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingContact(true)}
+                    className="flex w-full items-center justify-between text-left"
+                  >
+                    <div className="flex items-center gap-3 md:gap-4">
+                      <Phone className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
+                      <p className="text-sm md:text-base text-gray-800 dark:text-gray-200">
+                        {contactName || userProfile?.name || "Your Name"},{" "}
+                        <span className="font-medium">
+                          {contactPhoneInput || userProfile?.phone || "+91-XXXXXXXXXX"}
+                        </span>
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-gray-400" />
+                  </button>
+                ) : (
+                  <form
+                    className="flex flex-col gap-3 md:gap-4"
+                    onSubmit={async (e) => {
+                      e.preventDefault()
+                      const nameTrimmed = (contactName || "").trim()
+                      const trimmed = (contactPhoneInput || "").replace(/\D/g, "")
+                      if (!nameTrimmed) {
+                        toast.error("Please enter a contact name.")
+                        return
+                      }
+                      if (!trimmed || trimmed.length < 6) {
+                        toast.error("Please enter a valid phone number.")
+                        return
+                      }
+                      const maxLen = 10
+                      const normalized = trimmed.slice(0, maxLen)
+
+                      // Locally update contact info just for this order view
+                      setContactName(nameTrimmed)
+                      setContactPhoneInput(normalized)
+                      setIsEditingContact(false)
+                      toast.success("Contact details updated for this order.")
+                    }}
+                  >
+                    <div className="flex items-center gap-3 md:gap-4">
+                      <Phone className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mb-1">
+                          Update contact name and number for this order
+                        </p>
+                        <input
+                          type="text"
+                          value={contactName}
+                          onChange={(e) => setContactName(e.target.value)}
+                          className="mb-2 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#0f0f0f] px-3 py-2 text-sm md:text-base text-gray-900 dark:text-gray-100 focus:border-green-600 focus:outline-none focus:ring-1 focus:ring-green-600"
+                          placeholder="Contact name"
+                        />
+                        <input
+                          type="tel"
+                          value={contactPhoneInput}
+                          onChange={(e) =>
+                            setContactPhoneInput(
+                              e.target.value.replace(/\D/g, "").slice(0, 10),
+                            )
+                          }
+                          className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#0f0f0f] px-3 py-2 text-sm md:text-base text-gray-900 dark:text-gray-100 focus:border-green-600 focus:outline-none focus:ring-1 focus:ring-green-600"
+                          placeholder="+91XXXXXXXXXX"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditingContact(false)
+                          setContactName(userProfile?.name || "")
+                          setContactPhoneInput(userProfile?.phone || "")
+                        }}
+                        className="rounded-md border border-gray-300 px-3 py-1.5 text-xs md:text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="rounded-md bg-green-600 px-3 py-1.5 text-xs md:text-sm font-semibold text-white hover:bg-green-700"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
 
               {/* Bill Details - hidden on desktop when right-column Order Summary is shown */}

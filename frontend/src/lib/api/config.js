@@ -145,6 +145,7 @@ export const API_ENDPOINTS = {
   USER: {
     PROFILE: "/user/profile",
     ADDRESSES: "/user/addresses",
+    ADDRESS_UPDATE_TYPE: "/address/update-type",
     PREFERENCES: "/user/preferences",
     WALLET: "/user/wallet",
     ORDERS: "/user/orders",

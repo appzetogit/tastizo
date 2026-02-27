@@ -191,6 +191,14 @@ export const userAPI = {
     );
   },
 
+  // Update address type (Home | Office | Other)
+  updateAddressType: (addressId, type) => {
+    return apiClient.patch(API_ENDPOINTS.USER.ADDRESS_UPDATE_TYPE, {
+      addressId,
+      type,
+    });
+  },
+
   // Delete address
   deleteAddress: (addressId) => {
     return apiClient.delete(`${API_ENDPOINTS.USER.ADDRESSES}/${addressId}`);

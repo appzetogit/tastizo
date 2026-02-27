@@ -71,6 +71,25 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const [currentAddress, setCurrentAddress] = useState("")
   const [GOOGLE_MAPS_API_KEY, setGOOGLE_MAPS_API_KEY] = useState(null)
 
+  // When opened from cart with a preferred label (Home/Office/Other),
+  // initialize the address form with that label if present.
+  useEffect(() => {
+    if (!isOpen) return
+    try {
+      const preferredLabel = localStorage.getItem("preferredAddressLabel")
+      if (preferredLabel) {
+        setAddressFormData((prev) => ({
+          ...prev,
+          label: preferredLabel,
+        }))
+        // Clear after using once
+        localStorage.removeItem("preferredAddressLabel")
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [isOpen])
+
   // Load Google Maps API key from backend
   useEffect(() => {
     import('@/lib/utils/googleMapsApiKey.js').then(({ getGoogleMapsApiKey }) => {
