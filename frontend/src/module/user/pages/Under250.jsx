@@ -399,9 +399,9 @@ export default function Under250() {
           <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900 dark:to-blue-900" />
         )}
 
-        {/* Navbar */}
+        {/* Navbar (without profile avatar on this page) */}
         <div className="relative z-20 pt-2 sm:pt-3 lg:pt-4">
-          <PageNavbar textColor="black" zIndex={20} showProfile={true} />
+          <PageNavbar textColor="white" zIndex={20} showProfile={false} />
         </div>
       </div>
 

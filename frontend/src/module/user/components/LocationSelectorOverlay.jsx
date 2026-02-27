@@ -917,6 +917,24 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         }
       }
 
+      // Broadcast updated location to other parts of the app (Navbar, etc.)
+      try {
+        if (typeof window !== "undefined") {
+          const payload = {
+            latitude: locationData.latitude,
+            longitude: locationData.longitude,
+            city: locationData.city,
+            state: locationData.state,
+            area: locationData.area,
+            address: locationData.address,
+            formattedAddress: locationData.formattedAddress || locationData.address,
+          }
+          window.dispatchEvent(new CustomEvent("userLocationUpdated", { detail: payload }))
+        }
+      } catch {
+        // ignore cross-window errors
+      }
+
       // Success toast with address preview
       const addressPreview = locationData?.formattedAddress || locationData?.address || "Location updated"
       toast.success(`Location updated: ${addressPreview.split(',').slice(0, 2).join(', ')}`, {
@@ -2159,6 +2177,15 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         formattedAddress: `${address.street}, ${address.city}, ${address.state}`
       }
       localStorage.setItem("userLocation", JSON.stringify(locationData))
+
+      // Broadcast updated location so Navbar and other components update immediately
+      try {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("userLocationUpdated", { detail: locationData }))
+        }
+      } catch {
+        // ignore cross-window errors
+      }
 
       // Update map position to show selected address
       setMapPosition([latitude, longitude])
