@@ -124,52 +124,11 @@ export function useLocation() {
 
   /* ===================== GOOGLE MAPS REVERSE GEOCODE (now via backend, no direct Google calls) ===================== */
   const reverseGeocodeWithGoogleMaps = async (latitude, longitude) => {
-    // New implementation: delegate to backend /location/reverse (BigDataCloud) instead of calling
-    // Google Geocoding/Places APIs directly from the frontend.
-    try {
-      const response = await locationAPI.reverseGeocode(latitude, longitude);
-
-      if (!response?.data?.success) {
-        throw new Error(response?.data?.message || "Reverse geocoding failed");
-      }
-
-      const backendData = response.data.data || {};
-      const results = backendData.results || [];
-      const result = results[0];
-
-      if (!result) {
-        throw new Error("No reverse geocoding results");
-      }
-
-      const addressComponents = result.address_components || {};
-      const formattedAddress =
-        result.formatted_address || result.formattedAddress || "";
-
-      const city =
-        addressComponents.city ||
-        addressComponents.locality ||
-        "";
-      const state =
-        addressComponents.state ||
-        addressComponents.principalSubdivision ||
-        "";
-      const area = addressComponents.area || "";
-
-      return {
-        latitude,
-        longitude,
-        city,
-        state,
-        area,
-        address: formattedAddress || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-        formattedAddress:
-          formattedAddress || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-      };
-    } catch (err) {
-      console.error("Reverse geocoding via backend failed, using direct fallback:", err);
-      // Fallback to direct geocoding helper (which itself is provider‑agnostic)
-      return reverseGeocodeDirect(latitude, longitude);
-    }
+    // IMPORTANT: In production our server-side BigDataCloud usage is rate-limited/banned.
+    // To keep the user experience consistent and independent of server quota,
+    // always use the client-side BigDataCloud helper here. This was the behaviour
+    // when location worked correctly on localhost.
+    return reverseGeocodeDirect(latitude, longitude);
 
     // Legacy Google Maps implementation below is intentionally left unused.
     // The function now always returns above and never reaches the old code.
