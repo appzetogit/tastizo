@@ -86,52 +86,21 @@ export function useLocation() {
     }
   }
 
-  // Google Places API removed - using OLA Maps only
-
-  /* ===================== DIRECT REVERSE GEOCODE ===================== */
+  /* ===================== DIRECT REVERSE GEOCODE (provider‑agnostic fallback, no external APIs) ===================== */
   const reverseGeocodeDirect = async (latitude, longitude) => {
-    try {
-      const controller = new AbortController()
-      setTimeout(() => controller.abort(), 3000) // Faster timeout
-
-      const res = await fetch(
-        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`,
-        { signal: controller.signal }
-      )
-
-      const data = await res.json()
-
-      return {
-        city: data.city || data.locality || "",
-        state: data.principalSubdivision || "",
-        country: data.countryName || "",
-        area: data.subLocality || "",
-        address:
-          data.formattedAddress ||
-          `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-        formattedAddress:
-          data.formattedAddress ||
-          `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-      }
-    } catch {
-      return {
-        city: "Current Location",
-        address: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-        formattedAddress: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-      }
+    const coordsString = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+    return {
+      city: "Current Location",
+      state: "",
+      country: "",
+      area: "",
+      address: coordsString,
+      formattedAddress: coordsString,
     }
   }
 
-  /* ===================== GOOGLE MAPS REVERSE GEOCODE (now via backend, no direct Google calls) ===================== */
+  /* ===================== GOOGLE MAPS REVERSE GEOCODE (now using Google directly on client) ===================== */
   const reverseGeocodeWithGoogleMaps = async (latitude, longitude) => {
-    // IMPORTANT: In production our server-side BigDataCloud usage is rate-limited/banned.
-    // To keep the user experience consistent and independent of server quota,
-    // always use the client-side BigDataCloud helper here. This was the behaviour
-    // when location worked correctly on localhost.
-    return reverseGeocodeDirect(latitude, longitude);
-
-    // Legacy Google Maps implementation below is intentionally left unused.
-    // The function now always returns above and never reaches the old code.
     try {
       // Use AbortController for proper timeout handling
       const controller = new AbortController();
@@ -1440,7 +1409,7 @@ export function useLocation() {
                 } catch (geocodeErr) {
                   console.warn("⚠️ Google Maps geocoding failed, trying fallback:", geocodeErr.message)
                   try {
-                    // Fallback to direct reverse geocode (BigDataCloud)
+                  // Fallback to direct reverse geocode (local minimal address)
                     addr = await reverseGeocodeDirect(latitude, longitude)
                     console.log("✅ Fallback geocoding successful:", addr)
 

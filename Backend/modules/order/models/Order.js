@@ -186,7 +186,6 @@ const orderSchema = new mongoose.Schema(
         "cancelled",
       ],
       default: "pending",
-      index: true,
     },
     tracking: {
       confirmed: {

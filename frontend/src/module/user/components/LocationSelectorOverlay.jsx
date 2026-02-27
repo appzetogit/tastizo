@@ -1578,7 +1578,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         let pointOfInterest = ""
         let premise = ""
 
-        // NEW: Always use backend reverse geocoding (BigDataCloud via Node) instead of calling
+        // Use backend reverse geocoding (Node) instead of calling
         // Google Geocoding / Places APIs directly from the frontend.
         try {
           const response = await locationAPI.reverseGeocode(roundedLat, roundedLng)
