@@ -193,16 +193,29 @@ export const reverseGeocode = async (req, res) => {
           );
 
           try {
-            // Use BigDataCloud reverse-geocode client (no Google Geocoding / Places)
+            // Use BigDataCloud SERVER endpoint for reverse geocoding.
+            // NOTE: The "reverse-geocode-client" endpoint is for client-side use only
+            // and our server IP has been banned there. For backend we must call
+            // '/data/reverse-geocode' with an API key.
+            const bigDataCloudApiKey = process.env.BIGDATACLOUD_API_KEY;
+
+            if (!bigDataCloudApiKey) {
+              logger.warn(
+                "BIGDATACLOUD_API_KEY not configured. Skipping BigDataCloud fallback.",
+              );
+              throw new Error("BIGDATACLOUD_API_KEY missing");
+            }
+
             const fallbackResponse = await axios.get(
-              `https://api.bigdatacloud.net/data/reverse-geocode-client`,
+              "https://api.bigdatacloud.net/data/reverse-geocode",
               {
                 params: {
                   latitude: latNum,
                   longitude: lngNum,
                   localityLanguage: "en",
+                  key: bigDataCloudApiKey,
                 },
-                timeout: 5000, // Reduced timeout to 5 seconds
+                timeout: 7000,
               },
             );
 
