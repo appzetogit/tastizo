@@ -347,7 +347,10 @@ export default function AdminNavbar({ onMenuClick }) {
                   ))}
                 </div>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="justify-center cursor-pointer text-neutral-900 hover:text-black">
+                <DropdownMenuItem
+                  className="justify-center cursor-pointer text-neutral-900 hover:text-black font-medium"
+                  onClick={() => navigate("/admin/subscribed-mail-list")}
+                >
                   View all emails
                   <ArrowRight className="ml-2 w-4 h-4" />
                 </DropdownMenuItem>
@@ -482,16 +485,20 @@ export default function AdminNavbar({ onMenuClick }) {
                 <div className="text-sm text-neutral-500 mb-4">Quick Actions</div>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { icon: Package, label: "Orders" },
-                    { icon: Users, label: "Users" },
-                    { icon: UtensilsCrossed, label: "Products" },
-                    { icon: FileText, label: "Reports" },
+                    { icon: Package, label: "Orders", path: "/admin/orders" },
+                    { icon: Users, label: "Users", path: "/admin/customer-list" },
+                    { icon: UtensilsCrossed, label: "Products", path: "/admin/food-list" },
+                    { icon: FileText, label: "Reports", path: "/admin/analytics" },
                   ].map((action, idx) => (
                     <button
                       key={idx}
-                      className="flex items-center gap-3 p-4 rounded-lg border border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50 transition-all"
+                      onClick={() => {
+                        setSearchOpen(false);
+                        navigate(action.path);
+                      }}
+                      className="flex items-center gap-3 p-4 rounded-lg border border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50 transition-all group"
                     >
-                      <div className="p-2 rounded-md bg-black text-white">
+                      <div className="p-2 rounded-md bg-black text-white group-hover:scale-110 transition-transform">
                         <action.icon className="w-5 h-5" />
                       </div>
                       <span className="text-sm font-medium text-neutral-900">{action.label}</span>
@@ -528,6 +535,16 @@ export default function AdminNavbar({ onMenuClick }) {
                     {searchResults.map((result, idx) => (
                       <button
                         key={idx}
+                        onClick={() => {
+                          setSearchOpen(false);
+                          const pathMap = {
+                            "Order": "/admin/orders",
+                            "User": "/admin/customer-list",
+                            "Product": "/admin/food-list",
+                            "Report": "/admin/analytics"
+                          };
+                          navigate(pathMap[result.type] || "/admin");
+                        }}
                         className="w-full flex items-center gap-4 p-4 rounded-lg border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 transition-all text-left"
                       >
                         <div className="flex-1">

@@ -37,7 +37,7 @@ export default function AdminProfile() {
       setLoading(true);
       const response = await adminAPI.getAdminProfile();
       const adminData = response?.data?.data?.admin || response?.data?.admin;
-      
+
       if (adminData) {
         setProfile(adminData);
         setFormData({
@@ -58,6 +58,26 @@ export default function AdminProfile() {
   };
 
   const handleInputChange = (field, value) => {
+    // Validation for Full Name (Letters and spaces only)
+    if (field === "name") {
+      const filteredValue = value.replace(/[^a-zA-Z\s]/g, "");
+      setFormData((prev) => ({
+        ...prev,
+        [field]: filteredValue,
+      }));
+      return;
+    }
+
+    // Validation for Phone Number (Digits only, max 10)
+    if (field === "phone") {
+      const filteredValue = value.replace(/\D/g, "").slice(0, 10);
+      setFormData((prev) => ({
+        ...prev,
+        [field]: filteredValue,
+      }));
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -101,7 +121,7 @@ export default function AdminProfile() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       setSaving(true);
       let profileImageUrl = formData.profileImage;
@@ -114,7 +134,7 @@ export default function AdminProfile() {
             folder: 'admin-profiles'
           });
           profileImageUrl = uploadResponse?.data?.data?.url || uploadResponse?.data?.url;
-          
+
           if (!profileImageUrl) {
             throw new Error("Failed to get uploaded image URL");
           }
@@ -139,7 +159,7 @@ export default function AdminProfile() {
       });
 
       const updatedAdmin = response?.data?.data?.admin || response?.data?.admin;
-      
+
       if (updatedAdmin) {
         setProfile(updatedAdmin);
         setFormData((prev) => ({

@@ -54,12 +54,20 @@ export const getOrders = asyncHandler(async (req, res) => {
         const mappedStatus = statusMap[status] || status;
         query.status = mappedStatus;
 
-        // If restaurant-cancelled, filter by cancellation reason
+        // If restaurant-cancelled, filter by cancellation reason or cancelledBy field
         if (status === "restaurant-cancelled") {
-          query.cancellationReason = {
-            $regex:
-              /rejected by restaurant|restaurant rejected|restaurant cancelled/i,
-          };
+          query.$or = [
+            { cancelledBy: "restaurant" },
+            {
+              cancellationReason: {
+                $regex:
+                  /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue/i,
+              },
+            },
+          ];
+          // Remove single status assignment if using $or
+          delete query.status;
+          query.status = "cancelled";
         }
       }
     }
@@ -67,10 +75,7 @@ export const getOrders = asyncHandler(async (req, res) => {
     // Also handle cancelledBy query parameter (if passed separately)
     if (cancelledBy === "restaurant") {
       query.status = "cancelled";
-      query.cancellationReason = {
-        $regex:
-          /rejected by restaurant|restaurant rejected|restaurant cancelled/i,
-      };
+      query.cancelledBy = "restaurant";
     }
 
     // Payment status filter

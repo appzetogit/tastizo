@@ -1,23 +1,42 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { Search, Info, Settings } from "lucide-react"
+import { toast } from "sonner"
 import { conversationsDummy } from "../data/conversationsDummy"
 
 export default function Chattings() {
   const [activeTab, setActiveTab] = useState("customer")
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedConversation, setSelectedConversation] = useState(null)
+  const [messageInput, setMessageInput] = useState("")
+  const [messages, setMessages] = useState({})
 
-  const filteredConversations = conversationsDummy.filter(conv => {
-    if (activeTab === "customer" && conv.type !== "customer") return false
-    if (activeTab === "restaurant" && conv.type !== "restaurant") return false
-    
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim()
-      return conv.name.toLowerCase().includes(query) || conv.phone.includes(query)
+  const handleSendMessage = () => {
+    if (!messageInput.trim() || !selectedConversation) return
+
+    const convId = selectedConversation.id
+    const newMessage = {
+      id: Date.now(),
+      text: messageInput,
+      timestamp: "Just now",
+      sender: "admin"
     }
-    
-    return true
-  })
+
+    setMessages(prev => ({
+      ...prev,
+      [convId]: [...(prev[convId] || []), newMessage]
+    }))
+    setMessageInput("")
+    toast.success("Message sent")
+  }
+
+  const handleProfileClick = (conv) => {
+    toast.info(`Viewing profile for ${conv.name}`)
+    // In a real app, this would navigate to a profile page
+  }
+
+  const handleSettingsClick = () => {
+    toast.info("Opening chat settings")
+  }
 
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen">
@@ -28,7 +47,7 @@ export default function Chattings() {
             <div className="border-r border-slate-200 flex flex-col">
               <div className="p-6 border-b border-slate-200">
                 <h1 className="text-2xl font-bold text-slate-900 mb-4">Conversation List</h1>
-                
+
                 {/* Search Bar */}
                 <div className="relative mb-4">
                   <input
@@ -45,21 +64,19 @@ export default function Chattings() {
                 <div className="flex items-center gap-2 border-b border-slate-200">
                   <button
                     onClick={() => setActiveTab("customer")}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                      activeTab === "customer"
-                        ? "border-blue-600 text-blue-600"
-                        : "border-transparent text-slate-600 hover:text-slate-900"
-                    }`}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "customer"
+                      ? "border-blue-600 text-blue-600"
+                      : "border-transparent text-slate-600 hover:text-slate-900"
+                      }`}
                   >
                     Customer
                   </button>
                   <button
                     onClick={() => setActiveTab("restaurant")}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                      activeTab === "restaurant"
-                        ? "border-blue-600 text-blue-600"
-                        : "border-transparent text-slate-600 hover:text-slate-900"
-                    }`}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "restaurant"
+                      ? "border-blue-600 text-blue-600"
+                      : "border-transparent text-slate-600 hover:text-slate-900"
+                      }`}
                   >
                     Restaurant
                   </button>
@@ -81,12 +98,17 @@ export default function Chattings() {
                       <button
                         key={conversation.id}
                         onClick={() => setSelectedConversation(conversation)}
-                        className={`w-full p-4 text-left hover:bg-slate-50 transition-colors ${
-                          selectedConversation?.id === conversation.id ? "bg-blue-50" : ""
-                        }`}
+                        className={`w-full p-4 text-left hover:bg-slate-50 transition-colors ${selectedConversation?.id === conversation.id ? "bg-blue-50" : ""
+                          }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleProfileClick(conversation);
+                            }}
+                            className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0 overflow-hidden hover:ring-2 hover:ring-blue-400 transition-all"
+                          >
                             {conversation.avatar ? (
                               <img
                                 src={conversation.avatar}
@@ -96,7 +118,7 @@ export default function Chattings() {
                             ) : (
                               <span className="text-lg">👤</span>
                             )}
-                          </div>
+                          </button>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1">
                               <h3 className="text-sm font-semibold text-slate-900 truncate">
@@ -128,7 +150,10 @@ export default function Chattings() {
                   {/* Conversation Header */}
                   <div className="p-6 border-b border-slate-200">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      <button
+                        onClick={() => handleProfileClick(selectedConversation)}
+                        className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0 overflow-hidden hover:ring-2 hover:ring-blue-400 transition-all"
+                      >
                         {selectedConversation.avatar ? (
                           <img
                             src={selectedConversation.avatar}
@@ -138,7 +163,7 @@ export default function Chattings() {
                         ) : (
                           <span className="text-lg">👤</span>
                         )}
-                      </div>
+                      </button>
                       <div>
                         <h2 className="text-lg font-semibold text-slate-900">{selectedConversation.name}</h2>
                         <p className="text-sm text-slate-500">{selectedConversation.phone}</p>
@@ -149,28 +174,49 @@ export default function Chattings() {
                   {/* Messages Area */}
                   <div className="flex-1 overflow-y-auto p-6">
                     <div className="space-y-4">
-                      {/* Sample messages */}
+                      {/* Original last message as history */}
                       <div className="flex justify-start">
                         <div className="max-w-[70%] bg-slate-100 rounded-lg p-3">
                           <p className="text-sm text-slate-900">{selectedConversation.lastMessage}</p>
                           <p className="text-xs text-slate-500 mt-1">{selectedConversation.timestamp}</p>
                         </div>
                       </div>
+
+                      {/* User Sent Messages */}
+                      {(messages[selectedConversation.id] || []).map((msg) => (
+                        <div key={msg.id} className="flex justify-end">
+                          <div className="max-w-[70%] bg-blue-600 text-white rounded-lg p-3">
+                            <p className="text-sm">{msg.text}</p>
+                            <p className="text-[10px] opacity-70 mt-1 text-right">{msg.timestamp}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
                   {/* Message Input */}
                   <div className="p-6 border-t border-slate-200">
-                    <div className="flex items-center gap-3">
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }}
+                      className="flex items-center gap-3"
+                    >
                       <input
                         type="text"
                         placeholder="Type a message..."
+                        value={messageInput}
+                        onChange={(e) => setMessageInput(e.target.value)}
                         className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                       />
-                      <button className="px-6 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all">
+                      <button
+                        type="submit"
+                        className="px-6 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all"
+                      >
                         Send
                       </button>
-                    </div>
+                    </form>
                   </div>
                 </>
               ) : (
@@ -185,7 +231,11 @@ export default function Chattings() {
               )}
 
               {/* Settings Icon */}
-              <button className="absolute top-6 right-6 p-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors">
+              <button
+                onClick={handleSettingsClick}
+                className="absolute top-6 right-6 p-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors"
+                title="Chat Settings"
+              >
                 <Settings className="w-5 h-5 text-slate-600" />
               </button>
             </div>

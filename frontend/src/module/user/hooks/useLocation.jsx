@@ -102,6 +102,14 @@ export function useLocation() {
   /* ===================== GOOGLE MAPS REVERSE GEOCODE (now using Google directly on client) ===================== */
   const reverseGeocodeWithGoogleMaps = async (latitude, longitude) => {
     try {
+      // Get API key from backend (Admin → System → Environment Variables)
+      const { getGoogleMapsApiKey } = await import('@/lib/utils/googleMapsApiKey.js')
+      const apiKey = await getGoogleMapsApiKey()
+
+      if (!apiKey) {
+        throw new Error("Google Maps API key not available from database")
+      }
+
       // Use AbortController for proper timeout handling
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
@@ -114,7 +122,7 @@ export function useLocation() {
         // language=en for English, region=in for India (helps with better results)
         // result_type: prioritize premise > street_address > establishment > point_of_interest for exact location
         const response = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}&language=en&region=in&result_type=premise|street_address|establishment|point_of_interest|route|sublocality`,
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}&language=en&region=in&result_type=premise|street_address|establishment|point_of_interest|route|sublocality`,
           { signal: controller.signal }
         );
 

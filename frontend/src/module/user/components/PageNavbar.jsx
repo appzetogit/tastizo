@@ -181,6 +181,21 @@ export default function PageNavbar({
       return coordPattern.test(str.trim())
     }
 
+    // Special case: backend / hooks could not get a rich address and we only have
+    // placeholder text plus raw coordinates. In that case, show the coordinates
+    // in the navbar instead of treating everything as a placeholder.
+    if (
+      !mainLocation &&
+      location?.address === "Current Location" &&
+      isCoordinates(location?.formattedAddress)
+    ) {
+      mainLocation = location.formattedAddress
+      console.log(
+        "✅ Using coordinates as mainLocation because address is placeholder:",
+        mainLocation,
+      )
+    }
+
     // Priority 0: Use mainTitle (ZOMATO-STYLE) - Exact building/cafe name
     // This is the most accurate - directly from Google Maps components
     // If mainTitle is available, show it with area if area is different
