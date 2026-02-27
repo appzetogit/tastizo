@@ -16,6 +16,7 @@ export default function DiningList() {
     const [error, setError] = useState(null)
     const [isEditModalOpen, setIsEditModalOpen] = useState(false)
     const [editingRestaurant, setEditingRestaurant] = useState(null)
+    const [showOnlyRequests, setShowOnlyRequests] = useState(false)
 
     // Fetch restaurants from backend API
     useEffect(() => {
@@ -50,7 +51,12 @@ export default function DiningList() {
                         rating: restaurant.ratings?.average || restaurant.rating || 0,
                         logo: restaurant.profileImage?.url || restaurant.logo || "https://via.placeholder.com/40",
 
-                        diningSettings: restaurant.diningSettings || { isEnabled: false, maxGuests: 6 },
+                        // Categories selected by restaurant in DiningManagement (diningConfig.categories)
+                        diningCategoryIds: Array.isArray(restaurant.diningConfig?.categories)
+                            ? restaurant.diningConfig.categories.map(String)
+                            : [],
+
+                        diningSettings: restaurant.diningSettings || { isEnabled: true, maxGuests: 6, requestStatus: "none" },
                         originalData: restaurant,
                     }))
 
@@ -92,6 +98,11 @@ export default function DiningList() {
         fetchCategories()
     }, [])
 
+    const pendingRequestCount = useMemo(
+        () => restaurants.filter(r => r.diningSettings?.requestStatus === "pending").length,
+        [restaurants]
+    )
+
     const filteredRestaurants = useMemo(() => {
         let result = [...restaurants]
 
@@ -105,7 +116,7 @@ export default function DiningList() {
             )
         }
 
-        // Category Filter
+        // Category Filter (by admin-assigned diningType slug)
         if (selectedCategory !== "All") {
             result = result.filter(restaurant =>
                 restaurant.diningSettings?.diningType === selectedCategory ||
@@ -113,8 +124,12 @@ export default function DiningList() {
             )
         }
 
+        if (showOnlyRequests) {
+            result = result.filter(r => r.diningSettings?.requestStatus === "pending")
+        }
+
         return result
-    }, [restaurants, searchQuery, selectedCategory])
+    }, [restaurants, searchQuery, selectedCategory, showOnlyRequests])
 
     const formatRestaurantId = (id) => {
         if (!id) return "REST000000"
@@ -131,7 +146,14 @@ export default function DiningList() {
             // Optimistic update
             setRestaurants(prev => prev.map(r =>
                 r.id === restaurant.id
-                    ? { ...r, diningSettings: { ...r.diningSettings, isEnabled: newStatus } }
+                    ? {
+                        ...r,
+                        diningSettings: {
+                            ...r.diningSettings,
+                            isEnabled: newStatus,
+                            requestStatus: "none", // clear any pending flag when admin decides
+                        }
+                    }
                     : r
             ))
 
@@ -182,13 +204,30 @@ export default function DiningList() {
                         <div className="flex items-center gap-3">
                             <h1 className="text-2xl font-bold text-slate-900">Dining List</h1>
                         </div>
-                        <button
-                            onClick={() => navigate("/admin/restaurants/add")}
-                            className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 transition-all shadow-sm hover:shadow"
-                        >
-                            <Plus className="w-4 h-4" />
-                            <span>Add Restaurant</span>
-                        </button>
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowOnlyRequests((prev) => !prev)}
+                                className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg border flex items-center gap-2 transition-all
+                                    ${showOnlyRequests
+                                        ? "border-red-500 bg-red-50 text-red-700"
+                                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                                    }`}
+                            >
+                                <span>Dining Requests</span>
+                                <span className={`inline-flex items-center justify-center min-w-[1.5rem] px-1.5 py-0.5 rounded-full text-xs font-semibold 
+                                    ${pendingRequestCount > 0 ? "bg-red-500 text-white" : "bg-slate-200 text-slate-600"}`}>
+                                    {pendingRequestCount}
+                                </span>
+                            </button>
+                            <button
+                                onClick={() => navigate("/admin/restaurants/add")}
+                                className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 transition-all shadow-sm hover:shadow"
+                            >
+                                <Plus className="w-4 h-4" />
+                                <span>Add Restaurant</span>
+                            </button>
+                        </div>
                     </div>
                     <p className="text-slate-500">Manage restaurants available for dining.</p>
                 </div>
@@ -247,7 +286,9 @@ export default function DiningList() {
                                     All ({restaurants.length})
                                 </button>
                                 {categories.map((cat) => {
-                                    const count = restaurants.filter(r => r.diningSettings?.diningType === cat.slug).length;
+                                    const count = restaurants.filter(r =>
+                                        r.diningSettings?.diningType === cat.slug
+                                    ).length;
                                     return (
                                         <button
                                             key={cat._id}
@@ -321,12 +362,27 @@ export default function DiningList() {
                                                         <span className="text-sm text-slate-700">{restaurant.zone}</span>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
-                                                        <button
-                                                            onClick={() => handleDiningToggle(restaurant)}
-                                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${restaurant.diningSettings?.isEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}
-                                                        >
-                                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${restaurant.diningSettings?.isEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                                                        </button>
+                                                        <div className="flex items-center gap-3">
+                                                            <button
+                                                                onClick={() => handleDiningToggle(restaurant)}
+                                                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${restaurant.diningSettings?.isEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}
+                                                            >
+                                                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${restaurant.diningSettings?.isEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                                                            </button>
+                                                            {restaurant.diningSettings?.isEnabled ? (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                                    Enabled
+                                                                </span>
+                                                            ) : restaurant.diningSettings?.requestStatus === "pending" ? (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                                                    Pending Approval
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+                                                                    Disabled by Admin
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
                                                         <div className="flex items-center gap-2">

@@ -7,6 +7,7 @@ import {
   calculateOrder,
   cancelOrder,
   updateOrderDeliveryDetails,
+  submitOrderReview,
 } from "../controllers/orderController.js";
 import {
   getOrderChat,
@@ -44,5 +45,8 @@ router.patch("/:id/cancel", cancelOrder);
 
 // Update delivery details
 router.put("/:id/update-delivery-details", updateOrderDeliveryDetails);
+
+// Submit order review
+router.patch("/:id/review", submitOrderReview);
 
 export default router;

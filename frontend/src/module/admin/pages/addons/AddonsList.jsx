@@ -15,13 +15,13 @@ export default function AddonsList() {
     const fetchAllAddons = async () => {
       try {
         setLoading(true)
-        
+
         // First, fetch all restaurants
         const restaurantsResponse = await adminAPI.getRestaurants({ limit: 1000 })
-        const restaurants = restaurantsResponse?.data?.data?.restaurants || 
-                          restaurantsResponse?.data?.restaurants || 
-                          []
-        
+        const restaurants = restaurantsResponse?.data?.data?.restaurants ||
+          restaurantsResponse?.data?.restaurants ||
+          []
+
         if (restaurants.length === 0) {
           setAddons([])
           setLoading(false)
@@ -30,15 +30,15 @@ export default function AddonsList() {
 
         // Fetch addons for each restaurant
         const allAddons = []
-        
+
         for (const restaurant of restaurants) {
           try {
             const restaurantId = restaurant._id || restaurant.id
             const addonsResponse = await restaurantAPI.getAddonsByRestaurantId(restaurantId)
-            const restaurantAddons = addonsResponse?.data?.data?.addons || 
-                                    addonsResponse?.data?.addons || 
-                                    []
-            
+            const restaurantAddons = addonsResponse?.data?.data?.addons ||
+              addonsResponse?.data?.addons ||
+              []
+
             // Map addons with restaurant information
             restaurantAddons.forEach((addon) => {
               allAddons.push({
@@ -60,7 +60,7 @@ export default function AddonsList() {
             console.warn(`Failed to fetch addons for restaurant ${restaurant._id || restaurant.id}:`, error.message)
           }
         }
-        
+
         setAddons(allAddons)
       } catch (error) {
         console.error("Error fetching addons:", error)
@@ -77,13 +77,13 @@ export default function AddonsList() {
   // Format ID to ADDON format (e.g., ADDON606927)
   const formatAddonId = (id) => {
     if (!id) return "ADDON000000"
-    
+
     const idString = String(id)
     // Extract last 6 digits from the ID
     // Handle formats like "addon-1768285606927-r7kwd45t8" or "1768285606927-r7kwd45t8"
     const parts = idString.split(/[-.]/)
     let lastDigits = ""
-    
+
     // Get the last part and extract digits
     if (parts.length > 0) {
       const lastPart = parts[parts.length - 1]
@@ -103,7 +103,7 @@ export default function AddonsList() {
         }
       }
     }
-    
+
     // If no digits found, use a hash of the ID
     if (!lastDigits) {
       const hash = idString.split("").reduce((acc, char) => {
@@ -111,13 +111,13 @@ export default function AddonsList() {
       }, 0)
       lastDigits = Math.abs(hash).toString().slice(-6).padStart(6, "0")
     }
-    
+
     return `ADDON${lastDigits}`
   }
 
   const filteredAddons = useMemo(() => {
     let result = [...addons]
-    
+
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
       result = result.filter(addon =>
@@ -140,18 +140,18 @@ export default function AddonsList() {
 
     try {
       setDeleting(true)
-      
+
       // Get the restaurant's menu to find and remove the addon
       const menuResponse = await restaurantAPI.getMenuByRestaurantId(addon.restaurantId)
       const menu = menuResponse?.data?.data?.menu || menuResponse?.data?.menu
-      
+
       if (!menu) {
         throw new Error("Menu not found")
       }
 
       // Find and remove the addon from the menu
-      const addonIndex = menu.addons?.findIndex(a => 
-        String(a.id) === String(addon.id) || 
+      const addonIndex = menu.addons?.findIndex(a =>
+        String(a.id) === String(addon.id) ||
         String(a.id) === String(addon.originalAddon?.id)
       )
 
@@ -166,12 +166,12 @@ export default function AddonsList() {
       try {
         const response = await apiClient.put(
           `/restaurant/menu`,
-          { 
+          {
             sections: menu.sections || [],
             addons: menu.addons
           }
         )
-        
+
         if (!response.data || !response.data.success) {
           throw new Error(response.data?.message || "Failed to update menu")
         }
@@ -251,6 +251,9 @@ export default function AddonsList() {
                   Price
                 </th>
                 <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   Action
                 </th>
               </tr>
@@ -314,6 +317,16 @@ export default function AddonsList() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm font-medium text-slate-900">
                         ₹{addon.price.toFixed(2)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${addon.approvalStatus === 'approved'
+                        ? 'bg-green-100 text-green-700'
+                        : addon.approvalStatus === 'rejected'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                        {addon.approvalStatus || 'pending'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">

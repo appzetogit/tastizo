@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react"
 import { locationAPI, userAPI } from "@/lib/api"
 
 export function useLocation() {
+  const IS_DEV = import.meta.env.MODE === "development"
   const [location, setLocation] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -1748,14 +1749,16 @@ export function useLocation() {
             // If formattedAddress is coordinates, it means reverse geocoding failed
             // Build proper address from components or use fallback
             if (isFormattedAddressCoordinates || !completeFormattedAddress || completeFormattedAddress === "Select location") {
-              console.warn("⚠️⚠️⚠️ Reverse geocoding returned coordinates or empty address!")
-              console.warn("⚠️ Attempting to build address from components:", {
-                city: addr.city,
-                state: addr.state,
-                area: addr.area,
-                street: addr.street,
-                streetNumber: addr.streetNumber
-              })
+              if (IS_DEV) {
+                console.warn("⚠️⚠️⚠️ Reverse geocoding returned coordinates or empty address!")
+                console.warn("⚠️ Attempting to build address from components:", {
+                  city: addr.city,
+                  state: addr.state,
+                  area: addr.area,
+                  street: addr.street,
+                  streetNumber: addr.streetNumber
+                })
+              }
 
               // Build address from components
               const addressParts = [];
@@ -1772,12 +1775,16 @@ export function useLocation() {
               if (addressParts.length > 0) {
                 completeFormattedAddress = addressParts.join(', ');
                 displayAddress = addr.area || addr.city || "Select location";
-                console.log("✅ Built address from components:", completeFormattedAddress);
+                if (IS_DEV) {
+                  console.log("✅ Built address from components:", completeFormattedAddress);
+                }
               } else {
                 // Final fallback - don't use coordinates
                 completeFormattedAddress = addr.city || "Select location";
                 displayAddress = addr.city || "Select location";
-                console.warn("⚠️ Using fallback address:", completeFormattedAddress);
+                if (IS_DEV) {
+                  console.warn("⚠️ Using fallback address:", completeFormattedAddress);
+                }
               }
             }
 

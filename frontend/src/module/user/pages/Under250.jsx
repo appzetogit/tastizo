@@ -535,15 +535,34 @@ export default function Under250() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end">
-                    <div className="flex items-center gap-1 bg-green-800 text-white px-1 py-1 md:px-2 md:py-1.5 lg:px-3 lg:py-2 rounded-full">
-                      <div className="bg-white text-green-700 px-1 py-1 md:px-1.5 md:py-1.5 lg:px-2 lg:py-2 rounded-full">
-                        <Star className="h-3.5 w-3.5 md:h-4 md:w-4 lg:h-5 lg:w-5 fill-green-800 text-green-800" />
+                    {typeof restaurant.rating === "number" && restaurant.rating > 0 ? (
+                      <>
+                        <div className="flex items-center gap-1 bg-green-800 text-white px-1 py-1 md:px-2 md:py-1.5 lg:px-3 lg:py-2 rounded-full">
+                          <div className="bg-white text-green-700 px-1 py-1 md:px-1.5 md:py-1.5 lg:px-2 lg:py-2 rounded-full">
+                            <Star className="h-3.5 w-3.5 md:h-4 md:w-4 lg:h-5 lg:w-5 fill-green-800 text-green-800" />
+                          </div>
+                          <span className="text-xs md:text-sm lg:text-base font-bold">
+                            {restaurant.rating.toFixed(1)}
+                          </span>
+                        </div>
+                        <span className="text-xs md:text-sm lg:text-base text-gray-400 dark:text-gray-500 mt-0.5">
+                          {restaurant.totalRatings > 0
+                            ? `By ${
+                                restaurant.totalRatings >= 1000
+                                  ? `${(restaurant.totalRatings / 1000).toFixed(1)}K+`
+                                  : `${restaurant.totalRatings}+`
+                              }`
+                            : ""}
+                        </span>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-1 bg-gray-200 dark:bg-gray-800 px-2 py-1 rounded-full">
+                        <Star className="h-3.5 w-3.5 md:h-4 md:w-4 lg:h-5 lg:w-5 text-gray-400 dark:text-gray-500" />
+                        <span className="text-xs md:text-sm lg:text-base font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                          New
+                        </span>
                       </div>
-                      <span className="text-xs md:text-sm lg:text-base font-bold">{restaurant.rating}</span>
-                    </div>
-                    <span className="text-xs md:text-sm lg:text-base text-gray-400 dark:text-gray-500 mt-0.5">
-                      {restaurant.totalRatings > 0 ? `By ${restaurant.totalRatings >= 1000 ? `${(restaurant.totalRatings / 1000).toFixed(1)}K+` : `${restaurant.totalRatings}+`}` : ''}
-                    </span>
+                    )}
                   </div>
                 </div>
 

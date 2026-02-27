@@ -765,15 +765,17 @@ export default function Home() {
             ? restaurant.rating
             : (typeof restaurant.averageRating === "number" ? restaurant.averageRating : null)
 
-          const normalizedRating = rawRating !== null
+          // Treat 0 or negative as "no rating yet"
+          const normalizedRating = (rawRating !== null && rawRating > 0)
             ? Math.round(rawRating * 10) / 10
-            : 0
+            : null
 
           return {
             id: restaurant.restaurantId || restaurant._id,
             name: restaurant.name,
             cuisine: cuisine,
             rating: normalizedRating,
+            totalRatings: restaurant.totalRatings || 0,
             deliveryTime: deliveryTime,
             distance: distance,
             distanceInKm: distanceInKm, // Store numeric distance for sorting
@@ -1853,10 +1855,20 @@ export default function Home() {
                                     {restaurant.name}
                                   </h3>
                                 </div>
-                                <div className="flex-shrink-0 bg-green-600 text-white px-2 py-1 lg:px-3 lg:py-1.5 rounded-lg flex items-center gap-1 transform transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
-                                  <span className="text-sm lg:text-base font-bold">{restaurant.rating}</span>
-                                  <Star className="h-3 w-3 lg:h-4 lg:w-4 fill-white text-white" />
-                                </div>
+                                {typeof restaurant.rating === "number" && restaurant.rating > 0 ? (
+                                  <div className="flex-shrink-0 bg-green-600 text-white px-2 py-1 lg:px-3 lg:py-1.5 rounded-lg flex items-center gap-1 transform transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
+                                    <span className="text-sm lg:text-base font-bold">
+                                      {restaurant.rating.toFixed(1)}
+                                    </span>
+                                    <Star className="h-3 w-3 lg:h-4 lg:w-4 fill-white text-white" />
+                                  </div>
+                                ) : (
+                                  <div className="flex-shrink-0 bg-gray-200 text-gray-800 px-2 py-1 lg:px-3 lg:py-1.5 rounded-lg flex items-center gap-1">
+                                    <span className="text-[11px] lg:text-xs font-semibold uppercase tracking-wide">
+                                      New
+                                    </span>
+                                  </div>
+                                )}
                               </div>
 
                               {/* Delivery Time & Distance */}

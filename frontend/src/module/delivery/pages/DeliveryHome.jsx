@@ -630,6 +630,7 @@ export default function DeliveryHome() {
   const [showOrderIdConfirmationPopup, setShowOrderIdConfirmationPopup] = useState(false)
   const [showReachedDropPopup, setShowReachedDropPopup] = useState(false)
   const [showOrderDeliveredAnimation, setShowOrderDeliveredAnimation] = useState(false)
+  // Customer review popup disabled
   const [showCustomerReviewPopup, setShowCustomerReviewPopup] = useState(false)
   const [showPaymentPage, setShowPaymentPage] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
@@ -3963,23 +3964,112 @@ export default function DeliveryHome() {
       setOrderDeliveredIsAnimatingToComplete(true)
       setOrderDeliveredButtonProgress(1)
 
-      // Close popup after animation and show customer review (delivery will be completed when review is submitted)
+      // After animation, mark delivery complete directly (no extra page/popups)
       setTimeout(() => {
         setShowOrderDeliveredAnimation(false)
-        
-        // CRITICAL: Clear all pickup/delivery related popups
+
+        // Clear all pickup/delivery related popups
         setShowReachedDropPopup(false)
         setShowreachedPickupPopup(false)
         setShowOrderIdConfirmationPopup(false)
-        
-        // Show customer review popup instantly
-        setShowCustomerReviewPopup(true)
-        
-        // Reset after animation
-        setTimeout(() => {
-          setOrderDeliveredButtonProgress(0)
-          setOrderDeliveredIsAnimatingToComplete(false)
-        }, 500)
+
+        // Call completeDelivery API so order status becomes "delivered" everywhere
+        ;(async () => {
+          try {
+            const orderIdForApi =
+              selectedRestaurant?.id ||
+              newOrder?.orderMongoId ||
+              newOrder?._id ||
+              selectedRestaurant?.orderId ||
+              newOrder?.orderId
+
+            if (!orderIdForApi) {
+              console.error("❌ Order ID not available for completeDelivery", {
+                selectedRestaurant,
+                newOrder,
+              })
+              toast.error("Order ID not available. Please try again.")
+              return
+            }
+
+            console.log("📝 Completing delivery directly from swipe:", {
+              orderId: orderIdForApi,
+            })
+
+            const response = await deliveryAPI.completeDelivery(
+              orderIdForApi,
+              null,
+              "",
+            )
+
+            if (response.data?.success) {
+              let earnings = response.data.data?.earnings?.amount
+              if (earnings == null) {
+                earnings = response.data.data?.totalEarning
+              }
+              if (earnings == null) {
+                const backendEstimated = response.data.data?.estimatedEarnings
+                if (
+                  typeof backendEstimated === "object" &&
+                  backendEstimated?.totalEarning != null
+                ) {
+                  earnings = Number(backendEstimated.totalEarning) || 0
+                } else if (typeof backendEstimated === "number") {
+                  earnings = Number(backendEstimated) || 0
+                }
+              }
+              if (earnings == null) {
+                const est = selectedRestaurant?.estimatedEarnings
+                if (typeof est === "object" && est?.totalEarning != null) {
+                  earnings = Number(est.totalEarning) || 0
+                } else if (typeof est === "number") {
+                  earnings = Number(est) || 0
+                }
+              }
+              if (earnings == null) {
+                earnings = 0
+              }
+
+              setOrderEarnings(earnings)
+
+              console.log(
+                "✅ Delivery completed and earnings added to wallet:",
+                earnings,
+              )
+              console.log(
+                "✅ Wallet transaction:",
+                response.data.data?.walletTransaction,
+              )
+
+              // Notify wallet listeners (Pocket balance, Pocket page) so cash collected updates
+              window.dispatchEvent(new Event("deliveryWalletStateUpdated"))
+
+              if (earnings > 0) {
+                toast.success(`₹${earnings.toFixed(2)} added to your wallet!`)
+              } else {
+                toast.success("Order marked as delivered")
+              }
+
+              // Clear active order from UI so everywhere reflects delivered state
+              clearOrderData()
+            } else {
+              console.error("❌ Failed to complete delivery:", response.data)
+              toast.error(
+                response.data?.message ||
+                  "Failed to complete delivery. Please try again.",
+              )
+            }
+          } catch (error) {
+            console.error("❌ Error completing delivery:", error)
+            toast.error("Failed to complete delivery. Please try again.")
+          } finally {
+            // Reset after animation
+            setTimeout(() => {
+              setOrderDeliveredButtonProgress(0)
+              setOrderDeliveredIsAnimatingToComplete(false)
+            }, 500)
+          }
+        })()
       }, 200)
     } else {
       // Reset smoothly
@@ -6621,7 +6711,7 @@ export default function DeliveryHome() {
                                 order.deliveryState?.currentPhase === 'completed' ||
                                 order.deliveryState?.status === 'delivered'
         
-        if (isOrderDelivered && !showPaymentPage && !showCustomerReviewPopup && !showOrderDeliveredAnimation) {
+        if (isOrderDelivered && !showPaymentPage && !showOrderDeliveredAnimation) {
           console.log('✅ Order is delivered/completed, clearing from UI');
           clearOrderData();
           return;
@@ -7172,7 +7262,7 @@ export default function DeliveryHome() {
     selectedRestaurant?.deliveryState?.status,
     showPaymentPage,
     showOrderDeliveredAnimation,
-    showCustomerReviewPopup,
+    // showCustomerReviewPopup,
     showreachedPickupPopup,
     showOrderIdConfirmationPopup,
     showReachedDropPopup,
@@ -7321,7 +7411,7 @@ export default function DeliveryHome() {
   
   useEffect(() => {
     // CRITICAL: If payment page is showing, delivery is completed - do NOT show reached drop popup
-    if (showPaymentPage || showCustomerReviewPopup || showOrderDeliveredAnimation) {
+    if (showPaymentPage || showOrderDeliveredAnimation) {
       if (showReachedDropPopup) setShowReachedDropPopup(false)
       return
     }
@@ -10093,7 +10183,7 @@ export default function DeliveryHome() {
         selectedRestaurant.deliveryPhase === 'en_route_to_delivery') && 
        !showReachedDropPopup && 
        !showOrderDeliveredAnimation &&
-       !showCustomerReviewPopup &&
+      // !showCustomerReviewPopup &&
        !showPaymentPage && (
         <div className="fixed bottom-24 left-0 right-0 px-4 z-50">
           <motion.div
@@ -10476,149 +10566,7 @@ export default function DeliveryHome() {
         </div>
       </BottomPopup>
 
-      {/* Customer Review Popup - shown after Order Delivered */}
-      <BottomPopup
-        isOpen={showCustomerReviewPopup}
-        onClose={() => setShowCustomerReviewPopup(false)}
-        showCloseButton={false}
-        closeOnBackdropClick={false}
-        maxHeight="80vh"
-        showHandle={true}
-      >
-        <div className="">
-          <div className="text-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-2">
-              Rate Your Experience
-            </h2>
-            <p className="text-gray-600 text-sm mb-6">
-              How was your delivery experience?
-            </p>
-            
-            {/* Star Rating */}
-            <div className="flex justify-center gap-2 mb-6">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  onClick={() => setCustomerRating(star)}
-                  className="text-4xl transition-transform hover:scale-110"
-                >
-                  {star <= customerRating ? (
-                    <span className="text-yellow-400">★</span>
-                  ) : (
-                    <span className="text-gray-300">★</span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Optional Review Text */}
-            <div className="mb-6">
-              <label className="block text-left text-sm font-medium text-gray-700 mb-2">
-                Review (Optional)
-              </label>
-              <textarea
-                value={customerReviewText}
-                onChange={(e) => setCustomerReviewText(e.target.value)}
-                placeholder="Share your experience..."
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
-                rows={4}
-              />
-            </div>
-
-            {/* Submit Button */}
-            <button
-              onClick={async () => {
-                // Get order ID - use MongoDB _id for API call
-                const orderIdForApi = selectedRestaurant?.id || 
-                                    newOrder?.orderMongoId || 
-                                    newOrder?._id ||
-                                    selectedRestaurant?.orderId || 
-                                    newOrder?.orderId
-                
-                // Save review by calling completeDelivery API with rating and review
-                if (orderIdForApi) {
-                  try {
-                    console.log('📝 Submitting review and completing delivery:', {
-                      orderId: orderIdForApi,
-                      rating: customerRating,
-                      review: customerReviewText
-                    })
-                    
-                    // Call completeDelivery API with rating and review
-                    const response = await deliveryAPI.completeDelivery(
-                      orderIdForApi,
-                      customerRating > 0 ? customerRating : null,
-                      customerReviewText.trim() || ''
-                    )
-                    
-                    if (response.data?.success) {
-                      // Get updated earnings from response
-                      // Note: completeDelivery API already adds earnings and COD cash collected to wallet
-                      let earnings = response.data.data?.earnings?.amount
-                      if (earnings == null) {
-                        earnings = response.data.data?.totalEarning
-                      }
-                      // Fallback to estimated earnings from response
-                      if (earnings == null) {
-                        const backendEstimated = response.data.data?.estimatedEarnings
-                        if (typeof backendEstimated === 'object' && backendEstimated?.totalEarning != null) {
-                          earnings = Number(backendEstimated.totalEarning) || 0
-                        } else if (typeof backendEstimated === 'number') {
-                          earnings = Number(backendEstimated) || 0
-                        }
-                      }
-                      // Fallback to estimated earnings from current order state
-                      if (earnings == null) {
-                        const est = selectedRestaurant?.estimatedEarnings
-                        if (typeof est === 'object' && est?.totalEarning != null) {
-                          earnings = Number(est.totalEarning) || 0
-                        } else if (typeof est === 'number') {
-                          earnings = Number(est) || 0
-                        }
-                      }
-                      if (earnings == null) {
-                        earnings = 0
-                      }
-                      setOrderEarnings(earnings)
-                      
-                      console.log('✅ Delivery completed and earnings added to wallet:', earnings)
-                      console.log('✅ Wallet transaction:', response.data.data?.walletTransaction)
-                      
-                      // Notify wallet listeners (Pocket balance, Pocket page) so cash collected updates
-                      window.dispatchEvent(new Event('deliveryWalletStateUpdated'))
-                      
-                      // Show success message
-                      if (earnings > 0) {
-                        toast.success(`₹${earnings.toFixed(2)} added to your wallet! 💰`)
-                      }
-                      
-                      // Close review popup and show payment page
-                      setShowCustomerReviewPopup(false)
-                      setShowPaymentPage(true)
-                    } else {
-                      console.error('❌ Failed to submit review:', response.data)
-                      toast.error(response.data?.message || 'Failed to submit review. Please try again.')
-                    }
-                  } catch (error) {
-                    console.error('❌ Error submitting review:', error)
-                    toast.error('Failed to submit review. Please try again.')
-                    // Still show payment page even if review fails
-                    setShowCustomerReviewPopup(false)
-                    setShowPaymentPage(true)
-                  }
-                } else {
-                  // If no order ID, just show payment page
-                  setShowCustomerReviewPopup(false)
-                  setShowPaymentPage(true)
-                }
-              }}
-              className="w-full bg-green-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-green-700 transition-colors shadow-lg"
-            >
-              Submit Review
-            </button>
-          </div>
-        </div>
-      </BottomPopup>
+      {/* Customer Review Popup removed as per requirement */}
 
       {/* Payment Page - shown after Customer Review is submitted */}
       <AnimatePresence>

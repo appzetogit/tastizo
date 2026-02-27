@@ -27,6 +27,7 @@ import {
   deleteDiningOffer,
   getDiningMenu,
   updateDiningMenuItem,
+  requestDiningEnable,
 } from './controllers/diningManagementController.js';
 
 const router = express.Router();
@@ -107,6 +108,7 @@ router.get('/withdrawal/requests', authenticate, getRestaurantWithdrawalRequests
 // Dining Management routes (authenticated - must be before /:id)
 router.get('/dining-config', authenticate, getDiningConfig);
 router.patch('/dining-config', authenticate, updateDiningConfig);
+router.post('/dining-config/request-enable', authenticate, requestDiningEnable);
 router.get('/dining-offers', authenticate, getDiningOffers);
 router.post('/dining-offers', authenticate, createDiningOffer);
 router.patch('/dining-offers/:offerId', authenticate, updateDiningOffer);

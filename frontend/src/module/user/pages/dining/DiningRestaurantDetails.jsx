@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
+import { useProfile } from "@/module/user/context/ProfileContext"
 import { restaurantAPI, diningAPI } from "@/lib/api"
 import {
     ArrowLeft,
@@ -15,10 +16,13 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 export default function DiningRestaurantDetails() {
     const { diningType, slug } = useParams() // Get params from URL
     const navigate = useNavigate()
+    const { addFavorite, removeFavorite, isFavorite } = useProfile()
+    const isFav = isFavorite(slug)
 
     const [restaurant, setRestaurant] = useState(null)
     const [loading, setLoading] = useState(true)
@@ -30,6 +34,54 @@ export default function DiningRestaurantDetails() {
     const [diningOffers, setDiningOffers] = useState([])
     const [diningMenu, setDiningMenu] = useState(null)
 
+    // Share handler (Web Share API + clipboard fallback)
+    const copyToClipboard = async (text) => {
+        try {
+            await navigator.clipboard.writeText(text)
+            toast.success("Link copied to clipboard!")
+        } catch (error) {
+            const textArea = document.createElement("textarea")
+            textArea.value = text
+            textArea.style.position = "fixed"
+            textArea.style.opacity = "0"
+            document.body.appendChild(textArea)
+            textArea.select()
+            try {
+                document.execCommand("copy")
+                toast.success("Link copied to clipboard!")
+            } catch (err) {
+                toast.error("Failed to copy link")
+            }
+            document.body.removeChild(textArea)
+        }
+    }
+
+    const handleShareClick = async () => {
+        if (!restaurant) return
+
+        const shareUrl = window.location.href
+        const shareTitle = `${restaurant.name || "Dining"} - Tastizo`
+        const shareText = `Book your table at ${restaurant.name || "this restaurant"} on Tastizo.`
+
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: shareTitle,
+                    text: shareText,
+                    url: shareUrl,
+                })
+                return
+            } catch (error) {
+                if (error.name === "AbortError") {
+                    return
+                }
+                // fall through to clipboard fallback
+            }
+        }
+
+        await copyToClipboard(shareUrl)
+    }
+
     // Fetch data
     useEffect(() => {
         const fetchRestaurant = async () => {
@@ -37,7 +89,7 @@ export default function DiningRestaurantDetails() {
             try {
                 setLoading(true)
                 // Try fetch by ID/Slug
-                const response = await restaurantAPI.getRestaurantById(slug)
+                const response = await diningAPI.getRestaurantBySlug(slug)
 
                 if (response.data && response.data.success) {
                     const apiRestaurant = response.data.data
@@ -176,11 +228,34 @@ export default function DiningRestaurantDetails() {
                 </button>
 
                 <div className="flex gap-3 pointer-events-auto">
-                    <button className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white hover:bg-black/60 transition-colors">
-                        <Bookmark className="w-5 h-5" />
+                    <button
+                        onClick={() => {
+                            if (!restaurant) return
+                            if (isFav) {
+                                removeFavorite(slug)
+                                toast.success("Removed from favorites")
+                            } else {
+                                addFavorite({
+                                    slug,
+                                    name: displayName,
+                                    cuisine: restaurant.cuisine || "Multi-cuisine",
+                                    rating: ratingDisplay,
+                                    price: displayCostForTwo ? `₹${displayCostForTwo} for two` : "₹1400 for two",
+                                    image: coverImage
+                                })
+                                toast.success("Added to favorites!")
+                            }
+                        }}
+                        className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white hover:bg-black/60 transition-colors"
+                    >
+                        <Bookmark className={`w-5 h-5 ${isFav ? "fill-white" : ""}`} />
                     </button>
                     {shareEnabled && (
-                        <button className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white hover:bg-black/60 transition-colors">
+                        <button
+                            type="button"
+                            onClick={handleShareClick}
+                            className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white hover:bg-black/60 transition-colors"
+                        >
                             <Share2 className="w-5 h-5" />
                         </button>
                     )}

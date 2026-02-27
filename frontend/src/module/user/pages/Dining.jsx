@@ -349,7 +349,8 @@ export default function Dining() {
               {limelightItems.map((restaurant, index) => (
                 <div
                   key={restaurant._id || restaurant.id}
-                  className="min-w-full h-full relative flex-shrink-0 w-full"
+                  className="min-w-full h-full relative flex-shrink-0 w-full cursor-pointer"
+                  onClick={() => navigate(`/dining/restaurants/${restaurant.restaurant?.slug || restaurant.restaurant?._id}`)}
                 >
                   {/* Restaurant Image */}
                   <OptimizedImage
@@ -451,6 +452,7 @@ export default function Dining() {
                 <motion.div
                   key={item._id || item.id}
                   className="relative flex-shrink-0 rounded-xl overflow-hidden shadow-sm cursor-pointer"
+                  onClick={() => navigate(`/user/search?q=${encodeURIComponent(item.name)}`)}
                   style={{
                     width: 'calc((100vw - 3rem) / 2.5)',
                     minWidth: '140px',

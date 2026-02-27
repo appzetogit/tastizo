@@ -44,10 +44,18 @@ export const getRestaurantBySlug = async (req, res) => {
       slug: req.params.slug,
     });
 
-    // If not found in GamingRestaurant, check regular Restaurant
+    // If not found in DiningRestaurant, check regular Restaurant
     let actualRestaurant = restaurant;
     if (!actualRestaurant) {
       actualRestaurant = await Restaurant.findOne({ slug: req.params.slug });
+    }
+
+    // Failsafe: if slug is an ObjectId, try finding by ID
+    if (!actualRestaurant && req.params.slug.match(/^[0-9a-fA-F]{24}$/)) {
+      actualRestaurant = await DiningRestaurant.findById(req.params.slug);
+      if (!actualRestaurant) {
+        actualRestaurant = await Restaurant.findById(req.params.slug);
+      }
     }
 
     if (!actualRestaurant) {
@@ -152,7 +160,7 @@ export const getMustTries = async (req, res) => {
 export const getOfferBanners = async (req, res) => {
   try {
     const banners = await DiningOfferBanner.find({ isActive: true })
-      .populate("restaurant", "name")
+      .populate("restaurant", "name slug")
       .sort({ createdAt: -1 });
     res.status(200).json({
       success: true,
@@ -406,15 +414,24 @@ export const createDiningReview = async (req, res) => {
  */
 export const getDiningOffersBySlug = async (req, res) => {
   try {
-    const restaurant = await Restaurant.findOne({ slug: req.params.slug }).select("_id").lean();
+    const restaurant = await Restaurant.findOne({ slug: req.params.slug })
+      .select("_id")
+      .lean();
     if (!restaurant) {
-      return res.status(404).json({ success: false, message: "Restaurant not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Restaurant not found" });
     }
-    const offers = await RestaurantDiningOffer.find({ restaurant: restaurant._id, isActive: true })
+    const offers = await RestaurantDiningOffer.find({
+      restaurant: restaurant._id,
+      isActive: true,
+    })
       .sort({ order: 1, createdAt: -1 })
       .lean();
     res.status(200).json({ success: true, data: offers });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server Error", error: error.message });
   }
 };

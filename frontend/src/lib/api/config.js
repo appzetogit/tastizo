@@ -186,6 +186,7 @@ export const API_ENDPOINTS = {
     DINING_OFFER_BY_ID: "/restaurant/dining-offers/:offerId",
     DINING_MENU: "/restaurant/dining-menu",
     DINING_MENU_ITEMS: "/restaurant/dining-menu/items",
+    DINING_REQUEST_ENABLE: "/restaurant/dining-config/request-enable",
     STAFF: "/restaurant/staff",
     MENU: "/restaurant/menu",
     MENU_BY_RESTAURANT_ID: "/restaurant/:id/menu",

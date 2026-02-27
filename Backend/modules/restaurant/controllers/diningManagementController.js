@@ -1,8 +1,11 @@
-import Restaurant from '../models/Restaurant.js';
-import RestaurantDiningOffer from '../models/RestaurantDiningOffer.js';
-import Menu from '../models/Menu.js';
-import { successResponse, errorResponse } from '../../../shared/utils/response.js';
-import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
+import Restaurant from "../models/Restaurant.js";
+import RestaurantDiningOffer from "../models/RestaurantDiningOffer.js";
+import Menu from "../models/Menu.js";
+import {
+  successResponse,
+  errorResponse,
+} from "../../../shared/utils/response.js";
+import { asyncHandler } from "../../../shared/middleware/asyncHandler.js";
 
 /**
  * Get dining config for current restaurant (restaurant auth)
@@ -10,31 +13,73 @@ import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
  */
 export const getDiningConfig = asyncHandler(async (req, res) => {
   const restaurant = await Restaurant.findById(req.restaurant._id)
-    .select('name slug location profileImage deliveryTimings diningConfig')
+    .select("name slug location profileImage deliveryTimings diningConfig diningSettings")
     .lean();
-  if (!restaurant) return errorResponse(res, 404, 'Restaurant not found');
+  if (!restaurant) return errorResponse(res, 404, "Restaurant not found");
 
   const diningConfig = restaurant.diningConfig || {};
+  const diningSettings = restaurant.diningSettings || {};
+
+  const adminAllowsDining =
+    diningSettings.isEnabled === false ? false : true; // undefined/null => allowed (backwards compatible)
+  const requestStatus = diningSettings.requestStatus || "none";
+  const recommendedCategorySlug = diningSettings.diningType || null;
+
   const merged = {
     ...diningConfig,
     basicDetails: {
       name: diningConfig.basicDetails?.name ?? restaurant.name,
-      address: diningConfig.basicDetails?.address ?? restaurant.location?.formattedAddress ?? restaurant.location?.address ?? '',
-      description: diningConfig.basicDetails?.description ?? '',
+      address:
+        diningConfig.basicDetails?.address ??
+        restaurant.location?.formattedAddress ??
+        restaurant.location?.address ??
+        "",
+      description: diningConfig.basicDetails?.description ?? "",
       costForTwo: diningConfig.basicDetails?.costForTwo ?? null,
-      openingTime: diningConfig.basicDetails?.openingTime ?? restaurant.deliveryTimings?.openingTime ?? '12:00',
-      closingTime: diningConfig.basicDetails?.closingTime ?? restaurant.deliveryTimings?.closingTime ?? '23:59',
+      openingTime:
+        diningConfig.basicDetails?.openingTime ??
+        restaurant.deliveryTimings?.openingTime ??
+        "12:00",
+      closingTime:
+        diningConfig.basicDetails?.closingTime ??
+        restaurant.deliveryTimings?.closingTime ??
+        "23:59",
       isOpen: diningConfig.basicDetails?.isOpen ?? true,
     },
     coverImage: diningConfig.coverImage || restaurant.profileImage || {},
     gallery: diningConfig.gallery || [],
-    tableBooking: diningConfig.tableBooking || { enabled: false, timeSlots: [], minGuestsPerBooking: 1, maxGuestsPerBooking: 10, approvalMode: 'manual' },
+    tableBooking: diningConfig.tableBooking || {
+      enabled: false,
+      timeSlots: [],
+      minGuestsPerBooking: 1,
+      maxGuestsPerBooking: 10,
+      approvalMode: "manual",
+    },
     seatingCapacity: diningConfig.seatingCapacity ?? null,
-    pageControls: diningConfig.pageControls || { reviewsEnabled: true, shareEnabled: true, diningSlug: restaurant.slug || '' },
+    pageControls: diningConfig.pageControls || {
+      reviewsEnabled: true,
+      shareEnabled: true,
+      diningSlug: restaurant.slug || "",
+    },
+    categories: diningConfig.categories || [],
     enabled: diningConfig.enabled ?? false,
+    // Effective flag users should see (requires both restaurant + admin)
+    effectiveEnabled:
+      (diningConfig.enabled ?? false) && adminAllowsDining,
+    adminControls: {
+      isEnabledByAdmin: adminAllowsDining,
+      requestStatus,
+      lastRequestAt: diningSettings.lastRequestAt || null,
+      lastDecisionAt: diningSettings.lastDecisionAt || null,
+      recommendedCategorySlug,
+    },
   };
 
-  return successResponse(res, 200, 'Dining config retrieved', { diningConfig: merged, restaurantId: restaurant._id, slug: restaurant.slug });
+  return successResponse(res, 200, "Dining config retrieved", {
+    diningConfig: merged,
+    restaurantId: restaurant._id,
+    slug: restaurant.slug,
+  });
 });
 
 /**
@@ -46,57 +91,169 @@ export const updateDiningConfig = asyncHandler(async (req, res) => {
   const body = req.body;
 
   const restaurant = await Restaurant.findById(restaurantId);
-  if (!restaurant) return errorResponse(res, 404, 'Restaurant not found');
+  if (!restaurant) return errorResponse(res, 404, "Restaurant not found");
 
   if (!restaurant.diningConfig) restaurant.diningConfig = {};
 
-  if (body.enabled !== undefined) restaurant.diningConfig.enabled = !!body.enabled;
+  // Ensure diningSettings object exists for admin overrides / requests
+  if (!restaurant.diningSettings) restaurant.diningSettings = {};
 
-  if (body.basicDetails) {
-    restaurant.diningConfig.basicDetails = restaurant.diningConfig.basicDetails || {};
-    const b = body.basicDetails;
-    if (b.name !== undefined) restaurant.diningConfig.basicDetails.name = b.name;
-    if (b.address !== undefined) restaurant.diningConfig.basicDetails.address = b.address;
-    if (b.description !== undefined) restaurant.diningConfig.basicDetails.description = b.description;
-    if (b.costForTwo !== undefined) restaurant.diningConfig.basicDetails.costForTwo = b.costForTwo == null ? null : Number(b.costForTwo);
-    if (b.openingTime !== undefined) restaurant.diningConfig.basicDetails.openingTime = b.openingTime;
-    if (b.closingTime !== undefined) restaurant.diningConfig.basicDetails.closingTime = b.closingTime;
-    if (b.isOpen !== undefined) restaurant.diningConfig.basicDetails.isOpen = !!b.isOpen;
+  const adminHasDisabled =
+    restaurant.diningSettings.isEnabled === false;
+  const hasPendingRequest =
+    restaurant.diningSettings.requestStatus === "pending";
+
+  // If admin has globally disabled dining, restaurant cannot enable it directly
+  if (
+    body.enabled === true &&
+    (adminHasDisabled || hasPendingRequest)
+  ) {
+    return errorResponse(
+      res,
+      403,
+      hasPendingRequest
+        ? "Dining enable request is pending with admin. You cannot enable dining until it is approved."
+        : "Dining service is currently disabled by admin. Please send a request to enable.",
+    );
   }
 
-  if (body.coverImage !== undefined) restaurant.diningConfig.coverImage = body.coverImage;
-  if (body.gallery !== undefined) restaurant.diningConfig.gallery = Array.isArray(body.gallery) ? body.gallery : [];
+  if (body.enabled !== undefined)
+    restaurant.diningConfig.enabled = !!body.enabled;
+
+  if (body.basicDetails) {
+    restaurant.diningConfig.basicDetails =
+      restaurant.diningConfig.basicDetails || {};
+    const b = body.basicDetails;
+    if (b.name !== undefined)
+      restaurant.diningConfig.basicDetails.name = b.name;
+    if (b.address !== undefined)
+      restaurant.diningConfig.basicDetails.address = b.address;
+    if (b.description !== undefined)
+      restaurant.diningConfig.basicDetails.description = b.description;
+    if (b.costForTwo !== undefined)
+      restaurant.diningConfig.basicDetails.costForTwo =
+        b.costForTwo == null ? null : Number(b.costForTwo);
+    if (b.openingTime !== undefined)
+      restaurant.diningConfig.basicDetails.openingTime = b.openingTime;
+    if (b.closingTime !== undefined)
+      restaurant.diningConfig.basicDetails.closingTime = b.closingTime;
+    if (b.isOpen !== undefined)
+      restaurant.diningConfig.basicDetails.isOpen = !!b.isOpen;
+  }
+
+  if (body.coverImage !== undefined)
+    restaurant.diningConfig.coverImage = body.coverImage;
+  if (body.gallery !== undefined)
+    restaurant.diningConfig.gallery = Array.isArray(body.gallery)
+      ? body.gallery
+      : [];
 
   if (body.tableBooking) {
-    restaurant.diningConfig.tableBooking = restaurant.diningConfig.tableBooking || {};
+    restaurant.diningConfig.tableBooking =
+      restaurant.diningConfig.tableBooking || {};
     const tb = body.tableBooking;
-    if (tb.enabled !== undefined) restaurant.diningConfig.tableBooking.enabled = !!tb.enabled;
-    if (tb.timeSlots !== undefined) restaurant.diningConfig.tableBooking.timeSlots = Array.isArray(tb.timeSlots) ? tb.timeSlots : [];
-    if (tb.minGuestsPerBooking !== undefined) restaurant.diningConfig.tableBooking.minGuestsPerBooking = Number(tb.minGuestsPerBooking) || 1;
-    if (tb.maxGuestsPerBooking !== undefined) restaurant.diningConfig.tableBooking.maxGuestsPerBooking = Number(tb.maxGuestsPerBooking) || 10;
-    if (tb.approvalMode !== undefined) restaurant.diningConfig.tableBooking.approvalMode = tb.approvalMode === 'auto' ? 'auto' : 'manual';
+    if (tb.enabled !== undefined)
+      restaurant.diningConfig.tableBooking.enabled = !!tb.enabled;
+    if (tb.timeSlots !== undefined)
+      restaurant.diningConfig.tableBooking.timeSlots = Array.isArray(
+        tb.timeSlots,
+      )
+        ? tb.timeSlots
+        : [];
+    if (tb.minGuestsPerBooking !== undefined)
+      restaurant.diningConfig.tableBooking.minGuestsPerBooking =
+        Number(tb.minGuestsPerBooking) || 1;
+    if (tb.maxGuestsPerBooking !== undefined)
+      restaurant.diningConfig.tableBooking.maxGuestsPerBooking =
+        Number(tb.maxGuestsPerBooking) || 10;
+    if (tb.approvalMode !== undefined)
+      restaurant.diningConfig.tableBooking.approvalMode =
+        tb.approvalMode === "auto" ? "auto" : "manual";
   }
 
   if (body.seatingCapacity !== undefined) {
-    restaurant.diningConfig.seatingCapacity = body.seatingCapacity == null ? null : Math.max(0, Number(body.seatingCapacity));
+    restaurant.diningConfig.seatingCapacity =
+      body.seatingCapacity == null
+        ? null
+        : Math.max(0, Number(body.seatingCapacity));
   }
 
   if (body.pageControls) {
-    restaurant.diningConfig.pageControls = restaurant.diningConfig.pageControls || {};
+    restaurant.diningConfig.pageControls =
+      restaurant.diningConfig.pageControls || {};
     const pc = body.pageControls;
-    if (pc.reviewsEnabled !== undefined) restaurant.diningConfig.pageControls.reviewsEnabled = !!pc.reviewsEnabled;
-    if (pc.shareEnabled !== undefined) restaurant.diningConfig.pageControls.shareEnabled = !!pc.shareEnabled;
+    if (pc.reviewsEnabled !== undefined)
+      restaurant.diningConfig.pageControls.reviewsEnabled = !!pc.reviewsEnabled;
+    if (pc.shareEnabled !== undefined)
+      restaurant.diningConfig.pageControls.shareEnabled = !!pc.shareEnabled;
     if (pc.diningSlug !== undefined) {
-      const slug = String(pc.diningSlug).toLowerCase().trim().replace(/[^a-z0-9-]/g, '-').replace(/(^-|-$)/g, '');
-      const existing = await Restaurant.findOne({ slug, _id: { $ne: restaurantId } });
-      if (existing) return errorResponse(res, 400, 'This dining slug is already taken');
+      const slug = String(pc.diningSlug)
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9-]/g, "-")
+        .replace(/(^-|-$)/g, "");
+      const existing = await Restaurant.findOne({
+        slug,
+        _id: { $ne: restaurantId },
+      });
+      if (existing)
+        return errorResponse(res, 400, "This dining slug is already taken");
       restaurant.slug = slug || restaurant.slug;
       restaurant.diningConfig.pageControls.diningSlug = slug || restaurant.slug;
     }
   }
 
+  if (body.categories !== undefined) {
+    restaurant.diningConfig.categories = Array.isArray(body.categories)
+      ? body.categories
+      : [];
+  }
+
   await restaurant.save();
-  return successResponse(res, 200, 'Dining config updated', { diningConfig: restaurant.diningConfig });
+  return successResponse(res, 200, "Dining config updated", {
+    diningConfig: restaurant.diningConfig,
+  });
+});
+
+/**
+ * Create a dining enable request (restaurant auth)
+ * POST /api/restaurant/dining-config/request-enable
+ */
+export const requestDiningEnable = asyncHandler(async (req, res) => {
+  const restaurantId = req.restaurant._id;
+
+  const restaurant = await Restaurant.findById(restaurantId);
+  if (!restaurant) return errorResponse(res, 404, "Restaurant not found");
+
+  if (!restaurant.diningSettings) {
+    restaurant.diningSettings = {};
+  }
+
+  // If admin already allows dining globally, no need to request
+  if (restaurant.diningSettings.isEnabled !== false) {
+    return errorResponse(
+      res,
+      400,
+      "Dining is already enabled by admin for this restaurant.",
+    );
+  }
+
+  if (restaurant.diningSettings.requestStatus === "pending") {
+    return errorResponse(
+      res,
+      400,
+      "You already have a pending dining enable request.",
+    );
+  }
+
+  restaurant.diningSettings.requestStatus = "pending";
+  restaurant.diningSettings.lastRequestAt = new Date();
+
+  await restaurant.save();
+
+  return successResponse(res, 200, "Dining enable request sent to admin.", {
+    diningSettings: restaurant.diningSettings,
+  });
 });
 
 /**
@@ -108,13 +265,16 @@ export const updateDiningSeating = asyncHandler(async (req, res) => {
   const { seatingCapacity } = req.body;
 
   const restaurant = await Restaurant.findById(id);
-  if (!restaurant) return errorResponse(res, 404, 'Restaurant not found');
+  if (!restaurant) return errorResponse(res, 404, "Restaurant not found");
 
   if (!restaurant.diningConfig) restaurant.diningConfig = {};
-  restaurant.diningConfig.seatingCapacity = seatingCapacity == null ? null : Math.max(0, Number(seatingCapacity));
+  restaurant.diningConfig.seatingCapacity =
+    seatingCapacity == null ? null : Math.max(0, Number(seatingCapacity));
   await restaurant.save();
 
-  return successResponse(res, 200, 'Seating capacity updated', { seatingCapacity: restaurant.diningConfig.seatingCapacity });
+  return successResponse(res, 200, "Seating capacity updated", {
+    seatingCapacity: restaurant.diningConfig.seatingCapacity,
+  });
 });
 
 /**
@@ -122,8 +282,12 @@ export const updateDiningSeating = asyncHandler(async (req, res) => {
  * GET /api/restaurant/dining-offers
  */
 export const getDiningOffers = asyncHandler(async (req, res) => {
-  const offers = await RestaurantDiningOffer.find({ restaurant: req.restaurant._id }).sort({ order: 1, createdAt: -1 }).lean();
-  return successResponse(res, 200, 'Dining offers retrieved', { offers });
+  const offers = await RestaurantDiningOffer.find({
+    restaurant: req.restaurant._id,
+  })
+    .sort({ order: 1, createdAt: -1 })
+    .lean();
+  return successResponse(res, 200, "Dining offers retrieved", { offers });
 });
 
 /**
@@ -131,23 +295,44 @@ export const getDiningOffers = asyncHandler(async (req, res) => {
  * POST /api/restaurant/dining-offers
  */
 export const createDiningOffer = asyncHandler(async (req, res) => {
-  const { type, title, description, discountType, discountValue, validFrom, validTo, isActive } = req.body;
-  if (!type || !['prebook', 'walkin'].includes(type)) return errorResponse(res, 400, 'Valid type (prebook or walkin) required');
-  if (!title || !discountType || !['flat', 'percentage'].includes(discountType) || discountValue == null) return errorResponse(res, 400, 'title, discountType (flat/percentage), discountValue required');
-  if (!validFrom || !validTo) return errorResponse(res, 400, 'validFrom and validTo required');
+  const {
+    type,
+    title,
+    description,
+    discountType,
+    discountValue,
+    validFrom,
+    validTo,
+    isActive,
+  } = req.body;
+  if (!type || !["prebook", "walkin"].includes(type))
+    return errorResponse(res, 400, "Valid type (prebook or walkin) required");
+  if (
+    !title ||
+    !discountType ||
+    !["flat", "percentage"].includes(discountType) ||
+    discountValue == null
+  )
+    return errorResponse(
+      res,
+      400,
+      "title, discountType (flat/percentage), discountValue required",
+    );
+  if (!validFrom || !validTo)
+    return errorResponse(res, 400, "validFrom and validTo required");
 
   const offer = await RestaurantDiningOffer.create({
     restaurant: req.restaurant._id,
     type,
     title: String(title).trim(),
-    description: description ? String(description).trim() : '',
+    description: description ? String(description).trim() : "",
     discountType,
     discountValue: Number(discountValue),
     validFrom: new Date(validFrom),
     validTo: new Date(validTo),
     isActive: isActive !== false,
   });
-  return successResponse(res, 201, 'Dining offer created', { offer });
+  return successResponse(res, 201, "Dining offer created", { offer });
 });
 
 /**
@@ -155,20 +340,36 @@ export const createDiningOffer = asyncHandler(async (req, res) => {
  * PATCH /api/restaurant/dining-offers/:offerId
  */
 export const updateDiningOffer = asyncHandler(async (req, res) => {
-  const offer = await RestaurantDiningOffer.findOne({ _id: req.params.offerId, restaurant: req.restaurant._id });
-  if (!offer) return errorResponse(res, 404, 'Offer not found');
+  const offer = await RestaurantDiningOffer.findOne({
+    _id: req.params.offerId,
+    restaurant: req.restaurant._id,
+  });
+  if (!offer) return errorResponse(res, 404, "Offer not found");
 
-  const { type, title, description, discountType, discountValue, validFrom, validTo, isActive } = req.body;
-  if (type !== undefined) offer.type = ['prebook', 'walkin'].includes(type) ? type : offer.type;
+  const {
+    type,
+    title,
+    description,
+    discountType,
+    discountValue,
+    validFrom,
+    validTo,
+    isActive,
+  } = req.body;
+  if (type !== undefined)
+    offer.type = ["prebook", "walkin"].includes(type) ? type : offer.type;
   if (title !== undefined) offer.title = String(title).trim();
   if (description !== undefined) offer.description = String(description).trim();
-  if (discountType !== undefined) offer.discountType = ['flat', 'percentage'].includes(discountType) ? discountType : offer.discountType;
+  if (discountType !== undefined)
+    offer.discountType = ["flat", "percentage"].includes(discountType)
+      ? discountType
+      : offer.discountType;
   if (discountValue !== undefined) offer.discountValue = Number(discountValue);
   if (validFrom !== undefined) offer.validFrom = new Date(validFrom);
   if (validTo !== undefined) offer.validTo = new Date(validTo);
   if (isActive !== undefined) offer.isActive = !!isActive;
   await offer.save();
-  return successResponse(res, 200, 'Offer updated', { offer });
+  return successResponse(res, 200, "Offer updated", { offer });
 });
 
 /**
@@ -176,9 +377,12 @@ export const updateDiningOffer = asyncHandler(async (req, res) => {
  * DELETE /api/restaurant/dining-offers/:offerId
  */
 export const deleteDiningOffer = asyncHandler(async (req, res) => {
-  const deleted = await RestaurantDiningOffer.findOneAndDelete({ _id: req.params.offerId, restaurant: req.restaurant._id });
-  if (!deleted) return errorResponse(res, 404, 'Offer not found');
-  return successResponse(res, 200, 'Offer deleted');
+  const deleted = await RestaurantDiningOffer.findOneAndDelete({
+    _id: req.params.offerId,
+    restaurant: req.restaurant._id,
+  });
+  if (!deleted) return errorResponse(res, 404, "Offer not found");
+  return successResponse(res, 200, "Offer deleted");
 });
 
 /**
@@ -187,24 +391,31 @@ export const deleteDiningOffer = asyncHandler(async (req, res) => {
  */
 export const getDiningMenu = asyncHandler(async (req, res) => {
   const menu = await Menu.findOne({ restaurant: req.restaurant._id }).lean();
-  if (!menu) return successResponse(res, 200, 'Dining menu', { sections: [], addons: [] });
-  const sections = (menu.sections || []).map(sec => ({
+  if (!menu)
+    return successResponse(res, 200, "Dining menu", {
+      sections: [],
+      addons: [],
+    });
+  const sections = (menu.sections || []).map((sec) => ({
     ...sec,
-    items: (sec.items || []).map(item => ({
+    items: (sec.items || []).map((item) => ({
       ...item,
       dineInPrice: item.dineInPrice ?? item.price,
       availableForDining: item.availableForDining !== false,
     })),
-    subsections: (sec.subsections || []).map(sub => ({
+    subsections: (sec.subsections || []).map((sub) => ({
       ...sub,
-      items: (sub.items || []).map(item => ({
+      items: (sub.items || []).map((item) => ({
         ...item,
         dineInPrice: item.dineInPrice ?? item.price,
         availableForDining: item.availableForDining !== false,
       })),
     })),
   }));
-  return successResponse(res, 200, 'Dining menu', { sections, addons: menu.addons || [] });
+  return successResponse(res, 200, "Dining menu", {
+    sections,
+    addons: menu.addons || [],
+  });
 });
 
 /**
@@ -213,37 +424,45 @@ export const getDiningMenu = asyncHandler(async (req, res) => {
  * Body: { sectionId, itemId, subsectionId?, dineInPrice, availableForDining }
  */
 export const updateDiningMenuItem = asyncHandler(async (req, res) => {
-  const { sectionId, itemId, subsectionId, dineInPrice, availableForDining } = req.body;
-  if (!sectionId || !itemId) return errorResponse(res, 400, 'sectionId and itemId required');
+  const { sectionId, itemId, subsectionId, dineInPrice, availableForDining } =
+    req.body;
+  if (!sectionId || !itemId)
+    return errorResponse(res, 400, "sectionId and itemId required");
 
   const menu = await Menu.findOne({ restaurant: req.restaurant._id });
-  if (!menu || !menu.sections) return errorResponse(res, 404, 'Menu not found');
+  if (!menu || !menu.sections) return errorResponse(res, 404, "Menu not found");
 
   let updated = false;
   for (const section of menu.sections) {
     if (section.id !== sectionId) continue;
     if (subsectionId) {
-      const sub = (section.subsections || []).find(s => s.id === subsectionId);
+      const sub = (section.subsections || []).find(
+        (s) => s.id === subsectionId,
+      );
       if (sub) {
-        const item = (sub.items || []).find(i => i.id === itemId);
+        const item = (sub.items || []).find((i) => i.id === itemId);
         if (item) {
-          if (dineInPrice !== undefined) item.dineInPrice = dineInPrice == null ? null : Number(dineInPrice);
-          if (availableForDining !== undefined) item.availableForDining = !!availableForDining;
+          if (dineInPrice !== undefined)
+            item.dineInPrice = dineInPrice == null ? null : Number(dineInPrice);
+          if (availableForDining !== undefined)
+            item.availableForDining = !!availableForDining;
           updated = true;
           break;
         }
       }
     } else {
-      const item = (section.items || []).find(i => i.id === itemId);
+      const item = (section.items || []).find((i) => i.id === itemId);
       if (item) {
-        if (dineInPrice !== undefined) item.dineInPrice = dineInPrice == null ? null : Number(dineInPrice);
-        if (availableForDining !== undefined) item.availableForDining = !!availableForDining;
+        if (dineInPrice !== undefined)
+          item.dineInPrice = dineInPrice == null ? null : Number(dineInPrice);
+        if (availableForDining !== undefined)
+          item.availableForDining = !!availableForDining;
         updated = true;
         break;
       }
     }
   }
-  if (!updated) return errorResponse(res, 404, 'Item not found');
+  if (!updated) return errorResponse(res, 404, "Item not found");
   await menu.save();
-  return successResponse(res, 200, 'Dining menu item updated');
+  return successResponse(res, 200, "Dining menu item updated");
 });

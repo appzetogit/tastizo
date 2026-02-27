@@ -1424,3 +1424,81 @@ export const updateOrderDeliveryDetails = async (req, res) => {
     });
   }
 };
+
+/**
+ * Submit Order Review
+ * PATCH /api/orders/:id/review
+ */
+export const submitOrderReview = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const { rating, comment } = req.body;
+
+    // Validate rating
+    if (rating === undefined || rating === null) {
+      return res.status(400).json({
+        success: false,
+        message: "Rating is required",
+      });
+    }
+
+    const numericRating = Number(rating);
+    if (isNaN(numericRating) || numericRating < 1 || numericRating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: "Rating must be a number between 1 and 5",
+      });
+    }
+
+    // Find order
+    const order = await Order.findById(id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // Check if user is the owner of the order
+    if (order.userId.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to review this order",
+      });
+    }
+
+    // Update order with review
+    order.review = {
+      rating: numericRating,
+      comment: comment ? comment.trim() : "",
+      submittedAt: new Date(),
+      reviewedBy: userId,
+    };
+
+    await order.save();
+
+    logger.info(
+      `✅ Review submitted for order ${order.orderId} by user ${userId}`,
+    );
+
+    res.json({
+      success: true,
+      message: "Review submitted successfully",
+      data: {
+        orderId: order.orderId,
+        review: order.review,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error submitting order review: ${error.message}`, {
+      error: error.message,
+      stack: error.stack,
+    });
+    res.status(500).json({
+      success: false,
+      message: "Failed to submit review",
+    });
+  }
+};

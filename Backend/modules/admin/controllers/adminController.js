@@ -1573,11 +1573,24 @@ export const updateRestaurantDiningSettings = asyncHandler(async (req, res) => {
       return errorResponse(res, 404, "Restaurant not found");
     }
 
-    // Update dining settings
+    // Ensure container exists
+    if (!restaurant.diningSettings) {
+      restaurant.diningSettings = {};
+    }
+
+    // Shallow-merge existing settings
     restaurant.diningSettings = {
       ...restaurant.diningSettings,
       ...diningSettings,
     };
+
+    // If admin explicitly updates isEnabled, clear any pending request and record decision metadata
+    if (Object.prototype.hasOwnProperty.call(diningSettings, "isEnabled")) {
+      restaurant.diningSettings.isEnabled = !!diningSettings.isEnabled;
+      restaurant.diningSettings.requestStatus = "none";
+      restaurant.diningSettings.lastDecisionAt = new Date();
+      restaurant.diningSettings.lastDecisionBy = req.user._id;
+    }
 
     await restaurant.save();
 

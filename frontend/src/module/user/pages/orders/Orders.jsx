@@ -448,13 +448,35 @@ Order again from this restaurant in the ${companyName} app.`
       // Mark this order as rated so popup doesn't show again (before closing modal)
       const orderId = order.id || order._id || order.mongoId
       setShownRatingForOrders(prev => new Set([...prev, orderId]))
+      try {
+        if (typeof window !== "undefined" && window.localStorage) {
+          window.localStorage.setItem(`orderRated_${orderId}`, "true")
+        }
+      } catch {}
       
       handleCloseRating()
     } catch (error) {
       console.error("Error submitting order rating:", error)
+
+      const message = error?.response?.data?.message
+
+      // If backend says already rated, treat as success and prevent re‑rating
+      if (error?.response?.status === 400 && message === "You have already rated this order") {
+        const order = ratingModal.order
+        const orderId = order.id || order._id || order.mongoId
+        setShownRatingForOrders(prev => new Set([...prev, orderId]))
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            window.localStorage.setItem(`orderRated_${orderId}`, "true")
+          }
+        } catch {}
+        toast.info("You have already rated this order.")
+        handleCloseRating()
+        return
+      }
+
       toast.error(
-        error?.response?.data?.message ||
-          "Failed to submit rating. Please try again."
+        message || "Failed to submit rating. Please try again."
       )
     } finally {
       setSubmittingRating(false)
@@ -796,12 +818,21 @@ Order again from this restaurant in the ${companyName} app.`
                       </div>
                       <span className="text-xs font-semibold text-red-500">Payment failed</span>
                     </div>
-                  ) : isDelivered && order.rating ? (
+                  ) : isDelivered && (order.rating || (() => {
+                    try {
+                      if (typeof window === "undefined" || !window.localStorage) return false
+                      const orderId = order.id || order._id || order.mongoId
+                      if (!orderId) return false
+                      return window.localStorage.getItem(`orderRated_${orderId}`) === "true"
+                    } catch {
+                      return false
+                    }
+                  })()) ? (
                     <div>
                       <div className="flex items-center gap-1">
                         <span className="text-sm text-gray-800">You rated</span>
                         <div className="flex bg-yellow-400 text-white px-1 rounded text-[10px] items-center gap-0.5 h-4">
-                          {order.rating}<Star className="w-2 h-2 fill-current" />
+                          {(order.rating || 5)}<Star className="w-2 h-2 fill-current" />
                         </div>
                       </div>
                     </div>

@@ -3,6 +3,7 @@ import User from '../../auth/models/User.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import asyncHandler from '../../../shared/middleware/asyncHandler.js';
+import mongoose from 'mongoose';
 
 /**
  * Create a new feedback experience
@@ -69,6 +70,22 @@ export const createFeedbackExperience = asyncHandler(async (req, res) => {
       userPhone = authenticatedEntity.ownerPhone;
     }
 
+    // Ensure user can rate a given order only once
+    const orderIdFromMetadata =
+      metadata?.orderId || metadata?.orderMongoId || metadata?.order_id || null;
+
+    if (orderIdFromMetadata) {
+      const existing = await FeedbackExperience.findOne({
+        userId,
+        module: finalModule,
+        'metadata.orderId': String(orderIdFromMetadata),
+      }).lean();
+
+      if (existing) {
+        return errorResponse(res, 400, 'You have already rated this order');
+      }
+    }
+
     // Create feedback experience
     const feedbackExperience = await FeedbackExperience.create({
       userId,
@@ -80,6 +97,51 @@ export const createFeedbackExperience = asyncHandler(async (req, res) => {
       module: finalModule,
       metadata
     });
+
+    // If feedback is associated with a restaurant, update its aggregate rating
+    if (finalRestaurantId) {
+      try {
+        const restaurantObjectId =
+          finalRestaurantId instanceof mongoose.Types.ObjectId
+            ? finalRestaurantId
+            : new mongoose.Types.ObjectId(finalRestaurantId);
+
+        const ratingStats = await FeedbackExperience.aggregate([
+          {
+            $match: {
+              restaurantId: restaurantObjectId,
+              rating: { $exists: true, $ne: null, $gt: 0 },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              averageRating: { $avg: "$rating" },
+              totalRatings: { $sum: 1 },
+            },
+          },
+        ]);
+
+        const averageRating = ratingStats[0]?.averageRating || 0;
+        const totalRatings = ratingStats[0]?.totalRatings || 0;
+
+        // Persist aggregated values on Restaurant document so user APIs can read them directly
+        await Restaurant.findByIdAndUpdate(
+          restaurantObjectId,
+          {
+            rating: Number(averageRating.toFixed(1)),
+            totalRatings,
+          },
+          { new: false },
+        );
+      } catch (aggError) {
+        // Do not fail the request if aggregation/update fails – feedback is still stored
+        console.warn(
+          "Failed to update restaurant rating from feedback experience:",
+          aggError.message,
+        );
+      }
+    }
 
     return successResponse(res, 201, 'Feedback experience created successfully', {
       feedbackExperience

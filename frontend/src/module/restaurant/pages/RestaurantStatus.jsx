@@ -78,7 +78,7 @@ export default function RestaurantStatus() {
 
     // Listen for outlet timings updates
     window.addEventListener("outletTimingsUpdated", loadOutletTimings)
-    
+
     return () => {
       window.removeEventListener("outletTimingsUpdated", loadOutletTimings)
     }
@@ -90,8 +90,9 @@ export default function RestaurantStatus() {
 
     const checkIfOpen = () => {
       const now = new Date()
-      const currentDayFull = now.toLocaleDateString('en-US', { weekday: 'long' }) // "Monday", "Tuesday", etc.
-      const currentDay = now.toLocaleDateString('en-US', { weekday: 'short' }) // "Mon", "Tue", etc.
+      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+      const currentDayFull = daysOfWeek[now.getDay()]
+      const currentDay = currentDayFull.substring(0, 3) // "Sun", "Mon", etc.
       const currentHour = now.getHours()
       const currentMinute = now.getMinutes()
       const currentTimeInMinutes = currentHour * 60 + currentMinute
@@ -119,13 +120,13 @@ export default function RestaurantStatus() {
           setShowOutletClosedDialog(true)
           return
         }
-        
+
         // Check time range if day is open and has timings
         if (dayData.isOpen && dayData.openingTime && dayData.closingTime) {
           // Parse opening and closing times (format: "HH:mm")
           const [openHour, openMinute] = dayData.openingTime.split(':').map(Number)
           const [closeHour, closeMinute] = dayData.closingTime.split(':').map(Number)
-          
+
           const openingTimeInMinutes = openHour * 60 + openMinute
           const closingTimeInMinutes = closeHour * 60 + closeMinute
 
@@ -133,10 +134,10 @@ export default function RestaurantStatus() {
           let isWithin = false
           if (closingTimeInMinutes > openingTimeInMinutes) {
             // Normal case: same day
-            isWithin = currentTimeInMinutes >= openingTimeInMinutes && currentTimeInMinutes <= closingTimeInMinutes
+            isWithin = currentTimeInMinutes >= openingTimeInMinutes && currentTimeInMinutes < closingTimeInMinutes
           } else {
             // Overnight case: closing time is next day
-            isWithin = currentTimeInMinutes >= openingTimeInMinutes || currentTimeInMinutes <= closingTimeInMinutes
+            isWithin = currentTimeInMinutes >= openingTimeInMinutes || currentTimeInMinutes < closingTimeInMinutes
           }
 
           setIsWithinTimings(isWithin)
@@ -169,7 +170,7 @@ export default function RestaurantStatus() {
       // Parse opening and closing times (format: "HH:mm")
       const [openHour, openMinute] = deliveryTimings.openingTime.split(':').map(Number)
       const [closeHour, closeMinute] = deliveryTimings.closingTime.split(':').map(Number)
-      
+
       const openingTimeInMinutes = openHour * 60 + openMinute
       const closingTimeInMinutes = closeHour * 60 + closeMinute
 
@@ -189,13 +190,13 @@ export default function RestaurantStatus() {
     checkIfOpen()
     // Recheck every minute
     const interval = setInterval(checkIfOpen, 60000)
-    
+
     // Listen for outlet timings updates
     const handleOutletTimingsUpdate = () => {
       checkIfOpen()
     }
     window.addEventListener("outletTimingsUpdated", handleOutletTimingsUpdate)
-    
+
     return () => {
       clearInterval(interval)
       window.removeEventListener("outletTimingsUpdated", handleOutletTimingsUpdate)
@@ -218,8 +219,8 @@ export default function RestaurantStatus() {
           // Sync localStorage with backend
           localStorage.setItem('restaurant_online_status', JSON.stringify(restaurant.isAcceptingOrders))
           // Dispatch event to update navbar
-          window.dispatchEvent(new CustomEvent('restaurantStatusChanged', { 
-            detail: { isOnline: restaurant.isAcceptingOrders } 
+          window.dispatchEvent(new CustomEvent('restaurantStatusChanged', {
+            detail: { isOnline: restaurant.isAcceptingOrders }
           }))
         } else {
           // Fallback to localStorage
@@ -228,15 +229,15 @@ export default function RestaurantStatus() {
             const status = JSON.parse(savedStatus)
             setDeliveryStatus(status)
             // Dispatch event to update navbar
-            window.dispatchEvent(new CustomEvent('restaurantStatusChanged', { 
-              detail: { isOnline: status } 
+            window.dispatchEvent(new CustomEvent('restaurantStatusChanged', {
+              detail: { isOnline: status }
             }))
           } else {
             // Default to false if not set
             setDeliveryStatus(false)
             // Dispatch event to update navbar
-            window.dispatchEvent(new CustomEvent('restaurantStatusChanged', { 
-              detail: { isOnline: false } 
+            window.dispatchEvent(new CustomEvent('restaurantStatusChanged', {
+              detail: { isOnline: false }
             }))
           }
         }
@@ -251,19 +252,19 @@ export default function RestaurantStatus() {
           if (savedStatus !== null) {
             const status = JSON.parse(savedStatus)
             setDeliveryStatus(status)
-            window.dispatchEvent(new CustomEvent('restaurantStatusChanged', { 
-              detail: { isOnline: status } 
+            window.dispatchEvent(new CustomEvent('restaurantStatusChanged', {
+              detail: { isOnline: status }
             }))
           } else {
             setDeliveryStatus(false)
-            window.dispatchEvent(new CustomEvent('restaurantStatusChanged', { 
-              detail: { isOnline: false } 
+            window.dispatchEvent(new CustomEvent('restaurantStatusChanged', {
+              detail: { isOnline: false }
             }))
           }
         } catch (localError) {
           setDeliveryStatus(false)
-          window.dispatchEvent(new CustomEvent('restaurantStatusChanged', { 
-            detail: { isOnline: false } 
+          window.dispatchEvent(new CustomEvent('restaurantStatusChanged', {
+            detail: { isOnline: false }
           }))
         }
       }
@@ -279,18 +280,18 @@ export default function RestaurantStatus() {
       setShowOutletClosedDialog(true)
       return
     }
-    
+
     // If outside scheduled delivery timings, show popup
     if (checked && isWithinTimings === false && !isDayClosed) {
       setShowOutsideTimingsDialog(true)
       return
     }
-    
+
     setDeliveryStatus(checked)
     try {
       // Save to localStorage
       localStorage.setItem('restaurant_online_status', JSON.stringify(checked))
-      
+
       // Update backend
       try {
         await restaurantAPI.updateDeliveryStatus(checked)
@@ -299,10 +300,10 @@ export default function RestaurantStatus() {
         console.error('Error updating delivery status in backend:', apiError)
         // Still continue with local update even if backend fails
       }
-      
+
       // Dispatch custom event for navbar to listen
-      window.dispatchEvent(new CustomEvent('restaurantStatusChanged', { 
-        detail: { isOnline: checked } 
+      window.dispatchEvent(new CustomEvent('restaurantStatusChanged', {
+        detail: { isOnline: checked }
       }))
     } catch (error) {
       console.error("Error saving delivery status:", error)
@@ -329,10 +330,10 @@ export default function RestaurantStatus() {
   const formatCurrentDateTime = () => {
     const now = currentDateTime
     const dateStr = now.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
-    const timeStr = now.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
+    const timeStr = now.toLocaleTimeString('en-US', {
+      hour: 'numeric',
       minute: '2-digit',
-      hour12: true 
+      hour12: true
     })
     return `${dateStr}, ${timeStr}`
   }
@@ -340,8 +341,9 @@ export default function RestaurantStatus() {
   // Get delivery timings for current day (from outlet timings first, then backend)
   const getCurrentDayTimings = () => {
     const now = new Date()
-    const currentDayFull = now.toLocaleDateString('en-US', { weekday: 'long' }) // "Monday", "Tuesday", etc.
-    
+    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+    const currentDayFull = daysOfWeek[now.getDay()] // "Monday", "Tuesday", etc.
+
     // First try to get from outlet timings (localStorage)
     if (outletTimings && outletTimings[currentDayFull]) {
       const dayData = outletTimings[currentDayFull]
@@ -352,14 +354,14 @@ export default function RestaurantStatus() {
         }
       }
     }
-    
+
     // Fallback to backend delivery timings
     if (restaurantData?.deliveryTimings) {
       const openingTime = formatTime12Hour(restaurantData.deliveryTimings.openingTime)
       const closingTime = formatTime12Hour(restaurantData.deliveryTimings.closingTime)
       return { openingTime, closingTime }
     }
-    
+
     return null
   }
 
@@ -397,7 +399,7 @@ export default function RestaurantStatus() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={() => navigate(-1)}
             className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
             aria-label="Go back"
@@ -445,132 +447,132 @@ export default function RestaurantStatus() {
             </div>
 
             <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <p className="text-base font-bold text-gray-900 mb-1.5">Delivery status</p>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${deliveryStatus ? 'bg-green-500' : 'bg-gray-600'}`}></div>
-                <p className="text-sm text-gray-500">
-                  {deliveryStatus ? 'Receiving orders' : 'Not receiving orders'}
-                </p>
+              <div className="flex-1">
+                <p className="text-base font-bold text-gray-900 mb-1.5">Delivery status</p>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${deliveryStatus ? 'bg-green-500' : 'bg-gray-600'}`}></div>
+                  <p className="text-sm text-gray-500">
+                    {deliveryStatus ? 'Receiving orders' : 'Not receiving orders'}
+                  </p>
+                </div>
               </div>
+              <Switch
+                checked={deliveryStatus}
+                onCheckedChange={handleDeliveryStatusChange}
+                className="ml-4 data-[state=unchecked]:bg-gray-300 data-[state=checked]:bg-green-600"
+              />
             </div>
-            <Switch
-              checked={deliveryStatus}
-              onCheckedChange={handleDeliveryStatusChange}
-              className="ml-4 data-[state=unchecked]:bg-gray-300 data-[state=checked]:bg-green-600"
-            />
-          </div>
 
-          <p className="text-sm text-gray-700 mb-2">Current delivery slot</p>
-          <div className="flex items-center justify-between">
-            <p className="text-base font-bold text-gray-900">
-              {loading ? "Loading..." : (
-                (() => {
-                  // If current day is closed, show "Today is Off"
-                  if (isDayClosed) {
-                    return "Today is Off"
-                  }
-                  const timings = getCurrentDayTimings()
-                  if (timings) {
-                    const dateStr = currentDateTime.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
-                    return `${dateStr}, ${timings.openingTime} - ${timings.closingTime}`
-                  }
-                  return "Not configured"
-                })()
+            <p className="text-sm text-gray-700 mb-2">Current delivery slot</p>
+            <div className="flex items-center justify-between">
+              <p className="text-base font-bold text-gray-900">
+                {loading ? "Loading..." : (
+                  (() => {
+                    // If current day is closed, show "Today is Off"
+                    if (isDayClosed) {
+                      return "Today is Off"
+                    }
+                    const timings = getCurrentDayTimings()
+                    if (timings) {
+                      const dateStr = currentDateTime.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
+                      return `${dateStr}, ${timings.openingTime} - ${timings.closingTime}`
+                    }
+                    return "Not configured"
+                  })()
+                )}
+              </p>
+              {!isDayClosed && (
+                <button
+                  onClick={() => navigate("/restaurant/outlet-timings")}
+                  className="flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                >
+                  Details
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               )}
-            </p>
-            {!isDayClosed && (
-              <button
-                onClick={() => navigate("/restaurant/outlet-timings")}
-                className="flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm font-medium"
-              >
-                Details
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+            </div>
 
-          
+
 
           </CardContent>
         </Card>
 
-  {/* Warning Message - Only show if outside timings AND day is not closed */}
-  {!isWithinTimings && restaurantData && !isDayClosed && (
-        <div className="bg-pink-50 rounded-b-lg rounded-t-none p-4 flex items-start gap-3">
-          <div className="w-5 h-5 rounded-full bg-red-600 flex items-center justify-center shrink-0 mt-0.5">
-            <span className="text-white text-xs font-bold">!</span>
+        {/* Warning Message - Only show if outside timings AND day is not closed */}
+        {!isWithinTimings && restaurantData && !isDayClosed && (
+          <div className="bg-pink-50 rounded-b-lg rounded-t-none p-4 flex items-start gap-3">
+            <div className="w-5 h-5 rounded-full bg-red-600 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-white text-xs font-bold">!</span>
+            </div>
+            <p className="text-sm text-gray-700 flex-1">
+              You are currently outside your scheduled delivery timings.
+            </p>
           </div>
-          <p className="text-sm text-gray-700 flex-1">
-            You are currently outside your scheduled delivery timings.
-          </p>
-        </div>
-      )}
+        )}
 
-      {/* Outlet Closed Dialog */}
-      <Dialog open={showOutletClosedDialog} onOpenChange={setShowOutletClosedDialog}>
-        <DialogContent className="sm:max-w-md p-4 w-[90%] gap-2 flex flex-col">
-          <DialogHeader className="text-center">
-            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
-              <span className="text-3xl">⚠️</span>
-            </div>
-            <DialogTitle className="text-lg font-semibold text-gray-900 text-center">
-              Outlet Timings Closed
-            </DialogTitle>
-          </DialogHeader>
-          <DialogFooter className="flex-col gap-2 sm:flex-row">
-            <Button
-              onClick={() => setShowOutletClosedDialog(false)}
-              variant="outline"
-              className="w-full sm:w-auto"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleGoToOutletTimings}
-              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              Go to Outlet Timings
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        {/* Outlet Closed Dialog */}
+        <Dialog open={showOutletClosedDialog} onOpenChange={setShowOutletClosedDialog}>
+          <DialogContent className="sm:max-w-md p-4 w-[90%] gap-2 flex flex-col">
+            <DialogHeader className="text-center">
+              <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
+                <span className="text-3xl">⚠️</span>
+              </div>
+              <DialogTitle className="text-lg font-semibold text-gray-900 text-center">
+                Outlet Timings Closed
+              </DialogTitle>
+            </DialogHeader>
+            <DialogFooter className="flex-col gap-2 sm:flex-row">
+              <Button
+                onClick={() => setShowOutletClosedDialog(false)}
+                variant="outline"
+                className="w-full sm:w-auto"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleGoToOutletTimings}
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Go to Outlet Timings
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-      {/* Outside Timings Dialog */}
-      <Dialog open={showOutsideTimingsDialog} onOpenChange={setShowOutsideTimingsDialog}>
-        <DialogContent className="sm:max-w-md p-4 w-[90%] gap-2 flex flex-col">
-          <DialogHeader className="text-center">
-            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
-              <span className="text-3xl">⚠️</span>
-            </div>
-            <DialogTitle className="text-lg font-semibold text-gray-900 text-center">
-              Outside Delivery Timings
-            </DialogTitle>
-            <DialogDescription className="mt-2 text-sm text-gray-600">
-              You are currently outside your scheduled delivery timings. Please change outlet timings to enable delivery status.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col gap-2 sm:flex-row">
-            <Button
-              onClick={() => setShowOutsideTimingsDialog(false)}
-              variant="outline"
-              className="w-full sm:w-auto"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                setShowOutsideTimingsDialog(false)
-                navigate("/restaurant/outlet-timings")
-              }}
-              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              Change Outlet Timings
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
+        {/* Outside Timings Dialog */}
+        <Dialog open={showOutsideTimingsDialog} onOpenChange={setShowOutsideTimingsDialog}>
+          <DialogContent className="sm:max-w-md p-4 w-[90%] gap-2 flex flex-col">
+            <DialogHeader className="text-center">
+              <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
+                <span className="text-3xl">⚠️</span>
+              </div>
+              <DialogTitle className="text-lg font-semibold text-gray-900 text-center">
+                Outside Delivery Timings
+              </DialogTitle>
+              <DialogDescription className="mt-2 text-sm text-gray-600">
+                You are currently outside your scheduled delivery timings. Please change outlet timings to enable delivery status.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex-col gap-2 sm:flex-row">
+              <Button
+                onClick={() => setShowOutsideTimingsDialog(false)}
+                variant="outline"
+                className="w-full sm:w-auto"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowOutsideTimingsDialog(false)
+                  navigate("/restaurant/outlet-timings")
+                }}
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Change Outlet Timings
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
       </div>
     </div>
   )

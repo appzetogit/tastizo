@@ -1,6 +1,6 @@
 /**
  * Rapido/Zomato-Style Route-Based Marker Animation
- * 
+ *
  * Core Principle: Marker moves on polyline, not GPS
  */
 
@@ -13,10 +13,10 @@
  */
 export function interpolatePoint(start, end, progress) {
   const clampedProgress = Math.max(0, Math.min(1, progress));
-  
+
   return {
     lat: start.lat + (end.lat - start.lat) * clampedProgress,
-    lng: start.lng + (end.lng - start.lng) * clampedProgress
+    lng: start.lng + (end.lng - start.lng) * clampedProgress,
   };
 }
 
@@ -27,15 +27,16 @@ export function interpolatePoint(start, end, progress) {
  * @returns {number} Bearing in degrees (0-360)
  */
 export function calculateBearing(from, to) {
-  const lat1 = from.lat * Math.PI / 180;
-  const lat2 = to.lat * Math.PI / 180;
-  const dLng = (to.lng - from.lng) * Math.PI / 180;
-  
+  const lat1 = (from.lat * Math.PI) / 180;
+  const lat2 = (to.lat * Math.PI) / 180;
+  const dLng = ((to.lng - from.lng) * Math.PI) / 180;
+
   const y = Math.sin(dLng) * Math.cos(lat2);
-  const x = Math.cos(lat1) * Math.sin(lat2) - 
-            Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
-  
-  let bearing = Math.atan2(y, x) * 180 / Math.PI;
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+
+  let bearing = (Math.atan2(y, x) * 180) / Math.PI;
   return (bearing + 360) % 360;
 }
 
@@ -46,16 +47,20 @@ export function calculateBearing(from, to) {
  * @param {number} smoothingFactor - 0 to 1 (higher = smoother)
  * @returns {number} Smoothed bearing
  */
-export function smoothRotation(currentBearing, targetBearing, smoothingFactor = 0.3) {
+export function smoothRotation(
+  currentBearing,
+  targetBearing,
+  smoothingFactor = 0.3,
+) {
   // Handle 360/0 wrap-around
   let diff = targetBearing - currentBearing;
-  
+
   if (diff > 180) {
     diff -= 360;
   } else if (diff < -180) {
     diff += 360;
   }
-  
+
   const smoothed = currentBearing + diff * smoothingFactor;
   return (smoothed + 360) % 360;
 }
@@ -68,52 +73,75 @@ export function smoothRotation(currentBearing, targetBearing, smoothingFactor = 
  * @param {number} duration - Animation duration in ms (default 1200ms)
  * @param {Function} onComplete - Callback when animation completes
  */
-export function animateMarkerSmoothly(marker, currentPos, targetPos, duration = 1200, onComplete) {
+export function animateMarkerSmoothly(
+  marker,
+  currentPos,
+  targetPos,
+  duration = 1200,
+  onComplete,
+) {
   if (!marker || !currentPos || !targetPos) return;
-  
+
   const startTime = Date.now();
   const startLat = currentPos.lat;
   const startLng = currentPos.lng;
   const deltaLat = targetPos.lat - startLat;
   const deltaLng = targetPos.lng - startLng;
-  
+
   // Easing function (ease-out for natural deceleration)
   const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-  
+
   const animate = () => {
     const elapsed = Date.now() - startTime;
     const progress = Math.min(1, elapsed / duration);
     const easedProgress = easeOutCubic(progress);
-    
+
     const currentLat = startLat + deltaLat * easedProgress;
     const currentLng = startLng + deltaLng * easedProgress;
-    
+
     // Update marker position
     marker.setPosition({ lat: currentLat, lng: currentLng });
-    
+
     // Calculate and update bearing (rotation)
     if (progress < 1) {
-      const prevPos = progress > 0.1 
-        ? { lat: startLat + deltaLat * easeOutCubic(Math.max(0, progress - 0.1)), 
-            lng: startLng + deltaLng * easeOutCubic(Math.max(0, progress - 0.1)) }
-        : currentPos;
-      
-      const bearing = calculateBearing(prevPos, { lat: currentLat, lng: currentLng });
-      const currentRotation = marker.getRotation() || 0;
+      const prevPos =
+        progress > 0.1
+          ? {
+              lat:
+                startLat + deltaLat * easeOutCubic(Math.max(0, progress - 0.1)),
+              lng:
+                startLng + deltaLng * easeOutCubic(Math.max(0, progress - 0.1)),
+            }
+          : currentPos;
+
+      const bearing = calculateBearing(prevPos, {
+        lat: currentLat,
+        lng: currentLng,
+      });
+      const currentRotation =
+        marker.getRotation && typeof marker.getRotation === "function"
+          ? marker.getRotation()
+          : 0;
       const smoothedBearing = smoothRotation(currentRotation, bearing, 0.4);
-      marker.setRotation(smoothedBearing);
-      
+
+      if (marker.setRotation && typeof marker.setRotation === "function") {
+        marker.setRotation(smoothedBearing);
+      }
+
       requestAnimationFrame(animate);
     } else {
       // Animation complete
       marker.setPosition(targetPos);
       const finalBearing = calculateBearing(currentPos, targetPos);
-      marker.setRotation(finalBearing);
-      
+
+      if (marker.setRotation && typeof marker.setRotation === "function") {
+        marker.setRotation(finalBearing);
+      }
+
       if (onComplete) onComplete();
     }
   };
-  
+
   animate();
 }
 
@@ -125,11 +153,11 @@ export function animateMarkerSmoothly(marker, currentPos, targetPos, duration = 
  */
 export function findNearestPointOnPolyline(location, polylinePoints) {
   if (!polylinePoints || polylinePoints.length === 0) return null;
-  
+
   let minDistance = Infinity;
   let nearestIndex = 0;
   let nearestPoint = polylinePoints[0];
-  
+
   for (let i = 0; i < polylinePoints.length; i++) {
     const distance = calculateDistance(location, polylinePoints[i]);
     if (distance < minDistance) {
@@ -138,11 +166,11 @@ export function findNearestPointOnPolyline(location, polylinePoints) {
       nearestPoint = polylinePoints[i];
     }
   }
-  
+
   return {
     point: nearestPoint,
     index: nearestIndex,
-    distance: minDistance
+    distance: minDistance,
   };
 }
 
@@ -154,13 +182,16 @@ export function findNearestPointOnPolyline(location, polylinePoints) {
  */
 function calculateDistance(point1, point2) {
   const R = 6371000; // Earth radius in meters
-  const dLat = (point2.lat - point1.lat) * Math.PI / 180;
-  const dLng = (point2.lng - point1.lng) * Math.PI / 180;
-  
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(point1.lat * Math.PI / 180) * Math.cos(point2.lat * Math.PI / 180) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  
+  const dLat = ((point2.lat - point1.lat) * Math.PI) / 180;
+  const dLng = ((point2.lng - point1.lng) * Math.PI) / 180;
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((point1.lat * Math.PI) / 180) *
+      Math.cos((point2.lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
@@ -173,17 +204,17 @@ function calculateDistance(point1, point2) {
  */
 export function getPointOnPolylineByProgress(polylinePoints, progress) {
   if (!polylinePoints || polylinePoints.length === 0) return null;
-  
+
   const clampedProgress = Math.max(0, Math.min(1, progress));
   const totalPoints = polylinePoints.length;
   const targetIndex = Math.floor(clampedProgress * (totalPoints - 1));
   const nextIndex = Math.min(targetIndex + 1, totalPoints - 1);
-  
+
   return {
     currentPoint: polylinePoints[targetIndex],
     nextPoint: polylinePoints[nextIndex],
     currentIndex: targetIndex,
-    nextIndex: nextIndex
+    nextIndex: nextIndex,
   };
 }
 
@@ -195,25 +226,25 @@ export function getPointOnPolylineByProgress(polylinePoints, progress) {
  */
 export function estimatePositionOnRoute(lastKnownPos, polylinePoints) {
   if (!lastKnownPos || !polylinePoints) return null;
-  
+
   const timeSinceUpdate = (Date.now() - lastKnownPos.timestamp) / 1000; // seconds
   const speed = lastKnownPos.speed || 20; // km/h, default 20
   const speedMps = speed / 3.6; // Convert to m/s
   const estimatedDistance = speedMps * timeSinceUpdate; // meters
-  
+
   // Find nearest point on polyline
   const nearest = findNearestPointOnPolyline(lastKnownPos, polylinePoints);
   if (!nearest) return lastKnownPos;
-  
+
   // Move forward on polyline by estimated distance
   let remainingDistance = estimatedDistance;
   let currentIndex = nearest.index;
-  
+
   while (remainingDistance > 0 && currentIndex < polylinePoints.length - 1) {
     const currentPoint = polylinePoints[currentIndex];
     const nextPoint = polylinePoints[currentIndex + 1];
     const segmentDistance = calculateDistance(currentPoint, nextPoint);
-    
+
     if (segmentDistance <= remainingDistance) {
       remainingDistance -= segmentDistance;
       currentIndex++;
@@ -223,7 +254,7 @@ export function estimatePositionOnRoute(lastKnownPos, polylinePoints) {
       return interpolatePoint(currentPoint, nextPoint, progress);
     }
   }
-  
+
   // Reached end of route
   return polylinePoints[polylinePoints.length - 1];
 }
@@ -242,7 +273,7 @@ export class RouteBasedAnimationController {
     this.isAnimating = false;
     this.lastProgress = 0; // Track last progress to prevent backward movement
   }
-  
+
   /**
    * Update marker position based on route progress
    * @param {number} progress - 0 to 1
@@ -250,24 +281,27 @@ export class RouteBasedAnimationController {
    */
   updatePosition(progress, bearing) {
     if (!this.polylinePoints || this.polylinePoints.length === 0) return;
-    
-    const pointInfo = getPointOnPolylineByProgress(this.polylinePoints, progress);
+
+    const pointInfo = getPointOnPolylineByProgress(
+      this.polylinePoints,
+      progress,
+    );
     if (!pointInfo) return;
-    
+
     // Cancel any ongoing animation
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
     }
-    
+
     const targetPos = pointInfo.nextPoint;
     const currentPos = this.marker.getPosition();
-    
+
     if (currentPos) {
       const currentLatLng = {
         lat: currentPos.lat(),
-        lng: currentPos.lng()
+        lng: currentPos.lng(),
       };
-      
+
       // Animate smoothly to target
       this.isAnimating = true;
       animateMarkerSmoothly(
@@ -277,7 +311,7 @@ export class RouteBasedAnimationController {
         1200, // 1.2 seconds
         () => {
           this.isAnimating = false;
-        }
+        },
       );
     } else {
       // First time - set position directly
@@ -286,7 +320,7 @@ export class RouteBasedAnimationController {
         this.marker.setRotation(bearing);
       }
     }
-    
+
     this.currentIndex = pointInfo.currentIndex;
     this.lastProgress = progress; // Store progress to prevent backward movement
     this.lastUpdateTime = Date.now();
@@ -294,25 +328,28 @@ export class RouteBasedAnimationController {
       ...targetPos,
       speed: 20,
       bearing: bearing || 0,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
   }
-  
+
   /**
    * Handle GPS loss - continue animation based on estimated position
    */
   handleGPSLoss() {
     if (!this.lastKnownPosition || !this.polylinePoints) return;
-    
-    const estimatedPos = estimatePositionOnRoute(this.lastKnownPosition, this.polylinePoints);
+
+    const estimatedPos = estimatePositionOnRoute(
+      this.lastKnownPosition,
+      this.polylinePoints,
+    );
     if (estimatedPos) {
       const currentPos = this.marker.getPosition();
       if (currentPos) {
         const currentLatLng = {
           lat: currentPos.lat(),
-          lng: currentPos.lng()
+          lng: currentPos.lng(),
         };
-        
+
         // Slow down animation (50% speed) when GPS is lost
         animateMarkerSmoothly(
           this.marker,
@@ -321,12 +358,12 @@ export class RouteBasedAnimationController {
           2000, // Slower animation
           () => {
             this.isAnimating = false;
-          }
+          },
         );
       }
     }
   }
-  
+
   /**
    * Update polyline points (when route changes)
    * @param {Array} newPolylinePoints - New polyline points
@@ -335,7 +372,7 @@ export class RouteBasedAnimationController {
     this.polylinePoints = newPolylinePoints;
     this.currentIndex = 0;
   }
-  
+
   /**
    * Cleanup
    */
@@ -347,4 +384,3 @@ export class RouteBasedAnimationController {
     this.polylinePoints = null;
   }
 }
-

@@ -400,8 +400,21 @@ const DeliveryTrackingMap = ({
               bikeMarkerRef.current,
               routePolylinePointsRef.current
             );
-            console.log('✅ Route-based animation controller initialized with bike marker');
           }
+
+          // Add rotation helper methods since Google Maps Markers don't have them natively
+          bikeMarkerRef.current.getRotation = function () {
+            return this.getIcon()?.rotation || 0;
+          };
+
+          bikeMarkerRef.current.setRotation = function (rotation) {
+            const icon = this.getIcon();
+            if (icon && typeof icon === 'object') {
+              this.setIcon({ ...icon, rotation });
+            }
+          };
+
+          console.log('✅ Route-based animation controller initialized with bike marker');
 
           // Verify marker is on map
           const markerMap = bikeMarkerRef.current.getMap();
@@ -463,6 +476,18 @@ const DeliveryTrackingMap = ({
               zIndex: window.google.maps.Marker.MAX_ZINDEX + 3
             });
             console.log('✅ Created fallback marker (orange circle)');
+
+            // Add rotation helper methods to fallback marker too
+            bikeMarkerRef.current.getRotation = function () {
+              return this.getIcon()?.rotation || 0;
+            };
+
+            bikeMarkerRef.current.setRotation = function (rotation) {
+              const icon = this.getIcon();
+              if (icon && typeof icon === 'object') {
+                this.setIcon({ ...icon, rotation });
+              }
+            };
           } catch (fallbackError) {
             console.error('❌ Even fallback marker failed:', fallbackError);
           }

@@ -12,8 +12,10 @@ import {
   MapPin,
   RotateCcw,
   FileText,
+  Star,
+  Loader2
 } from "lucide-react"
-import { orderAPI, restaurantAPI } from "@/lib/api"
+import { orderAPI, restaurantAPI, api, API_ENDPOINTS } from "@/lib/api"
 import { toast } from "sonner"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -25,6 +27,10 @@ export default function UserOrderDetails() {
   const [order, setOrder] = useState(null)
   const [restaurant, setRestaurant] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [rating, setRating] = useState(null)
+  const [feedbackText, setFeedbackText] = useState("")
+  const [submittingRating, setSubmittingRating] = useState(false)
+  const [hasRated, setHasRated] = useState(false)
 
   useEffect(() => {
     const fetchOrderDetails = async () => {
@@ -73,6 +79,31 @@ export default function UserOrderDetails() {
 
     fetchOrderDetails()
   }, [orderId, navigate])
+
+  // On first load, restore "already rated" state and saved rating/comment so we show details view
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return
+      const stored = window.localStorage.getItem(`orderRated_${orderId}`)
+      if (!stored) return
+      if (stored === "true") {
+        setHasRated(true)
+        return
+      }
+      const parsed = JSON.parse(stored)
+      if (parsed && (parsed.r != null || parsed.rating != null)) {
+        setHasRated(true)
+        setRating(parsed.r != null ? parsed.r : parsed.rating)
+        if (parsed.c != null || parsed.comment != null) {
+          setFeedbackText(parsed.c != null ? String(parsed.c) : String(parsed.comment || ""))
+        }
+      } else {
+        setHasRated(true)
+      }
+    } catch {
+      setHasRated(true)
+    }
+  }, [orderId])
 
   const handleCopyOrderId = async () => {
     if (!order) return
@@ -201,6 +232,70 @@ export default function UserOrderDetails() {
     }
     const tel = restaurantPhone.startsWith("+") ? restaurantPhone : `+91${restaurantPhone.replace(/\D/g, "").slice(-10)}`
     window.location.href = `tel:${tel}`
+  }
+
+  const handleSubmitRating = async () => {
+    if (rating === null) {
+      toast.error("Please select a rating first")
+      return
+    }
+
+    try {
+      setSubmittingRating(true)
+
+      const restaurantId =
+        restaurant?._id ||
+        (typeof order.restaurantId === "object" ? order.restaurantId?._id : order.restaurantId) ||
+        null
+
+      await api.post(API_ENDPOINTS.ADMIN.FEEDBACK_EXPERIENCE_CREATE, {
+        rating,
+        module: "user",
+        restaurantId,
+        metadata: {
+          orderId: orderIdDisplay,
+          orderMongoId: order._id,
+          orderTotal: pricing.totalPayable || pricing.total || pricing.grandTotal || null,
+          restaurantName,
+          comment: feedbackText || undefined,
+        },
+      })
+
+      setHasRated(true)
+      try {
+        if (typeof window !== "undefined" && window.localStorage) {
+          window.localStorage.setItem(
+            `orderRated_${orderIdDisplay}`,
+            JSON.stringify({ r: rating, c: feedbackText || "" })
+          )
+        }
+      } catch {}
+      toast.success("Thanks for rating your food experience!")
+    } catch (error) {
+      console.error("Error submitting order rating from details page:", error)
+      const message = error?.response?.data?.message
+
+      if (error?.response?.status === 400 && message === "You have already rated this order") {
+        setHasRated(true)
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            window.localStorage.setItem(
+              `orderRated_${orderIdDisplay}`,
+              JSON.stringify({ r: rating, c: feedbackText || "" })
+            )
+          }
+        } catch {}
+        toast.info("You have already rated this order.")
+        return
+      }
+
+      toast.error(
+        message ||
+        "Failed to submit rating. Please try again.",
+      )
+    } finally {
+      setSubmittingRating(false)
+    }
   }
 
   const handleDownloadSummary = async () => {
@@ -590,6 +685,92 @@ export default function UserOrderDetails() {
             </div>
           </div>
         </div>
+
+        {/* Rate Food Experience */}
+        {hasRated ? (
+          <div className="bg-white p-4 rounded-xl shadow-sm space-y-4">
+            <h3 className="font-semibold text-gray-800 text-base text-center">
+              Thanks for rating your food experience!
+            </h3>
+            <p className="text-xs text-gray-500 text-center">
+              Your rating for {restaurantName}
+            </p>
+            {(rating != null && rating >= 1) ? (
+              <div className="flex items-center justify-center gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    className={`w-7 h-7 ${rating >= star
+                      ? "text-yellow-400 fill-yellow-400"
+                      : "text-gray-300"
+                    }`}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600 text-center">Your rating was submitted.</p>
+            )}
+            {feedbackText?.trim() && (
+              <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2">
+                <p className="text-xs text-gray-500 mb-1">Your feedback</p>
+                <p className="text-sm text-gray-800">{feedbackText}</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="bg-white p-4 rounded-xl shadow-sm space-y-4">
+            <h3 className="font-semibold text-gray-800 text-base text-center">
+              Rate your food experience
+            </h3>
+            <p className="text-xs text-gray-500 text-center">
+              How was the food from {restaurantName}?
+            </p>
+            <div className="flex items-center justify-center gap-2 mb-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setRating(star)}
+                  className="p-1.5 transition-transform hover:scale-110 active:scale-95"
+                >
+                  <Star
+                    className={`w-7 h-7 ${(rating || 0) >= star
+                      ? "text-yellow-400 fill-yellow-400"
+                      : "text-gray-300"
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              rows={3}
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E23744] focus:border-[#E23744] resize-none"
+              placeholder="Share what you liked or disliked (optional)"
+            />
+
+            <button
+              type="button"
+              disabled={submittingRating || rating === null}
+              onClick={handleSubmitRating}
+              className="w-full rounded-xl bg-[#E23744] text-white text-sm font-semibold py-2.5 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              {submittingRating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <Star className="w-4 h-4 fill-white" />
+                  Submit Rating
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Fixed Bottom Buttons */}

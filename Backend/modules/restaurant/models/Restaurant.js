@@ -293,6 +293,22 @@ const restaurantSchema = new mongoose.Schema(
         type: String,
         default: "family-dining", // e.g., 'fine-dining', 'cafe', 'casual-dining'
       },
+      // Admin override + request workflow
+      requestStatus: {
+        type: String,
+        enum: ["none", "pending"],
+        default: "none",
+      },
+      lastRequestAt: {
+        type: Date,
+      },
+      lastDecisionAt: {
+        type: Date,
+      },
+      lastDecisionBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Admin",
+      },
     },
     // Full dining page management config (restaurant editable except seatingCapacity)
     diningConfig: {
@@ -313,7 +329,11 @@ const restaurantSchema = new mongoose.Schema(
         timeSlots: [{ type: String }],
         minGuestsPerBooking: { type: Number, default: 1 },
         maxGuestsPerBooking: { type: Number, default: 10 },
-        approvalMode: { type: String, enum: ["auto", "manual"], default: "manual" },
+        approvalMode: {
+          type: String,
+          enum: ["auto", "manual"],
+          default: "manual",
+        },
       },
       seatingCapacity: { type: Number, default: null },
       pageControls: {
@@ -321,6 +341,9 @@ const restaurantSchema = new mongoose.Schema(
         shareEnabled: { type: Boolean, default: true },
         diningSlug: { type: String, trim: true, lowercase: true },
       },
+      categories: [
+        { type: mongoose.Schema.Types.ObjectId, ref: "DiningCategory" },
+      ],
     },
     businessModel: {
       type: String,

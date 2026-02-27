@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { 
+import {
   ArrowLeft,
   ShoppingCart,
   Share2,
@@ -34,6 +34,28 @@ export default function FoodDetailPage() {
     setTimeout(() => {
       setToast({ show: false, message: '' })
     }, 3000)
+  }
+
+  // Handle share functionality
+  const handleShare = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: foodData.name,
+          text: `Check out this ${foodData.name} on Tastizo!`,
+          url: window.location.href,
+        })
+      } else {
+        // Fallback: Copy to clipboard
+        await navigator.clipboard.writeText(window.location.href)
+        showToast("Link copied to clipboard!")
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error("Error sharing:", error)
+        showToast("Failed to share link")
+      }
+    }
   }
 
   // Mock food data - in real app, fetch based on id
@@ -73,7 +95,7 @@ export default function FoodDetailPage() {
       originalId: foodData.id,
       ...restFoodData
     }
-    
+
     setWishlist((prev) => {
       const isInWishlist = prev.some((w) => w.id === itemId)
       if (isInWishlist) {
@@ -84,9 +106,9 @@ export default function FoodDetailPage() {
         return updated
       } else {
         // Show toast notification
-        setToast({ 
-          show: true, 
-          message: `Your food item "${foodData.name}" is added to wishlist` 
+        setToast({
+          show: true,
+          message: `Your food item "${foodData.name}" is added to wishlist`
         })
         setTimeout(() => {
           setToast({ show: false, message: '' })
@@ -113,14 +135,14 @@ export default function FoodDetailPage() {
       {/* Top Header */}
       <div className="bg-white sticky top-0 z-10 rounded-b-3xl">
         <div className="px-4 py-3 flex items-center justify-between">
-          <button 
+          <button
             onClick={() => navigate(-1)}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-gray-900" />
           </button>
           <h1 className="text-lg font-semibold text-gray-900">Details</h1>
-          <button 
+          <button
             onClick={() => navigate('/usermain/cart')}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative"
           >
@@ -131,8 +153,8 @@ export default function FoodDetailPage() {
 
       {/* Food Image */}
       <div className="w-full bg-white">
-        <img 
-          src={foodData.image} 
+        <img
+          src={foodData.image}
           alt={foodData.name}
           className="w-full h-80 object-cover"
         />
@@ -144,22 +166,21 @@ export default function FoodDetailPage() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xl font-bold text-gray-900">{foodData.name}</h2>
           <div className="flex items-center gap-3">
-            <button 
-              onClick={() => {}}
+            <button
+              onClick={handleShare}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
               <Share2 className="w-5 h-5 text-gray-700" />
             </button>
-            <button 
+            <button
               onClick={toggleWishlist}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
-              <Heart 
-                className={`w-5 h-5 transition-all ${
-                  isInWishlist() 
-                    ? 'text-red-500 fill-red-500' 
+              <Heart
+                className={`w-5 h-5 transition-all ${isInWishlist()
+                    ? 'text-red-500 fill-red-500'
                     : 'text-gray-700 hover:text-red-500'
-                }`} 
+                  }`}
               />
             </button>
           </div>
@@ -175,11 +196,11 @@ export default function FoodDetailPage() {
             </div>
           </div>
           <p className="text-sm text-gray-600 leading-relaxed">
-            {showFullDescription 
-              ? foodData.description 
+            {showFullDescription
+              ? foodData.description
               : `${foodData.description.substring(0, 120)}...`}
             {!showFullDescription && (
-              <button 
+              <button
                 onClick={() => setShowFullDescription(true)}
                 className="text-[#ff8100] font-medium ml-1"
               >
@@ -197,22 +218,19 @@ export default function FoodDetailPage() {
               <button
                 key={index}
                 onClick={() => setSelectedSize(index)}
-                className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all ${
-                  selectedSize === index
+                className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all ${selectedSize === index
                     ? 'border-[#ff8100] bg-[#ff8100]/10'
                     : 'border-gray-200 bg-white hover:border-gray-300'
-                }`}
+                  }`}
               >
                 <div className="text-center">
-                  <p className={`text-sm font-semibold mb-1 ${
-                    selectedSize === index ? 'text-[#ff8100]' : 'text-gray-700'
-                  }`}>
+                  <p className={`text-sm font-semibold mb-1 ${selectedSize === index ? 'text-[#ff8100]' : 'text-gray-700'
+                    }`}>
                     {size.name}
                   </p>
                   <div className="flex items-center justify-center gap-1">
-                    <span className={`text-xs font-medium ${
-                      selectedSize === index ? 'text-[#ff8100]' : 'text-gray-600'
-                    }`}>
+                    <span className={`text-xs font-medium ${selectedSize === index ? 'text-[#ff8100]' : 'text-gray-600'
+                      }`}>
                       ${size.price}
                     </span>
                     <span className="text-xs text-gray-400 line-through">
@@ -231,17 +249,16 @@ export default function FoodDetailPage() {
             <span className="text-2xl font-bold text-gray-900">${currentPrice}</span>
             <span className="text-base text-gray-400 line-through">${currentOriginalPrice}</span>
           </div>
-          
+
           {/* Quantity Selector */}
           <div className="flex items-center gap-3 bg-gray-100 rounded-lg px-2 py-1">
             <button
               onClick={handleDecrease}
               disabled={quantity === 1}
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                quantity === 1 
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${quantity === 1
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   : 'bg-gray-800 text-white hover:bg-gray-700'
-              }`}
+                }`}
             >
               <Minus className="w-4 h-4" />
             </button>
@@ -262,7 +279,7 @@ export default function FoodDetailPage() {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 md:hidden">
         {/* Add to Cart Button */}
         <div className="p-4 pb-2">
-          <Button 
+          <Button
             className="w-full bg-[#ff8100] hover:bg-[#e67300] text-white font-semibold py-3 rounded-lg text-base"
             onClick={() => {
               showToast("Item added to the cart")
@@ -272,17 +289,17 @@ export default function FoodDetailPage() {
             Add to Cart
           </Button>
         </div>
-        
+
         {/* Bottom Navigation Bar */}
         <div className="flex items-center justify-around py-2 px-4 border-t border-gray-100">
-          <button 
+          <button
             onClick={() => navigate('/usermain')}
             className="flex flex-col items-center gap-1 p-2 text-gray-600 hover:text-[#ff8100] transition-colors"
           >
             <Home className="w-6 h-6" />
             <span className="text-xs text-gray-600 font-medium">Home</span>
           </button>
-          <button 
+          <button
             onClick={() => navigate('/usermain/wishlist')}
             className="flex flex-col items-center gap-1 p-2 text-gray-600 hover:text-[#ff8100] transition-colors"
           >

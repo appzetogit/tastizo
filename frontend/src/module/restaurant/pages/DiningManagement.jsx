@@ -16,16 +16,20 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
+  LayoutGrid,
+  Check,
 } from "lucide-react"
-import { restaurantAPI } from "@/lib/api"
+import { restaurantAPI, diningAPI } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { toast } from "sonner"
 
 const SECTION_IDS = {
   BASIC: "basic",
   ABOUT: "about",
   COVER: "cover",
   SEATING: "seating",
+  CATEGORIES: "categories",
   OFFERS: "offers",
   MENU: "menu",
   PAGE_CONTROLS: "page-controls",
@@ -38,8 +42,15 @@ export default function DiningManagement() {
   const [error, setError] = useState(null)
   const [expandedSection, setExpandedSection] = useState(SECTION_IDS.BASIC)
   const [config, setConfig] = useState(null)
+  const [adminControls, setAdminControls] = useState({
+    isEnabledByAdmin: true,
+    requestStatus: "none",
+    lastRequestAt: null,
+    recommendedCategorySlug: null,
+  })
   const [offers, setOffers] = useState([])
   const [diningMenu, setDiningMenu] = useState({ sections: [], addons: [] })
+  const [allDiningCategories, setAllDiningCategories] = useState([])
 
   const [form, setForm] = useState({
     enabled: false,
@@ -62,6 +73,7 @@ export default function DiningManagement() {
       approvalMode: "manual",
     },
     seatingCapacity: null,
+    categories: [],
     pageControls: {
       reviewsEnabled: true,
       shareEnabled: true,
@@ -78,14 +90,30 @@ export default function DiningManagement() {
       try {
         setLoading(true)
         setError(null)
-        const [configRes, offersRes, menuRes] = await Promise.all([
+        const [configRes, offersRes, menuRes, categoriesRes] = await Promise.all([
           restaurantAPI.getDiningConfig(),
           restaurantAPI.getDiningOffers(),
           restaurantAPI.getDiningMenu(),
+          diningAPI.getCategories(),
         ])
         if (configRes.data?.success && configRes.data?.data?.diningConfig) {
           const c = configRes.data.data.diningConfig
           setConfig(c)
+          if (c.adminControls) {
+            setAdminControls({
+              isEnabledByAdmin: c.adminControls.isEnabledByAdmin !== false,
+              requestStatus: c.adminControls.requestStatus || "none",
+              lastRequestAt: c.adminControls.lastRequestAt || null,
+              recommendedCategorySlug: c.adminControls.recommendedCategorySlug || null,
+            })
+          } else {
+            setAdminControls({
+              isEnabledByAdmin: true,
+              requestStatus: "none",
+              lastRequestAt: null,
+              recommendedCategorySlug: null,
+            })
+          }
           setForm({
             enabled: c.enabled ?? false,
             basicDetails: {
@@ -107,6 +135,7 @@ export default function DiningManagement() {
               approvalMode: c.tableBooking?.approvalMode ?? "manual",
             },
             seatingCapacity: c.seatingCapacity ?? null,
+            categories: c.categories || [],
             pageControls: {
               reviewsEnabled: c.pageControls?.reviewsEnabled !== false,
               shareEnabled: c.pageControls?.shareEnabled !== false,
@@ -116,6 +145,9 @@ export default function DiningManagement() {
         }
         if (offersRes.data?.success && Array.isArray(offersRes.data?.data?.offers)) setOffers(offersRes.data.data.offers)
         if (menuRes.data?.success && menuRes.data?.data) setDiningMenu(menuRes.data.data)
+        if (categoriesRes?.data?.success && Array.isArray(categoriesRes?.data?.data)) {
+          setAllDiningCategories(categoriesRes.data.data)
+        }
       } catch (e) {
         setError(e.response?.data?.message || e.message || "Failed to load dining config")
       } finally {
@@ -124,6 +156,39 @@ export default function DiningManagement() {
     }
     fetch()
   }, [])
+
+  // When admin recommends a dining category (via slug), sync it into the form selection
+  useEffect(() => {
+    if (!adminControls.recommendedCategorySlug || allDiningCategories.length === 0) return
+
+    const match = allDiningCategories.find((cat) => {
+      if (!cat?.name) return false
+      const slug = cat.name.toLowerCase().replace(/\s+/g, "-")
+      return slug === adminControls.recommendedCategorySlug
+    })
+    if (!match) return
+
+    setForm((prev) => {
+      const idStr = String(match._id)
+      const current = prev.categories || []
+      if (current.length === 1 && String(current[0]) === idStr) {
+        return prev
+      }
+      return { ...prev, categories: [match._id] }
+    })
+  }, [adminControls.recommendedCategorySlug, allDiningCategories])
+
+  const recommendedCategoryName =
+    adminControls.recommendedCategorySlug && allDiningCategories.length > 0
+      ? (() => {
+        const match = allDiningCategories.find((cat) => {
+          if (!cat?.name) return false
+          const slug = cat.name.toLowerCase().replace(/\s+/g, "-")
+          return slug === adminControls.recommendedCategorySlug
+        })
+        return match?.name || null
+      })()
+      : null
 
   const saveDiningConfig = async () => {
     try {
@@ -134,10 +199,12 @@ export default function DiningManagement() {
         coverImage: form.coverImage?.url ? form.coverImage : undefined,
         gallery: form.gallery,
         seatingCapacity: form.seatingCapacity == null || form.seatingCapacity === "" ? null : Number(form.seatingCapacity),
+        categories: form.categories,
         pageControls: form.pageControls,
       }
       await restaurantAPI.updateDiningConfig(payload)
       setConfig((prev) => ({ ...prev, ...payload }))
+      toast.success("Dining configuration saved successfully")
     } catch (e) {
       setError(e.response?.data?.message || e.message || "Failed to save")
     } finally {
@@ -235,6 +302,37 @@ export default function DiningManagement() {
     }
   }
 
+  // Allow only a single dining category selection
+  const toggleCategory = (categoryId) => {
+    setForm(prev => {
+      const current = prev.categories || [];
+      const isSelected = current.includes(categoryId);
+      // If already selected, clear category; otherwise set as the only category
+      const updated = isSelected ? [] : [categoryId];
+      return { ...prev, categories: updated };
+    });
+  }
+
+  const handleRequestEnable = async () => {
+    try {
+      setSaving(true)
+      setError(null)
+      await restaurantAPI.requestDiningEnable()
+      setAdminControls((prev) => ({
+        ...prev,
+        requestStatus: "pending",
+        lastRequestAt: new Date().toISOString(),
+      }))
+      toast.success("Dining enable request sent to admin.")
+    } catch (e) {
+      const msg = e?.response?.data?.message || e.message || "Failed to send request"
+      setError(msg)
+      toast.error(msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -273,16 +371,80 @@ export default function DiningManagement() {
           </div>
         )}
 
+        {/* Admin status + request controls */}
+        <div className="mb-4 space-y-2">
+          <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-slate-700">
+                Dining status (Admin)
+              </span>
+              {adminControls.isEnabledByAdmin ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Enabled
+                </span>
+              ) : adminControls.requestStatus === "pending" ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                  Pending Approval
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+                  Disabled by Admin
+                </span>
+              )}
+            </div>
+            {!adminControls.isEnabledByAdmin && adminControls.requestStatus !== "pending" && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleRequestEnable}
+                disabled={saving}
+                className="text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>Request Dining Enable</>
+                )}
+              </Button>
+            )}
+          </div>
+          {!adminControls.isEnabledByAdmin && (
+            <p className="text-xs text-slate-500">
+              Dining service is currently disabled by Admin.{" "}
+              {adminControls.requestStatus === "pending"
+                ? "Your enable request is pending approval."
+                : "Send a request to enable dining for this restaurant."}
+            </p>
+          )}
+        </div>
+
         {/* Dining enable toggle */}
         <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
           <span className="font-medium text-slate-900">Enable Dining Page</span>
           <button
             role="switch"
             aria-checked={form.enabled}
-            onClick={() => setForm((p) => ({ ...p, enabled: !p.enabled }))}
-            className={`relative w-11 h-6 rounded-full transition-colors ${form.enabled ? "bg-emerald-600" : "bg-slate-300"}`}
+            onClick={() => {
+              if (!adminControls.isEnabledByAdmin) return;
+              setForm((p) => ({ ...p, enabled: !p.enabled }));
+            }}
+            className={`relative w-11 h-6 rounded-full transition-colors ${
+              !adminControls.isEnabledByAdmin
+                ? "bg-slate-200 cursor-not-allowed opacity-60"
+                : form.enabled
+                ? "bg-emerald-600"
+                : "bg-slate-300"
+            }`}
           >
-            <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${form.enabled ? "translate-x-5" : "translate-x-0"}`} />
+            <span
+              className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                form.enabled ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
           </button>
         </div>
 
@@ -380,6 +542,58 @@ export default function DiningManagement() {
           </div>
         </Section>
 
+        {/* Dining Categories */}
+        {form.enabled && (
+          <Section
+            id={SECTION_IDS.CATEGORIES}
+            title="Dining Categories"
+            icon={LayoutGrid}
+            expanded={expandedSection === SECTION_IDS.CATEGORIES}
+            onToggle={() => setExpandedSection(expandedSection === SECTION_IDS.CATEGORIES ? null : SECTION_IDS.CATEGORIES)}
+          >
+            <div className="space-y-3">
+              <p className="text-sm text-slate-600 mb-1">Select the category that best describes your dining experience.</p>
+              {recommendedCategoryName && (
+                <p className="text-xs font-semibold text-emerald-700">
+                  Recommended by admin: <span className="underline">{recommendedCategoryName}</span>
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                {allDiningCategories.length === 0 ? (
+                  <div className="col-span-2 py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    <p className="text-sm text-slate-500">No dining categories found.</p>
+                  </div>
+                ) : (
+                  allDiningCategories.map((category) => {
+                    const isSelected = form.categories?.includes(category._id);
+                    return (
+                      <button
+                        key={category._id}
+                        type="button"
+                        onClick={() => toggleCategory(category._id)}
+                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${isSelected
+                          ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500"
+                          : "border-slate-200 hover:border-emerald-200 hover:bg-slate-50"
+                          }`}
+                      >
+                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? "bg-emerald-500 border-emerald-500" : "bg-white border-slate-300"
+                          }`}>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                        </div>
+                        <div>
+                          <p className={`text-sm font-semibold ${isSelected ? "text-emerald-900" : "text-slate-700"}`}>
+                            {category.name}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </Section>
+        )}
+
         {/* Pre-book & Walk-in Offers */}
         <Section id={SECTION_IDS.OFFERS} title="Pre-book & Walk-in Offers" icon={Tag} expanded={expandedSection === SECTION_IDS.OFFERS} onToggle={() => setExpandedSection(expandedSection === SECTION_IDS.OFFERS ? null : SECTION_IDS.OFFERS)}>
           <div className="space-y-4">
@@ -463,7 +677,7 @@ export default function DiningManagement() {
           </div>
         </Section>
       </div>
-    </div>
+    </div >
   )
 }
 

@@ -138,10 +138,21 @@ export default function Restaurants() {
                                   {restaurant.cuisine}
                                 </p>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <div className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/30 px-1.5 py-0.5 rounded-full">
-                                    <Star className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-yellow-400 text-yellow-400" />
-                                    <span className="font-bold text-xs sm:text-sm text-yellow-700 dark:text-yellow-400">{restaurant.rating}</span>
-                                  </div>
+                                  {typeof restaurant.rating === "number" && restaurant.rating > 0 ? (
+                                    <div className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/30 px-1.5 py-0.5 rounded-full">
+                                      <Star className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-yellow-400 text-yellow-400" />
+                                      <span className="font-bold text-xs sm:text-sm text-yellow-700 dark:text-yellow-400">
+                                        {restaurant.rating.toFixed(1)}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1 bg-gray-200 dark:bg-gray-800 px-1.5 py-0.5 rounded-full">
+                                      <Star className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-gray-400 dark:text-gray-500" />
+                                      <span className="font-semibold text-[11px] sm:text-xs text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                                        New
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                               <Button

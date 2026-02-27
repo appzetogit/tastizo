@@ -434,15 +434,25 @@ export const restaurantAPI = {
 
   // Dining Management
   getDiningConfig: () => apiClient.get(API_ENDPOINTS.RESTAURANT.DINING_CONFIG),
-  updateDiningConfig: (data) => apiClient.patch(API_ENDPOINTS.RESTAURANT.DINING_CONFIG, data),
+  updateDiningConfig: (data) =>
+    apiClient.patch(API_ENDPOINTS.RESTAURANT.DINING_CONFIG, data),
+  requestDiningEnable: () =>
+    apiClient.post(API_ENDPOINTS.RESTAURANT.DINING_REQUEST_ENABLE),
   getDiningOffers: () => apiClient.get(API_ENDPOINTS.RESTAURANT.DINING_OFFERS),
-  createDiningOffer: (data) => apiClient.post(API_ENDPOINTS.RESTAURANT.DINING_OFFERS, data),
+  createDiningOffer: (data) =>
+    apiClient.post(API_ENDPOINTS.RESTAURANT.DINING_OFFERS, data),
   updateDiningOffer: (offerId, data) =>
-    apiClient.patch(API_ENDPOINTS.RESTAURANT.DINING_OFFER_BY_ID.replace(":offerId", offerId), data),
+    apiClient.patch(
+      API_ENDPOINTS.RESTAURANT.DINING_OFFER_BY_ID.replace(":offerId", offerId),
+      data,
+    ),
   deleteDiningOffer: (offerId) =>
-    apiClient.delete(API_ENDPOINTS.RESTAURANT.DINING_OFFER_BY_ID.replace(":offerId", offerId)),
+    apiClient.delete(
+      API_ENDPOINTS.RESTAURANT.DINING_OFFER_BY_ID.replace(":offerId", offerId),
+    ),
   getDiningMenu: () => apiClient.get(API_ENDPOINTS.RESTAURANT.DINING_MENU),
-  updateDiningMenuItem: (data) => apiClient.patch(API_ENDPOINTS.RESTAURANT.DINING_MENU_ITEMS, data),
+  updateDiningMenuItem: (data) =>
+    apiClient.patch(API_ENDPOINTS.RESTAURANT.DINING_MENU_ITEMS, data),
 
   // Upload profile image
   uploadProfileImage: (file) => {
@@ -1010,7 +1020,7 @@ export const deliveryAPI = {
   claimEarningAddon: (offerId) => {
     const endpoint = API_ENDPOINTS.DELIVERY.EARNINGS_ACTIVE_OFFER_CLAIM.replace(
       ":offerId",
-      offerId
+      offerId,
     );
     if (import.meta.env.DEV) {
       console.log("📡 Claiming earning addon bonus from:", endpoint);
@@ -1940,6 +1950,13 @@ export const orderAPI = {
     return apiClient.patch(API_ENDPOINTS.ORDER.CANCEL.replace(":id", orderId), {
       reason,
     });
+  },
+  // Submit order review
+  submitOrderReview: (orderId, reviewData) => {
+    return apiClient.patch(
+      API_ENDPOINTS.ORDER.DETAILS.replace(":id", orderId) + "/review",
+      reviewData,
+    );
   },
 };
 

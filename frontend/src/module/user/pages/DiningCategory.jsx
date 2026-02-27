@@ -34,25 +34,30 @@ export default function DiningCategory() {
     const fetchRestaurants = async () => {
       try {
         setIsLoading(true)
-        const response = await restaurantAPI.getRestaurants()
+        const response = await restaurantAPI.getRestaurants({
+          diningCategory: category,
+          limit: 100
+        })
         if (response.data && response.data.success) {
           // Map backend data to UI format
           const mappedData = (response.data.data.restaurants || response.data.data || [])
-            .filter(r => r.diningSettings?.isEnabled !== false)
             .map(r => ({
               id: r._id || r.id,
+              slug: r.slug,
               name: r.name,
               rating: r.rating || r.avgRating || 0,
               location: r.location?.addressLine1 || r.address || "Indore",
-              distance: "2.5 km", // Placeholder as we don't have user geo-coords to calc
+              distance: "2.5 km", // Placeholder
               cuisine: Array.isArray(r.cuisines) ? r.cuisines[0] : (r.cuisine || "Multi-cuisine"),
-              price: r.costForTwo ? `₹${r.costForTwo} for two` : "Price not available",
-              image: r.coverImage || r.profileImage?.url || r.logo || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop",
-              offer: r.discount ? `Flat ${r.discount}% OFF` : "Great Offers",
-              deliveryTime: r.deliveryTime ? `${r.deliveryTime} mins` : "30-40 mins",
-              featuredDish: "Special", // Placeholder
-              featuredPrice: 250, // Placeholder
-              diningType: r.diningSettings?.diningType,
+              price: r.diningConfig?.basicDetails?.costForTwo
+                ? `₹${r.diningConfig.basicDetails.costForTwo} for two`
+                : "Price not available",
+              image: r.diningConfig?.coverImage?.url || r.profileImage?.url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop",
+              offer: r.offer || "Great Offers",
+              deliveryTime: r.estimatedDeliveryTime || "30-40 mins",
+              featuredDish: r.featuredDish || "Special",
+              featuredPrice: r.featuredPrice || 250,
+              diningEnabled: r.diningConfig?.enabled,
             }))
           setRestaurants(mappedData)
         }
@@ -109,7 +114,7 @@ export default function DiningCategory() {
         return timeMatch && parseInt(timeMatch[1]) <= 45
       })
     }
-    // Note: Distance filtering is using static "2.5 km" placeholder currently
+    // Distance filtering is using static "2.5 km" placeholder currently
     if (activeFilters.has('distance-under-1km')) {
       filtered = filtered.filter(r => {
         const distMatch = r.distance.match(/(\d+\.?\d*)/)
@@ -130,14 +135,6 @@ export default function DiningCategory() {
     }
     if (activeFilters.has('rating-45-plus')) {
       filtered = filtered.filter(r => r.rating >= 4.5)
-    }
-
-    // Apply Category Filter from URL
-    if (category) {
-      filtered = filtered.filter(r => {
-        const typeSlug = (r.diningType || "").toLowerCase().replace(/\s+/g, '-');
-        return typeSlug === category.toLowerCase();
-      });
     }
 
     // Apply cuisine filter
@@ -263,7 +260,7 @@ export default function DiningCategory() {
             {/* Restaurant Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
               {filteredRestaurants.map((restaurant, index) => {
-                const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
+                const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
                 const favorite = isFavorite(restaurantSlug)
 
                 const handleToggleFavorite = (e) => {
@@ -285,7 +282,7 @@ export default function DiningCategory() {
                 }
 
                 return (
-                  <Link key={restaurant.id} to={`/dining/${category}/${restaurantSlug}`}>
+                  <Link key={restaurant.id} to={`/dining/${category}/${restaurant.slug || restaurantSlug}`}>
                     <Card className="overflow-hidden cursor-pointer border-0 group bg-white shadow-sm hover:shadow-xl transition-all duration-300 py-0 gap-0 rounded-2xl ring-1 ring-black/5">
                       {/* Image Section */}
                       <div className="relative h-48 sm:h-56 md:h-60 w-full overflow-hidden">
