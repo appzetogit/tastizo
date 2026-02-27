@@ -406,7 +406,7 @@ export default function Under250() {
       </div>
 
       {/* Content Section */}
-      <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-2 sm:pt-3 md:pt-4 lg:pt-6 pb-6 md:pb-8 lg:pb-10">
+      <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-2 sm:pt-3 md:pt-4 lg:pt-6 pb-24 md:pb-28 lg:pb-32">
 
         <section className="space-y-1 sm:space-y-1.5">
           <div
@@ -564,7 +564,7 @@ export default function Under250() {
                         return (
                           <motion.div
                             key={item.id}
-                            className="flex-shrink-0 w-[200px] sm:w-[220px] md:w-full bg-white dark:bg-[#1a1a1a] rounded-lg md:rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden cursor-pointer"
+                            className="flex-shrink-0 w-[180px] sm:w-[210px] md:w-full bg-white dark:bg-[#1a1a1a] rounded-lg md:rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden cursor-pointer"
                             onClick={() => handleItemClick(item, restaurant)}
                             initial={{ opacity: 0, y: 20 }}
                             whileInView={{ opacity: 1, y: 0 }}
@@ -574,7 +574,7 @@ export default function Under250() {
                             style={{ boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" }}
                           >
                             {/* Item Image */}
-                            <div className="relative w-full h-32 sm:h-36 md:h-40 lg:h-48 xl:h-52 overflow-hidden">
+                            <div className="relative w-full h-32 sm:h-36 md:h-40 lg:h-48 xl:h-52 overflow-hidden bg-white">
                               <motion.div
                                 className="absolute inset-0"
                                 whileHover={{ scale: 1.1 }}
@@ -584,7 +584,7 @@ export default function Under250() {
                                   src={item.image}
                                   alt={item.name}
                                   className="w-full h-full"
-                                  objectFit="cover"
+                                  objectFit="contain"
                                   sizes="(max-width: 640px) 200px, (max-width: 768px) 220px, 100vw"
                                   placeholder="blur"
                                   priority={itemIndex < 4}
@@ -621,44 +621,75 @@ export default function Under250() {
                                   1 x {item.name}
                                 </span>
                               </div>
-                              <div className="flex items-center justify-between">
+                              <div className="flex items-end justify-between gap-2">
                                 <div>
                                   <p className="text-base md:text-lg lg:text-xl xl:text-2xl font-bold text-gray-900 dark:text-white">
                                     ₹{Math.round(item.price)}
                                   </p>
                                   {item.bestPrice && (
-                                    <p className="text-xs md:text-sm lg:text-base text-gray-500 dark:text-gray-400">Best price</p>
+                                    <p className="text-xs md:text-sm lg:text-base text-gray-500 dark:text-gray-400">
+                                      Best price
+                                    </p>
                                   )}
                                 </div>
-                                {quantity > 0 ? (
-                                  <Link to="/user/cart" onClick={(e) => e.stopPropagation()}>
+
+                                <div className="flex items-center">
+                                  {quantity > 0 && !shouldShowGrayscale ? (
+                                    <div className="flex items-center gap-1 sm:gap-2 bg-white dark:bg-[#111] border border-green-500/70 rounded-full px-1.5 sm:px-2 py-0.5 sm:py-1 shadow-sm">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          updateItemQuantity(
+                                            item,
+                                            Math.max(0, quantity - 1),
+                                            e,
+                                            restaurant.name,
+                                          )
+                                        }}
+                                        className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-green-50 dark:bg-green-900/30 text-green-600 disabled:opacity-50"
+                                      >
+                                        <Minus className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                                      </button>
+                                      <span className="min-w-[1.25rem] sm:min-w-[1.5rem] text-center text-[11px] sm:text-xs md:text-sm font-semibold text-gray-900 dark:text-white">
+                                        {quantity}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          updateItemQuantity(
+                                            item,
+                                            quantity + 1,
+                                            e,
+                                            restaurant.name,
+                                          )
+                                        }}
+                                        className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#2A9C64] text-white disabled:opacity-50"
+                                      >
+                                        <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                                      </button>
+                                    </div>
+                                  ) : (
                                     <Button
                                       variant={"outline"}
                                       size="sm"
-                                      className="bg-green-600/10 text-green-500 border-green-500 hover:bg-green-700 hover:text-white h-7 md:h-8 lg:h-9 px-3 md:px-4 lg:px-5 text-xs md:text-sm lg:text-base"
+                                      disabled={shouldShowGrayscale}
+                                      className={`h-7 md:h-8 lg:h-9 px-3 md:px-4 lg:px-5 text-xs md:text-sm lg:text-base rounded-full ${shouldShowGrayscale
+                                        ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 border-gray-300 dark:border-gray-700 cursor-not-allowed opacity-50'
+                                        : 'bg-[#2A9C64]/10 text-[#2A9C64] border-[#2A9C64] hover:bg-[#2A9C64] hover:text-white'
+                                        }`}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        if (!shouldShowGrayscale) {
+                                          handleItemClick(item, restaurant)
+                                        }
+                                      }}
                                     >
-                                      View cart
+                                      Add
                                     </Button>
-                                  </Link>
-                                ) : (
-                                  <Button
-                                    variant={"outline"}
-                                    size="sm"
-                                    disabled={shouldShowGrayscale}
-                                    className={`h-7 md:h-8 lg:h-9 px-3 md:px-4 lg:px-5 text-xs md:text-sm lg:text-base ${shouldShowGrayscale
-                                      ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 border-gray-300 dark:border-gray-700 cursor-not-allowed opacity-50'
-                                      : 'bg-green-600/10 text-green-500 border-green-500 hover:bg-green-700 hover:text-white'
-                                      }`}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      if (!shouldShowGrayscale) {
-                                        handleItemClick(item, restaurant)
-                                      }
-                                    }}
-                                  >
-                                    Add
-                                  </Button>
-                                )}
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </motion.div>
@@ -948,7 +979,7 @@ export default function Under250() {
                   <Button
                     className={`flex-1 h-[44px] md:h-[50px] lg:h-[56px] rounded-lg md:rounded-xl font-semibold flex items-center justify-center gap-2 text-sm md:text-base lg:text-lg ${shouldShowGrayscale
                       ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-600 cursor-not-allowed opacity-50'
-                      : 'bg-[#15D675] hover:bg-[#12c069] dark:bg-[#15D675] dark:hover:bg-[#12c069] text-white'
+                      : 'bg-[#2A9C64] hover:bg-[#238654] dark:bg-[#2A9C64] dark:hover:bg-[#238654] text-white'
                       }`}
                     onClick={(e) => {
                       if (!shouldShowGrayscale) {

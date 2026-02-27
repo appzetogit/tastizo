@@ -71,6 +71,24 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const [currentAddress, setCurrentAddress] = useState("")
   const [GOOGLE_MAPS_API_KEY, setGOOGLE_MAPS_API_KEY] = useState(null)
 
+  // Decide where to send user after closing this overlay.
+  // If a page (like Cart) stored a custom return path in localStorage,
+  // prefer that; otherwise, default to home ("/").
+  const navigateAfterClose = (fallbackPath = "/") => {
+    let targetPath = fallbackPath
+    try {
+      const stored = localStorage.getItem("locationReturnPath")
+      if (stored && typeof stored === "string" && stored.trim() !== "") {
+        targetPath = stored
+      }
+      // Clear once used so it doesn't affect future opens
+      localStorage.removeItem("locationReturnPath")
+    } catch {
+      // ignore storage errors
+    }
+    navigate(targetPath)
+  }
+
   // When opened from cart with a preferred label (Home/Office/Other),
   // initialize the address form with that label if present.
   useEffect(() => {
@@ -906,10 +924,10 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         duration: 2000,
       })
 
-      // Wait 2 seconds then redirect to home page
+      // Wait 2 seconds then redirect back to caller (cart/home/etc.)
       setTimeout(() => {
         onClose()
-        navigate("/")
+        navigateAfterClose("/")
       }, 2000)
     } catch (error) {
       // Handle permission denied or other errors
@@ -2068,9 +2086,9 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       setShowAddressForm(false)
       setLoadingAddress(false)
 
-      // Close overlay and redirect to home page
+      // Close overlay and redirect back to caller (cart/home/etc.)
       onClose()
-      navigate("/")
+      navigateAfterClose("/")
     } catch (error) {
       console.error("❌ Error saving address:", error)
       console.error("❌ Error details:", {
@@ -2106,7 +2124,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       label: "Home",
       phone: "",
     })
-    navigate("/")
+    navigateAfterClose("/")
   }
 
   const handleSelectSavedAddress = async (address) => {
@@ -2442,7 +2460,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               size="icon"
               onClick={() => {
                 onClose()
-                navigate("/")
+                navigateAfterClose("/")
               }}
               className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 -ml-2"
             >

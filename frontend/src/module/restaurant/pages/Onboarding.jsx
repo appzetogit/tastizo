@@ -1008,13 +1008,13 @@ export default function RestaurantOnboarding() {
         clearOnboardingFromLocalStorage()
 
         // Show success message briefly, then navigate
-        console.log('✅ Onboarding completed successfully, redirecting to restaurant home...')
+        console.log('✅ Onboarding completed successfully, redirecting to restaurant home with zone-setup prompt...')
 
-        // Wait a moment to ensure data is saved, then navigate
+        // Wait a moment to ensure data is saved, then navigate.
+        // Add a query flag so the home page can show a Zone Setup popup once.
         setTimeout(() => {
-          // Navigate to restaurant home page after onboarding completion
-          console.log('🚀 Navigating to restaurant home page...')
-          navigate("/restaurant", { replace: true })
+          console.log('🚀 Navigating to restaurant home page with showZoneSetup flag...')
+          navigate("/restaurant?showZoneSetup=1", { replace: true })
         }, 800)
       }
     } catch (err) {

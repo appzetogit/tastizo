@@ -104,8 +104,8 @@ export default function LocationPrompt() {
             <X className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center">
-              <MapPin className="h-6 w-6 text-primary-orange" />
+            <div className="h-12 w-12 rounded-full bg-[#2A9C64]/10 flex items-center justify-center">
+              <MapPin className="h-6 w-6 text-[#2A9C64]" />
             </div>
             <div>
               <CardTitle>Enable Location Services</CardTitle>
@@ -131,7 +131,7 @@ export default function LocationPrompt() {
             </Button>
             <Button
               onClick={handleAllow}
-              className="flex-1 bg-primary-orange hover:opacity-90 text-white"
+              className="flex-1 bg-[#2A9C64] hover:bg-[#238654] text-white"
               disabled={loading}
             >
               {loading ? "Getting location..." : "Allow Location"}

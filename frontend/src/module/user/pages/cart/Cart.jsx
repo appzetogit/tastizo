@@ -725,6 +725,8 @@ export default function Cart() {
       setSelectedAddressType(nextType)
       try {
         localStorage.setItem("preferredAddressLabel", nextType)
+        // When opened from Cart, ensure we come back to Cart after closing
+        localStorage.setItem("locationReturnPath", "/user/cart")
       } catch {
         // ignore storage errors
       }
@@ -1736,6 +1738,11 @@ export default function Cart() {
                           type="button"
                           onClick={() => {
                             setShowAddressPicker(false)
+                          try {
+                            localStorage.setItem("locationReturnPath", "/user/cart")
+                          } catch {
+                            // ignore storage errors
+                          }
                             openLocationSelector()
                           }}
                           className="w-full flex items-center gap-3 p-3 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-600 dark:text-gray-400 text-left"
@@ -1988,7 +1995,7 @@ export default function Cart() {
                 size="lg"
                 onClick={handlePlaceOrder}
                 disabled={isPlacingOrder || (selectedPaymentMethod === "wallet" && walletBalance < total)}
-                className="w-full bg-green-700 hover:bg-green-800 dark:bg-green-600 dark:hover:bg-green-700 text-white px-6 md:px-10 h-14 md:h-16 rounded-lg md:rounded-xl text-base md:text-lg font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-[#2A9C64] hover:bg-[#238654] dark:bg-[#2A9C64] dark:hover:bg-[#238654] text-white px-6 md:px-10 h-14 md:h-16 rounded-lg md:rounded-xl text-base md:text-lg font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {(selectedPaymentMethod === "razorpay" || selectedPaymentMethod === "wallet") && (
                   <div className="text-left mr-3 md:mr-4">

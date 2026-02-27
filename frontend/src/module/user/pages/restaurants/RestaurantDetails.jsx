@@ -2729,7 +2729,7 @@ export default function RestaurantDetails() {
                       <Button
                         className={`flex-1 h-[44px] rounded-lg font-semibold flex items-center justify-center gap-2 ${shouldShowGrayscale
                           ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-600 cursor-not-allowed opacity-50'
-                          : 'bg-[#15D675] hover:bg-[#12c069] text-white'
+                          : 'bg-[#2A9C64] hover:bg-[#238654] text-white'
                           }`}
                         onClick={(e) => {
                           if (!shouldShowGrayscale) {

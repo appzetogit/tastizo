@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useLocation } from "react-router-dom"
 import { checkOnboardingStatus } from "../utils/onboardingUtils"
 import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
@@ -551,6 +551,7 @@ function TableBookings() {
 
 export default function OrdersMain() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [activeFilter, setActiveFilter] = useState("preparing")
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
@@ -587,6 +588,9 @@ export default function OrdersMain() {
   })
   const [isReverifying, setIsReverifying] = useState(false)
 
+  // Zone setup prompt state (shown after registration/onboarding completes)
+  const [showZoneSetupPrompt, setShowZoneSetupPrompt] = useState(false)
+
   // Restaurant notifications hook for real-time orders
   const { newOrder, clearNewOrder, isConnected } = useRestaurantNotifications()
 
@@ -598,6 +602,27 @@ export default function OrdersMain() {
     "Technical issue",
     "Other reason"
   ]
+
+  // If we ever need to trigger the zone-setup prompt from somewhere else,
+  // expose a helper on window (non-critical, best-effort only).
+  useEffect(() => {
+    try {
+      window.__showRestaurantZoneSetupPrompt = () => {
+        setShowZoneSetupPrompt(true)
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const handleZoneSetupLater = () => {
+    setShowZoneSetupPrompt(false)
+  }
+
+  const handleZoneSetupNow = () => {
+    setShowZoneSetupPrompt(false)
+    navigate("/restaurant/zone-setup")
+  }
 
   // Fetch restaurant verification status
   useEffect(() => {
@@ -612,6 +637,27 @@ export default function OrdersMain() {
             onboarding: restaurant.onboarding || null,
             isLoading: false
           })
+
+          // If onboarding just completed (navigated with ?showZoneSetup=1 or flag)
+          // and restaurant has no location/zone configured yet, show zone-setup prompt once.
+          try {
+            const params = new URLSearchParams(location.search)
+            const shouldShowFromQuery = params.get("showZoneSetup") === "1"
+            const flag = localStorage.getItem("showRestaurantZoneSetupPrompt")
+            const shouldShowFromStorage = flag === "1"
+
+            const hasLocation =
+              !!restaurant.location &&
+              Array.isArray(restaurant.location.coordinates) &&
+              restaurant.location.coordinates.length >= 2
+
+            if (!hasLocation && (shouldShowFromQuery || shouldShowFromStorage)) {
+              setShowZoneSetupPrompt(true)
+              localStorage.removeItem("showRestaurantZoneSetupPrompt")
+            }
+          } catch {
+            // ignore storage / URL errors
+          }
 
           // Check if onboarding is incomplete and redirect if needed
           const completedSteps = restaurant.onboarding?.completedSteps || 0
@@ -1246,6 +1292,46 @@ export default function OrdersMain() {
       <div className="sticky top-0 z-50 bg-white">
         <RestaurantNavbar showNotifications={false} />
       </div>
+
+      {/* Zone Setup Prompt - shown once after registration/onboarding when no zone is configured */}
+      {showZoneSetupPrompt && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md mx-4 rounded-2xl bg-white shadow-2xl border border-emerald-100">
+            <div className="px-5 pt-5 pb-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">Set up your delivery zone</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Finish your zone setup so customers in your area can start seeing your restaurant and placing orders.
+              </p>
+            </div>
+            <div className="px-5 py-4 space-y-3 text-sm text-gray-700">
+              <p className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#2A9C64]" />
+                Draw your primary delivery area on the map.
+              </p>
+              <p className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#2A9C64]" />
+                Ensure your restaurant location is pinned accurately.
+              </p>
+            </div>
+            <div className="px-5 pb-5 pt-2 flex flex-col sm:flex-row sm:justify-end sm:items-center gap-3">
+              <button
+                type="button"
+                onClick={handleZoneSetupLater}
+                className="w-full sm:w-auto rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Maybe later
+              </button>
+              <button
+                type="button"
+                onClick={handleZoneSetupNow}
+                className="w-full sm:w-auto rounded-lg bg-[#2A9C64] px-4 py-2 text-sm font-semibold text-white hover:bg-[#238654] shadow-sm"
+              >
+                Setup zone now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Top Filter Bar - Sticky below navbar */}
       <div className="sticky top-[50px] z-40 pb-2 bg-gray-100">
