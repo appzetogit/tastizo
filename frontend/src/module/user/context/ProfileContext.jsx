@@ -23,11 +23,11 @@ export function ProfileProvider({ children }) {
         console.error("Error parsing userProfile from localStorage:", e)
       }
     }
-    
+
     // Default empty profile
     return null
   })
-  
+
   const [loading, setLoading] = useState(true)
 
   const [addresses, setAddresses] = useState([])
@@ -63,6 +63,22 @@ export function ProfileProvider({ children }) {
     return saved ? JSON.parse(saved) : []
   })
 
+  // Collections state
+  const [collections, setCollections] = useState(() => {
+    const saved = localStorage.getItem("userCollections")
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch (e) {
+        console.error("Error parsing userCollections:", e)
+      }
+    }
+    // Default collections
+    return [
+      { id: "bookmarks", name: "Bookmarks", items: [], isDefault: true }
+    ]
+  })
+
   // Dish favorites state - stored in localStorage for persistence
   const [dishFavorites, setDishFavorites] = useState(() => {
     const saved = localStorage.getItem("userDishFavorites")
@@ -94,6 +110,10 @@ export function ProfileProvider({ children }) {
   }, [favorites])
 
   useEffect(() => {
+    localStorage.setItem("userCollections", JSON.stringify(collections))
+  }, [collections])
+
+  useEffect(() => {
     localStorage.setItem("userDishFavorites", JSON.stringify(dishFavorites))
   }, [dishFavorites])
 
@@ -116,11 +136,11 @@ export function ProfileProvider({ children }) {
 
       try {
         setLoading(true)
-        
+
         // Fetch user profile
         const response = await authAPI.getCurrentUser()
         const userData = response?.data?.data?.user || response?.data?.user || response?.data
-        
+
         if (userData) {
           setUserProfile(userData)
           const userStr = JSON.stringify(userData)
@@ -169,14 +189,14 @@ export function ProfileProvider({ children }) {
     }
 
     fetchUserProfile()
-    
+
     // Listen for auth changes
     const handleAuthChange = () => {
       fetchUserProfile()
     }
-    
+
     window.addEventListener("userAuthChanged", handleAuthChange)
-    
+
     return () => {
       window.removeEventListener("userAuthChanged", handleAuthChange)
     }
@@ -187,7 +207,7 @@ export function ProfileProvider({ children }) {
     try {
       const response = await userAPI.addAddress(address)
       const newAddress = response?.data?.data?.address || response?.data?.address
-      
+
       if (newAddress) {
         setAddresses((prev) => {
           const updated = [...prev, newAddress]
@@ -206,7 +226,7 @@ export function ProfileProvider({ children }) {
     try {
       const response = await userAPI.updateAddress(id, updatedAddress)
       const updatedAddr = response?.data?.data?.address || response?.data?.address
-      
+
       if (updatedAddr) {
         setAddresses((prev) => {
           const updated = prev.map((addr) => (addr.id === id ? { ...updatedAddr, id } : addr))
@@ -270,12 +290,12 @@ export function ProfileProvider({ children }) {
     setPaymentMethods((prev) => {
       const paymentToDelete = prev.find((pm) => pm.id === id)
       const newPayments = prev.filter((pm) => pm.id !== id)
-      
+
       // If deleting default, set first remaining as default
       if (paymentToDelete?.isDefault && newPayments.length > 0) {
         newPayments[0].isDefault = true
       }
-      
+
       return newPayments
     })
   }, [])
@@ -323,6 +343,48 @@ export function ProfileProvider({ children }) {
     return favorites
   }, [favorites])
 
+  // Collection functions
+  const addCollection = useCallback((name) => {
+    const newCollection = {
+      id: `collection-${Date.now()}`,
+      name: name,
+      items: [],
+      isDefault: false
+    }
+    setCollections(prev => [...prev, newCollection])
+    return newCollection
+  }, [])
+
+  const removeCollection = useCallback((id) => {
+    setCollections(prev => prev.filter(c => c.id !== id || c.isDefault))
+  }, [])
+
+  const toggleItemInCollection = useCallback((item, collectionId) => {
+    setCollections(prev => prev.map(col => {
+      if (col.id === collectionId) {
+        const isAlreadyIn = col.items.some(i => (i.slug && i.slug === item.slug) || (i.id && i.id === item.id))
+        if (isAlreadyIn) {
+          return {
+            ...col,
+            items: col.items.filter(i => !((i.slug && i.slug === item.slug) || (i.id && i.id === item.id)))
+          }
+        } else {
+          return {
+            ...col,
+            items: [...col.items, item]
+          }
+        }
+      }
+      return col
+    }))
+  }, [])
+
+  const isItemInCollection = useCallback((itemIdOrSlug, collectionId) => {
+    const collection = collections.find(c => c.id === collectionId)
+    if (!collection) return false
+    return collection.items.some(i => i.slug === itemIdOrSlug || i.id === itemIdOrSlug)
+  }, [collections])
+
   // Dish favorites functions - memoized with useCallback
   const addDishFavorite = useCallback((dish) => {
     setDishFavorites((prev) => {
@@ -334,7 +396,7 @@ export function ProfileProvider({ children }) {
   }, [])
 
   const removeDishFavorite = useCallback((dishId, restaurantId) => {
-    setDishFavorites((prev) => 
+    setDishFavorites((prev) =>
       prev.filter(fav => !(fav.id === dishId && fav.restaurantId === restaurantId))
     )
   }, [])
@@ -384,6 +446,11 @@ export function ProfileProvider({ children }) {
       removeDishFavorite,
       isDishFavorite,
       getDishFavorites,
+      collections,
+      addCollection,
+      removeCollection,
+      toggleItemInCollection,
+      isItemInCollection,
     }),
     [
       userProfile,
@@ -415,6 +482,11 @@ export function ProfileProvider({ children }) {
       removeDishFavorite,
       isDishFavorite,
       getDishFavorites,
+      collections,
+      addCollection,
+      removeCollection,
+      toggleItemInCollection,
+      isItemInCollection,
     ]
   )
 
@@ -455,6 +527,11 @@ export function useProfile() {
       removeDishFavorite: () => console.warn("ProfileProvider not available"),
       isDishFavorite: () => false,
       getDishFavorites: () => [],
+      collections: [{ id: "bookmarks", name: "Bookmarks", items: [], isDefault: true }],
+      addCollection: () => console.warn("ProfileProvider not available"),
+      removeCollection: () => console.warn("ProfileProvider not available"),
+      toggleItemInCollection: () => console.warn("ProfileProvider not available"),
+      isItemInCollection: () => false,
       vegMode: true,
       setVegMode: () => console.warn("ProfileProvider not available")
     }

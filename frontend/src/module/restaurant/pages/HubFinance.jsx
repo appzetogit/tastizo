@@ -668,21 +668,21 @@ export default function HubFinance() {
       <div className="flex-1 overflow-y-auto px-4 py-6">
         {activeTab === "payouts" && (
           <div className="space-y-6">
-            {/* Current cycle */}
+            {/* Available balance (single source of truth – same as withdrawal) */}
             <div>
-              <h2 className="text-base font-bold text-gray-900 mb-3">Current cycle</h2>
+              <h2 className="text-base font-bold text-gray-900 mb-3">Available balance</h2>
               <div className="bg-white rounded-lg p-4">
                 {loading ? (
                   <div className="py-8 text-center text-gray-500">Loading...</div>
                 ) : (
                   <>
                     <p className="text-4xl font-bold text-gray-900 mb-2">
-                      ₹{(financeData?.currentCycle?.estimatedPayout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₹{(financeData?.availableBalance ?? financeData?.currentCycle?.estimatedPayout ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                     <p className="text-sm text-gray-600 mb-4">
-                      {financeData?.currentCycle?.totalOrders || 0} {financeData?.currentCycle?.totalOrders === 1 ? 'order' : 'orders'}
+                      {financeData?.currentCycle?.totalOrders ?? 0} {financeData?.currentCycle?.totalOrders === 1 ? 'order' : 'orders'} this cycle
                     </p>
-                    {(financeData?.currentCycle?.estimatedPayout || 0) > 0 && (
+                    {((financeData?.availableBalance ?? financeData?.currentCycle?.estimatedPayout) ?? 0) > 0 && (
                       <button
                         onClick={() => setShowWithdrawalModal(true)}
                         className="w-full bg-black text-white py-3 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors mt-4"
@@ -894,15 +894,21 @@ export default function HubFinance() {
                     {/* Show past cycles orders if available */}
                     {pastCyclesData && pastCyclesData.orders && pastCyclesData.orders.length > 0 && (
                       <div className="bg-white rounded-lg p-4 space-y-3">
-                        {pastCyclesData.orders.map((order, index) => (
-                          <div key={order.orderId || index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
+                        {pastCyclesData.orders.slice().reverse().map((order, index) => {
+                          const isDining = order.source === 'dining'
+                          return (
+                          <div key={order.orderId || order._id || index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
                                 <p className="text-sm font-semibold text-gray-900 mb-1">
-                                  Order ID: {order.orderId || 'N/A'}
+                                  {isDining ? (
+                                    <>Dining <span className="text-gray-500 font-normal">#{order.orderId || 'N/A'}</span></>
+                                  ) : (
+                                    <>Order ID: {order.orderId || 'N/A'}</>
+                                  )}
                                 </p>
                                 <p className="text-xs text-gray-600">
-                                  {order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'}
+                                  {isDining ? 'Table booking' : (order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A')}
                                 </p>
                               </div>
                               <div className="text-right ml-4">
@@ -915,21 +921,28 @@ export default function HubFinance() {
                               </div>
                             </div>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                     {/* Show current cycle orders if past cycles data is not available or has no orders */}
                     {(!pastCyclesData || !pastCyclesData.orders || pastCyclesData.orders.length === 0) && !loadingPastCycles && financeData?.currentCycle?.orders && financeData.currentCycle.orders.length > 0 && (
                       <div className="bg-white rounded-lg p-4 space-y-3">
-                        {financeData.currentCycle.orders.map((order, index) => (
-                          <div key={order.orderId || index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
+                        {financeData.currentCycle.orders.slice().reverse().map((order, index) => {
+                          const isDining = order.source === 'dining'
+                          return (
+                          <div key={order.orderId || order._id || index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
                                 <p className="text-sm font-semibold text-gray-900 mb-1">
-                                  Order ID: {order.orderId || 'N/A'}
+                                  {isDining ? (
+                                    <>Dining <span className="text-gray-500 font-normal">#{order.orderId || 'N/A'}</span></>
+                                  ) : (
+                                    <>Order ID: {order.orderId || 'N/A'}</>
+                                  )}
                                 </p>
                                 <p className="text-xs text-gray-600">
-                                  {order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'}
+                                  {isDining ? 'Table booking' : (order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A')}
                                 </p>
                               </div>
                               <div className="text-right ml-4">
@@ -942,7 +955,8 @@ export default function HubFinance() {
                               </div>
                             </div>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </>
@@ -995,7 +1009,7 @@ export default function HubFinance() {
                 
                 <div className="mb-4">
                   <p className="text-sm text-gray-600 mb-2">
-                    Available Balance: <span className="font-semibold text-gray-900">₹{(financeData?.currentCycle?.estimatedPayout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    Available Balance: <span className="font-semibold text-gray-900">₹{(financeData?.availableBalance ?? financeData?.currentCycle?.estimatedPayout ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </p>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Enter Amount to Withdraw
@@ -1003,14 +1017,14 @@ export default function HubFinance() {
                   <input
                     type="number"
                     min="0.01"
-                    max={financeData?.currentCycle?.estimatedPayout || 0}
+                    max={financeData?.availableBalance ?? financeData?.currentCycle?.estimatedPayout ?? 0}
                     step="0.01"
                     value={withdrawalAmount}
                     onChange={(e) => setWithdrawalAmount(e.target.value)}
                     placeholder="0.00"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none"
                   />
-                  {withdrawalAmount && parseFloat(withdrawalAmount) > (financeData?.currentCycle?.estimatedPayout || 0) && (
+                  {withdrawalAmount && parseFloat(withdrawalAmount) > (financeData?.availableBalance ?? financeData?.currentCycle?.estimatedPayout ?? 0) && (
                     <p className="text-sm text-red-600 mt-1">Amount cannot exceed available balance</p>
                   )}
                 </div>
@@ -1059,7 +1073,7 @@ export default function HubFinance() {
                         setSubmittingWithdrawal(false)
                       }
                     }}
-                    disabled={submittingWithdrawal || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || parseFloat(withdrawalAmount) > (financeData?.currentCycle?.estimatedPayout || 0)}
+                    disabled={submittingWithdrawal || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || parseFloat(withdrawalAmount) > (financeData?.availableBalance ?? financeData?.currentCycle?.estimatedPayout ?? 0)}
                     className="flex-1 px-4 py-3 bg-black text-white rounded-lg font-medium hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                   >
                     {submittingWithdrawal ? 'Submitting...' : 'Submit Request'}

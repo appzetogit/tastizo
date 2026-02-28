@@ -27,6 +27,7 @@ import {
   reverifyRestaurant,
   deleteRestaurant,
   updateRestaurantDiningSettings,
+  updateRestaurantDiningCommission,
   getAllOffers,
   getRestaurantAnalytics,
   getCustomerWalletReport,
@@ -219,6 +220,15 @@ import {
   getFeeSettingsHistory,
   getPublicFeeSettings,
 } from "../controllers/feeSettingsController.js";
+import {
+  getDiningCoupons,
+  getDiningCouponById,
+  createDiningCoupon,
+  updateDiningCoupon,
+  deleteDiningCoupon,
+  toggleDiningCouponStatus,
+} from "../controllers/diningCouponController.js";
+import { getDiningEarnings } from "../controllers/diningEarningsController.js";
 import zoneRoutes from "./zoneRoutes.js";
 import { authenticateAdmin } from "../middleware/adminAuth.js";
 import { uploadMiddleware } from "../../../shared/utils/cloudinaryService.js";
@@ -293,8 +303,20 @@ router.post("/restaurants/:id/reject", rejectRestaurant);
 router.post("/restaurants/:id/reverify", reverifyRestaurant);
 router.put("/restaurants/:id/status", updateRestaurantStatus);
 router.put("/restaurants/:id/dining-settings", updateRestaurantDiningSettings);
+router.patch("/restaurants/:id/dining-commission", updateRestaurantDiningCommission);
 router.patch("/restaurants/:id/dining-seating", updateDiningSeating);
 router.delete("/restaurants/:id", deleteRestaurant);
+
+// Dining Coupons (admin)
+router.get("/dining-coupons", getDiningCoupons);
+router.get("/dining-coupons/:id", getDiningCouponById);
+router.post("/dining-coupons", createDiningCoupon);
+router.put("/dining-coupons/:id", updateDiningCoupon);
+router.delete("/dining-coupons/:id", deleteDiningCoupon);
+router.patch("/dining-coupons/:id/status", toggleDiningCouponStatus);
+
+// Dining Earnings (admin)
+router.get("/dining-earnings", getDiningEarnings);
 
 // Category Management
 router.get("/categories", getCategories);

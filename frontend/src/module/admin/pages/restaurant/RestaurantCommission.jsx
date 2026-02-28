@@ -27,6 +27,7 @@ export default function RestaurantCommission() {
       type: "percentage",
       value: "10"
     },
+    diningCommissionPercentage: "",
     notes: ""
   })
   const [formErrors, setFormErrors] = useState({})
@@ -35,9 +36,12 @@ export default function RestaurantCommission() {
     restaurant: true,
     restaurantId: true,
     defaultCommission: true,
+    diningCommission: true,
     status: true,
     actions: true,
   })
+  const [editingDiningCommission, setEditingDiningCommission] = useState(null) // { id, value }
+  const [savingDiningCommission, setSavingDiningCommission] = useState(false)
 
   const filteredCommissions = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -157,6 +161,7 @@ export default function RestaurantCommission() {
         type: "percentage",
         value: "10"
       },
+      diningCommissionPercentage: "",
       notes: ""
     })
     setFormErrors({})
@@ -212,6 +217,7 @@ export default function RestaurantCommission() {
             type: commissionData.defaultCommission?.type || "percentage",
             value: commissionData.defaultCommission?.value?.toString() || "10"
           },
+          diningCommissionPercentage: commissionData.restaurant?.diningCommissionPercentage?.toString() ?? "",
           notes: commissionData.notes || ""
         })
         setFormErrors({})
@@ -264,6 +270,11 @@ export default function RestaurantCommission() {
       errors.defaultCommission = "Percentage must be between 0-100"
     }
 
+    const diningPct = formData.diningCommissionPercentage !== "" ? parseFloat(formData.diningCommissionPercentage) : null
+    if (diningPct !== null && (isNaN(diningPct) || diningPct < 0 || diningPct > 100)) {
+      errors.diningCommissionPercentage = "Dining commission must be between 0-100"
+    }
+
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -294,6 +305,17 @@ export default function RestaurantCommission() {
         toast.success('Commission created successfully')
       }
 
+      const restaurantId = formData.restaurantId
+      const diningPct = formData.diningCommissionPercentage !== "" ? parseFloat(formData.diningCommissionPercentage) : 0
+      if (restaurantId && !isNaN(diningPct) && diningPct >= 0 && diningPct <= 100) {
+        try {
+          await adminAPI.updateRestaurantDiningCommission(restaurantId, diningPct)
+        } catch (err) {
+          console.error('Failed to update dining commission:', err)
+          toast.error(err.response?.data?.message || 'Commission saved but dining commission update failed')
+        }
+      }
+
       await fetchCommissions()
       setIsAddEditOpen(false)
       setSelectedCommission(null)
@@ -311,6 +333,7 @@ export default function RestaurantCommission() {
     restaurant: "Restaurant Name",
     restaurantId: "Restaurant ID",
     defaultCommission: "Default Commission",
+    diningCommission: "Dining Commission (%)",
     status: "Status",
     actions: "Actions",
   }
@@ -383,6 +406,11 @@ export default function RestaurantCommission() {
                         Default Commission
                       </th>
                     )}
+                    {visibleColumns.diningCommission && (
+                      <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                        Dining Commission (%)
+                      </th>
+                    )}
                     {visibleColumns.status && (
                       <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                         Status
@@ -429,6 +457,124 @@ export default function RestaurantCommission() {
                                 <>${commission.defaultCommission.value}</>
                               )}
                             </span>
+                          </td>
+                        )}
+                        {visibleColumns.diningCommission && (
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {editingDiningCommission?.id === (commission.restaurant?._id || commission.restaurant) ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  step={0.5}
+                                  value={editingDiningCommission.value}
+                                  onChange={(e) =>
+                                    setEditingDiningCommission((prev) => ({
+                                      ...prev,
+                                      value: parseFloat(e.target.value) || 0,
+                                    }))
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      const save = async () => {
+                                        setSavingDiningCommission(true)
+                                        try {
+                                          const restaurantId =
+                                            commission.restaurant?._id || commission.restaurant
+                                          await adminAPI.updateRestaurantDiningCommission(
+                                            restaurantId,
+                                            editingDiningCommission.value,
+                                          )
+                                          setCommissions((prev) =>
+                                            prev.map((c) =>
+                                              (c.restaurant?._id || c.restaurant) === restaurantId
+                                                ? {
+                                                    ...c,
+                                                    restaurant: {
+                                                      ...(c.restaurant || {}),
+                                                      diningCommissionPercentage: editingDiningCommission.value,
+                                                    },
+                                                  }
+                                                : c,
+                                            ),
+                                          )
+                                          setEditingDiningCommission(null)
+                                          toast.success("Dining commission updated")
+                                        } catch (error) {
+                                          console.error(error)
+                                          toast.error(
+                                            error.response?.data?.message ||
+                                              "Failed to update dining commission",
+                                          )
+                                        } finally {
+                                          setSavingDiningCommission(false)
+                                        }
+                                      }
+                                      save()
+                                    }
+                                    if (e.key === "Escape") setEditingDiningCommission(null)
+                                  }}
+                                  className="w-16 px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    setSavingDiningCommission(true)
+                                    try {
+                                      const restaurantId =
+                                        commission.restaurant?._id || commission.restaurant
+                                      await adminAPI.updateRestaurantDiningCommission(
+                                        restaurantId,
+                                        editingDiningCommission.value,
+                                      )
+                                      setCommissions((prev) =>
+                                        prev.map((c) =>
+                                          (c.restaurant?._id || c.restaurant) === restaurantId
+                                            ? {
+                                                ...c,
+                                                restaurant: {
+                                                  ...(c.restaurant || {}),
+                                                  diningCommissionPercentage: editingDiningCommission.value,
+                                                },
+                                              }
+                                            : c,
+                                        ),
+                                      )
+                                      setEditingDiningCommission(null)
+                                      toast.success("Dining commission updated")
+                                    } catch (error) {
+                                      console.error(error)
+                                      toast.error(
+                                        error.response?.data?.message ||
+                                          "Failed to update dining commission",
+                                      )
+                                    } finally {
+                                      setSavingDiningCommission(false)
+                                    }
+                                  }}
+                                  disabled={savingDiningCommission}
+                                  className="text-xs text-blue-600 hover:underline"
+                                >
+                                  {savingDiningCommission ? "..." : "Save"}
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setEditingDiningCommission({
+                                    id: commission.restaurant?._id || commission.restaurant,
+                                    value:
+                                      commission.restaurant?.diningCommissionPercentage ?? 0,
+                                  })
+                                }
+                                className="text-sm text-slate-700 hover:text-blue-600 hover:underline"
+                              >
+                                {commission.restaurant?.diningCommissionPercentage ?? 0}%
+                              </button>
+                            )}
                           </td>
                         )}
                         {visibleColumns.status && (
@@ -575,6 +721,28 @@ export default function RestaurantCommission() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Dining Commission (%) - used for table booking bill payments */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Dining Commission (%) <span className="text-slate-400 font-normal">(table bill payments)</span>
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.5}
+                value={formData.diningCommissionPercentage}
+                onChange={(e) => setFormData(prev => ({ ...prev, diningCommissionPercentage: e.target.value }))}
+                className={`w-full max-w-[120px] px-3 py-2 text-sm border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  formErrors.diningCommissionPercentage ? "border-red-500" : "border-slate-300"
+                }`}
+                placeholder="e.g., 10"
+              />
+              {formErrors.diningCommissionPercentage && (
+                <p className="text-xs text-red-500 mt-1">{formErrors.diningCommissionPercentage}</p>
+              )}
             </div>
 
             {/* Notes */}

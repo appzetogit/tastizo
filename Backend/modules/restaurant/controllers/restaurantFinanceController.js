@@ -2,6 +2,7 @@ import Order from '../../order/models/Order.js';
 import RestaurantCommission from '../../admin/models/RestaurantCommission.js';
 import WithdrawalRequest from '../models/WithdrawalRequest.js';
 import RestaurantWallet from '../models/RestaurantWallet.js';
+import TableBooking from '../../dining/models/TableBooking.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import asyncHandler from '../../../shared/middleware/asyncHandler.js';
 import mongoose from 'mongoose';
@@ -149,7 +150,7 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
     // IMPORTANT: Commission is calculated on FOOD PRICE (subtotal - discount), NOT on total (which includes platform fee, GST, delivery fee)
     let currentCycleTotal = 0;
     let currentCycleCommission = 0;
-    const currentCycleOrdersData = await Promise.all(currentCycleOrders.map(async (order) => {
+    let currentCycleOrdersData = await Promise.all(currentCycleOrders.map(async (order) => {
       // Food price = subtotal - discount (this is what commission is calculated on)
       const foodPrice = (order.pricing?.subtotal || 0) - (order.pricing?.discount || 0);
       const commissionData = await calculateCommissionForOrder(foodPrice);
@@ -251,6 +252,44 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
         address: order.address || {}
       };
     }));
+
+    // Include paid dining (table bookings) in current cycle
+    const restaurantObjId = mongoose.Types.ObjectId.isValid(restaurantId) ? new mongoose.Types.ObjectId(restaurantId) : restaurant._id;
+    const currentCycleDining = await TableBooking.find({
+      restaurant: restaurantObjId,
+      paymentStatus: 'paid',
+      paidAt: { $gte: currentCycleStart, $lte: currentCycleEnd }
+    }).lean();
+
+    const diningRows = (currentCycleDining || []).map((booking) => {
+      const finalAmount = booking.finalAmount || 0;
+      const commission = booking.commissionAmount || 0;
+      const payout = booking.restaurantEarning != null ? booking.restaurantEarning : (finalAmount - commission);
+      return {
+        orderId: booking.bookingId || booking._id?.toString() || 'N/A',
+        source: 'dining',
+        orderTotal: finalAmount,
+        totalAmount: finalAmount,
+        commission,
+        payout,
+        deliveredAt: booking.paidAt || booking.updatedAt,
+        createdAt: booking.paidAt || booking.createdAt,
+        items: [],
+        foodNames: 'Dining',
+        customerName: 'N/A',
+        customerPhone: 'N/A',
+        customerEmail: 'N/A',
+        paymentMethod: 'Online',
+        orderStatus: 'Paid',
+        address: {}
+      };
+    });
+
+    currentCycleTotal += (currentCycleDining || []).reduce((sum, b) => sum + (b.finalAmount || 0), 0);
+    currentCycleCommission += (currentCycleDining || []).reduce((sum, b) => sum + (b.commissionAmount || 0), 0);
+    currentCycleOrdersData = [...currentCycleOrdersData, ...diningRows].sort(
+      (a, b) => new Date(a.deliveredAt || a.createdAt) - new Date(b.deliveredAt || b.createdAt)
+    );
 
     // Format current cycle dates
     const formatCycleDate = (date) => {
@@ -414,16 +453,53 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
       };
     }));
 
+      // Include paid dining in past cycle
+      const pastCycleDining = await TableBooking.find({
+        restaurant: restaurantObjId,
+        paymentStatus: 'paid',
+        paidAt: { $gte: start, $lte: end }
+      }).lean();
+
+      const pastDiningRows = (pastCycleDining || []).map((booking) => {
+        const finalAmount = booking.finalAmount || 0;
+        const commission = booking.commissionAmount || 0;
+        const payout = booking.restaurantEarning != null ? booking.restaurantEarning : (finalAmount - commission);
+        return {
+          orderId: booking.bookingId || booking._id?.toString() || 'N/A',
+          source: 'dining',
+          orderTotal: finalAmount,
+          totalAmount: finalAmount,
+          commission,
+          payout,
+          deliveredAt: booking.paidAt || booking.updatedAt,
+          createdAt: booking.paidAt || booking.createdAt,
+          items: [],
+          foodNames: 'Dining',
+          customerName: 'N/A',
+          customerPhone: 'N/A',
+          customerEmail: 'N/A',
+          paymentMethod: 'Online',
+          orderStatus: 'Paid',
+          address: {}
+        };
+      });
+
+      pastCycleTotal += (pastCycleDining || []).reduce((s, b) => s + (b.finalAmount || 0), 0);
+      pastCycleCommission += (pastCycleDining || []).reduce((s, b) => s + (b.commissionAmount || 0), 0);
+      const pastCycleOrdersWithDining = [...pastCycleOrdersData, ...pastDiningRows].sort(
+        (a, b) => new Date(a.deliveredAt || a.createdAt) - new Date(b.deliveredAt || b.createdAt)
+      );
+
       pastCyclesData = {
         dateRange: {
           start: formatCycleDate(start),
           end: formatCycleDate(end)
         },
-        totalOrders: pastCycleOrders.length,
+        totalOrders: pastCycleOrders.length + (pastCycleDining?.length || 0),
         totalOrderValue: Math.round(pastCycleTotal * 100) / 100,
         totalCommission: Math.round(pastCycleCommission * 100) / 100,
         estimatedPayout: Math.round((pastCycleTotal - pastCycleCommission) * 100) / 100,
-        orders: pastCycleOrdersData
+        orders: pastCycleOrdersWithDining
       };
     }
 
@@ -439,14 +515,18 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
 
     const totalWithdrawals = allWithdrawals.reduce((sum, req) => sum + (req.amount || 0), 0);
     
-    // Subtract all withdrawals (pending + approved) from estimatedPayout to show available balance
-    // This ensures end-to-end withdrawal calculation works correctly
+    // Subtract all withdrawals (pending + approved) from estimatedPayout to show cycle-based estimate
     const availablePayout = Math.max(0, Math.round((currentCyclePayout - totalWithdrawals) * 100) / 100);
-    
+
+    // Actual withdrawable balance comes from wallet (used by withdrawal API)
+    const wallet = await RestaurantWallet.findOrCreateByRestaurantId(restaurant._id || restaurantObjId);
+    const availableBalance = Math.round((wallet.totalBalance || 0) * 100) / 100;
+
     console.log('💰 Finance Calculation:', {
       currentCyclePayout,
       totalWithdrawals,
       availablePayout,
+      availableBalance,
       withdrawalsCount: allWithdrawals.length,
       withdrawals: allWithdrawals.map(w => ({ id: w._id, amount: w.amount, status: w.status }))
     });
@@ -455,19 +535,20 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
       currentCycle: {
         start: currentCycleStartFormatted,
         end: currentCycleEndFormatted,
-        totalOrders: currentCycleOrders.length,
+        totalOrders: currentCycleOrders.length + (currentCycleDining?.length || 0),
         totalOrderValue: Math.round(currentCycleTotal * 100) / 100,
         totalCommission: Math.round(currentCycleCommission * 100) / 100,
-        estimatedPayout: availablePayout, // Show available balance after pending withdrawals
+        estimatedPayout: availablePayout, // Cycle-based estimate (orders + dining minus withdrawals)
         payoutDate: null, // Will be set when payout is processed
-        orders: currentCycleOrdersData // Include orders array in response
+        orders: currentCycleOrdersData // Include orders + dining in response
       },
       pastCycles: pastCyclesData,
       restaurant: {
         name: restaurant.name || 'Restaurant',
         restaurantId: restaurant.restaurantId || restaurantId,
         address: restaurant.location?.address || restaurant.location?.formattedAddress || ''
-      }
+      },
+      availableBalance // Actual wallet balance - use this for withdrawal UI
     });
   } catch (error) {
     console.error('Error fetching restaurant finance:', error);

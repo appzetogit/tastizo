@@ -44,7 +44,7 @@ export const getRestaurantCommissions = asyncHandler(async (req, res) => {
 
     // Get commissions
     const commissions = await RestaurantCommission.find(query)
-      .populate('restaurant', 'name restaurantId isActive email phone')
+      .populate('restaurant', 'name restaurantId isActive email phone diningCommissionPercentage')
       .populate('createdBy', 'name email')
       .populate('updatedBy', 'name email')
       .sort({ createdAt: -1 })
@@ -160,7 +160,7 @@ export const getRestaurantCommissionById = asyncHandler(async (req, res) => {
     }
 
     const commission = await RestaurantCommission.findById(id)
-      .populate('restaurant', 'name restaurantId isActive email phone ownerName businessModel')
+      .populate('restaurant', 'name restaurantId isActive email phone ownerName businessModel diningCommissionPercentage')
       .populate('createdBy', 'name email')
       .populate('updatedBy', 'name email')
       .lean();
@@ -191,7 +191,7 @@ export const getCommissionByRestaurantId = asyncHandler(async (req, res) => {
     }
 
     const commission = await RestaurantCommission.findOne({ restaurant: restaurantId })
-      .populate('restaurant', 'name restaurantId isActive email phone ownerName businessModel')
+      .populate('restaurant', 'name restaurantId isActive email phone ownerName businessModel diningCommissionPercentage')
       .populate('createdBy', 'name email')
       .populate('updatedBy', 'name email')
       .lean();

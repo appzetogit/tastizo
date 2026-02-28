@@ -120,6 +120,8 @@ const SystemAddons = lazy(() => import("../pages/system/SystemAddons"));
 const LandingPageManagement = lazy(() => import("../pages/system/LandingPageManagement"));
 const DiningManagement = lazy(() => import("../pages/system/DiningManagement"));
 const DiningList = lazy(() => import("../pages/system/DiningList"));
+const DiningCoupons = lazy(() => import("../pages/dining/DiningCoupons"));
+const DiningEarnings = lazy(() => import("../pages/dining/DiningEarnings"));
 
 export default function AdminRouter() {
   return (
@@ -179,6 +181,8 @@ export default function AdminRouter() {
           <Route path="restaurants/complaints" element={<RestaurantComplaints />} />
           <Route path="restaurants/bulk-import" element={<RestaurantsBulkImport />} />
           <Route path="restaurants/bulk-export" element={<RestaurantsBulkExport />} />
+          <Route path="dining-coupons" element={<DiningCoupons />} />
+          <Route path="dining-earnings" element={<DiningEarnings />} />
 
           {/* FOOD MANAGEMENT */}
           {/* Categories */}

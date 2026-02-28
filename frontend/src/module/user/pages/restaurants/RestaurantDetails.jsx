@@ -53,13 +53,28 @@ export default function RestaurantDetails() {
   const [searchParams] = useSearchParams()
   const showOnlyUnder250 = searchParams.get('under250') === 'true'
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
-  const { vegMode, addDishFavorite, removeDishFavorite, isDishFavorite, getDishFavorites, getFavorites, addFavorite, removeFavorite, isFavorite } = useProfile()
+  const {
+    vegMode,
+    addDishFavorite,
+    removeDishFavorite,
+    isDishFavorite,
+    getDishFavorites,
+    getFavorites,
+    addFavorite,
+    removeFavorite,
+    isFavorite,
+    collections,
+    addCollection,
+    toggleItemInCollection
+  } = useProfile()
   const { location: userLocation } = useLocation() // Get user's current location
   const { zoneId, zone, loading: loadingZone, isOutOfService } = useZone(userLocation) // Get user's zone for zone-based filtering
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [highlightIndex, setHighlightIndex] = useState(0)
   const [quantities, setQuantities] = useState({})
   const [showManageCollections, setShowManageCollections] = useState(false)
+  const [newCollectionName, setNewCollectionName] = useState("")
+  const [isAddingNewCollection, setIsAddingNewCollection] = useState(false)
   const [showItemDetail, setShowItemDetail] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
   const [showFilterSheet, setShowFilterSheet] = useState(false)
@@ -1047,11 +1062,8 @@ export default function RestaurantDetails() {
     const isAlreadyFavorite = isFavorite(restaurantSlug)
 
     if (isAlreadyFavorite) {
-      // Remove from collection
-      removeFavorite(restaurantSlug)
-      toast.success("Restaurant removed from collection")
+      setShowManageCollections(true)
     } else {
-      // Add to collection
       addFavorite({
         slug: restaurantSlug,
         name: restaurant.name || "",
@@ -1063,6 +1075,7 @@ export default function RestaurantDetails() {
         image: restaurant.profileImageUrl?.url || restaurant.image || ""
       })
       toast.success("Restaurant added to collection")
+      setShowManageCollections(true)
     }
 
     setShowMenuOptionsSheet(false)
@@ -2482,7 +2495,11 @@ export default function RestaurantDetails() {
                   <div className="flex items-center justify-between px-4 pt-6 pb-4 border-b border-gray-200 dark:border-gray-800">
                     <h2 className="text-lg font-bold text-gray-900 dark:text-white">Manage Collections</h2>
                     <button
-                      onClick={() => setShowManageCollections(false)}
+                      onClick={() => {
+                        setShowManageCollections(false)
+                        setIsAddingNewCollection(false)
+                        setNewCollectionName("")
+                      }}
                       className="h-8 w-8 rounded-full bg-gray-700 dark:bg-gray-600 flex items-center justify-center hover:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
                     >
                       <X className="h-4 w-4 text-white" />
@@ -2499,30 +2516,39 @@ export default function RestaurantDetails() {
                         // Don't close modal on click, let checkbox handle it
                       }}
                     >
-                      <div className="h-12 w-12 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center flex-shrink-0">
-                        <Bookmark className="h-6 w-6 text-red-500 dark:text-red-400 fill-red-500 dark:fill-red-400" />
+                      <div className="h-12 w-12 rounded-lg bg-[#2A9C64]/10 flex items-center justify-center flex-shrink-0">
+                        <Bookmark className="h-6 w-6 text-[#2A9C64] fill-[#2A9C64]" />
                       </div>
                       <div className="flex-1 text-left">
                         <div className="flex items-center justify-between">
                           <span className="text-base font-medium text-gray-900 dark:text-white">Bookmarks</span>
-                          {selectedItem && (
+                          {selectedItem ? (
                             <Checkbox
                               checked={isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)}
                               onCheckedChange={(checked) => {
-                                if (!checked && selectedItem) {
-                                  const restaurantId = restaurant?.restaurantId || restaurant?._id || restaurant?.id
+                                const restaurantId = restaurant?.restaurantId || restaurant?._id || restaurant?.id
+                                if (checked) {
+                                  addDishFavorite(selectedItem, restaurantId)
+                                } else {
                                   removeDishFavorite(selectedItem.id, restaurantId)
-                                  setShowManageCollections(false)
                                 }
                               }}
-                              className="h-5 w-5 rounded border-2 border-red-500 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
+                              className="h-5 w-5 rounded border-2 border-[#2A9C64] data-[state=checked]:bg-[#2A9C64] data-[state=checked]:border-[#2A9C64]"
                               onClick={(e) => e.stopPropagation()}
                             />
-                          )}
-                          {!selectedItem && (
-                            <div className="h-5 w-5 rounded border-2 border-red-500 bg-red-500 flex items-center justify-center">
-                              <Check className="h-3 w-3 text-white" />
-                            </div>
+                          ) : (
+                            <Checkbox
+                              checked={isFavorite(restaurant?.slug || slug || "")}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  addFavorite(restaurant)
+                                } else {
+                                  removeFavorite(restaurant?.slug || slug || "")
+                                }
+                              }}
+                              className="h-5 w-5 rounded border-2 border-[#2A9C64] data-[state=checked]:bg-[#2A9C64] data-[state=checked]:border-[#2A9C64]"
+                              onClick={(e) => e.stopPropagation()}
+                            />
                           )}
                         </div>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -2531,28 +2557,112 @@ export default function RestaurantDetails() {
                       </div>
                     </button>
 
+                    {/* User Collections */}
+                    {collections.filter(c => !c.isDefault).map(collection => (
+                      <div
+                        key={collection.id}
+                        className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                        }}
+                      >
+                        <div className="h-12 w-12 rounded-lg bg-[#2A9C64]/10 flex items-center justify-center flex-shrink-0">
+                          <Bookmark className="h-6 w-6 text-[#2A9C64] fill-[#2A9C64]" />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <div className="flex items-center justify-between">
+                            <span className="text-base font-medium text-gray-900 dark:text-white">{collection.name}</span>
+                            {/* Checkbox for restaurants or dishes depending on selectedItem */}
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                checked={selectedItem
+                                  ? collection.items.some(i => i.id === selectedItem.id)
+                                  : collection.items.some(i => i.slug === (restaurant?.slug || slug))
+                                }
+                                onCheckedChange={() => {
+                                  if (selectedItem) {
+                                    toggleItemInCollection(selectedItem, collection.id)
+                                  } else {
+                                    toggleItemInCollection(restaurant, collection.id)
+                                  }
+                                }}
+                                className="h-5 w-5 rounded border-2 border-[#2A9C64] data-[state=checked]:bg-[#2A9C64] data-[state=checked]:border-[#2A9C64]"
+                              />
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            {collection.items.length} item{collection.items.length !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+
                     {/* Create new Collection */}
-                    <button
-                      className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                      onClick={() => setShowManageCollections(false)}
-                    >
-                      <div className="h-12 w-12 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center flex-shrink-0">
-                        <Plus className="h-6 w-6 text-red-500 dark:text-red-400" />
+                    {isAddingNewCollection ? (
+                      <div className="p-3 space-y-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <Input
+                          placeholder="Collection name"
+                          value={newCollectionName}
+                          onChange={(e) => setNewCollectionName(e.target.value)}
+                          className="h-10 bg-white dark:bg-[#2a2a2a] border-gray-200 dark:border-gray-700"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && newCollectionName.trim()) {
+                              addCollection(newCollectionName.trim())
+                              setNewCollectionName("")
+                              setIsAddingNewCollection(false)
+                            }
+                          }}
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            className="flex-1 h-9 bg-[#2A9C64] hover:bg-[#238a58] text-white"
+                            disabled={!newCollectionName.trim()}
+                            onClick={() => {
+                              addCollection(newCollectionName.trim())
+                              setNewCollectionName("")
+                              setIsAddingNewCollection(false)
+                            }}
+                          >
+                            Create
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="flex-1 h-9 border-gray-200 dark:border-gray-700"
+                            onClick={() => {
+                              setIsAddingNewCollection(false)
+                              setNewCollectionName("")
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex-1 text-left">
-                        <span className="text-base font-medium text-gray-900 dark:text-white">
-                          Create new Collection
-                        </span>
-                      </div>
-                    </button>
+                    ) : (
+                      <button
+                        className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                        onClick={() => setIsAddingNewCollection(true)}
+                      >
+                        <div className="h-12 w-12 rounded-lg bg-[#2A9C64]/10 flex items-center justify-center flex-shrink-0">
+                          <Plus className="h-6 w-6 text-[#2A9C64]" />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <span className="text-base font-medium text-gray-900 dark:text-white">
+                            Create new Collection
+                          </span>
+                        </div>
+                      </button>
+                    )}
                   </div>
 
                   {/* Done Button */}
                   <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-4">
                     <Button
-                      className="w-full bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 py-3 rounded-lg font-medium"
+                      className="w-full bg-[#2A9C64] hover:bg-[#238a58] text-white py-3 rounded-lg font-medium"
                       onClick={() => {
                         setShowManageCollections(false)
+                        setIsAddingNewCollection(false)
+                        setNewCollectionName("")
                       }}
                     >
                       Done
@@ -2625,12 +2735,12 @@ export default function RestaurantDetails() {
                           handleBookmarkClick(selectedItem)
                         }}
                         className={`h-10 w-10 rounded-full border flex items-center justify-center transition-all duration-300 ${isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)
-                          ? "border-red-500 dark:border-red-400 bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400"
+                          ? "border-[#2A9C64] bg-[#2A9C64]/10 text-[#2A9C64]"
                           : "border-white dark:border-gray-800 bg-white/90 dark:bg-[#1a1a1a]/90 text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-[#2a2a2a]"
                           }`}
                       >
                         <Bookmark
-                          className={`h-5 w-5 transition-all duration-300 ${isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id) ? "fill-red-500 dark:fill-red-400" : ""
+                          className={`h-5 w-5 transition-all duration-300 ${isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id) ? "fill-[#2A9C64]" : ""
                             }`}
                         />
                       </button>

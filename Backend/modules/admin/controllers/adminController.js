@@ -1614,6 +1614,44 @@ export const updateRestaurantDiningSettings = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Update Restaurant Dining Commission (%)
+ * PATCH /api/admin/restaurants/:id/dining-commission
+ */
+export const updateRestaurantDiningCommission = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { diningCommissionPercentage } = req.body;
+
+    if (typeof diningCommissionPercentage !== "number" || diningCommissionPercentage < 0 || diningCommissionPercentage > 100) {
+      return errorResponse(res, 400, "Dining commission must be a number between 0 and 100");
+    }
+
+    const restaurant = await Restaurant.findById(id);
+    if (!restaurant) {
+      return errorResponse(res, 404, "Restaurant not found");
+    }
+
+    restaurant.diningCommissionPercentage = diningCommissionPercentage;
+    await restaurant.save();
+
+    logger.info(`Restaurant dining commission updated: ${id}`, {
+      diningCommissionPercentage,
+      updatedBy: req.user._id,
+    });
+
+    return successResponse(res, 200, "Dining commission updated successfully", {
+      restaurant: {
+        id: restaurant._id,
+        diningCommissionPercentage: restaurant.diningCommissionPercentage,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error updating dining commission: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, "Failed to update dining commission");
+  }
+});
+
+/**
  * Reject Restaurant Join Request
  * POST /api/admin/restaurants/:id/reject
  */

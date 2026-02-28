@@ -34,10 +34,13 @@ export default function RestaurantsList() {
     ownerInfo: true,
     zone: true,
     cuisine: true,
+    diningCommission: true,
     status: true,
     action: true,
   })
-  const defaultVisibleColumns = { sl: true, restaurantInfo: true, ownerInfo: true, zone: true, cuisine: true, status: true, action: true }
+  const defaultVisibleColumns = { sl: true, restaurantInfo: true, ownerInfo: true, zone: true, cuisine: true, diningCommission: true, status: true, action: true }
+  const [editingDiningCommission, setEditingDiningCommission] = useState(null) // { id, value }
+  const [savingDiningCommission, setSavingDiningCommission] = useState(false)
   const toggleColumn = (key) => setVisibleColumns((prev) => ({ ...prev, [key]: !prev[key] }))
   const resetColumns = () => setVisibleColumns({ ...defaultVisibleColumns })
 
@@ -116,6 +119,7 @@ export default function RestaurantsList() {
             status: restaurant.isActive !== false, // Default to true if not set
             rating: restaurant.ratings?.average || restaurant.rating || 0,
             logo: restaurant.profileImage?.url || restaurant.logo || "https://via.placeholder.com/40",
+            diningCommissionPercentage: restaurant.diningCommissionPercentage ?? 0,
             // Preserve original restaurant data for details modal
             originalData: restaurant,
           }))
@@ -544,6 +548,7 @@ export default function RestaurantsList() {
               ownerInfo: "Owner Info",
               zone: "Zone",
               cuisine: "Cuisine",
+              diningCommission: "Dining Commission (%)",
               status: "Status",
               action: "Action",
             }}
@@ -600,6 +605,11 @@ export default function RestaurantsList() {
                           <span>Cuisine</span>
                           <ArrowUpDown className={`w-3 h-3 ${sortKey === "cuisine" ? "text-blue-600" : "text-slate-400"}`} />
                         </button>
+                      </th>
+                    )}
+                    {visibleColumns.diningCommission && (
+                      <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                        <span>Dining Commission (%)</span>
                       </th>
                     )}
                     {visibleColumns.status && (
@@ -673,6 +683,71 @@ export default function RestaurantsList() {
                         {visibleColumns.cuisine && (
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className="text-sm text-slate-700">{restaurant.cuisine}</span>
+                          </td>
+                        )}
+                        {visibleColumns.diningCommission && (
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {editingDiningCommission?.id === restaurant.id ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  step={0.5}
+                                  value={editingDiningCommission.value}
+                                  onChange={(e) => setEditingDiningCommission((p) => ({ ...p, value: parseFloat(e.target.value) || 0 }))}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      const save = async () => {
+                                        setSavingDiningCommission(true)
+                                        try {
+                                          await adminAPI.updateRestaurantDiningCommission(restaurant._id || restaurant.id, editingDiningCommission.value)
+                                          setRestaurants((prev) => prev.map((r) => (r.id === restaurant.id ? { ...r, diningCommissionPercentage: editingDiningCommission.value } : r)))
+                                          setEditingDiningCommission(null)
+                                        } catch (err) {
+                                          console.error(err)
+                                          alert(err.response?.data?.message || "Failed to update")
+                                        } finally {
+                                          setSavingDiningCommission(false)
+                                        }
+                                      }
+                                      save()
+                                    }
+                                    if (e.key === "Escape") setEditingDiningCommission(null)
+                                  }}
+                                  className="w-16 px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    setSavingDiningCommission(true)
+                                    try {
+                                      await adminAPI.updateRestaurantDiningCommission(restaurant._id || restaurant.id, editingDiningCommission.value)
+                                      setRestaurants((prev) => prev.map((r) => (r.id === restaurant.id ? { ...r, diningCommissionPercentage: editingDiningCommission.value } : r)))
+                                      setEditingDiningCommission(null)
+                                    } catch (err) {
+                                      console.error(err)
+                                      alert(err.response?.data?.message || "Failed to update")
+                                    } finally {
+                                      setSavingDiningCommission(false)
+                                    }
+                                  }}
+                                  disabled={savingDiningCommission}
+                                  className="text-xs text-blue-600 hover:underline"
+                                >
+                                  {savingDiningCommission ? "..." : "Save"}
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setEditingDiningCommission({ id: restaurant.id, value: restaurant.diningCommissionPercentage ?? 0 })}
+                                className="text-sm text-slate-700 hover:text-blue-600 hover:underline"
+                              >
+                                {restaurant.diningCommissionPercentage ?? 0}%
+                              </button>
+                            )}
                           </td>
                         )}
                         {visibleColumns.status && (

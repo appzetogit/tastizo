@@ -1177,6 +1177,38 @@ export const adminAPI = {
     });
   },
 
+  updateRestaurantDiningCommission: (id, diningCommissionPercentage) => {
+    return apiClient.patch(
+      API_ENDPOINTS.ADMIN.RESTAURANT_DINING_COMMISSION.replace(":id", id),
+      { diningCommissionPercentage },
+    );
+  },
+
+  // Dining coupons (admin)
+  getDiningCoupons: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DINING_COUPONS, { params });
+  },
+  getDiningCouponById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DINING_COUPONS_BY_ID.replace(":id", id));
+  },
+  createDiningCoupon: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.DINING_COUPONS, data);
+  },
+  updateDiningCoupon: (id, data) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.DINING_COUPONS_BY_ID.replace(":id", id), data);
+  },
+  deleteDiningCoupon: (id) => {
+    return apiClient.delete(API_ENDPOINTS.ADMIN.DINING_COUPONS_BY_ID.replace(":id", id));
+  },
+  toggleDiningCouponStatus: (id) => {
+    return apiClient.patch(API_ENDPOINTS.ADMIN.DINING_COUPON_STATUS.replace(":id", id));
+  },
+
+  // Dining earnings (admin)
+  getDiningEarnings: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DINING_EARNINGS, { params });
+  },
+
   // Get dining categories
   getDiningCategories: () => {
     return apiClient.get("/admin/dining/categories");
@@ -2041,6 +2073,33 @@ export const diningAPI = {
         bookingId,
       ),
       { status },
+    );
+  },
+  // Send bill (restaurant)
+  sendBill: (bookingId, data) => {
+    return apiClient.post(
+      API_ENDPOINTS.DINING.BOOKING_SEND_BILL.replace(":bookingId", bookingId),
+      data,
+    );
+  },
+  // Apply coupon (user)
+  applyCoupon: (bookingId, code) => {
+    return apiClient.post(
+      API_ENDPOINTS.DINING.BOOKING_APPLY_COUPON.replace(":bookingId", bookingId),
+      { code },
+    );
+  },
+  // Create payment order for dining bill (user)
+  createDiningPaymentOrder: (bookingId) => {
+    return apiClient.post(
+      API_ENDPOINTS.DINING.BOOKING_CREATE_PAYMENT.replace(":bookingId", bookingId),
+    );
+  },
+  // Verify dining payment (user)
+  verifyDiningPayment: (bookingId, payload) => {
+    return apiClient.post(
+      API_ENDPOINTS.DINING.BOOKING_VERIFY_PAYMENT.replace(":bookingId", bookingId),
+      payload,
     );
   },
   // Create review

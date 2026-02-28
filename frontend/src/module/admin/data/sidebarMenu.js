@@ -67,6 +67,8 @@ export const sidebarMenuData = [
             label: "Restaurant Complaints",
             path: "/admin/restaurants/complaints",
           },
+          { label: "Dining Coupons", path: "/admin/dining-coupons" },
+          { label: "Dining Earnings", path: "/admin/dining-earnings" },
         ],
       },
     ],

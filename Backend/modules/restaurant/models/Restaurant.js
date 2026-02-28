@@ -350,6 +350,13 @@ const restaurantSchema = new mongoose.Schema(
       enum: ["Commission Base", "Subscription Base"],
       default: "Commission Base",
     },
+    // Dining: commission % on dining bill payment (admin-only editable)
+    diningCommissionPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
   },
   {
     timestamps: true,

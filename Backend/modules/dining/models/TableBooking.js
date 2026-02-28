@@ -31,7 +31,7 @@ const tableBookingSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "checked-in", "completed", "cancelled"],
+      enum: ["pending", "confirmed", "checked-in", "completed", "dining_completed", "cancelled"],
       default: "confirmed",
     },
     checkInTime: {
@@ -44,6 +44,29 @@ const tableBookingSchema = new mongoose.Schema(
       type: String,
       unique: true,
     },
+    // Bill & payment (restaurant sends bill after dining_completed)
+    billAmount: { type: Number, default: null },
+    discountAmount: { type: Number, default: 0 },
+    finalAmount: { type: Number, default: null },
+    billStatus: {
+      type: String,
+      enum: ["not_sent", "pending", "completed"],
+      default: "not_sent",
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["unpaid", "paid"],
+      default: "unpaid",
+    },
+    billSentAt: { type: Date },
+    billNote: { type: String, trim: true },
+    appliedCoupon: { type: mongoose.Schema.Types.ObjectId, ref: "DiningCoupon" },
+    paidAt: { type: Date },
+    razorpayOrderId: { type: String }, // temporary, for payment verification
+    // Commission (calculated on finalAmount after payment)
+    commissionAmount: { type: Number, default: 0 },
+    restaurantEarning: { type: Number, default: 0 },
+    adminEarning: { type: Number, default: 0 },
   },
   {
     timestamps: true,

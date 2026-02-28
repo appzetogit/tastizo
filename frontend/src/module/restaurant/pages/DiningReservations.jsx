@@ -1,14 +1,19 @@
 import { useState, useEffect } from "react"
-import { Calendar, Clock, Users, Search, Filter, MessageSquare, ChevronRight, CheckCircle2, XCircle, Clock4 } from "lucide-react"
+import { Calendar, Clock, Users, Search, Filter, MessageSquare, ChevronRight, CheckCircle2, XCircle, Clock4, Receipt, X } from "lucide-react"
 import { diningAPI, restaurantAPI } from "@/lib/api"
 import Loader from "@/components/Loader"
 import { Badge } from "@/components/ui/badge"
+import { toast } from "sonner"
 
 export default function DiningReservations() {
     const [bookings, setBookings] = useState([])
     const [loading, setLoading] = useState(true)
     const [restaurant, setRestaurant] = useState(null)
     const [searchTerm, setSearchTerm] = useState("")
+    const [sendBillModal, setSendBillModal] = useState(null) // { booking }
+    const [billAmount, setBillAmount] = useState("")
+    const [billNote, setBillNote] = useState("")
+    const [sendingBill, setSendingBill] = useState(false)
 
     useEffect(() => {
         const fetchAll = async () => {
@@ -44,13 +49,43 @@ export default function DiningReservations() {
         try {
             const response = await diningAPI.updateBookingStatusRestaurant(bookingId, newStatus)
             if (response.data.success) {
-                // Update local state
                 setBookings(prev => prev.map(b =>
                     b._id === bookingId ? { ...b, status: newStatus } : b
                 ))
+                toast.success("Status updated")
             }
         } catch (error) {
             console.error("Error updating status:", error)
+            toast.error(error.response?.data?.message || "Failed to update status")
+        }
+    }
+
+    const handleSendBill = async () => {
+        if (!sendBillModal?.booking) return
+        const amount = parseFloat(billAmount)
+        if (!Number.isFinite(amount) || amount <= 0) {
+            toast.error("Enter a valid bill amount")
+            return
+        }
+        setSendingBill(true)
+        try {
+            const res = await diningAPI.sendBill(sendBillModal.booking._id, {
+                billAmount: amount,
+                note: billNote.trim() || undefined,
+            })
+            if (res.data.success) {
+                setBookings(prev => prev.map(b =>
+                    b._id === sendBillModal.booking._id ? { ...b, ...res.data.data } : b
+                ))
+                setSendBillModal(null)
+                setBillAmount("")
+                setBillNote("")
+                toast.success("Bill sent successfully")
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to send bill")
+        } finally {
+            setSendingBill(false)
         }
     }
 
@@ -191,16 +226,25 @@ export default function DiningReservations() {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <Badge className={`rounded-lg px-2.5 py-1 ${booking.status === 'confirmed' ? 'bg-green-100 text-green-700 hover:bg-green-200' :
-                                                    booking.status === 'checked-in' ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' :
-                                                        booking.status === 'completed' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' :
-                                                            'bg-red-100 text-red-700 hover:bg-red-200'
-                                                    }`}>
-                                                    {booking.status}
-                                                </Badge>
+                                                <div className="flex flex-col gap-1">
+                                                    <Badge className={`rounded-lg px-2.5 py-1 w-fit ${booking.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                                                        booking.status === 'checked-in' ? 'bg-orange-100 text-orange-700' :
+                                                            booking.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                                                                booking.status === 'dining_completed' ? 'bg-violet-100 text-violet-700' :
+                                                                    'bg-red-100 text-red-700'
+                                                        }`}>
+                                                        {booking.status.replace('_', ' ')}
+                                                    </Badge>
+                                                    {booking.billStatus === 'pending' && booking.paymentStatus !== 'paid' && (
+                                                        <span className="text-[10px] text-amber-600 font-medium">Bill sent</span>
+                                                    )}
+                                                    {booking.paymentStatus === 'paid' && (
+                                                        <span className="text-[10px] text-green-600 font-medium">Paid</span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex flex-wrap items-center gap-2">
                                                     {booking.status === 'confirmed' && (
                                                         <button
                                                             onClick={() => handleStatusUpdate(booking._id, 'checked-in')}
@@ -215,6 +259,23 @@ export default function DiningReservations() {
                                                             className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors"
                                                         >
                                                             Check-out
+                                                        </button>
+                                                    )}
+                                                    {booking.status === 'completed' && (
+                                                        <button
+                                                            onClick={() => handleStatusUpdate(booking._id, 'dining_completed')}
+                                                            className="px-3 py-1.5 bg-violet-600 text-white text-xs font-bold rounded-lg hover:bg-violet-700 transition-colors"
+                                                        >
+                                                            Dining completed
+                                                        </button>
+                                                    )}
+                                                    {booking.status === 'dining_completed' && booking.billStatus === 'not_sent' && booking.paymentStatus !== 'paid' && (
+                                                        <button
+                                                            onClick={() => setSendBillModal({ booking })}
+                                                            className="px-3 py-1.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-1"
+                                                        >
+                                                            <Receipt className="w-3.5 h-3.5" />
+                                                            Send Bill
                                                         </button>
                                                     )}
                                                 </div>
@@ -235,6 +296,62 @@ export default function DiningReservations() {
                     )}
                 </div>
             </div>
+
+            {/* Send Bill Modal */}
+            {sendBillModal?.booking && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => !sendingBill && setSendBillModal(null)}>
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-slate-900">Send Bill</h3>
+                            <button type="button" onClick={() => !sendingBill && setSendBillModal(null)} className="p-2 rounded-lg hover:bg-slate-100">
+                                <X className="w-5 h-5 text-slate-500" />
+                            </button>
+                        </div>
+                        <p className="text-sm text-slate-600 mb-4">Booking #{sendBillModal.booking.bookingId} – {sendBillModal.booking.user?.name}</p>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Total Bill Amount (₹)</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    step="0.01"
+                                    value={billAmount}
+                                    onChange={(e) => setBillAmount(e.target.value)}
+                                    placeholder="0.00"
+                                    className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Note (optional)</label>
+                                <textarea
+                                    value={billNote}
+                                    onChange={(e) => setBillNote(e.target.value)}
+                                    placeholder="Add a note for the guest..."
+                                    rows={2}
+                                    className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
+                                />
+                            </div>
+                        </div>
+                        <div className="mt-6 flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => !sendingBill && setSendBillModal(null)}
+                                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSendBill}
+                                disabled={sendingBill || !billAmount || parseFloat(billAmount) <= 0}
+                                className="flex-1 py-2.5 rounded-xl bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {sendingBill ? "Sending..." : "Send Bill"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
