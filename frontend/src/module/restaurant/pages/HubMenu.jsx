@@ -596,12 +596,16 @@ export default function HubMenu() {
   //   }
   // }, [menuGroups, loadingMenu])
 
-  // Expand all groups by default on mount
+  // Expand all groups by default once when menu loads.
+  // Do not auto-reopen after the user manually closes categories.
   useEffect(() => {
-    if (expandedGroups.size === 0 && menuData.length > 0) {
-      setExpandedGroups(new Set(menuData.map(g => g.id)))
+    if (menuData.length > 0) {
+      setExpandedGroups((prev) => {
+        if (prev && prev.size > 0) return prev
+        return new Set(menuData.map((g) => g.id))
+      })
     }
-  }, [menuData, expandedGroups])
+  }, [menuData])
 
   // Prevent body scroll when popups are open
   useEffect(() => {

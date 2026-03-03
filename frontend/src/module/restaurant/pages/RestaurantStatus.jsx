@@ -121,11 +121,41 @@ export default function RestaurantStatus() {
           return
         }
 
-        // Check time range if day is open and has timings
-        if (dayData.isOpen && dayData.openingTime && dayData.closingTime) {
+        // Resolve opening/closing times from either legacy "slots" format or new openingTime/closingTime
+        let openingTimeStr = null
+        let closingTimeStr = null
+
+        // Legacy: slots array with start/end and AM/PM periods
+        if (Array.isArray(dayData.slots) && dayData.slots.length > 0) {
+          const firstSlot = dayData.slots[0]
+          const parseSlotTime = (time, period) => {
+            if (!time || typeof time !== "string") return null
+            const [rawHours, rawMinutes] = time.split(":")
+            let hours = parseInt(rawHours || "0", 10)
+            const minutes = parseInt(rawMinutes || "0", 10)
+            if (Number.isNaN(hours) || Number.isNaN(minutes)) return null
+
+            const p = (period || "").toLowerCase()
+            if (p === "pm" && hours !== 12) hours += 12
+            if (p === "am" && hours === 12) hours = 0
+
+            const hh = hours.toString().padStart(2, "0")
+            const mm = minutes.toString().padStart(2, "0")
+            return `${hh}:${mm}`
+          }
+
+          openingTimeStr = parseSlotTime(firstSlot.start, firstSlot.startPeriod || "am")
+          closingTimeStr = parseSlotTime(firstSlot.end, firstSlot.endPeriod || "pm")
+        } else if (dayData.isOpen && dayData.openingTime && dayData.closingTime) {
+          // New format already in "HH:mm"
+          openingTimeStr = dayData.openingTime
+          closingTimeStr = dayData.closingTime
+        }
+
+        if (openingTimeStr && closingTimeStr) {
           // Parse opening and closing times (format: "HH:mm")
-          const [openHour, openMinute] = dayData.openingTime.split(':').map(Number)
-          const [closeHour, closeMinute] = dayData.closingTime.split(':').map(Number)
+          const [openHour, openMinute] = openingTimeStr.split(":").map(Number)
+          const [closeHour, closeMinute] = closingTimeStr.split(":").map(Number)
 
           const openingTimeInMinutes = openHour * 60 + openMinute
           const closingTimeInMinutes = closeHour * 60 + closeMinute
@@ -347,10 +377,37 @@ export default function RestaurantStatus() {
     // First try to get from outlet timings (localStorage)
     if (outletTimings && outletTimings[currentDayFull]) {
       const dayData = outletTimings[currentDayFull]
-      if (dayData.isOpen && dayData.openingTime && dayData.closingTime) {
+      // Support both legacy slots format and new openingTime/closingTime
+      if (Array.isArray(dayData.slots) && dayData.slots.length > 0) {
+        const firstSlot = dayData.slots[0]
+        const parseSlotTime = (time, period) => {
+          if (!time || typeof time !== "string") return null
+          const [rawHours, rawMinutes] = time.split(":")
+          let hours = parseInt(rawHours || "0", 10)
+          const minutes = parseInt(rawMinutes || "0", 10)
+          if (Number.isNaN(hours) || Number.isNaN(minutes)) return null
+
+          const p = (period || "").toLowerCase()
+          if (p === "pm" && hours !== 12) hours += 12
+          if (p === "am" && hours === 12) hours = 0
+
+          const hh = hours.toString().padStart(2, "0")
+          const mm = minutes.toString().padStart(2, "0")
+          return `${hh}:${mm}`
+        }
+
+        const open24 = parseSlotTime(firstSlot.start, firstSlot.startPeriod || "am")
+        const close24 = parseSlotTime(firstSlot.end, firstSlot.endPeriod || "pm")
+        if (open24 && close24) {
+          return {
+            openingTime: formatTime12Hour(open24),
+            closingTime: formatTime12Hour(close24),
+          }
+        }
+      } else if (dayData.isOpen && dayData.openingTime && dayData.closingTime) {
         return {
           openingTime: formatTime12Hour(dayData.openingTime),
-          closingTime: formatTime12Hour(dayData.closingTime)
+          closingTime: formatTime12Hour(dayData.closingTime),
         }
       }
     }

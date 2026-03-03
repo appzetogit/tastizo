@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { useNavigate, useParams, useLocation } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -77,6 +77,32 @@ export default function ItemDetailsPage() {
   const descriptionLength = itemDescription.length
   const minDescriptionLength = 5
   const nameLength = itemName.length
+
+  // When variants exist, base price should always reflect the lowest
+  // variant price and should not be manually editable (per QA spec).
+  const hasVariants = useMemo(
+    () => Array.isArray(variations) && variations.length > 0,
+    [variations],
+  )
+
+  const lowestVariantPrice = useMemo(() => {
+    if (!hasVariants) return null
+    const prices = variations
+      .map((v) => {
+        if (typeof v.price === "number") return v.price
+        const parsed = parseFloat(v.price)
+        return Number.isNaN(parsed) ? null : parsed
+      })
+      .filter((p) => typeof p === "number" && p >= 0)
+    if (!prices.length) return null
+    return Math.min(...prices)
+  }, [hasVariants, variations])
+
+  useEffect(() => {
+    if (lowestVariantPrice != null) {
+      setBasePrice(lowestVariantPrice.toString())
+    }
+  }, [lowestVariantPrice])
 
   // Fetch item data from menu API when editing
   useEffect(() => {
@@ -1061,13 +1087,19 @@ export default function ItemDetailsPage() {
                     type="text"
                     value={basePrice}
                     onChange={(e) => {
-                      // Remove rupee symbol and any non-numeric characters except decimal point
-                      const value = e.target.value.replace(/[₹\s,]/g, '').replace(/[^0-9.]/g, '')
-                      // Allow only one decimal point
-                      const parts = value.split('.')
-                      const cleanedValue = parts.length > 2
-                        ? parts[0] + '.' + parts.slice(1).join('')
-                        : value
+                      // When variants exist, base price is auto-derived from
+                      // the lowest variant price – prevent manual edits.
+                      if (hasVariants && lowestVariantPrice != null) {
+                        return
+                      }
+                      const value = e.target.value
+                        .replace(/[₹\s,]/g, "")
+                        .replace(/[^0-9.]/g, "")
+                      const parts = value.split(".")
+                      const cleanedValue =
+                        parts.length > 2
+                          ? parts[0] + "." + parts.slice(1).join("")
+                          : value
                       setBasePrice(cleanedValue)
                     }}
                     onFocus={(e) => {
@@ -1077,13 +1109,23 @@ export default function ItemDetailsPage() {
                       }
                     }}
                     placeholder="Enter price"
-                    className="w-full pl-8 pr-12 py-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    readOnly={hasVariants && lowestVariantPrice != null}
+                    className={`w-full pl-8 pr-12 py-3 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      hasVariants && lowestVariantPrice != null
+                        ? "bg-gray-100 cursor-not-allowed"
+                        : "bg-gray-50"
+                    }`}
                   />
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-600">₹</span>
                   <button className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100">
                     <EditIcon className="w-4 h-4 text-gray-500" />
                   </button>
                 </div>
+                {hasVariants && lowestVariantPrice != null && (
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Base price is automatically set to the lowest variant price.
+                  </p>
+                )}
               </div>
 
               {/* Preparation Time */}

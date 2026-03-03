@@ -130,11 +130,62 @@ export default function TableBooking() {
         ]
     }
 
+    // Parse time strings like "10:30 PM" or "23:30" into minutes since midnight
+    const parseTimeToMinutes = (timeStr) => {
+        if (!timeStr || typeof timeStr !== "string") return null
+
+        const trimmed = timeStr.trim()
+
+        // 12-hour format with AM/PM
+        const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+        if (ampmMatch) {
+            let hours = parseInt(ampmMatch[1], 10)
+            const minutes = parseInt(ampmMatch[2], 10)
+            const period = ampmMatch[3].toUpperCase()
+
+            if (period === "PM" && hours !== 12) hours += 12
+            if (period === "AM" && hours === 12) hours = 0
+
+            return hours * 60 + minutes
+        }
+
+        // 24-hour format "HH:mm"
+        const twentyFourMatch = trimmed.match(/^(\d{1,2}):(\d{2})$/)
+        if (twentyFourMatch) {
+            const hours = parseInt(twentyFourMatch[1], 10)
+            const minutes = parseInt(twentyFourMatch[2], 10)
+            if (Number.isNaN(hours) || Number.isNaN(minutes)) return null
+            return hours * 60 + minutes
+        }
+
+        return null
+    }
+
+    // Determine restaurant closing time in minutes (if available)
+    const closingTimeStr =
+        restaurant?.diningConfig?.basicDetails?.closingTime ||
+        restaurant?.diningSettings?.closingTime ||
+        restaurant?.deliveryTimings?.closingTime ||
+        null
+
+    const closingMinutes = closingTimeStr ? parseTimeToMinutes(closingTimeStr) : null
+
+    const isSlotAfterClosing = (slotTime) => {
+        if (closingMinutes == null) return false
+        const slotMinutes = parseTimeToMinutes(slotTime)
+        if (slotMinutes == null) return false
+        return slotMinutes > closingMinutes
+    }
+
     if (loading) return <Loader />
     if (!restaurant) return <div>Restaurant not found</div>
 
     const handleProceed = () => {
         if (!selectedSlot) return
+        if (isSlotAfterClosing(selectedSlot.time)) {
+            // Guard: do not allow proceeding with a slot beyond closing time
+            return
+        }
         navigate("/dining/book-confirmation", {
             state: {
                 restaurant,
@@ -236,21 +287,32 @@ export default function TableBooking() {
 
                     {/* Slots Grid */}
                     <div className="grid grid-cols-3 gap-3">
-                        {slots[activeTimeOfDay].map((slot, idx) => (
-                            <button
-                                key={idx}
-                                onClick={() => setSelectedSlot(slot)}
-                                className={`p-3 rounded-xl border transition-all text-center flex flex-col gap-0.5 ${selectedSlot?.time === slot.time
-                                    ? "bg-[#2B9C64] border-[#2B9C64] text-white shadow-lg shadow-[#2B9C64]/20"
-                                    : "bg-white border-slate-100 hover:border-slate-200"
+                        {slots[activeTimeOfDay].map((slot, idx) => {
+                            const disabled = isSlotAfterClosing(slot.time)
+                            const isSelected = selectedSlot?.time === slot.time && !disabled
+
+                            return (
+                                <button
+                                    key={idx}
+                                    onClick={() => {
+                                        if (!disabled) setSelectedSlot(slot)
+                                    }}
+                                    disabled={disabled}
+                                    className={`p-3 rounded-xl border transition-all text-center flex flex-col gap-0.5 ${
+                                        disabled
+                                            ? "bg-slate-100 border-slate-100 text-slate-400 cursor-not-allowed opacity-60"
+                                            : isSelected
+                                                ? "bg-[#2B9C64] border-[#2B9C64] text-white shadow-lg shadow-[#2B9C64]/20"
+                                                : "bg-white border-slate-100 hover:border-slate-200"
                                     }`}
-                            >
-                                <span className={`text-sm font-bold ${selectedSlot?.time === slot.time ? "text-white" : "text-gray-800"
-                                    }`}>
-                                    {slot.time}
-                                </span>
-                            </button>
-                        ))}
+                                >
+                                    <span className={`text-sm font-bold ${isSelected ? "text-white" : "text-gray-800"
+                                        }`}>
+                                        {slot.time}
+                                    </span>
+                                </button>
+                            )
+                        })}
                     </div>
                 </div>
             </div>
