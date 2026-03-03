@@ -1086,9 +1086,9 @@ export default function CategoryPage() {
                   variant="outline"
                   className="mt-4 md:mt-6"
                   onClick={() => {
+                    // Clear filters and search but keep current category
                     setActiveFilters(new Set())
                     setSearchQuery("")
-                    setSelectedCategory('all')
                   }}
                 >
                   Clear all filters
