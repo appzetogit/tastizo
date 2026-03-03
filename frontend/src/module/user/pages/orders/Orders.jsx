@@ -230,17 +230,28 @@ export default function Orders() {
               originalStatus: originalStatus, // Keep original status for reference
               createdAt: createdAt.toISOString(),
               address: order.address || {},
-              items: (order.items || []).map(item => ({
-                itemId: item.itemId || item._id || item.id,
-                name: item.name || item.foodName || 'Item',
-                quantity: item.quantity || 1,
-                price: item.price || 0,
-                image: item.image || null,
-                description: item.description || null,
-                isVeg: item.isVeg !== undefined ? item.isVeg : (item.category === 'veg' || item.type === 'veg'),
-                _id: item._id || item.id,
-                id: item.id || item._id
-              })),
+              items: (order.items || []).map(item => {
+                const foodType = item.foodType || item.variationFoodType
+                const isVeg =
+                  typeof foodType === "string"
+                    ? foodType.toLowerCase() === "veg"
+                    : item.isVeg !== undefined
+                      ? item.isVeg
+                      : (item.category === "veg" || item.type === "veg")
+
+                return {
+                  itemId: item.itemId || item._id || item.id,
+                  name: item.name || item.foodName || "Item",
+                  quantity: item.quantity || 1,
+                  price: item.price || 0,
+                  image: item.image || null,
+                  description: item.description || null,
+                  isVeg,
+                  _id: item._id || item.id,
+                  id: item.id || item._id,
+                  foodType: foodType || null,
+                }
+              }),
               total: order.pricing?.total || order.total || 0,
               subtotal: order.pricing?.subtotal || 0,
               deliveryFee: order.pricing?.deliveryFee || 0,

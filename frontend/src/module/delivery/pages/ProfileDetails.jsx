@@ -37,6 +37,14 @@ export default function ProfileDetails() {
   })
   const [bankDetailsErrors, setBankDetailsErrors] = useState({})
   const [isUpdatingBankDetails, setIsUpdatingBankDetails] = useState(false)
+  const [showRiderDetailsPopup, setShowRiderDetailsPopup] = useState(false)
+  const [riderDetails, setRiderDetails] = useState({
+    name: "",
+    city: "",
+    vehicleType: "bike",
+  })
+  const [riderDetailsErrors, setRiderDetailsErrors] = useState({})
+  const [isUpdatingRiderDetails, setIsUpdatingRiderDetails] = useState(false)
   const [showPersonalDetailsPopup, setShowPersonalDetailsPopup] = useState(false)
   const [personalDetails, setPersonalDetails] = useState({
     name: "",
@@ -47,6 +55,26 @@ export default function ProfileDetails() {
   const [isUpdatingPersonalDetails, setIsUpdatingPersonalDetails] = useState(false)
   const [isUpdatingPhoto, setIsUpdatingPhoto] = useState(false)
   const fileInputRef = useRef(null)
+
+  const handleRemovePhoto = async () => {
+    if (!window.confirm("Remove profile photo?")) return
+    try {
+      setIsUpdatingPhoto(true)
+      await deliveryAPI.updateProfile({
+        profileImage: { url: "", publicId: "" },
+      })
+      const response = await deliveryAPI.getProfile()
+      if (response?.data?.success && response?.data?.data?.profile) {
+        setProfile(response.data.data.profile)
+      }
+      toast.success("Profile photo removed")
+    } catch (error) {
+      console.error("Error removing profile photo:", error)
+      toast.error(error?.response?.data?.message || "Failed to remove profile photo")
+    } finally {
+      setIsUpdatingPhoto(false)
+    }
+  }
 
   // Note: All alternate phone related code has been removed
 
@@ -137,26 +165,7 @@ export default function ProfileDetails() {
               <button
                 type="button"
                 disabled={isUpdatingPhoto}
-                onClick={async () => {
-                  if (!window.confirm("Remove profile photo?")) return
-                  try {
-                    setIsUpdatingPhoto(true)
-                    await deliveryAPI.updateProfile({
-                      profileImage: { url: "", publicId: "" },
-                    })
-                    // Refetch profile to reflect removal
-                    const response = await deliveryAPI.getProfile()
-                    if (response?.data?.success && response?.data?.data?.profile) {
-                      setProfile(response.data.data.profile)
-                    }
-                    toast.success("Profile photo removed")
-                  } catch (error) {
-                    console.error("Error removing profile photo:", error)
-                    toast.error(error?.response?.data?.message || "Failed to remove profile photo")
-                  } finally {
-                    setIsUpdatingPhoto(false)
-                  }
-                }}
+                onClick={handleRemovePhoto}
                 className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-red-500/90 text-white text-[11px] font-medium hover:bg-red-600 disabled:opacity-60"
               >
                 <Trash2 className="w-3 h-3" />
@@ -223,11 +232,53 @@ export default function ProfileDetails() {
         </div>
       </div>
 
+      {/* Explicit profile photo actions for mobile/non-hover */}
+      <div className="flex items-center justify-center gap-4 pb-2 pt-1">
+        <button
+          type="button"
+          disabled={isUpdatingPhoto}
+          onClick={() => fileInputRef.current?.click()}
+          className="text-xs font-medium text-green-600 hover:text-green-700 disabled:opacity-60"
+        >
+          Change photo
+        </button>
+        {(profile?.profileImage?.url || profile?.documents?.photo) && (
+          <button
+            type="button"
+            disabled={isUpdatingPhoto}
+            onClick={handleRemovePhoto}
+            className="text-xs font-medium text-red-500 hover:text-red-600 disabled:opacity-60"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+
       {/* Content */}
       <div className="px-4 py-6 space-y-6">
         {/* Rider Details Section */}
         <div>
-          <h2 className="text-base font-bold text-gray-900 mb-3">Rider details</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-bold text-gray-900">Rider details</h2>
+            {!loading && profile && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRiderDetailsPopup(true)
+                  setRiderDetails({
+                    name: profile?.name || "",
+                    city: profile?.location?.city || "",
+                    vehicleType: profile?.vehicle?.type || "bike",
+                  })
+                  setRiderDetailsErrors({})
+                }}
+                className="text-green-600 font-medium text-sm flex items-center gap-1 hover:text-green-700"
+              >
+                <Edit2 className="w-4 h-4" />
+                <span>Edit</span>
+              </button>
+            )}
+          </div>
           <div className="bg-white rounded-lg shadow-sm divide-y divide-gray-200">
             <div className="p-2 px-3 flex items-center justify-between">
               <p className="text-base text-gray-900">
@@ -235,12 +286,6 @@ export default function ProfileDetails() {
               </p>
             </div>
             <div className="divide-y divide-gray-200">
-              <div className="p-2 px-3 flex items-center justify-between">
-                <p className="text-sm text-gray-900">Zone</p>
-                <p className="text-base text-gray-900">
-                  {profile?.availability?.zones?.length > 0 ? "Assigned" : "Not assigned"}
-                </p>
-              </div>
               <div className="p-2 px-3 flex items-center justify-between">
                 <p className="text-sm text-gray-900">City</p>
                 <p className="text-base text-gray-900">
@@ -322,59 +367,6 @@ export default function ProfileDetails() {
                     <Eye className="w-5 h-5 text-gray-600" />
                   </button>
                 )}
-                <label className="p-2 hover:bg-gray-100 rounded-full transition-colors cursor-pointer text-xs text-green-600 font-medium">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      if (!file.type.startsWith("image/")) {
-                        toast.error("Please select an image file")
-                        return
-                      }
-                      if (file.size > 5 * 1024 * 1024) {
-                        toast.error("Image size should be less than 5MB")
-                        return
-                      }
-                      try {
-                        const formData = new FormData()
-                        formData.append("file", file)
-                        formData.append("folder", "appzeto/delivery/documents")
-                        const response = await apiClient.post("/upload/media", formData, {
-                          headers: { "Content-Type": "multipart/form-data" },
-                        })
-                        if (response?.data?.success && response?.data?.data) {
-                          const { url } = response.data.data
-                          await deliveryAPI.updateProfile({
-                            documents: {
-                              ...profile?.documents,
-                              aadhar: {
-                                ...profile?.documents?.aadhar,
-                                document: url,
-                                verified: false,
-                              },
-                            },
-                          })
-                          const refreshed = await deliveryAPI.getProfile()
-                          if (refreshed?.data?.success && refreshed?.data?.data?.profile) {
-                            setProfile(refreshed.data.data.profile)
-                          }
-                          toast.success("Aadhar document updated")
-                        } else {
-                          toast.error("Failed to upload Aadhar document")
-                        }
-                      } catch (error) {
-                        console.error("Error updating Aadhar document:", error)
-                        toast.error(error?.response?.data?.message || "Failed to update Aadhar document")
-                      } finally {
-                        if (e.target) e.target.value = ""
-                      }
-                    }}
-                  />
-                  <span>{profile?.documents?.aadhar?.document ? "Change" : "Upload"}</span>
-                </label>
               </div>
             </div>
 
@@ -411,59 +403,6 @@ export default function ProfileDetails() {
                     <Eye className="w-5 h-5 text-gray-600" />
                   </button>
                 )}
-                <label className="p-2 hover:bg-gray-100 rounded-full transition-colors cursor-pointer text-xs text-green-600 font-medium">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      if (!file.type.startsWith("image/")) {
-                        toast.error("Please select an image file")
-                        return
-                      }
-                      if (file.size > 5 * 1024 * 1024) {
-                        toast.error("Image size should be less than 5MB")
-                        return
-                      }
-                      try {
-                        const formData = new FormData()
-                        formData.append("file", file)
-                        formData.append("folder", "appzeto/delivery/documents")
-                        const response = await apiClient.post("/upload/media", formData, {
-                          headers: { "Content-Type": "multipart/form-data" },
-                        })
-                        if (response?.data?.success && response?.data?.data) {
-                          const { url } = response.data.data
-                          await deliveryAPI.updateProfile({
-                            documents: {
-                              ...profile?.documents,
-                              pan: {
-                                ...profile?.documents?.pan,
-                                document: url,
-                                verified: false,
-                              },
-                            },
-                          })
-                          const refreshed = await deliveryAPI.getProfile()
-                          if (refreshed?.data?.success && refreshed?.data?.data?.profile) {
-                            setProfile(refreshed.data.data.profile)
-                          }
-                          toast.success("PAN document updated")
-                        } else {
-                          toast.error("Failed to upload PAN document")
-                        }
-                      } catch (error) {
-                        console.error("Error updating PAN document:", error)
-                        toast.error(error?.response?.data?.message || "Failed to update PAN document")
-                      } finally {
-                        if (e.target) e.target.value = ""
-                      }
-                    }}
-                  />
-                  <span>{profile?.documents?.pan?.document ? "Change" : "Upload"}</span>
-                </label>
               </div>
             </div>
 
@@ -500,59 +439,6 @@ export default function ProfileDetails() {
                     <Eye className="w-5 h-5 text-gray-600" />
                   </button>
                 )}
-                <label className="p-2 hover:bg-gray-100 rounded-full transition-colors cursor-pointer text-xs text-green-600 font-medium">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      if (!file.type.startsWith("image/")) {
-                        toast.error("Please select an image file")
-                        return
-                      }
-                      if (file.size > 5 * 1024 * 1024) {
-                        toast.error("Image size should be less than 5MB")
-                        return
-                      }
-                      try {
-                        const formData = new FormData()
-                        formData.append("file", file)
-                        formData.append("folder", "appzeto/delivery/documents")
-                        const response = await apiClient.post("/upload/media", formData, {
-                          headers: { "Content-Type": "multipart/form-data" },
-                        })
-                        if (response?.data?.success && response?.data?.data) {
-                          const { url } = response.data.data
-                          await deliveryAPI.updateProfile({
-                            documents: {
-                              ...profile?.documents,
-                              drivingLicense: {
-                                ...profile?.documents?.drivingLicense,
-                                document: url,
-                                verified: false,
-                              },
-                            },
-                          })
-                          const refreshed = await deliveryAPI.getProfile()
-                          if (refreshed?.data?.success && refreshed?.data?.data?.profile) {
-                            setProfile(refreshed.data.data.profile)
-                          }
-                          toast.success("Driving license document updated")
-                        } else {
-                          toast.error("Failed to upload driving license document")
-                        }
-                      } catch (error) {
-                        console.error("Error updating driving license document:", error)
-                        toast.error(error?.response?.data?.message || "Failed to update driving license document")
-                      } finally {
-                        if (e.target) e.target.value = ""
-                      }
-                    }}
-                  />
-                  <span>{profile?.documents?.drivingLicense?.document ? "Change" : "Upload"}</span>
-                </label>
               </div>
             </div>
           </div>
@@ -952,6 +838,159 @@ export default function ProfileDetails() {
               }`}
           >
             {isUpdatingBankDetails ? "Updating..." : "Save Bank Details"}
+          </button>
+        </div>
+      </BottomPopup>
+
+      {/* Rider Details Edit Popup */}
+      <BottomPopup
+        isOpen={showRiderDetailsPopup}
+        onClose={() => {
+          setShowRiderDetailsPopup(false)
+          setRiderDetailsErrors({})
+        }}
+        title="Edit Rider Details"
+        showCloseButton={true}
+        closeOnBackdropClick={true}
+        maxHeight="60vh"
+      >
+        <div className="space-y-4">
+          {/* Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Rider Name
+            </label>
+            <input
+              type="text"
+              value={riderDetails.name}
+              onChange={(e) => {
+                setRiderDetails((prev) => ({ ...prev, name: e.target.value }))
+                setRiderDetailsErrors((prev) => ({ ...prev, name: "" }))
+              }}
+              placeholder="Enter rider name"
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                riderDetailsErrors.name ? "border-red-500" : "border-gray-300"
+              }`}
+            />
+            {riderDetailsErrors.name && (
+              <p className="text-red-500 text-xs mt-1">{riderDetailsErrors.name}</p>
+            )}
+          </div>
+
+          {/* City */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              City
+            </label>
+            <input
+              type="text"
+              value={riderDetails.city}
+              onChange={(e) => {
+                const value = e.target.value.replace(/[^a-zA-Z\s]/g, "")
+                setRiderDetails((prev) => ({ ...prev, city: value }))
+                setRiderDetailsErrors((prev) => ({ ...prev, city: "" }))
+              }}
+              placeholder="Enter city"
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                riderDetailsErrors.city ? "border-red-500" : "border-gray-300"
+              }`}
+            />
+            {riderDetailsErrors.city && (
+              <p className="text-red-500 text-xs mt-1">{riderDetailsErrors.city}</p>
+            )}
+          </div>
+
+          {/* Vehicle Type */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Vehicle Type
+            </label>
+            <select
+              value={riderDetails.vehicleType}
+              onChange={(e) => {
+                setRiderDetails((prev) => ({ ...prev, vehicleType: e.target.value }))
+                setRiderDetailsErrors((prev) => ({ ...prev, vehicleType: "" }))
+              }}
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                riderDetailsErrors.vehicleType ? "border-red-500" : "border-gray-300"
+              }`}
+            >
+              <option value="">Select vehicle type</option>
+              <option value="bike">Bike</option>
+              <option value="scooter">Scooter</option>
+              <option value="bicycle">Bicycle</option>
+              <option value="car">Car</option>
+            </select>
+            {riderDetailsErrors.vehicleType && (
+              <p className="text-red-500 text-xs mt-1">{riderDetailsErrors.vehicleType}</p>
+            )}
+          </div>
+
+          <button
+            onClick={async () => {
+              const errors = {}
+              const nameTrimmed = riderDetails.name.trim()
+              const cityTrimmed = riderDetails.city.trim()
+              const vehicleType = riderDetails.vehicleType
+
+              if (!nameTrimmed) {
+                errors.name = "Name is required"
+              } else if (!/^[a-zA-Z\s'-]{2,50}$/.test(nameTrimmed)) {
+                errors.name = "Name can only contain letters and spaces (2-50 characters)"
+              }
+
+              if (!cityTrimmed) {
+                errors.city = "City is required"
+              } else if (!/^[A-Za-z\s]{2,}$/.test(cityTrimmed)) {
+                errors.city = "City should only contain letters and spaces"
+              }
+
+              const allowedVehicleTypes = ["bike", "scooter", "bicycle", "car"]
+              if (!vehicleType || !allowedVehicleTypes.includes(vehicleType)) {
+                errors.vehicleType = "Please select vehicle type"
+              }
+
+              if (Object.keys(errors).length > 0) {
+                setRiderDetailsErrors(errors)
+                toast.error("Please fix the highlighted fields")
+                return
+              }
+
+              setIsUpdatingRiderDetails(true)
+              try {
+                await deliveryAPI.updateProfile({
+                  name: nameTrimmed,
+                  location: {
+                    ...profile?.location,
+                    city: cityTrimmed,
+                  },
+                  vehicle: {
+                    ...profile?.vehicle,
+                    type: vehicleType,
+                  },
+                })
+                const refreshed = await deliveryAPI.getProfile()
+                if (refreshed?.data?.success && refreshed?.data?.data?.profile) {
+                  setProfile(refreshed.data.data.profile)
+                  setVehicleNumber(refreshed.data.data.profile?.vehicle?.number || vehicleNumber)
+                }
+                toast.success("Rider details updated successfully")
+                setShowRiderDetailsPopup(false)
+              } catch (error) {
+                console.error("Error updating rider details:", error)
+                toast.error(error?.response?.data?.message || "Failed to update rider details")
+              } finally {
+                setIsUpdatingRiderDetails(false)
+              }
+            }}
+            disabled={isUpdatingRiderDetails}
+            className={`w-full py-3 rounded-lg font-medium text-white transition-colors ${
+              isUpdatingRiderDetails
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-[#00B761] hover:bg-[#00A055]"
+            }`}
+          >
+            {isUpdatingRiderDetails ? "Updating..." : "Save Rider Details"}
           </button>
         </div>
       </BottomPopup>

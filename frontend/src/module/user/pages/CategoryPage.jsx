@@ -547,14 +547,21 @@ export default function CategoryPage() {
       filtered = filtered.filter(r => r.offer && r.offer.includes('50%'))
     }
 
-    // Filter by search
+    // Filter by search - match on restaurant and dish names
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(r =>
-        r.name?.toLowerCase().includes(query) ||
-        r.cuisine?.toLowerCase().includes(query) ||
-        r.featuredDish?.toLowerCase().includes(query)
-      )
+      filtered = filtered.filter(r => {
+        const restaurantMatch =
+          r.name?.toLowerCase().includes(query) ||
+          r.cuisine?.toLowerCase().includes(query) ||
+          r.featuredDish?.toLowerCase().includes(query)
+
+        const dishMatch = r.categoryDishName
+          ? r.categoryDishName.toLowerCase().includes(query)
+          : false
+
+        return restaurantMatch || dishMatch
+      })
     }
 
     return filtered

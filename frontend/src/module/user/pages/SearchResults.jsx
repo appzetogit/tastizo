@@ -25,6 +25,8 @@ const filterOptions = [
 
 // Mock data removed - using backend data only
 
+const SEARCH_HISTORY_KEY = "user_search_history_v1"
+
 export default function SearchResults() {
   const [searchParams, setSearchParams] = useSearchParams()
   const query = searchParams.get("q") || ""
@@ -434,7 +436,25 @@ export default function SearchResults() {
   const handleSearch = (e) => {
     e.preventDefault()
     if (searchQuery.trim()) {
-      setSearchParams({ q: searchQuery.trim() })
+      const value = searchQuery.trim()
+      setSearchParams({ q: value })
+
+      // Save to local search history for overlay
+      try {
+        const raw = localStorage.getItem(SEARCH_HISTORY_KEY)
+        const parsed = raw ? JSON.parse(raw) : []
+        const existing = Array.isArray(parsed)
+          ? parsed.filter(
+              (item) =>
+                typeof item === "string" &&
+                item.toLowerCase() !== value.toLowerCase()
+            )
+          : []
+        const updated = [value, ...existing].slice(0, 10)
+        localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated))
+      } catch (error) {
+        console.warn("Failed to update search history from results page:", error)
+      }
     }
   }
 

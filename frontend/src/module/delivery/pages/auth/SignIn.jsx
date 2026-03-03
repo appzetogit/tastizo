@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Select,
@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { deliveryAPI } from "@/lib/api"
+import { clearModuleAuth } from "@/lib/utils/auth"
 import { useCompanyName } from "@/lib/hooks/useCompanyName"
 
 // Common country codes
@@ -43,6 +44,17 @@ export default function DeliverySignIn() {
   })
   const [error, setError] = useState("")
   const [isSending, setIsSending] = useState(false)
+
+  // When opening sign-in, clear any old delivery session so a new
+  // phone number starts a fresh login flow.
+  useEffect(() => {
+    try {
+      clearModuleAuth("delivery")
+      sessionStorage.removeItem("deliveryAuthData")
+    } catch (e) {
+      console.warn("Failed to clear previous delivery session:", e)
+    }
+  }, [])
 
   // Get selected country details dynamically
   const selectedCountry = countryCodes.find(c => c.code === formData.countryCode) || countryCodes[2] // Default to India (+91)
@@ -88,6 +100,13 @@ export default function DeliverySignIn() {
 
       // Call backend to send OTP for delivery login
       await deliveryAPI.sendOTP(fullPhone, "login")
+
+      // Before starting new OTP flow, ensure previous delivery auth is cleared
+      try {
+        clearModuleAuth("delivery")
+      } catch (e) {
+        console.warn("Failed to clear previous delivery auth before OTP:", e)
+      }
 
       // Store auth data in sessionStorage for OTP page
       const authData = {

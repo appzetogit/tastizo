@@ -15,6 +15,46 @@ const logger = winston.createLogger({
   ]
 });
 
+const INDIAN_STATES = [
+  'Andhra Pradesh',
+  'Arunachal Pradesh',
+  'Assam',
+  'Bihar',
+  'Chhattisgarh',
+  'Goa',
+  'Gujarat',
+  'Haryana',
+  'Himachal Pradesh',
+  'Jharkhand',
+  'Karnataka',
+  'Kerala',
+  'Madhya Pradesh',
+  'Maharashtra',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Odisha',
+  'Punjab',
+  'Rajasthan',
+  'Sikkim',
+  'Tamil Nadu',
+  'Telangana',
+  'Tripura',
+  'Uttar Pradesh',
+  'Uttarakhand',
+  'West Bengal',
+  // Union Territories
+  'Andaman and Nicobar Islands',
+  'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi',
+  'Jammu and Kashmir',
+  'Ladakh',
+  'Lakshadweep',
+  'Puducherry',
+].sort();
+
 /**
  * Submit Delivery Signup Step 1 - Basic Details
  * POST /api/delivery/signup/details
@@ -23,13 +63,37 @@ const signupDetailsSchema = Joi.object({
   name: Joi.string().trim().min(2).max(100).required(),
   email: Joi.string().email().lowercase().trim().optional().allow(null, ''),
   address: Joi.string().trim().required(),
-  city: Joi.string().trim().required(),
-  state: Joi.string().trim().required(),
+  city: Joi.string()
+    .trim()
+    .pattern(/^[A-Za-z\s]{2,}$/)
+    .message('Enter valid city name')
+    .required(),
+  state: Joi.string()
+    .trim()
+    .valid(...INDIAN_STATES)
+    .required()
+    .messages({
+      'any.only': 'Please select your state',
+    }),
   vehicleType: Joi.string().valid('bike', 'scooter', 'bicycle', 'car').required(),
   vehicleName: Joi.string().trim().optional().allow(null, ''),
-  vehicleNumber: Joi.string().trim().required(),
-  panNumber: Joi.string().trim().required(),
-  aadharNumber: Joi.string().trim().required()
+  vehicleNumber: Joi.string()
+    .trim()
+    .uppercase()
+    .pattern(/^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/)
+    .message('Enter valid vehicle number (e.g., MP09AB1234)')
+    .required(),
+  panNumber: Joi.string()
+    .trim()
+    .uppercase()
+    .pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/)
+    .message('Enter valid PAN number (e.g., ABCDE1234F)')
+    .required(),
+  aadharNumber: Joi.string()
+    .trim()
+    .pattern(/^\d{12}$/)
+    .message('Enter valid 12-digit Aadhaar number')
+    .required()
 });
 
 export const submitSignupDetails = asyncHandler(async (req, res) => {

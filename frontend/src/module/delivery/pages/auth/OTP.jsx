@@ -22,34 +22,34 @@ export default function DeliveryOTP() {
   const inputRefs = useRef([])
 
   useEffect(() => {
-    // Check if user is already fully authenticated (has token and it's valid)
-    // Only redirect if token exists and is valid - don't redirect during OTP flow
-    const token = localStorage.getItem("delivery_accessToken")
-    const authenticated = localStorage.getItem("delivery_authenticated") === "true"
-    
-    // Only redirect if both token and authenticated flag exist (user is fully logged in)
-    if (token && authenticated) {
-      // Check if token is not expired
-      try {
-        const parts = token.split('.')
-        if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
-          const now = Math.floor(Date.now() / 1000)
-          // If token is valid and not expired, redirect to home
-          if (payload.exp && payload.exp > now) {
-            navigate("/delivery", { replace: true })
-            return
-          }
-        }
-      } catch (e) {
-        // Token parsing failed, continue with OTP flow
-      }
-    }
-
     // Get auth data from sessionStorage (delivery module key)
+    // If this exists, user has just started a fresh login flow and
+    // we should NOT auto-redirect using any existing token.
     const stored = sessionStorage.getItem("deliveryAuthData")
     if (!stored) {
-      // No auth data, redirect to sign in
+      // No pending OTP flow; if a valid delivery session exists, go to home,
+      // otherwise send user to sign-in.
+      const token = localStorage.getItem("delivery_accessToken")
+      const authenticated = localStorage.getItem("delivery_authenticated") === "true"
+
+      if (token && authenticated) {
+        try {
+          const parts = token.split(".")
+          if (parts.length === 3) {
+            const payload = JSON.parse(
+              atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")),
+            )
+            const now = Math.floor(Date.now() / 1000)
+            if (payload.exp && payload.exp > now) {
+              navigate("/delivery", { replace: true })
+              return
+            }
+          }
+        } catch (e) {
+          // Token parsing failed, fall through to sign-in
+        }
+      }
+
       navigate("/delivery/sign-in", { replace: true })
       return
     }
@@ -189,8 +189,13 @@ export default function DeliveryOTP() {
       const response = await deliveryAPI.verifyOTP(phone, code, "login")
       const data = response?.data?.data || {}
 
-      // Check if user needs to complete signup
-      if (data.needsSignup) {
+      const userStatus = data?.user?.status
+      const skipSignupForApproved =
+        userStatus === "approved" || userStatus === "active"
+
+      // Check if user needs to complete signup (but never force it
+      // for already approved/active riders).
+      if (data.needsSignup && !skipSignupForApproved) {
         // Store tokens for authenticated signup flow
         const accessToken = data.accessToken
         const user = data.user

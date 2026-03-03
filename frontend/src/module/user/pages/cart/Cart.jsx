@@ -545,15 +545,24 @@ export default function Cart() {
 
       try {
         setLoadingPricing(true)
-        const items = cart.map(item => ({
-          itemId: item.id,
-          name: item.name,
-          price: item.price, // Price should already be in INR
-          quantity: item.quantity || 1,
-          image: item.image,
-          description: item.description,
-          isVeg: item.isVeg !== false
-        }))
+        const items = cart.map(item => {
+          const foodType = item.foodType || item.variationFoodType
+          const isVeg =
+            typeof foodType === "string"
+              ? foodType.toLowerCase() === "veg"
+              : item.isVeg !== false
+
+          return {
+            itemId: item.id,
+            name: item.name,
+            price: item.price, // Price should already be in INR
+            quantity: item.quantity || 1,
+            image: item.image,
+            description: item.description,
+            isVeg,
+            foodType: foodType || null,
+          }
+        })
 
         const response = await orderAPI.calculateOrder({
           items,

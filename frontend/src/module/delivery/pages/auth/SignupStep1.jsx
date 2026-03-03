@@ -4,6 +4,46 @@ import { ArrowLeft } from "lucide-react"
 import { deliveryAPI } from "@/lib/api"
 import { toast } from "sonner"
 
+const INDIAN_STATES = [
+  "Andhra Pradesh",
+  "Arunachal Pradesh",
+  "Assam",
+  "Bihar",
+  "Chhattisgarh",
+  "Goa",
+  "Gujarat",
+  "Haryana",
+  "Himachal Pradesh",
+  "Jharkhand",
+  "Karnataka",
+  "Kerala",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Manipur",
+  "Meghalaya",
+  "Mizoram",
+  "Nagaland",
+  "Odisha",
+  "Punjab",
+  "Rajasthan",
+  "Sikkim",
+  "Tamil Nadu",
+  "Telangana",
+  "Tripura",
+  "Uttar Pradesh",
+  "Uttarakhand",
+  "West Bengal",
+  // Union Territories
+  "Andaman and Nicobar Islands",
+  "Chandigarh",
+  "Dadra and Nagar Haveli and Daman and Diu",
+  "Delhi",
+  "Jammu and Kashmir",
+  "Ladakh",
+  "Lakshadweep",
+  "Puducherry",
+].sort()
+
 export default function SignupStep1() {
   const navigate = useNavigate()
   const [formData, setFormData] = useState({
@@ -23,17 +63,108 @@ export default function SignupStep1() {
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }))
-    // Clear error for this field
-    if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ""
-      }))
+    let nextValue = value
+
+    if (name === "city") {
+      // Allow only alphabets and spaces
+      nextValue = value.replace(/[^a-zA-Z\s]/g, "")
     }
+
+    if (name === "vehicleNumber") {
+      // Uppercase, only letters/digits, limit length
+      nextValue = value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10)
+    }
+
+    if (name === "panNumber") {
+      // Always uppercase, only letters/digits, max 10 chars
+      nextValue = value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10)
+    }
+
+    if (name === "aadharNumber") {
+      // Only digits, format as XXXX XXXX XXXX
+      const digits = value.replace(/\D/g, "").slice(0, 12)
+      const parts = []
+      for (let i = 0; i < digits.length; i += 4) {
+        parts.push(digits.slice(i, i + 4))
+      }
+      nextValue = parts.join(" ")
+    }
+
+    setFormData((prev) => {
+      if (name === "state") {
+        // When state changes, reset city
+        return {
+          ...prev,
+          state: nextValue,
+          city: "",
+        }
+      }
+      return {
+        ...prev,
+        [name]: nextValue,
+      }
+    })
+
+    // Field-level real-time validation
+    let fieldError = ""
+    const trimmed = nextValue.trim()
+
+    switch (name) {
+      case "name":
+        if (!trimmed) fieldError = "Name is required"
+        break
+      case "email":
+        if (trimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+          fieldError = "Invalid email format"
+        }
+        break
+      case "address":
+        if (!trimmed) fieldError = "Address is required"
+        break
+      case "city":
+        if (!trimmed) fieldError = "City is required"
+        else if (!/^[A-Za-z\s]{2,}$/.test(trimmed)) {
+          fieldError = "Enter valid city name"
+        }
+        break
+      case "state":
+        if (!trimmed || !INDIAN_STATES.includes(trimmed)) {
+          fieldError = "Please select your state"
+        }
+        break
+      case "vehicleNumber":
+        if (!trimmed) fieldError = "Vehicle number is required"
+        else if (!/^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/.test(trimmed)) {
+          fieldError = "Enter valid vehicle number (e.g., MP09AB1234)"
+        }
+        break
+      case "panNumber":
+        if (!trimmed) fieldError = "PAN number is required"
+        else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(trimmed)) {
+          fieldError = "Enter valid PAN number (e.g., ABCDE1234F)"
+        }
+        break
+      case "aadharNumber": {
+        const digits = nextValue.replace(/\s/g, "")
+        if (!digits) fieldError = "Aadhaar number is required"
+        else if (!/^\d{12}$/.test(digits)) {
+          fieldError = "Enter valid 12-digit Aadhaar number"
+        }
+        break
+      }
+      default:
+        break
+    }
+
+    setErrors((prev) => {
+      const updated = { ...prev }
+      if (fieldError) {
+        updated[name] = fieldError
+      } else {
+        delete updated[name]
+      }
+      return updated
+    })
   }
 
   const validate = () => {
@@ -53,26 +184,30 @@ export default function SignupStep1() {
 
     if (!formData.city.trim()) {
       newErrors.city = "City is required"
+    } else if (!/^[A-Za-z\s]{2,}$/.test(formData.city.trim())) {
+      newErrors.city = "Enter valid city name"
     }
 
-    if (!formData.state.trim()) {
-      newErrors.state = "State is required"
+    if (!formData.state.trim() || !INDIAN_STATES.includes(formData.state.trim())) {
+      newErrors.state = "Please select your state"
     }
 
     if (!formData.vehicleNumber.trim()) {
       newErrors.vehicleNumber = "Vehicle number is required"
+    } else if (!/^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/.test(formData.vehicleNumber.trim())) {
+      newErrors.vehicleNumber = "Enter valid vehicle number (e.g., MP09AB1234)"
     }
 
     if (!formData.panNumber.trim()) {
       newErrors.panNumber = "PAN number is required"
     } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.panNumber.toUpperCase())) {
-      newErrors.panNumber = "Invalid PAN format (e.g., ABCDE1234F)"
+      newErrors.panNumber = "Enter valid PAN number (e.g., ABCDE1234F)"
     }
 
     if (!formData.aadharNumber.trim()) {
-      newErrors.aadharNumber = "Aadhar number is required"
+      newErrors.aadharNumber = "Aadhaar number is required"
     } else if (!/^\d{12}$/.test(formData.aadharNumber.replace(/\s/g, ""))) {
-      newErrors.aadharNumber = "Aadhar number must be 12 digits"
+      newErrors.aadharNumber = "Enter valid 12-digit Aadhaar number"
     }
 
     setErrors(newErrors)
@@ -205,7 +340,7 @@ export default function SignupStep1() {
                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                   errors.city ? "border-red-500" : "border-gray-300"
                 }`}
-                placeholder="City"
+                placeholder="Enter city"
               />
               {errors.city && <p className="text-red-500 text-sm mt-1">{errors.city}</p>}
             </div>
@@ -213,16 +348,21 @@ export default function SignupStep1() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 State <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
+              <select
                 name="state"
                 value={formData.state}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${
                   errors.state ? "border-red-500" : "border-gray-300"
                 }`}
-                placeholder="State"
-              />
+              >
+                <option value="">Select State</option>
+                {INDIAN_STATES.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+              </select>
               {errors.state && <p className="text-red-500 text-sm mt-1">{errors.state}</p>}
             </div>
           </div>
@@ -297,37 +437,53 @@ export default function SignupStep1() {
             {errors.panNumber && <p className="text-red-500 text-sm mt-1">{errors.panNumber}</p>}
           </div>
 
-          {/* Aadhar Number */}
+          {/* Aadhaar Number */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Aadhar Number <span className="text-red-500">*</span>
+              Aadhaar Number <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               name="aadharNumber"
               value={formData.aadharNumber}
               onChange={handleChange}
-              maxLength={12}
+              maxLength={14}
               className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                 errors.aadharNumber ? "border-red-500" : "border-gray-300"
               }`}
-              placeholder="1234 5678 9012"
+              placeholder="XXXX XXXX XXXX"
             />
             {errors.aadharNumber && <p className="text-red-500 text-sm mt-1">{errors.aadharNumber}</p>}
           </div>
 
           {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className={`w-full py-4 rounded-lg font-bold text-white text-base transition-colors mt-6 ${
-              isSubmitting
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-[#00B761] hover:bg-[#00A055]"
-            }`}
-          >
-            {isSubmitting ? "Saving..." : "Continue"}
-          </button>
+          {(() => {
+            const isFormValid =
+              !isSubmitting &&
+              formData.name.trim() &&
+              formData.address.trim() &&
+              formData.city.trim() &&
+              formData.state.trim() &&
+              INDIAN_STATES.includes(formData.state.trim()) &&
+              formData.vehicleNumber.trim() &&
+              formData.panNumber.trim() &&
+              formData.aadharNumber.trim() &&
+              Object.keys(errors).length === 0
+
+            return (
+              <button
+                type="submit"
+                disabled={!isFormValid}
+                className={`w-full py-4 rounded-lg font-bold text-white text-base transition-colors mt-6 ${
+                  !isFormValid
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-[#00B761] hover:bg-[#00A055]"
+                }`}
+              >
+                {isSubmitting ? "Saving..." : "Continue"}
+              </button>
+            )
+          })()}
         </form>
       </div>
     </div>

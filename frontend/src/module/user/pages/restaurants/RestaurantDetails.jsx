@@ -52,6 +52,7 @@ export default function RestaurantDetails() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const showOnlyUnder250 = searchParams.get('under250') === 'true'
+  const initialSearchQuery = searchParams.get('q') || ""
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
   const {
     vegMode,
@@ -87,7 +88,7 @@ export default function RestaurantDetails() {
   const [showMenuSheet, setShowMenuSheet] = useState(false)
   const [showLargeOrderMenu, setShowLargeOrderMenu] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery)
   const [showMenuOptionsSheet, setShowMenuOptionsSheet] = useState(false)
   const [expandedAddButtons, setExpandedAddButtons] = useState(new Set())
   const [expandedSections, setExpandedSections] = useState(new Set([0])) // Default: Recommended section is expanded

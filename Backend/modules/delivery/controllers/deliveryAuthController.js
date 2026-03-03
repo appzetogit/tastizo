@@ -169,8 +169,14 @@ export const verifyOTP = asyncHandler(async (req, res) => {
         }
       }
 
-      // Check if signup needs to be completed (missing required fields)
-      const needsSignup =
+      // Check if signup needs to be completed (missing required fields).
+      // Only force signup for non-approved / non-active partners, so that
+      // already approved riders aren't pushed back into signup due to
+      // legacy missing optional fields.
+      const requiresFullProfileStatus =
+        !["approved", "active"].includes(delivery.status);
+
+      const hasMissingProfileFields =
         !delivery.location?.city ||
         !delivery.vehicle?.number ||
         !delivery.documents?.pan?.number ||
@@ -178,6 +184,8 @@ export const verifyOTP = asyncHandler(async (req, res) => {
         !delivery.documents?.aadhar?.document ||
         !delivery.documents?.pan?.document ||
         !delivery.documents?.drivingLicense?.document;
+
+      const needsSignup = requiresFullProfileStatus && hasMissingProfileFields;
 
       if (needsSignup) {
         // Generate tokens for signup flow
