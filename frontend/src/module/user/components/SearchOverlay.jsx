@@ -73,7 +73,8 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
 
         const foods = restaurants
           .map((restaurant, index) => {
-            const name = restaurant.featuredDish || restaurant.name
+            // Show restaurant cards (not dish names)
+            const name = restaurant.name || restaurant.featuredDish
             if (!name) return null
 
             const coverImages = restaurant.coverImages && restaurant.coverImages.length > 0
@@ -103,6 +104,7 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
               name,
               image,
               restaurantSlug: slug,
+              featuredDish: restaurant.featuredDish || null,
             }
           })
           .filter(Boolean)
@@ -155,6 +157,15 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
       }
       return updated
     })
+  }
+
+  const clearRecentSearches = () => {
+    try {
+      localStorage.removeItem(SEARCH_HISTORY_KEY)
+    } catch (error) {
+      console.warn("Failed to clear search history:", error)
+    }
+    setRecentSearches([])
   }
 
   const handleSuggestionClick = (suggestion) => {
@@ -236,10 +247,21 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
             animation: 'slideDown 0.3s ease-out 0.1s both'
           }}
         >
-          <h3 className="text-sm sm:text-base font-semibold text-gray-700 dark:text-gray-300 mb-4 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-primary-orange" />
-            Recent Searches
-          </h3>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="text-sm sm:text-base font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary-orange" />
+              Recent Searches
+            </h3>
+            {recentSearches.length > 0 && (
+              <button
+                type="button"
+                onClick={clearRecentSearches}
+                className="text-[11px] sm:text-xs font-medium text-gray-500 hover:text-red-500 underline-offset-2 hover:underline"
+              >
+                Clear
+              </button>
+            )}
+          </div>
           {recentSearches.length > 0 ? (
             <div className="flex gap-2 sm:gap-3 flex-wrap">
               {recentSearches.map((suggestion, index) => (
@@ -270,11 +292,13 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
           }}
         >
           <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-6">
-            {searchValue.trim() === "" ? "Popular dishes around you" : `Search Results (${filteredFoods.length})`}
+            {searchValue.trim() === ""
+              ? "Popular restaurants around you"
+              : `Search Results (${filteredFoods.length})`}
           </h3>
           {loadingFoods ? (
             <div className="text-center py-12 sm:py-16 text-sm sm:text-base text-gray-500 dark:text-gray-400">
-              Loading dishes...
+              Loading restaurants...
             </div>
           ) : filteredFoods.length > 0 ? (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-4 md:gap-5 lg:gap-6">
