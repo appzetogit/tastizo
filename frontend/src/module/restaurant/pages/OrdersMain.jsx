@@ -2300,9 +2300,9 @@ function OrderCard({
             </div>
             {/* Hide ETA for ready orders */}
             {status !== 'ready' && eta && (
-              <div className="flex items-baseline gap-1">
-                <span className="text-[11px] text-gray-500">ETA</span>
-                <span className="text-xs font-medium text-black">
+              <div className="flex items-baseline gap-1 shrink-0">
+                <span className="text-[11px] text-gray-500 whitespace-nowrap">ETA</span>
+                <span className="text-xs font-medium text-black whitespace-nowrap">
                   {eta}
                 </span>
               </div>

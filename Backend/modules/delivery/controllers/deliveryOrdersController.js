@@ -41,22 +41,41 @@ export const getOrders = asyncHandler(async (req, res) => {
     const delivery = req.delivery;
     const { status, page = 1, limit = 20, includeDelivered } = req.query;
 
-    // Build query
-    const query = { deliveryPartnerId: delivery._id };
+    const currentDeliveryId = delivery._id;
+
+    // Base query filters (status / delivery phase)
+    const baseFilters = {};
 
     if (status) {
-      query.status = status;
+      baseFilters.status = status;
     } else {
       // By default, exclude delivered and cancelled orders unless explicitly requested
       if (includeDelivered !== "true" && includeDelivered !== true) {
-        query.status = { $nin: ["delivered", "cancelled"] };
+        baseFilters.status = { $nin: ["delivered", "cancelled"] };
         // Also exclude orders with completed delivery phase
-        query.$or = [
+        baseFilters.$or = [
           { "deliveryState.currentPhase": { $ne: "completed" } },
           { "deliveryState.currentPhase": { $exists: false } },
         ];
       }
     }
+
+    // Orders visible to this delivery partner:
+    // 1) Explicitly assigned (deliveryPartnerId)
+    // 2) Or they were notified via assignmentInfo priority/expanded lists
+    const visibilityFilter = {
+      $or: [
+        { deliveryPartnerId: currentDeliveryId },
+        { "assignmentInfo.priorityDeliveryPartnerIds": currentDeliveryId },
+        { "assignmentInfo.expandedDeliveryPartnerIds": currentDeliveryId },
+      ],
+    };
+
+    // Combine filters
+    const query = {
+      ...baseFilters,
+      ...visibilityFilter,
+    };
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);

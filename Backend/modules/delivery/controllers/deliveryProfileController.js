@@ -57,7 +57,13 @@ const updateProfileSchema = Joi.object({
     .optional(),
   vehicle: Joi.object({
     type: Joi.string().valid("bike", "scooter", "bicycle", "car").optional(),
-    number: Joi.string().trim().optional().allow(null, ""),
+    number: Joi.string()
+      .trim()
+      .uppercase()
+      .pattern(/^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/)
+      .message("Vehicle number must be in format MH12AB1234")
+      .optional()
+      .allow(null, ""),
     model: Joi.string().trim().optional().allow(null, ""),
     brand: Joi.string().trim().optional().allow(null, ""),
   }).optional(),
@@ -65,7 +71,12 @@ const updateProfileSchema = Joi.object({
     addressLine1: Joi.string().trim().optional().allow(null, ""),
     addressLine2: Joi.string().trim().optional().allow(null, ""),
     area: Joi.string().trim().optional().allow(null, ""),
-    city: Joi.string().trim().optional().allow(null, ""),
+    city: Joi.string()
+      .trim()
+      .pattern(/^[A-Za-z\s]+$/)
+      .message("City should only contain letters and spaces")
+      .optional()
+      .allow(null, ""),
     state: Joi.string().trim().optional().allow(null, ""),
     zipCode: Joi.string().trim().optional().allow(null, ""),
   }).optional(),
@@ -91,6 +102,8 @@ const updateProfileSchema = Joi.object({
         .trim()
         .length(11)
         .uppercase()
+        .pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/)
+        .message("IFSC code must be 11 characters (e.g., HDFC0001234)")
         .optional()
         .allow(null, ""),
       bankName: Joi.string().trim().min(2).max(100).optional().allow(null, ""),
