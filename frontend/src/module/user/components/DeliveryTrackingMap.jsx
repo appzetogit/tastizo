@@ -4,6 +4,7 @@ import { API_BASE_URL } from '@/lib/api/config';
 import bikeLogo from '@/assets/bikelogo.png';
 import { RouteBasedAnimationController } from '@/module/user/utils/routeBasedAnimation';
 import { extractPolylineFromDirections, findNearestPointOnPolyline } from '@/module/delivery/utils/liveTrackingPolyline';
+import { subscribeToActiveOrderLocation } from '@/lib/firebaseRealtime';
 import './DeliveryTrackingMap.css';
 
 // Helper function to calculate Haversine distance
@@ -753,6 +754,32 @@ const DeliveryTrackingMap = ({
       }
     };
   }, [orderId, backendUrl, moveBikeSmoothly]);
+
+  // Subscribe to Firebase Realtime Database for this order's live location
+  // This complements the socket-based updates and allows other clients
+  // (user app, restaurant dashboard) to use a shared realtime source.
+  useEffect(() => {
+    if (!orderId) return;
+
+    const unsubscribe = subscribeToActiveOrderLocation(orderId, (loc) => {
+      const location = {
+        lat: loc.lat,
+        lng: loc.lng,
+        heading: 0,
+      };
+      setCurrentLocation(location);
+      setDeliveryBoyLocation(location);
+
+      if (isMapLoaded && mapInstance.current) {
+        // Smoothly move bike marker using existing animation logic
+        moveBikeSmoothly(location.lat, location.lng, location.heading || 0);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [orderId, isMapLoaded, moveBikeSmoothly]);
 
   // Initialize Google Map (only once - prevent re-initialization)
   useEffect(() => {

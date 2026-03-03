@@ -183,11 +183,44 @@ export default function DiningRestaurantDetails() {
         )
     }
 
+    // Helper to build a full human-readable address for dining pages
+    const buildFullAddress = () => {
+        // 1) Dining config basic address (usually already formatted)
+        const dcAddress = restaurant.diningConfig?.basicDetails?.address
+        if (dcAddress && dcAddress.trim()) return dcAddress.trim()
+
+        const loc = restaurant.location || {}
+
+        // 2) Prefer formattedAddress if present and not a raw coordinates string
+        if (typeof loc.formattedAddress === "string" && loc.formattedAddress.trim() && loc.formattedAddress !== "Select location") {
+            const trimmed = loc.formattedAddress.trim()
+            const isCoords = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(trimmed)
+            if (!isCoords) return trimmed
+        }
+
+        // 3) Build from structured location parts
+        const parts = []
+        if (loc.addressLine1 && loc.addressLine1.trim()) parts.push(loc.addressLine1.trim())
+        if (loc.addressLine2 && loc.addressLine2.trim()) parts.push(loc.addressLine2.trim())
+        if (loc.area && loc.area.trim()) parts.push(loc.area.trim())
+        if (loc.city && loc.city.trim()) parts.push(loc.city.trim())
+        if (loc.state && loc.state.trim()) parts.push(loc.state.trim())
+        const pin = loc.pincode || loc.zipCode || loc.postalCode
+        if (pin && String(pin).trim()) parts.push(String(pin).trim())
+        if (parts.length > 0) return parts.join(", ")
+
+        // 4) Fallback to generic address fields
+        if (loc.address && loc.address.trim()) return loc.address.trim()
+        if (restaurant.address && restaurant.address.trim()) return restaurant.address.trim()
+
+        return ""
+    }
+
     // Helper values (dynamic from API)
     const dc = restaurant.diningConfig
     const coverImage = dc?.coverImage?.url || restaurant.coverImage || restaurant.profileImage?.url || restaurant.logo || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
     const displayName = dc?.basicDetails?.name || restaurant.name
-    const displayAddress = dc?.basicDetails?.address || restaurant.location?.addressLine1 || restaurant.address || restaurant.location?.address || ""
+    const displayAddress = buildFullAddress()
     const displayCostForTwo = dc?.basicDetails?.costForTwo ?? restaurant.costForTwo
     const displayOpening = dc?.basicDetails?.openingTime || restaurant.deliveryTimings?.openingTime || "12:00"
     const displayClosing = dc?.basicDetails?.closingTime || restaurant.deliveryTimings?.closingTime || "23:59"

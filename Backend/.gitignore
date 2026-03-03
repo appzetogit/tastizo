@@ -1,6 +1,7 @@
 node_modules/
 .env
 .DS_Store
+config/serviceAccountKey.json
 dist/
 build/
 coverage/

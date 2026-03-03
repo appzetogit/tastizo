@@ -208,6 +208,46 @@ export default function MyOrders() {
     })
   }, [filteredOrders, searchQuery])
 
+  // Voice search using Web Speech API (if available in browser)
+  const handleVoiceSearch = () => {
+    try {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+      if (!SpeechRecognition) {
+        toast.error("Voice search is not supported in this browser.")
+        return
+      }
+
+      const recognition = new SpeechRecognition()
+      recognition.continuous = false
+      recognition.interimResults = false
+      recognition.lang = "en-IN"
+
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map(result => result[0].transcript)
+          .join(" ")
+          .trim()
+
+        if (transcript) {
+          setSearchQuery(transcript)
+          toast.success(`Searching for "${transcript}"`)
+        }
+      }
+
+      recognition.onerror = (event) => {
+        if (event.error !== "no-speech") {
+          console.error("Voice search error:", event.error)
+          toast.error("Could not start voice search. Please try again.")
+        }
+      }
+
+      recognition.start()
+    } catch (error) {
+      console.error("Voice search initialization failed:", error)
+      toast.error("Voice search is not available right now.")
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 pb-10 font-sans">
       {/* Header */}
@@ -254,7 +294,14 @@ export default function MyOrders() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="flex-1 ml-3 outline-none text-gray-600 placeholder-gray-400"
           />
-          <Mic className="w-5 h-5 text-red-500 border-l pl-2 box-content border-gray-300" />
+          <button
+            type="button"
+            onClick={handleVoiceSearch}
+            className="ml-2 pl-2 border-l border-gray-300 text-red-500 hover:text-red-600 focus:outline-none"
+            aria-label="Voice search"
+          >
+            <Mic className="w-5 h-5" />
+          </button>
             </div>
           </div>
           
