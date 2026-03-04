@@ -10,10 +10,12 @@ import { useProfile } from "../../context/ProfileContext"
 import { toast } from "sonner"
 
 export default function Favorites() {
-  const { getFavorites, removeFavorite, getDishFavorites, removeDishFavorite } = useProfile()
+  const { getFavorites, removeFavorite, getDishFavorites, removeDishFavorite, collections } = useProfile()
   const restaurantFavorites = getFavorites()
   const dishFavorites = getDishFavorites()
+
   const [activeTab, setActiveTab] = useState("restaurants")
+  const [activeCollectionId, setActiveCollectionId] = useState("bookmarks")
 
   const handleRemoveFavorite = (e, slug) => {
     e.preventDefault()
@@ -33,7 +35,21 @@ export default function Favorites() {
     }
   }
 
-  const totalFavorites = restaurantFavorites.length + dishFavorites.length
+  const activeCollection = collections?.find((c) => c.id === activeCollectionId)
+  const isBookmarksView = !activeCollection || activeCollection.isDefault
+
+  const collectionRestaurantItems = !isBookmarksView && activeCollection
+    ? activeCollection.items.filter((item) => item.slug)
+    : []
+
+  const collectionDishItems = !isBookmarksView && activeCollection
+    ? activeCollection.items.filter((item) => !item.slug)
+    : []
+
+  const restaurantsToShow = isBookmarksView ? restaurantFavorites : collectionRestaurantItems
+  const dishesToShow = isBookmarksView ? dishFavorites : collectionDishItems
+
+  const totalFavorites = restaurantsToShow.length + dishesToShow.length
 
   if (totalFavorites === 0) {
     return (
@@ -79,12 +95,44 @@ export default function Favorites() {
               <div>
                 <h1 className="text-lg sm:text-xl md:text-2xl font-bold">My Favorites</h1>
                 <p className="text-gray-700 dark:text-gray-300 mt-1 text-sm font-semibold">
-                  {dishFavorites.length || 0} {dishFavorites.length === 1 ? "dish" : "dishes"} • {restaurantFavorites.length || 0} {restaurantFavorites.length === 1 ? "restaurant" : "restaurants"}
+                  {dishesToShow.length || 0} {dishesToShow.length === 1 ? "dish" : "dishes"} •{" "}
+                  {restaurantsToShow.length || 0} {restaurantsToShow.length === 1 ? "restaurant" : "restaurants"}
                 </p>
               </div>
             </div>
           </div>
         </ScrollReveal>
+
+        {/* Collections filter pills */}
+        {collections && collections.length > 0 && (
+          <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+            <button
+              onClick={() => setActiveCollectionId("bookmarks")}
+              className={`px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium border ${
+                isBookmarksView
+                  ? "bg-primary-orange text-white border-primary-orange"
+                  : "bg-white text-gray-700 dark:bg-transparent dark:text-gray-300 border-gray-200 dark:border-gray-700"
+              }`}
+            >
+              Bookmarks
+            </button>
+            {collections
+              .filter((c) => !c.isDefault)
+              .map((collection) => (
+                <button
+                  key={collection.id}
+                  onClick={() => setActiveCollectionId(collection.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium border whitespace-nowrap ${
+                    activeCollectionId === collection.id
+                      ? "bg-primary-orange text-white border-primary-orange"
+                      : "bg-white text-gray-700 dark:bg-transparent dark:text-gray-300 border-gray-200 dark:border-gray-700"
+                  }`}
+                >
+                  {collection.name}
+                </button>
+              ))}
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b">
@@ -96,7 +144,7 @@ export default function Favorites() {
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            Restaurants ({restaurantFavorites.length})
+            Restaurants ({restaurantsToShow.length})
           </button>
           <button
             onClick={() => setActiveTab("dishes")}
@@ -106,14 +154,14 @@ export default function Favorites() {
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            Dishes ({dishFavorites.length})
+            Dishes ({dishesToShow.length})
           </button>
         </div>
 
         {/* Restaurants Tab */}
         {activeTab === "restaurants" && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {restaurantFavorites.length === 0 ? (
+            {restaurantsToShow.length === 0 ? (
               <div className="col-span-full text-center py-12">
                 <Heart className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
                 <p className="text-muted-foreground text-lg mb-4">No restaurants saved yet</p>
@@ -124,7 +172,7 @@ export default function Favorites() {
                 </Link>
               </div>
             ) : (
-              restaurantFavorites.map((restaurant, index) => (
+              restaurantsToShow.map((restaurant, index) => (
             <ScrollReveal key={restaurant.slug} delay={index * 0.1}>
               <Link to={`/user/restaurants/${restaurant.slug}`}>
                 <Card className="overflow-hidden h-full">
@@ -139,16 +187,18 @@ export default function Favorites() {
                       }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                    <div className="absolute top-2 right-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white text-red-500"
-                        onClick={(e) => handleRemoveFavorite(e, restaurant.slug)}
-                      >
-                        <Heart className="h-4 w-4 fill-red-500" />
-                      </Button>
-                    </div>
+                    {isBookmarksView && (
+                      <div className="absolute top-2 right-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white text-red-500"
+                          onClick={(e) => handleRemoveFavorite(e, restaurant.slug)}
+                        >
+                          <Heart className="h-4 w-4 fill-red-500" />
+                        </Button>
+                      </div>
+                    )}
                     <div className="absolute bottom-2 left-2">
                       <div className="flex items-center gap-1 bg-white/90 backdrop-blur-sm px-1.5 py-0.5 rounded-full">
                         <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
@@ -191,7 +241,7 @@ export default function Favorites() {
         {/* Dishes Tab */}
         {activeTab === "dishes" && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {dishFavorites.length === 0 ? (
+            {dishesToShow.length === 0 ? (
               <div className="col-span-full text-center py-12">
                 <Bookmark className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
                 <p className="text-muted-foreground text-lg mb-4">No dishes saved yet</p>
@@ -202,7 +252,7 @@ export default function Favorites() {
                 </Link>
               </div>
             ) : (
-              dishFavorites.map((dish, index) => {
+              dishesToShow.map((dish, index) => {
                 const restaurantSlug = dish.restaurantSlug || ""
                 return (
                   <ScrollReveal key={`${dish.id}-${dish.restaurantId}`} delay={index * 0.1}>

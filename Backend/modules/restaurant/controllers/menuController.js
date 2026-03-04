@@ -4,6 +4,37 @@ import { successResponse, errorResponse } from '../../../shared/utils/response.j
 import asyncHandler from '../../../shared/middleware/asyncHandler.js';
 import mongoose from 'mongoose';
 
+// Derive the base item price from variations when present.
+// If valid variation prices exist, returns the lowest of them.
+// Otherwise falls back to the explicitly provided item price (or 0).
+const deriveBasePriceFromVariations = (rawPrice, variations) => {
+  if (Array.isArray(variations) && variations.length > 0) {
+    const prices = variations
+      .map((v) => {
+        if (!v) return null;
+        const value =
+          typeof v.price === 'number'
+            ? v.price
+            : Number.isFinite(Number(v.price))
+              ? Number(v.price)
+              : null;
+        return Number.isFinite(value) && value >= 0 ? value : null;
+      })
+      .filter((p) => p != null);
+
+    if (prices.length > 0) {
+      return Math.min(...prices);
+    }
+  }
+
+  const numericPrice =
+    typeof rawPrice === 'number' ? rawPrice : Number(rawPrice);
+
+  return Number.isFinite(numericPrice) && numericPrice >= 0
+    ? numericPrice
+    : 0;
+};
+
 // Get menu for a restaurant
 export const getMenu = asyncHandler(async (req, res) => {
   // Restaurant is attached by authenticate middleware
@@ -97,7 +128,7 @@ export const updateMenu = asyncHandler(async (req, res) => {
       category: item.category || section.name,
       rating: item.rating ?? 0.0,
       reviews: item.reviews ?? 0,
-      price: item.price || 0,
+      price: deriveBasePriceFromVariations(item.price, item.variations),
       stock: item.stock || "Unlimited",
       discount: item.discount || null,
       originalPrice: item.originalPrice || null,
@@ -184,9 +215,9 @@ export const updateMenu = asyncHandler(async (req, res) => {
         nameArabic: item.nameArabic || "",
         image: item.image || "",
         category: item.category || section.name,
-        rating: item.rating ?? 0.0,
-        reviews: item.reviews ?? 0,
-        price: item.price || 0,
+      rating: item.rating ?? 0.0,
+      reviews: item.reviews ?? 0,
+      price: deriveBasePriceFromVariations(item.price, item.variations),
         stock: item.stock || "Unlimited",
         discount: item.discount || null,
         originalPrice: item.originalPrice || null,
@@ -389,6 +420,7 @@ export const addItemToSection = asyncHandler(async (req, res) => {
   }
 
   // Normalize item data
+  const basePrice = deriveBasePriceFromVariations(item.price, item.variations);
   const newItem = {
     id: String(item.id || Date.now() + Math.random()),
     name: item.name.trim(),
@@ -397,7 +429,7 @@ export const addItemToSection = asyncHandler(async (req, res) => {
     category: item.category || section.name,
     rating: item.rating ?? 0.0,
     reviews: item.reviews ?? 0,
-    price: Number(item.price) || 0,
+    price: basePrice,
     stock: item.stock || "Unlimited",
     discount: item.discount || null,
     originalPrice: item.originalPrice || null,
@@ -533,6 +565,7 @@ export const addItemToSubsection = asyncHandler(async (req, res) => {
   }
 
   // Normalize item data
+  const basePrice = deriveBasePriceFromVariations(item.price, item.variations);
   const newItem = {
     id: String(item.id || Date.now() + Math.random()),
     name: item.name.trim(),
@@ -541,7 +574,7 @@ export const addItemToSubsection = asyncHandler(async (req, res) => {
     category: item.category || section.name,
     rating: item.rating ?? 0.0,
     reviews: item.reviews ?? 0,
-    price: Number(item.price) || 0,
+    price: basePrice,
     stock: item.stock || "Unlimited",
     discount: item.discount || null,
     originalPrice: item.originalPrice || null,

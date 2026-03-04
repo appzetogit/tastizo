@@ -45,7 +45,7 @@ export default function BottomNavigation() {
         >
           <Tag className={`h-5 w-5 ${isUnder250 ? "text-[#2A9C64] fill-[#2A9C64]" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
           <span className={`text-xs sm:text-sm font-medium ${isUnder250 ? "text-[#2A9C64] font-semibold" : "text-gray-600 dark:text-gray-400"}`}>
-            Under 250
+            Under 200
           </span>
           {isUnder250 && (
             <div className="absolute top-0 left-0 right-0 h-0.5 bg-[#2A9C64] rounded-b-full" />
