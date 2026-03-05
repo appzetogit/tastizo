@@ -47,6 +47,7 @@ export default function DiningManagement() {
     requestStatus: "none",
     lastRequestAt: null,
     recommendedCategorySlug: null,
+    maxGuests: null,
   })
   const [offers, setOffers] = useState([])
   const [diningMenu, setDiningMenu] = useState({ sections: [], addons: [] })
@@ -105,6 +106,7 @@ export default function DiningManagement() {
               requestStatus: c.adminControls.requestStatus || "none",
               lastRequestAt: c.adminControls.lastRequestAt || null,
               recommendedCategorySlug: c.adminControls.recommendedCategorySlug || null,
+              maxGuests: c.adminControls.maxGuests ?? null,
             })
           } else {
             setAdminControls({
@@ -112,6 +114,7 @@ export default function DiningManagement() {
               requestStatus: "none",
               lastRequestAt: null,
               recommendedCategorySlug: null,
+              maxGuests: null,
             })
           }
           setForm({
@@ -198,7 +201,10 @@ export default function DiningManagement() {
         basicDetails: form.basicDetails,
         coverImage: form.coverImage?.url ? form.coverImage : undefined,
         gallery: form.gallery,
-        seatingCapacity: form.seatingCapacity == null || form.seatingCapacity === "" ? null : Number(form.seatingCapacity),
+        seatingCapacity:
+          form.seatingCapacity == null || form.seatingCapacity === ""
+            ? null
+            : Number(form.seatingCapacity),
         categories: form.categories,
         pageControls: form.pageControls,
       }
@@ -536,9 +542,34 @@ export default function DiningManagement() {
 
         {/* Seating Capacity */}
         <Section id={SECTION_IDS.SEATING} title="Seating Capacity" icon={Users} expanded={expandedSection === SECTION_IDS.SEATING} onToggle={() => setExpandedSection(expandedSection === SECTION_IDS.SEATING ? null : SECTION_IDS.SEATING)}>
-          <div>
+          <div className="space-y-2">
             <label className="block text-sm font-medium text-slate-700">Number of seats</label>
-            <Input type="number" min={0} value={form.seatingCapacity ?? ""} onChange={(e) => setForm((p) => ({ ...p, seatingCapacity: e.target.value === "" ? null : e.target.value }))} placeholder="e.g. 50" className="max-w-[140px] mt-1" />
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={0}
+                value={form.seatingCapacity ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  if (raw === "") {
+                    setForm((p) => ({ ...p, seatingCapacity: null }))
+                    return
+                  }
+                  let val = Number(raw)
+                  if (Number.isNaN(val) || val < 0) val = 0
+                  const max = adminControls.maxGuests ?? null
+                  if (max != null && val > max) val = max
+                  setForm((p) => ({ ...p, seatingCapacity: val }))
+                }}
+                placeholder="e.g. 50"
+                className="max-w-[140px] mt-1"
+              />
+              {adminControls.maxGuests != null && (
+                <p className="text-xs text-slate-500">
+                  Admin limit: up to <span className="font-semibold">{adminControls.maxGuests}</span> seats
+                </p>
+              )}
+            </div>
           </div>
         </Section>
 

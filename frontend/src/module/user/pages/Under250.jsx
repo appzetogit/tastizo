@@ -575,6 +575,7 @@ export default function Under250() {
                     >
                       {restaurant.menuItems.map((item, itemIndex) => {
                         const quantity = quantities[item.id] || 0
+                        const isBookmarked = bookmarkedItems.has(item.id)
                         return (
                           <motion.div
                             key={item.id}
@@ -587,64 +588,85 @@ export default function Under250() {
                             whileHover={{ y: -8, scale: 1.02 }}
                             style={{ boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" }}
                           >
-                            {/* Item Image */}
-                            <div className="relative w-full h-32 sm:h-36 md:h-40 lg:h-48 xl:h-52 overflow-hidden bg-white">
-                              <motion.div
-                                className="absolute inset-0"
-                                whileHover={{ scale: 1.1 }}
-                                transition={{ duration: 0.5, ease: "easeOut" }}
-                              >
+                            {/* Item Row: image + info + Add (Under 200 style) */}
+                            <div className="flex items-center gap-3 sm:gap-4 p-3 md:p-4 lg:p-5">
+                              {/* Circular image */}
+                              <div className="relative flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
                                 <OptimizedImage
                                   src={item.image}
                                   alt={item.name}
                                   className="w-full h-full"
-                                  objectFit="contain"
-                                  sizes="(max-width: 640px) 200px, (max-width: 768px) 220px, 100vw"
+                                  objectFit="cover"
+                                  sizes="80px"
                                   placeholder="blur"
                                   priority={itemIndex < 4}
                                 />
-                              </motion.div>
-                              {/* Gradient Overlay on Hover */}
-                              <motion.div
-                                className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent"
-                                initial={{ opacity: 0 }}
-                                whileHover={{ opacity: 1 }}
-                                transition={{ duration: 0.3 }}
-                              />
-                              {/* Veg Indicator */}
-                              {item.isVeg && (
-                                <motion.div
-                                  className="absolute top-2 left-2 md:top-3 md:left-3 h-4 w-4 md:h-5 md:w-5 lg:h-6 lg:w-6 rounded border-2 border-green-600 bg-white flex items-center justify-center z-10"
-                                  whileHover={{ scale: 1.2, rotate: 5 }}
-                                  transition={{ duration: 0.2 }}
-                                >
-                                  <div className="h-2 w-2 md:h-2.5 md:w-2.5 lg:h-3 lg:w-3 rounded-full bg-green-600" />
-                                </motion.div>
-                              )}
-                            </div>
-
-                            {/* Item Details */}
-                            <div className="p-3 md:p-4 lg:p-5">
-                              <div className="flex items-center gap-1 md:gap-2 mb-1 md:mb-2 lg:mb-3">
-                                {item.isVeg && (
-                                  <div className="h-3 w-3 md:h-4 md:w-4 lg:h-5 lg:w-5 rounded border border-green-600 bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
-                                    <div className="h-1.5 w-1.5 md:h-2 md:w-2 lg:h-2.5 lg:w-2.5 rounded-full bg-green-600" />
-                                  </div>
-                                )}
-                                <span className="text-sm md:text-base lg:text-lg font-semibold text-gray-900 dark:text-white">
-                                  1 x {item.name}
-                                </span>
                               </div>
-                              <div className="flex items-end justify-between gap-2">
-                                <div>
-                                  <p className="text-base md:text-lg lg:text-xl xl:text-2xl font-bold text-gray-900 dark:text-white">
-                                    ₹{Math.round(item.price)}
-                                  </p>
-                                  {item.bestPrice && (
-                                    <p className="text-xs md:text-sm lg:text-base text-gray-500 dark:text-gray-400">
-                                      Best price
+
+                              {/* Text + price/time + description + Add */}
+                              <div className="flex-1 flex items-center justify-between gap-2">
+                                <div className="min-w-0 space-y-1.5">
+                                  {/* Veg indicator + name */}
+                                  <div className="flex items-center gap-1.5">
+                                    {item.isVeg && (
+                                      <div className="h-3 w-3 md:h-4 md:w-4 lg:h-5 lg:w-5 rounded-sm border-2 border-green-600 flex items-center justify-center">
+                                        <div className="h-1.5 w-1.5 md:h-2 md:w-2 lg:h-2.5 lg:w-2.5 rounded-full bg-green-600" />
+                                      </div>
+                                    )}
+                                    <h3 className="text-sm md:text-base lg:text-lg font-semibold text-gray-900 dark:text-white truncate">
+                                      {item.name}
+                                    </h3>
+                                  </div>
+
+                                  {/* Price + time pill */}
+                                  <div className="flex items-center gap-2 text-xs sm:text-sm">
+                                    <span className="font-semibold text-gray-900 dark:text-white">
+                                      ₹{Math.round(item.price)}
+                                    </span>
+                                    <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                                      <Clock className="h-3 w-3" strokeWidth={1.5} />
+                                      <span className="text-[11px] sm:text-xs font-medium">
+                                        {restaurant.deliveryTime || "20-25 mins"}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Description */}
+                                  {item.description && (
+                                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
+                                      {item.description}
                                     </p>
                                   )}
+
+                                  {/* Bookmark & Share */}
+                                  <div className="flex items-center gap-2 pt-1">
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-7 w-7 sm:h-8 sm:w-8 rounded-full border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111] hover:bg-gray-100 dark:hover:bg-gray-800"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleBookmarkClick(item.id)
+                                      }}
+                                    >
+                                      <Bookmark
+                                        className={`h-4 w-4 ${isBookmarked ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"
+                                          }`}
+                                        strokeWidth={2}
+                                      />
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-7 w-7 sm:h-8 sm:w-8 rounded-full border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111] hover:bg-gray-100 dark:hover:bg-gray-800"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        // Share action placeholder
+                                      }}
+                                    >
+                                      <Share2 className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                    </Button>
+                                  </div>
                                 </div>
 
                                 <div className="flex items-center">

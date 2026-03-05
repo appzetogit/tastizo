@@ -10,6 +10,9 @@ export default function DiningReservations() {
     const [loading, setLoading] = useState(true)
     const [restaurant, setRestaurant] = useState(null)
     const [searchTerm, setSearchTerm] = useState("")
+    const [statusFilter, setStatusFilter] = useState("all") // all | confirmed | checked-in | cancelled | completed | dining_completed
+    const [todayOnly, setTodayOnly] = useState(false)
+    const [showFilter, setShowFilter] = useState(false)
     const [sendBillModal, setSendBillModal] = useState(null) // { booking }
     const [billAmount, setBillAmount] = useState("")
     const [billNote, setBillNote] = useState("")
@@ -90,10 +93,22 @@ export default function DiningReservations() {
     }
 
     const filteredBookings = bookings
-        .filter(booking =>
-            booking.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            booking.bookingId?.toLowerCase().includes(searchTerm.toLowerCase())
-        )
+        .filter(booking => {
+            const term = searchTerm.trim().toLowerCase()
+            if (!term) return true
+            return (
+                booking.user?.name?.toLowerCase().includes(term) ||
+                booking.bookingId?.toLowerCase().includes(term)
+            )
+        })
+        .filter(booking => {
+            if (statusFilter === "all") return true
+            return booking.status === statusFilter
+        })
+        .filter(booking => {
+            if (!todayOnly) return true
+            return new Date(booking.date).toDateString() === new Date().toDateString()
+        })
         .sort((a, b) => b._id.localeCompare(a._id))
 
     if (loading) return <Loader />
@@ -121,9 +136,79 @@ export default function DiningReservations() {
                                 className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-xl text-sm focus:ring-2 focus:ring-red-500 focus:bg-white transition-all"
                             />
                         </div>
-                        <button className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">
-                            <Filter className="w-5 h-5 text-slate-600" />
-                        </button>
+                        <div className="relative">
+                            <button
+                                type="button"
+                                onClick={() => setShowFilter((prev) => !prev)}
+                                className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors flex items-center gap-1"
+                            >
+                                <Filter className="w-5 h-5 text-slate-600" />
+                            </button>
+                            {showFilter && (
+                                <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-slate-100 z-40">
+                                    <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                            Filters
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setStatusFilter("all")
+                                                setTodayOnly(false)
+                                                setShowFilter(false)
+                                            }}
+                                            className="text-[11px] text-blue-600 font-semibold"
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
+                                    <div className="px-4 py-3 space-y-3">
+                                        <div>
+                                            <p className="text-xs font-semibold text-slate-500 mb-1">
+                                                Status
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {[
+                                                    { id: "all", label: "All" },
+                                                    { id: "confirmed", label: "Confirmed" },
+                                                    { id: "checked-in", label: "Checked-in" },
+                                                    { id: "completed", label: "Completed" },
+                                                    { id: "cancelled", label: "Cancelled" },
+                                                ].map((opt) => (
+                                                    <button
+                                                        key={opt.id}
+                                                        type="button"
+                                                        onClick={() => setStatusFilter(opt.id)}
+                                                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${statusFilter === opt.id
+                                                            ? "bg-slate-900 text-white border-slate-900"
+                                                            : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                                                            }`}
+                                                    >
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-medium text-slate-600">
+                                                Only today&apos;s bookings
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setTodayOnly((prev) => !prev)}
+                                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${todayOnly ? "bg-green-500" : "bg-slate-200"
+                                                    }`}
+                                            >
+                                                <span
+                                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${todayOnly ? "translate-x-4" : "translate-x-1"
+                                                        }`}
+                                                />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

@@ -1813,9 +1813,7 @@ export default function RestaurantDetails() {
                               ) : (
                                 <motion.button
                                   layoutId={`add-button-${item.id}`}
-                                  initial={{ opacity: 0, scale: 0.9 }}
-                                  animate={{ opacity: 1, scale: 1 }}
-                                  transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
+                                  initial={false}
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     if (!shouldShowGrayscale) {
@@ -1824,9 +1822,9 @@ export default function RestaurantDetails() {
                                   }}
                                   disabled={shouldShowGrayscale}
                                   className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border font-bold px-6 py-1.5 rounded-lg shadow-md flex items-center gap-1 transition-colors ${shouldShowGrayscale
-                                    ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
-                                    : 'border-green-600 text-green-600 hover:bg-green-50'
-                                    }`}
+                                        ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
+                                        : 'border-green-600 text-green-600 hover:bg-green-50'
+                                        }`}
                                 >
                                   ADD <Plus size={14} className="stroke-[3px]" />
                                 </motion.button>
@@ -2029,9 +2027,7 @@ export default function RestaurantDetails() {
                                         ) : (
                                           <motion.button
                                             layoutId={`add-button-sub-${item.id}`}
-                                            initial={{ opacity: 0, scale: 0.9 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
+                                            initial={false}
                                             onClick={(e) => {
                                               e.stopPropagation()
                                               if (!shouldShowGrayscale) {

@@ -233,6 +233,17 @@ export default function DiningRestaurantDetails() {
     const reviewsLabel = reviewsCount > 0 ? `${reviewsCount} Reviews` : "No reviews yet"
     const isOpen = dc?.basicDetails?.isOpen !== undefined ? dc.basicDetails.isOpen : (restaurant.isAcceptingOrders !== false)
 
+    // Max guests for booking:
+    // - Admin sets an upper limit (restaurant.diningSettings.maxGuests)
+    // - Restaurant chooses seatingCapacity within that range in Dining Management
+    // - For users, we show the restaurant's seatingCapacity but never above the admin limit
+    const adminMaxGuests = restaurant.diningSettings?.maxGuests ?? null
+    const restaurantCapacity = dc?.seatingCapacity ?? null
+    let maxGuests = restaurantCapacity ?? adminMaxGuests ?? 6
+    if (adminMaxGuests != null && maxGuests > adminMaxGuests) {
+        maxGuests = adminMaxGuests
+    }
+
     const restaurantPhone = restaurant.phone || restaurant.primaryContactNumber || ""
     const addressForMaps = displayAddress || ""
 
@@ -599,12 +610,12 @@ export default function DiningRestaurantDetails() {
                                     <input
                                         type="number"
                                         min="1"
-                                        max={restaurant.diningSettings?.maxGuests || 6}
+                                        max={maxGuests}
                                         value={selectedGuests}
                                         onChange={(e) => {
                                             const val = parseInt(e.target.value)
                                             if (!isNaN(val)) {
-                                                const max = restaurant.diningSettings?.maxGuests || 6
+                                                const max = maxGuests
                                                 if (val > max) setSelectedGuests(max)
                                                 else if (val < 1) setSelectedGuests(1)
                                                 else setSelectedGuests(val)
@@ -624,7 +635,7 @@ export default function DiningRestaurantDetails() {
 
                                 {/* Scrollable Guest Options */}
                                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                                    {Array.from({ length: restaurant.diningSettings?.maxGuests || 6 }, (_, i) => i + 1).map(num => (
+                                    {Array.from({ length: maxGuests }, (_, i) => i + 1).map(num => (
                                         <button
                                             key={num}
                                             onClick={() => setSelectedGuests(num)}

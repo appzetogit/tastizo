@@ -35,11 +35,6 @@ export default function AvailableCashLimit({ onClose, walletData = {} }) {
           </div>
         </div>
 
-        <div className="bg-blue-50 rounded-lg p-4 border border-blue-100 mt-2">
-          <p className="text-xs text-blue-800 leading-relaxed">
-            Aapki available cash limit calculate ki jati hai aapki total limit mein se cash-in-hand aur deductions ko subtract karke, aur pocket withdrawals ko add karke.
-          </p>
-        </div>
       </div>
 
       <div className="pt-4 mt-auto">

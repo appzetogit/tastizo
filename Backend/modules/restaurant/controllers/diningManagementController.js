@@ -24,6 +24,9 @@ export const getDiningConfig = asyncHandler(async (req, res) => {
     diningSettings.isEnabled === false ? false : true; // undefined/null => allowed (backwards compatible)
   const requestStatus = diningSettings.requestStatus || "none";
   const recommendedCategorySlug = diningSettings.diningType || null;
+  const adminMaxGuests = Number.isFinite(diningSettings.maxGuests)
+    ? Math.max(1, Number(diningSettings.maxGuests))
+    : null;
 
   const merged = {
     ...diningConfig,
@@ -72,6 +75,7 @@ export const getDiningConfig = asyncHandler(async (req, res) => {
       lastRequestAt: diningSettings.lastRequestAt || null,
       lastDecisionAt: diningSettings.lastDecisionAt || null,
       recommendedCategorySlug,
+      maxGuests: adminMaxGuests,
     },
   };
 

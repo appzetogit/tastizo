@@ -1046,7 +1046,8 @@ export default function HubFinance() {
                         alert('Please enter a valid amount')
                         return
                       }
-                      if (amount > (financeData?.currentCycle?.estimatedPayout || 0)) {
+                      const maxWithdrawable = (financeData?.availableBalance ?? financeData?.currentCycle?.estimatedPayout ?? 0)
+                      if (amount > maxWithdrawable) {
                         alert('Amount cannot exceed available balance')
                         return
                       }

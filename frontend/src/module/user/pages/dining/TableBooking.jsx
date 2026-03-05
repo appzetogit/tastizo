@@ -180,6 +180,17 @@ export default function TableBooking() {
     if (loading) return <Loader />
     if (!restaurant) return <div>Restaurant not found</div>
 
+    // Max guests:
+    // - Admin sets an upper limit (restaurant.diningSettings.maxGuests)
+    // - Restaurant chooses seatingCapacity within that range in Dining Management
+    // - For users, we show the restaurant's seatingCapacity but never above the admin limit
+    const adminMaxGuests = restaurant.diningSettings?.maxGuests ?? null
+    const restaurantCapacity = restaurant.diningConfig?.seatingCapacity ?? null
+    let maxGuests = restaurantCapacity ?? adminMaxGuests ?? 10
+    if (adminMaxGuests != null && maxGuests > adminMaxGuests) {
+        maxGuests = adminMaxGuests
+    }
+
     const handleProceed = () => {
         if (!selectedSlot) return
         if (isSlotAfterClosing(selectedSlot.time)) {
@@ -225,7 +236,7 @@ export default function TableBooking() {
                             onChange={(e) => setSelectedGuests(parseInt(e.target.value))}
                             className="appearance-none bg-slate-50 border border-slate-200 rounded-lg py-2 pl-4 pr-10 font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#2B9C64]"
                         >
-                            {Array.from({ length: restaurant.diningSettings?.maxGuests || 10 }, (_, i) => i + 1).map(num => (
+                            {Array.from({ length: maxGuests }, (_, i) => i + 1).map(num => (
                                 <option key={num} value={num}>{num}</option>
                             ))}
                         </select>
