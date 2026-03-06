@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { HelpCircle, ArrowRight, Phone, Ambulance, AlertTriangle, Shield, ShieldCheck, User } from "lucide-react";
+import { HelpCircle, ArrowRight, Phone, Ambulance, AlertTriangle, Shield, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { deliveryAPI } from "@/lib/api";
 import { useCompanyName } from "@/lib/hooks/useCompanyName";
@@ -106,8 +106,6 @@ export default function FeedNavbar({ className = "" }) {
       });
     }
   };
-
-  const handleProfileClick = () => navigate("/delivery/profile");
 
   const handleToggle = async (e) => {
     e?.preventDefault?.();
@@ -241,8 +239,6 @@ export default function FeedNavbar({ className = "" }) {
 
   const [showEmergencyPopup, setShowEmergencyPopup] = useState(false);
   const [showHelpPopup, setShowHelpPopup] = useState(false);
-  const [profileImage, setProfileImage] = useState(null);
-  const [imageError, setImageError] = useState(false);
 
   // Fetch emergency help numbers
   useEffect(() => {
@@ -326,45 +322,6 @@ export default function FeedNavbar({ className = "" }) {
     },
   ];
 
-  // Fetch profile image
-  useEffect(() => {
-    const fetchProfileImage = async () => {
-      try {
-        const response = await deliveryAPI.getProfile();
-        if (response?.data?.success && response?.data?.data?.profile) {
-          const profile = response.data.data.profile;
-          // Use profileImage.url first, fallback to documents.photo
-          const imageUrl = profile.profileImage?.url || profile.documents?.photo;
-          if (imageUrl) {
-            setProfileImage(imageUrl);
-            setImageError(false);
-          }
-        }
-      } catch (error) {
-        // Skip logging network and timeout errors (handled by axios interceptor)
-        if (error.code !== 'ECONNABORTED' && 
-            error.code !== 'ERR_NETWORK' && 
-            error.message !== 'Network Error' &&
-            !error.message?.includes('timeout')) {
-          console.error("Error fetching profile image for navbar:", error);
-        }
-      }
-    };
-
-    fetchProfileImage();
-
-    // Listen for profile refresh events
-    const handleProfileRefresh = () => {
-      fetchProfileImage();
-    };
-
-    window.addEventListener('deliveryProfileRefresh', handleProfileRefresh);
-    
-    return () => {
-      window.removeEventListener('deliveryProfileRefresh', handleProfileRefresh);
-    };
-  }, []);
-
   return (
     <>
     <div className={`bg-white px-4 py-3 flex items-center justify-between sticky top-0 z-50 border-b border-gray-200 ${className}`}>
@@ -419,22 +376,6 @@ export default function FeedNavbar({ className = "" }) {
             title="Help"
         >
           <HelpCircle className="w-5 h-5 text-gray-700" />
-        </button>
-
-        {/* Profile */}
-        <button onClick={handleProfileClick} className="w-9 h-9 rounded-full overflow-hidden ring-2 ring-gray-300 flex items-center justify-center bg-gray-200" title="Profile">
-          {profileImage && !imageError ? (
-            <img
-              src={profileImage}
-              alt="Profile"
-              className="w-full h-full object-cover"
-              onError={() => {
-                setImageError(true);
-              }}
-            />
-          ) : (
-            <User className="w-5 h-5 text-gray-500" />
-          )}
         </button>
       </div>
     </div>

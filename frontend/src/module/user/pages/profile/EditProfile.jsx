@@ -82,6 +82,7 @@ export default function EditProfile() {
   const [isSaving, setIsSaving] = useState(false)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
   const [profileImage, setProfileImage] = useState(initialProfile?.profileImage || "")
+  const [initialImage] = useState(initialProfile?.profileImage || "")
   const [imagePreview, setImagePreview] = useState(initialProfile?.profileImage || "")
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
@@ -118,12 +119,12 @@ export default function EditProfile() {
   // Get avatar initial
   const avatarInitial = formData.name?.charAt(0).toUpperCase() || 'A'
 
-  // Check if form has changes
+  // Check if form has changes (including profile image changes)
   useEffect(() => {
-    const currentData = JSON.stringify(formData)
-    const savedData = JSON.stringify(initialData)
-    setHasChanges(currentData !== savedData)
-  }, [formData, initialData])
+    const currentSnapshot = JSON.stringify({ ...formData, profileImage })
+    const initialSnapshot = JSON.stringify({ ...initialData, profileImage: initialImage })
+    setHasChanges(currentSnapshot !== initialSnapshot)
+  }, [formData, initialData, profileImage, initialImage])
 
   const handleChange = (field, value) => {
     if (field === "mobile") {
@@ -146,7 +147,8 @@ export default function EditProfile() {
   }
 
   const handleImageSelect = async (e) => {
-    const file = e.target.files?.[0]
+    const inputEl = e.target
+    const file = inputEl.files?.[0]
     if (!file) return
 
     // Validate file type
@@ -192,6 +194,10 @@ export default function EditProfile() {
       setImagePreview(profileImage)
     } finally {
       setIsUploadingImage(false)
+      // Reset input so selecting the same file/camera capture again still triggers onChange
+      if (inputEl) {
+        inputEl.value = ""
+      }
     }
   }
 

@@ -327,6 +327,7 @@ export default function ToHub() {
 
   const [totalSales, setTotalSales] = useState("₹ 0")
   const [totalOrders, setTotalOrders] = useState("0")
+  const [avgOrderValue, setAvgOrderValue] = useState("₹ 0")
   const [lastUpdated, setLastUpdated] = useState(null)
   const [mealtimeMetrics, setMealtimeMetrics] = useState([
     { title: "Breakfast", window: "7:00 am - 11:00 am", value: "0", change: "- 0%", color: "#111827" },
@@ -335,6 +336,13 @@ export default function ToHub() {
     { title: "Dinner", window: "7:00 pm - 11:00 pm", value: "0", change: "- 0%", color: "#f59e0b" },
     { title: "Late night", window: "11:00 pm - 7:00 am", value: "0", change: "- 0%", color: "#10b981" },
   ])
+  const [customerSegments, setCustomerSegments] = useState({
+    newCount: 0,
+    repeatCount: 0,
+    lapsedCount: 0,
+    total: 0,
+    lastUpdated: null,
+  })
   const [impressionsCustomerView, setImpressionsCustomerView] = useState("affinity")
   const [menuOpensCustomerView, setMenuOpensCustomerView] = useState("affinity")
   const [ordersPlacedCustomerView, setOrdersPlacedCustomerView] = useState("affinity")
@@ -701,6 +709,69 @@ export default function ToHub() {
       },
     ]
   }
+
+  // Calculate basic customer segments (new / repeat / lapsed) from orders
+  const calculateCustomerSegments = (orders) => {
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return { newCount: 0, repeatCount: 0, lapsedCount: 0, total: 0 }
+    }
+
+    const now = new Date()
+    const customersMap = new Map()
+
+    orders.forEach((order) => {
+      if (!order) return
+      const createdAt = order.createdAt ? new Date(order.createdAt) : null
+      if (!createdAt || Number.isNaN(createdAt.getTime())) return
+
+      const user = order.userId || order.customer || {}
+      const customerKey =
+        user._id ||
+        user.id ||
+        user.phone ||
+        user.email ||
+        order.userPhone ||
+        order.userName ||
+        null
+
+      if (!customerKey) return
+
+      const existing = customersMap.get(customerKey) || {
+        firstOrder: createdAt,
+        lastOrder: createdAt,
+        ordersCount: 0,
+      }
+
+      if (createdAt < existing.firstOrder) existing.firstOrder = createdAt
+      if (createdAt > existing.lastOrder) existing.lastOrder = createdAt
+      existing.ordersCount += 1
+
+      customersMap.set(customerKey, existing)
+    })
+
+    let newCount = 0
+    let repeatCount = 0
+    let lapsedCount = 0
+
+    customersMap.forEach((info) => {
+      const diffDays =
+        (now.getTime() - info.lastOrder.getTime()) / (1000 * 60 * 60 * 24)
+
+      // Ignore customers whose last order was more than a year ago
+      if (diffDays > 365) return
+
+      if (diffDays > 60) {
+        lapsedCount += 1
+      } else if (info.ordersCount === 1) {
+        newCount += 1
+      } else {
+        repeatCount += 1
+      }
+    })
+
+    const total = newCount + repeatCount + lapsedCount
+    return { newCount, repeatCount, lapsedCount, total }
+  }
   
   // Fetch orders and update chart data
   const fetchOrdersAndUpdateChart = useCallback(async (rangeId) => {
@@ -809,6 +880,8 @@ export default function ToHub() {
         
         // Calculate mealtime data
         const mealtimeData = calculateMealtimeData(allOrders, startDate, endDate)
+        // Calculate customer segments (new / repeat / lapsed) from all available orders
+        const segments = calculateCustomerSegments(allOrders)
         
         console.log('📈 Chart data calculated:', {
           totalSales: newTotalSales,
@@ -820,7 +893,13 @@ export default function ToHub() {
         setChartData(newChartData)
         setTotalSales(`₹ ${newTotalSales.toLocaleString("en-IN")}`)
         setTotalOrders(newTotalOrders.toString())
+        const avg = newTotalOrders > 0 ? newTotalSales / newTotalOrders : 0
+        setAvgOrderValue(`₹ ${avg.toFixed(0)}`)
         setMealtimeMetrics(mealtimeData)
+        setCustomerSegments({
+          ...segments,
+          lastUpdated: new Date(),
+        })
         setLastUpdated(new Date())
       } else {
         // No orders found
@@ -836,6 +915,7 @@ export default function ToHub() {
         ])
         setTotalSales("₹ 0")
         setTotalOrders("0")
+        setAvgOrderValue("₹ 0")
         // Reset mealtime metrics to zero
         setMealtimeMetrics([
           { title: "Breakfast", window: "7:00 am - 11:00 am", value: "0", change: "- 0%", color: "#111827" },
@@ -844,6 +924,13 @@ export default function ToHub() {
           { title: "Dinner", window: "7:00 pm - 11:00 pm", value: "0", change: "- 0%", color: "#f59e0b" },
           { title: "Late night", window: "11:00 pm - 7:00 am", value: "0", change: "- 0%", color: "#10b981" },
         ])
+        setCustomerSegments({
+          newCount: 0,
+          repeatCount: 0,
+          lapsedCount: 0,
+          total: 0,
+          lastUpdated: new Date(),
+        })
       }
     } catch (error) {
       // Suppress 401 errors as they're handled by axios interceptor
@@ -1033,11 +1120,38 @@ export default function ToHub() {
     { title: "CTR", value: "0%", change: "- 0%", sub: "Click-through rate" },
     { title: "Spend", value: "₹0", change: "- 0%", sub: "Total spend" },
   ]
-  const customersMetrics = [
-    { title: "New customers", sub: "No orders in last 365 days", value: "0", change: "- 0%", color: "#111827" },
-    { title: "Repeat customers", sub: "Ordered in last 60 days", value: "0", change: "- 0%", color: "#ef4444" },
-    { title: "Lapsed customers", sub: "Last order 60 to 365 days ago", value: "0", change: "- 0%", color: "#2563eb" },
-  ]
+  const customersMetrics = useMemo(() => {
+    const total = customerSegments.total || 0
+    const formatPercent = (count) => {
+      if (!total || !count) return "0% of active"
+      const pct = ((count / total) * 100).toFixed(1)
+      return `${pct}% of active`
+    }
+
+    return [
+      {
+        title: "New customers",
+        sub: "First order in last 365 days",
+        value: String(customerSegments.newCount || 0),
+        change: formatPercent(customerSegments.newCount || 0),
+        color: "#111827",
+      },
+      {
+        title: "Repeat customers",
+        sub: "More than one order, last order ≤ 60 days",
+        value: String(customerSegments.repeatCount || 0),
+        change: formatPercent(customerSegments.repeatCount || 0),
+        color: "#ef4444",
+      },
+      {
+        title: "Lapsed customers",
+        sub: "Last order 60–365 days ago",
+        value: String(customerSegments.lapsedCount || 0),
+        change: formatPercent(customerSegments.lapsedCount || 0),
+        color: "#2563eb",
+      },
+    ]
+  }, [customerSegments])
   const customerAffinityBreakup = [
     { title: "New customers", sub: "No orders in last 365 days", value: "0", change: "- 0%", color: "#111827" },
     { title: "Repeat customers", sub: "Ordered in last 60 days", value: "0", change: "- 0%", color: "#ef4444" },
@@ -1190,7 +1304,11 @@ export default function ToHub() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-base font-bold text-gray-900">Sales</p>
-              <p className="text-xs text-gray-500">Last updated: few seconds ago</p>
+              <p className="text-xs text-gray-500">
+                {lastUpdated
+                  ? `Last updated: ${formatTimeAgo(lastUpdated)}`
+                  : "Last updated: a day ago"}
+              </p>
             </div>
             <div className="relative">
               <button 
@@ -1218,9 +1336,24 @@ export default function ToHub() {
           </div>
 
           {[
-            { title: "Net sales", value: "₹0 • 0%", dataKey: "sales", color: "#f97316" },
-            { title: "Orders delivered", value: "0 • 0%", dataKey: "orders", color: "#f97316" },
-            { title: "Avg. order value", value: "₹0 • 0%", dataKey: "sales", color: "#f97316" },
+            {
+              title: "Net sales",
+              value: `${totalSales} • 0%`,
+              dataKey: "sales",
+              color: "#f97316",
+            },
+            {
+              title: "Orders delivered",
+              value: `${totalOrders} • 0%`,
+              dataKey: "orders",
+              color: "#f97316",
+            },
+            {
+              title: "Avg. order value",
+              value: `${avgOrderValue} • 0%`,
+              dataKey: "sales",
+              color: "#f97316",
+            },
           ].map((section, idx) => (
             <div key={section.title} className={idx < 2 ? "pb-3 border-b border-dashed border-gray-200 space-y-2" : "space-y-2"}>
               <div className="flex items-center justify-between text-sm font-semibold text-gray-900">
@@ -1268,7 +1401,11 @@ export default function ToHub() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-base font-bold text-gray-900">Customers</p>
-              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+              <p className="text-xs text-gray-500">
+                {customerSegments.lastUpdated
+                  ? `Last updated: ${formatTimeAgo(customerSegments.lastUpdated)}`
+                  : "Last updated: a day ago"}
+              </p>
             </div>
             <div className="relative">
               <button 
@@ -1511,6 +1648,22 @@ export default function ToHub() {
     )
     const aovMax = Math.max(...aovData.map((d) => d.aov || 0), 1)
 
+    const summaryMetrics = useMemo(() => {
+      let totalSalesValue = 0
+      let totalOrdersValue = 0
+      chartData.forEach((d) => {
+        totalSalesValue += d.sales || 0
+        totalOrdersValue += d.orders || 0
+      })
+      const avgOrderValue = totalOrdersValue > 0 ? totalSalesValue / totalOrdersValue : 0
+
+      return {
+        totalSalesValue,
+        totalOrdersValue,
+        avgOrderValue,
+      }
+    }, [chartData])
+
     return (
       <div className="space-y-4">
         <div className="px-4">
@@ -1551,9 +1704,24 @@ export default function ToHub() {
             </div>
 
             {[
-              { title: "Net sales", value: "₹0 • 0%", dataKey: "sales", color: "#f97316" },
-              { title: "Orders delivered", value: "0 • 0%", dataKey: "orders", color: "#f97316" },
-              { title: "Avg. order value", value: "₹0 • 0%", dataKey: "sales", color: "#f97316" },
+              {
+                title: "Net sales",
+                value: `₹${summaryMetrics.totalSalesValue.toLocaleString("en-IN")} • 0%`,
+                dataKey: "sales",
+                color: "#f97316",
+              },
+              {
+                title: "Orders delivered",
+                value: `${summaryMetrics.totalOrdersValue} • 0%`,
+                dataKey: "orders",
+                color: "#f97316",
+              },
+              {
+                title: "Avg. order value",
+                value: `₹${summaryMetrics.avgOrderValue.toFixed(0)} • 0%`,
+                dataKey: "sales",
+                color: "#f97316",
+              },
             ].map((section, idx) => (
               <div key={section.title} className={idx < 2 ? "pb-3 border-b border-dashed border-gray-200 space-y-2" : "space-y-2"}>
                 <div className="flex items-center justify-between text-sm font-semibold text-gray-900">

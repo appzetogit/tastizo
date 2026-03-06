@@ -54,7 +54,8 @@ export default function SignIn() {
     countryCode: "+91",
     email: "",
     name: "",
-    rememberMe: false,
+    // Default to true so users stay logged in across app restarts
+    rememberMe: true,
   })
   const [errors, setErrors] = useState({
     phone: "",
@@ -451,7 +452,7 @@ export default function SignIn() {
     const newMode = isSignUp ? "signin" : "signup"
     navigate(`/user/auth/sign-in?mode=${newMode}`, { replace: true })
     // Reset form
-    setFormData({ phone: "", countryCode: "+91", email: "", name: "", rememberMe: false })
+    setFormData({ phone: "", countryCode: "+91", email: "", name: "", rememberMe: true })
     setErrors({ phone: "", email: "", name: "" })
   }
 

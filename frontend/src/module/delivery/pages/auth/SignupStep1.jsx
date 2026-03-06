@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowLeft } from "lucide-react"
 import { deliveryAPI } from "@/lib/api"
@@ -44,6 +44,8 @@ const INDIAN_STATES = [
   "Puducherry",
 ].sort()
 
+const STORAGE_KEY = "delivery_signup_basic_details"
+
 export default function SignupStep1() {
   const navigate = useNavigate()
   const [formData, setFormData] = useState({
@@ -60,6 +62,30 @@ export default function SignupStep1() {
   })
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Restore previously saved basic details (from signup flow or local persistence)
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined") return
+
+      // Prefer data saved from a previous visit during this session
+      const sessionStored = sessionStorage.getItem(STORAGE_KEY)
+      const localStored = localStorage.getItem(STORAGE_KEY)
+      const raw = sessionStored || localStored
+
+      if (!raw) return
+
+      const parsed = JSON.parse(raw)
+      if (!parsed || typeof parsed !== "object") return
+
+      setFormData((prev) => ({
+        ...prev,
+        ...parsed,
+      }))
+    } catch (e) {
+      console.warn("Failed to restore delivery signup basic details:", e)
+    }
+  }, [])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -99,10 +125,21 @@ export default function SignupStep1() {
           city: "",
         }
       }
-      return {
+      const updated = {
         ...prev,
         [name]: nextValue,
       }
+
+      // Persist draft so navigating away and back keeps the data
+      try {
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+        }
+      } catch (storageError) {
+        console.warn("Failed to persist delivery signup basic details:", storageError)
+      }
+
+      return updated
     })
 
     // Field-level real-time validation
@@ -240,6 +277,24 @@ export default function SignupStep1() {
 
       if (response?.data?.success) {
         toast.success("Details saved successfully")
+        // Persist the latest saved details so returning to this page pre-fills from backend state
+        try {
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+              ...formData,
+              name: formData.name.trim(),
+              email: formData.email.trim(),
+              address: formData.address.trim(),
+              city: formData.city.trim(),
+              state: formData.state.trim(),
+              vehicleNumber: formData.vehicleNumber.trim(),
+              panNumber: formData.panNumber.trim().toUpperCase(),
+              aadharNumber: formData.aadharNumber.replace(/\s/g, "")
+            }))
+          }
+        } catch (storageError) {
+          console.warn("Failed to persist saved signup details:", storageError)
+        }
         navigate("/delivery/signup/documents")
       }
     } catch (error) {

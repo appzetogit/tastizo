@@ -161,8 +161,8 @@ export default function LimitSettlement() {
               No settlement transactions
             </p>
             <p className="text-gray-600 text-sm text-center max-w-xs">
-              Jab bhi aap available limit settle karoge, uski payment
-              transactions yahan dikhenge.
+              Whenever you settle your available limit, the related payment
+              transactions will appear here.
             </p>
           </div>
         )}

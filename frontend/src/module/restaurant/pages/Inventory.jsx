@@ -929,7 +929,39 @@ export default function Inventory() {
       .filter(Boolean)
   }, [statusFilteredCategories, searchQuery])
 
-  // When on Add-ons tab, keep the list empty (no items shown)
+  // Derived add-ons list with stock filter applied
+  const statusFilteredAddons = useMemo(() => {
+    if (!selectedFilter) return addons
+
+    if (selectedFilter === "out-of-stock") {
+      // Out of stock = explicitly not available
+      return addons.filter(addon => addon.isAvailable === false)
+    }
+
+    if (selectedFilter === "in-stock") {
+      // In stock = available or missing flag (treated as available)
+      return addons.filter(addon => addon.isAvailable !== false)
+    }
+
+    return addons
+  }, [addons, selectedFilter])
+
+  // Apply text search on add-ons (name + category-like fields)
+  const filteredAddons = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return statusFilteredAddons
+
+    return statusFilteredAddons.filter(addon => {
+      const name = addon.name || ""
+      const categoryName = addon.categoryName || addon.category || addon.groupName || ""
+      return (
+        name.toLowerCase().includes(q) ||
+        categoryName.toLowerCase().includes(q)
+      )
+    })
+  }, [statusFilteredAddons, searchQuery])
+
+  // When on Add-ons tab, we hide the main categories list
   const listToRender = activeTab === "add-ons" ? [] : filteredCategories
 
   // Calculate out of stock count for a category
@@ -971,43 +1003,82 @@ export default function Inventory() {
       const updatedSections = sections.map(section => {
         if (section.id !== categoryId) return section
 
-        // If updating category, set isEnabled
+        // If updating category, set isEnabled and propagate availability to all items
         if (itemId === null) {
-          return {
-            ...section,
-            isEnabled: isEnabled,
-            // Also update all items in the category
-            items: section.items.map(item => ({
-              ...item,
-              isAvailable: isAvailable
-            })),
-            subsections: section.subsections.map(subsection => ({
-              ...subsection,
-              items: subsection.items.map(item => ({
+          const items = Array.isArray(section.items)
+            ? section.items.map(item => ({
                 ...item,
-                isAvailable: isAvailable
+                isAvailable: isAvailable,
               }))
-            }))
-          }
-        } else {
-          // If updating item, update only that item
-          const updatedItems = section.items.map(item =>
-            item.id === String(itemId) ? { ...item, isAvailable: isAvailable } : item
-          )
-          
-          // Update items in subsections too
-          const updatedSubsections = section.subsections.map(subsection => ({
-            ...subsection,
-            items: subsection.items.map(item =>
-              item.id === String(itemId) ? { ...item, isAvailable: isAvailable } : item
-            )
-          }))
+            : []
+
+          const subsections = Array.isArray(section.subsections)
+            ? section.subsections.map(subsection => ({
+                ...subsection,
+                items: Array.isArray(subsection.items)
+                  ? subsection.items.map(item => ({
+                      ...item,
+                      isAvailable: isAvailable,
+                    }))
+                  : [],
+              }))
+            : []
 
           return {
             ...section,
-            items: updatedItems,
-            subsections: updatedSubsections
+            isEnabled: isEnabled,
+            items,
+            subsections,
           }
+        }
+
+        // If updating a single item, update only that specific instance (not all items with same ID)
+        const updatedSection = { ...section }
+
+        const items = Array.isArray(section.items) ? [...section.items] : []
+        let itemUpdated = false
+
+        // First, try to update in top-level items
+        if (items.length > 0) {
+          const index = items.findIndex(item => String(item.id) === String(itemId))
+          if (index !== -1) {
+            items[index] = {
+              ...items[index],
+              isAvailable: isAvailable,
+            }
+            itemUpdated = true
+          }
+        }
+
+        // If not found yet, try to update in subsections
+        let subsections = Array.isArray(section.subsections) ? section.subsections : []
+        if (!itemUpdated && subsections.length > 0) {
+          subsections = subsections.map(subsection => ({ ...subsection }))
+
+          for (let si = 0; si < subsections.length; si++) {
+            const current = subsections[si]
+            const ssItems = Array.isArray(current.items) ? [...current.items] : []
+            const idx = ssItems.findIndex(item => String(item.id) === String(itemId))
+
+            if (idx !== -1) {
+              ssItems[idx] = {
+                ...ssItems[idx],
+                isAvailable: isAvailable,
+              }
+              subsections[si] = {
+                ...current,
+                items: ssItems,
+              }
+              itemUpdated = true
+              break
+            }
+          }
+        }
+
+        return {
+          ...updatedSection,
+          items,
+          subsections,
         }
       })
 
@@ -1423,16 +1494,20 @@ export default function Inventory() {
                 <div className="flex items-center justify-center py-20">
                   <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
                 </div>
-              ) : addons.length === 0 ? (
+              ) : filteredAddons.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 px-4">
                   <div className="text-center">
-                    <p className="text-lg font-medium text-gray-500">No add-ons available</p>
-                    <p className="text-sm text-gray-400 mt-2">Approved add-ons will appear here</p>
+                    <p className="text-lg font-medium text-gray-500">No add-ons found</p>
+                    <p className="text-sm text-gray-400 mt-2">
+                      {addons.length === 0
+                        ? "Approved add-ons will appear here"
+                        : "Try adjusting your search or filters"}
+                    </p>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {addons.map((addon) => (
+                  {filteredAddons.map((addon) => (
                     <div
                       key={addon.id}
                       className="bg-white rounded-lg border border-gray-200 p-4"

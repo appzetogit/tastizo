@@ -93,22 +93,37 @@ export default function Orders() {
       shownRatingForOrders: Array.from(shownRatingForOrders)
     })
 
-    // Find delivered orders that haven't been rated and haven't shown popup yet
+    // Find delivered (non-cancelled) orders that haven't been rated and haven't shown popup yet
     const deliveredOrders = orders.filter(order => {
       // Check originalStatus first (from backend), then fallback to transformed status
       const originalStatus = order.originalStatus || order.status || ''
       const transformedStatus = order.status || ''
       
+      // Normalize statuses
+      const lowerOriginal = originalStatus.toLowerCase()
+      const lowerTransformed = transformedStatus.toLowerCase()
+
+      // Treat any cancelled status as NOT reviewable
+      const isCancelledStatus =
+        lowerOriginal === "cancelled" ||
+        lowerOriginal === "canceled" ||
+        lowerOriginal === "restaurant_cancelled" ||
+        lowerOriginal === "user_cancelled" ||
+        lowerTransformed === "cancelled" ||
+        lowerTransformed === "canceled" ||
+        lowerTransformed === "restaurant_cancelled" ||
+        lowerTransformed === "user_cancelled"
+
       // Check if order is delivered - check both original and transformed status
       const isDelivered = 
         originalStatus === 'delivered' || 
         originalStatus === 'completed' ||
-        originalStatus.toLowerCase() === 'delivered' ||
-        originalStatus.toLowerCase() === 'completed' ||
+        lowerOriginal === 'delivered' ||
+        lowerOriginal === 'completed' ||
         transformedStatus === 'delivered' ||
         transformedStatus === 'completed' ||
-        transformedStatus.toLowerCase() === 'delivered' ||
-        transformedStatus.toLowerCase() === 'completed'
+        lowerTransformed === 'delivered' ||
+        lowerTransformed === 'completed'
       
       // Check if order has rating - check multiple places where rating might be stored
       const hasRating = 
@@ -122,13 +137,15 @@ export default function Orders() {
       // Also check if order has deliveredAt timestamp (indicates it was delivered)
       const hasDeliveredAt = order.deliveredAt !== null && order.deliveredAt !== undefined
       
-      const shouldShow = (isDelivered || hasDeliveredAt) && !hasRating && !hasShownPopup
+      // Never show rating prompt for cancelled orders
+      const shouldShow = !isCancelledStatus && (isDelivered || hasDeliveredAt) && !hasRating && !hasShownPopup
       
       console.log(`📦 Order ${orderId}:`, {
         originalStatus,
         transformedStatus,
         isDelivered,
         hasDeliveredAt,
+        isCancelledStatus,
         hasRating,
         rating: order.rating,
         review: order.review,
@@ -429,6 +446,24 @@ Order again from this restaurant in the ${companyName} app.`
       setSubmittingRating(true)
 
       const order = ratingModal.order
+      const orderMongoId = order.mongoId || order._id
+
+      // Submit to order review API so the restaurant sees the correct rating and comment
+      if (orderMongoId) {
+        try {
+          await orderAPI.submitOrderReview(String(orderMongoId), {
+            rating: selectedRating,
+            comment: feedbackText?.trim() || "",
+          })
+        } catch (reviewErr) {
+          const reviewMsg = reviewErr?.response?.data?.message || ""
+          if (reviewErr?.response?.status === 400 && reviewMsg.toLowerCase().includes("already")) {
+            // Already reviewed – treat as success, don't block
+          } else {
+            throw reviewErr
+          }
+        }
+      }
 
       await api.post(API_ENDPOINTS.ADMIN.FEEDBACK_EXPERIENCE_CREATE, {
         rating: selectedRating,

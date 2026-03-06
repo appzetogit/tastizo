@@ -789,7 +789,7 @@ export default function App() {
           }
         />
         {/* Delivery Public Routes */}
-        <Route path="/delivery/sign-in" element={<DeliverySignIn />} />
+        <Route path="/delivery/sign-in" element={<AuthRedirect module="delivery"><DeliverySignIn /></AuthRedirect>} />
         <Route path="/delivery/signup" element={<DeliverySignup />} />
         <Route path="/delivery/otp" element={<DeliveryOTP />} />
         <Route path="/delivery/terms" element={<DeliveryTermsAndConditions />} />

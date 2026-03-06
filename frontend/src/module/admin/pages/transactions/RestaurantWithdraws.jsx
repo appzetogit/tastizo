@@ -254,13 +254,6 @@ export default function RestaurantWithdraws() {
 
         {/* Table Card */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative">
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="absolute top-6 right-6 p-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors"
-          >
-            <Settings className="w-5 h-5 text-slate-600" />
-          </button>
-
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold text-slate-900">Withdraw Request Table</h2>
@@ -280,6 +273,7 @@ export default function RestaurantWithdraws() {
                 />
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               </div>
+              {/* Export dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all">
@@ -299,6 +293,14 @@ export default function RestaurantWithdraws() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              {/* Settings button, kept separate so it doesn't overlap export */}
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors"
+                title="Table settings"
+              >
+                <Settings className="w-5 h-5 text-slate-600" />
+              </button>
             </div>
           </div>
 

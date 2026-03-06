@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from "react"
 import { Search, Trash2, Loader2 } from "lucide-react"
 import { adminAPI, restaurantAPI } from "@/lib/api"
-import apiClient from "@/lib/api"
 import { toast } from "sonner"
 
 export default function FoodsList() {
@@ -156,7 +155,7 @@ export default function FoodsList() {
   }, [foods, searchQuery])
 
   const handleDelete = async (id) => {
-    const food = foods.find(f => f.id === id)
+    const food = foods.find((f) => f.id === id)
     if (!food) return
 
     if (!window.confirm(`Are you sure you want to delete "${food.name}"? This action cannot be undone.`)) {
@@ -165,82 +164,16 @@ export default function FoodsList() {
 
     try {
       setDeleting(true)
-      
-      // Get the restaurant's menu
-      const menuResponse = await restaurantAPI.getMenuByRestaurantId(food.restaurantId)
-      const menu = menuResponse?.data?.data?.menu || menuResponse?.data?.menu
-      
-      if (!menu || !menu.sections) {
-        throw new Error("Menu not found")
-      }
 
-      // Find and remove the item from the menu structure
-      let itemRemoved = false
-      const updatedSections = menu.sections.map(section => {
-        // Check items in section
-        if (section.items && Array.isArray(section.items)) {
-          const itemIndex = section.items.findIndex(item => 
-            String(item.id) === String(food.id) || 
-            String(item.id) === String(food.originalItem?.id)
-          )
-          if (itemIndex !== -1) {
-            section.items.splice(itemIndex, 1)
-            itemRemoved = true
-          }
-        }
-        
-        // Check items in subsections
-        if (section.subsections && Array.isArray(section.subsections)) {
-          section.subsections = section.subsections.map(subsection => {
-            if (subsection.items && Array.isArray(subsection.items)) {
-              const itemIndex = subsection.items.findIndex(item => 
-                String(item.id) === String(food.id) || 
-                String(item.id) === String(food.originalItem?.id)
-              )
-              if (itemIndex !== -1) {
-                subsection.items.splice(itemIndex, 1)
-                itemRemoved = true
-              }
-            }
-            return subsection
-          })
-        }
-        
-        return section
-      })
+      // Instead of calling restaurant-auth menu APIs (which require a restaurant token),
+      // use the admin food-approval reject endpoint to effectively remove/hide this item.
+      // This works for any menu item id across all restaurants.
+      const reason = "Deleted by admin from Restaurant Foods List"
+      await adminAPI.rejectFoodItem(String(food.id), reason)
 
-      if (!itemRemoved) {
-        throw new Error("Item not found in menu")
-      }
-
-      // Update menu in backend
-      // Note: Since we're admin, we need to use a workaround
-      // The restaurant menu update endpoint requires restaurant authentication
-      // For now, we'll try using the restaurant endpoint directly
-      // TODO: Create admin endpoint: PUT /api/admin/restaurants/:id/menu
-      try {
-        // Try using restaurant menu update endpoint
-        // This might fail if backend doesn't allow admin to update restaurant menus
-        const response = await apiClient.put(
-          `/restaurant/menu`,
-          { sections: updatedSections }
-        )
-        
-        if (!response.data || !response.data.success) {
-          throw new Error(response.data?.message || "Failed to update menu")
-        }
-      } catch (apiError) {
-        // If direct API call fails, we need an admin endpoint
-        // For now, show a helpful error message
-        if (apiError.response?.status === 401 || apiError.response?.status === 403) {
-          throw new Error("Admin cannot directly update restaurant menus. Please contact developer to add admin menu update endpoint.")
-        }
-        throw apiError
-      }
-
-      // Remove from local state
-      setFoods(foods.filter(f => f.id !== id))
-      toast.success("Food item deleted successfully")
+      // Optimistically remove from local state so the row disappears from the table
+      setFoods((prev) => prev.filter((f) => f.id !== id))
+      toast.success("Food item deleted (rejected) successfully")
     } catch (error) {
       console.error("Error deleting food:", error)
       toast.error(error?.response?.data?.message || "Failed to delete food item")

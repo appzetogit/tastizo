@@ -2347,12 +2347,12 @@ export default function Home() {
               />
 
               {/* Title */}
-              <h3 className="text-base font-bold text-gray-900 dark:text-white mb-3">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
                 See veg dishes from
               </h3>
 
               {/* Radio Options */}
-              <div className="space-y-2 mb-4">
+              <div className="space-y-2 mb-5">
                 {/* All restaurants */}
                 <label
                   className="flex items-center gap-2.5 cursor-pointer p-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
@@ -2423,22 +2423,9 @@ export default function Home() {
                     setIsApplyingVegMode(false)
                   }, 2000)
                 }}
-                className="w-full bg-green-600 text-white font-semibold py-2.5 rounded-xl hover:bg-green-700 transition-colors mb-2 text-sm"
+                className="w-full bg-[#2B9C64] text-white font-semibold py-2.5 rounded-xl hover:bg-[#218a56] transition-colors text-sm shadow-sm"
               >
                 Apply
-              </button>
-
-              {/* More settings link */}
-              <button
-                onClick={() => {
-                  setShowVegModePopup(false)
-                  // Revert veg mode to OFF if popup is closed without applying
-                  setVegModeContext(false)
-                  setPrevVegMode(false)
-                }}
-                className="w-full text-green-600 dark:text-green-400 font-medium text-xs hover:text-green-700 dark:hover:text-green-500 transition-colors"
-              >
-                More settings
               </button>
             </motion.div>
           </>

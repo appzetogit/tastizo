@@ -55,6 +55,7 @@ export default function ProfileDetails() {
   const [isUpdatingPersonalDetails, setIsUpdatingPersonalDetails] = useState(false)
   const [isUpdatingPhoto, setIsUpdatingPhoto] = useState(false)
   const fileInputRef = useRef(null)
+  const [showPhotoSourcePopup, setShowPhotoSourcePopup] = useState(false)
 
   const handleRemovePhoto = async () => {
     if (!window.confirm("Remove profile photo?")) return
@@ -155,7 +156,7 @@ export default function ProfileDetails() {
             <button
               type="button"
               disabled={isUpdatingPhoto}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => setShowPhotoSourcePopup(true)}
               className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white/90 text-gray-900 text-[11px] font-medium hover:bg-white disabled:opacity-60"
             >
               <Camera className="w-3 h-3" />
@@ -237,7 +238,7 @@ export default function ProfileDetails() {
         <button
           type="button"
           disabled={isUpdatingPhoto}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => setShowPhotoSourcePopup(true)}
           className="text-xs font-medium text-green-600 hover:text-green-700 disabled:opacity-60"
         >
           Change photo
@@ -253,6 +254,61 @@ export default function ProfileDetails() {
           </button>
         )}
       </div>
+
+      {/* Hidden file input for gallery/camera capture (triggered by source chooser) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0]
+          if (!file) return
+
+          // Basic validation
+          if (!file.type.startsWith("image/")) {
+            toast.error("Please select an image file")
+            return
+          }
+          if (file.size > 5 * 1024 * 1024) {
+            toast.error("Image size should be less than 5MB")
+            return
+          }
+
+          try {
+            setIsUpdatingPhoto(true)
+            const formData = new FormData()
+            formData.append("file", file)
+            formData.append("folder", "appzeto/delivery/documents")
+
+            const response = await apiClient.post("/upload/media", formData, {
+              headers: { "Content-Type": "multipart/form-data" },
+            })
+
+            if (response?.data?.success && response?.data?.data) {
+              const { url, publicId } = response.data.data
+              await deliveryAPI.updateProfile({
+                profileImage: { url, publicId },
+              })
+              const profileRes = await deliveryAPI.getProfile()
+              if (profileRes?.data?.success && profileRes?.data?.data?.profile) {
+                setProfile(profileRes.data.data.profile)
+              }
+              toast.success("Profile photo updated successfully")
+            } else {
+              toast.error("Failed to upload profile photo")
+            }
+          } catch (error) {
+            console.error("Error updating profile photo:", error)
+            toast.error(error?.response?.data?.message || "Failed to update profile photo")
+          } finally {
+            setIsUpdatingPhoto(false)
+            if (e.target) {
+              e.target.value = ""
+            }
+          }
+        }}
+      />
 
       {/* Content */}
       <div className="px-4 py-6 space-y-6">
@@ -581,6 +637,47 @@ export default function ProfileDetails() {
           </div>
         </div>
       </div>
+
+      {/* Photo source chooser using existing BottomPopup pattern */}
+      <BottomPopup
+        isOpen={showPhotoSourcePopup}
+        onClose={() => setShowPhotoSourcePopup(false)}
+        title="Update profile photo"
+        showCloseButton={true}
+      >
+        <div className="py-4 space-y-3">
+          <button
+            type="button"
+            disabled={isUpdatingPhoto}
+            onClick={() => {
+              setShowPhotoSourcePopup(false)
+              // Hint to use camera if supported; many browsers/devices respect capture when opening picker
+              if (fileInputRef.current) {
+                fileInputRef.current.setAttribute("capture", "environment")
+                fileInputRef.current.click()
+              }
+            }}
+            className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <span className="text-sm font-medium text-gray-900">Use camera</span>
+            <Camera className="w-4 h-4 text-gray-500" />
+          </button>
+          <button
+            type="button"
+            disabled={isUpdatingPhoto}
+            onClick={() => {
+              setShowPhotoSourcePopup(false)
+              if (fileInputRef.current) {
+                fileInputRef.current.removeAttribute("capture")
+                fileInputRef.current.click()
+              }
+            }}
+            className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <span className="text-sm font-medium text-gray-900">Choose from gallery</span>
+          </button>
+        </div>
+      </BottomPopup>
 
       {/* Vehicle Number Popup */}
       <BottomPopup

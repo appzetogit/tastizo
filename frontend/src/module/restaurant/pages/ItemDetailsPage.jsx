@@ -688,6 +688,10 @@ export default function ItemDetailsPage() {
       // Prepare nutrition data as strings (as per menu model)
       const nutritionStrings = []
 
+      // When no variants, base price 0 is replaced with minimum ₹1 for valid pricing
+      const rawPrice = parseFloat(basePrice) || 0
+      const effectivePrice = hasVariants ? rawPrice : Math.max(1, rawPrice)
+
       // Prepare item data according to menu model
       const itemDataToSave = {
         id: String(itemId), // Ensure ID is a string
@@ -698,7 +702,7 @@ export default function ItemDetailsPage() {
         category: category,
         rating: itemData?.rating || 0.0,
         reviews: itemData?.reviews || 0,
-        price: parseFloat(basePrice) || 0,
+        price: effectivePrice,
         preparationTime: preparationTime || "",
         stock: "Unlimited",
         discount: null,
@@ -1092,15 +1096,21 @@ export default function ItemDetailsPage() {
                       if (hasVariants && lowestVariantPrice != null) {
                         return
                       }
-                      const value = e.target.value
+                      let value = e.target.value
                         .replace(/[₹\s,]/g, "")
                         .replace(/[^0-9.]/g, "")
                       const parts = value.split(".")
-                      const cleanedValue =
+                      // At most one decimal point
+                      const oneDecimal =
                         parts.length > 2
                           ? parts[0] + "." + parts.slice(1).join("")
                           : value
-                      setBasePrice(cleanedValue)
+                      value = oneDecimal
+                      // Remove leading zeros (e.g. "011" -> "11", "00.5" -> "0.5"); allow "0" or "0."
+                      if (value.length > 1 && value.startsWith("0") && !value.startsWith("0.")) {
+                        value = value.replace(/^0+/, "") || "0"
+                      }
+                      setBasePrice(value)
                     }}
                     onFocus={(e) => {
                       // Remove rupee symbol when focused for easier editing
@@ -1124,6 +1134,11 @@ export default function ItemDetailsPage() {
                 {hasVariants && lowestVariantPrice != null && (
                   <p className="mt-1 text-[11px] text-gray-500">
                     Base price is automatically set to the lowest variant price.
+                  </p>
+                )}
+                {!hasVariants && (parseFloat(basePrice) || 0) === 0 && (
+                  <p className="mt-1 text-[11px] text-amber-600">
+                    Base price 0 will be saved as ₹1 (minimum price).
                   </p>
                 )}
               </div>

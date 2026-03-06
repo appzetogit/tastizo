@@ -388,19 +388,16 @@ export default function Feedback() {
                           (restaurantData?.name) ||
                           'Restaurant'
 
-            // Get rating if available (from order.review or order.rating)
-            const rating = order.review?.rating || 
-                          order.rating || 
-                          order.feedback?.rating ||
-                          null
-            const reviewText = order.review?.comment ||
-                             order.review?.text ||
-                             order.feedback?.comment ||
-                             order.feedback?.text ||
-                             (rating ? `${rating}★ rating` : 'No review text')
+            // Get rating and comment from order.review (source of truth for restaurant)
+            const rating = order.review?.rating ? Number(order.review.rating) : (order.rating != null ? Number(order.rating) : order.feedback?.rating != null ? Number(order.feedback.rating) : null)
+            const reviewText = order.review?.comment?.trim() ||
+                             order.review?.text?.trim() ||
+                             order.feedback?.comment?.trim() ||
+                             order.feedback?.text?.trim() ||
+                             (rating != null ? `${rating}★ rating` : '')
 
             // Count user's orders with this restaurant
-            const userOrdersCount = allOrders.filter(o => 
+            const userOrdersCount = allOrders.filter(o =>
               (o.userId?._id || o.userId) === (order.userId?._id || order.userId)
             ).length
 
@@ -411,16 +408,16 @@ export default function Feedback() {
               userName: userName,
               userImage: userImage,
               ordersCount: userOrdersCount,
-              rating: rating || 5, // Default to 5 if no rating
+              rating: rating,
               date: formattedDate,
-              reviewText: reviewText,
+              reviewText: reviewText || 'No review text',
               reply: order.review?.reply || order.feedback?.reply || null,
-              orderData: order // Keep original order data
+              orderData: order
             }
           })
           .filter(review => {
-            // Include reviews that have a rating or have review text (not the default "No review text")
-            return review.rating !== null || (review.reviewText && review.reviewText !== 'No review text')
+            // Only include orders that have an actual review (rating or comment from order.review)
+            return review.rating != null || (review.reviewText && review.reviewText !== 'No review text')
           })
 
         // Calculate rating summary

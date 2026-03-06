@@ -146,6 +146,15 @@ export default function UserOrderDetails() {
   const restaurantName =
     order.restaurantName || restaurantObj.name || "Restaurant"
 
+  // Normalize order status and detect any cancelled state to control rating visibility
+  const rawOriginalStatus = (order.originalStatus || order.status || "").toString()
+  const lowerOriginalStatus = rawOriginalStatus.toLowerCase()
+  const isCancelledStatus =
+    lowerOriginalStatus === "cancelled" ||
+    lowerOriginalStatus === "canceled" ||
+    lowerOriginalStatus === "restaurant_cancelled" ||
+    lowerOriginalStatus === "user_cancelled"
+
   // Build restaurant address (try restaurant fields first, then fall back)
   const restaurantLocation = (() => {
     const loc = restaurantObj.location || {}

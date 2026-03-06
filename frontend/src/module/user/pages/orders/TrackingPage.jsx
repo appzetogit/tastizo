@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { GoogleMap, LoadScript, Marker, Polyline } from '@react-google-maps/api';
 import { ArrowLeft, Share2, RefreshCcw, Home, UtensilsCrossed, ChevronRight, Shield, Phone } from 'lucide-react';
 
@@ -55,6 +56,7 @@ const userPos = { lat: 22.75, lng: 75.89 };
 const center = { lat: 22.735, lng: 75.875 };
 
 const TrackingPage = () => {
+  const navigate = useNavigate();
 
   return (
     <div className="relative min-h-screen bg-gray-900 font-sans overflow-hidden">
@@ -165,16 +167,20 @@ const TrackingPage = () => {
             </p>
           </div>
 
-          {/* Contact Person Card */}
-          <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 shadow-sm">
+          {/* Contact Person Card - click to go to profile */}
+          <button
+            type="button"
+            onClick={() => navigate('/user/profile')}
+            className="w-full text-left bg-gray-800 rounded-xl p-4 border border-gray-700 shadow-sm hover:bg-gray-700/80 active:bg-gray-700 transition-colors"
+          >
             <div className="flex items-center gap-3">
-              <Phone className="w-5 h-5 text-gray-400" />
-              <div className="flex-1">
+              <Phone className="w-5 h-5 text-gray-400 shrink-0" />
+              <div className="flex-1 min-w-0">
                 <p className="font-semibold text-white">Ajay Panchal</p>
                 <p className="text-sm text-gray-400">+91 7610416911</p>
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Delivery Location Card */}
           <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 shadow-sm">

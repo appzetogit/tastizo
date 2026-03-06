@@ -2186,7 +2186,7 @@ function OrderCard({
   const isReady = status === "Ready"
 
   return (
-    <div className="w-full bg-white rounded-2xl p-4 mb-3 border border-gray-200 hover:border-gray-400 transition-colors relative">
+    <div className="w-full bg-white rounded-2xl p-4 mb-3 border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
       {/* Cancel button - only show for preparing orders */}
       {status === 'preparing' && onCancel && (
         <button
@@ -2195,7 +2195,7 @@ function OrderCard({
             e.stopPropagation();
             onCancel({ orderId, mongoId, customerName });
           }}
-          className="absolute top-2 right-2 p-1.5 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors z-10"
+          className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-white border border-red-100 text-red-600 shadow-md hover:bg-red-50 transition-colors z-10"
           title="Cancel Order"
         >
           <X className="w-4 h-4" />

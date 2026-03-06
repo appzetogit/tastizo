@@ -153,14 +153,19 @@ export default function TransactionReport() {
   const activeFiltersCount = (filters.zone !== "All Zones" ? 1 : 0) + (filters.restaurant !== "All restaurants" ? 1 : 0) + (filters.time !== "All Time" ? 1 : 0)
 
   const formatCurrency = (amount) => {
-    if (amount >= 1000) {
-      return `$ ${(amount / 1000).toFixed(2)}K`
+    const value = Number(amount || 0)
+    if (Math.abs(value) >= 1000) {
+      return `₹ ${(value / 1000).toFixed(2)}K`
     }
-    return `$ ${amount.toFixed(2)}`
+    return `₹ ${value.toFixed(2)}`
   }
 
   const formatFullCurrency = (amount) => {
-    return `$ ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    const value = Number(amount || 0)
+    return `₹ ${value.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`
   }
 
   if (loading) {
