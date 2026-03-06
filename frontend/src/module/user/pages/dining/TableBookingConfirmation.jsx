@@ -33,8 +33,9 @@ export default function TableBookingConfirmation() {
         const fetchUser = async () => {
             try {
                 const response = await authAPI.getCurrentUser()
-                if (response.data.success) {
-                    setUser(response.data.data)
+                const userData = response?.data?.data?.user || response?.data?.user || response?.data
+                if (userData) {
+                    setUser(userData)
                 }
             } catch (error) {
                 console.error("Error fetching user:", error)
@@ -82,21 +83,83 @@ export default function TableBookingConfirmation() {
     }
 
     const openEditModal = () => {
+        // Prefill with current user details so the popup always shows latest values
         setEditName(user?.name || "")
-        setEditPhone(user?.phone || user?.email || "")
+        setEditPhone(user?.phone || "")
         setIsEditModalOpen(true)
     }
 
+    const handleEditNameChange = (value) => {
+        // Allow only letters, spaces and a few punctuation chars
+        const cleaned = value.replace(/[^A-Za-z\s'.-]/g, "")
+        setEditName(cleaned)
+    }
+
+    const handleEditPhoneChange = (value) => {
+        // Keep only digits and limit to 15
+        const digitsOnly = value.replace(/\D/g, "").slice(0, 15)
+        setEditPhone(digitsOnly)
+    }
+
     const handleSaveEdit = async () => {
+        const trimmedName = editName.trim()
+        const digitsOnly = editPhone.replace(/\D/g, "")
+
+        // Basic validations
+        if (!trimmedName || trimmedName.length < 2) {
+            toast.error("Please enter a valid name (at least 2 characters).")
+            return
+        }
+
+        // Name should not contain digits or only special characters
+        const namePattern = /^[A-Za-z][A-Za-z\s'.-]*$/
+        if (!namePattern.test(trimmedName)) {
+            toast.error("Name should only contain letters and spaces.")
+            return
+        }
+
+        if (!digitsOnly) {
+            toast.error("Please enter your phone number.")
+            return
+        }
+
+        if (digitsOnly.length < 7 || digitsOnly.length > 15) {
+            toast.error("Please enter a valid phone number (7–15 digits).")
+            return
+        }
+
+        if (digitsOnly.length === 10 && !["6", "7", "8", "9"].includes(digitsOnly[0])) {
+            toast.error("Please enter a valid 10-digit mobile number.")
+            return
+        }
+
         try {
             setSavingEdit(true)
-            await userAPI.updateProfile({ name: editName, phone: editPhone })
-            const response = await authAPI.getCurrentUser()
-            if (response.data.success) setUser(response.data.data)
+            // Persist to backend
+            await userAPI.updateProfile({ name: trimmedName, phone: digitsOnly })
+
+            // Optimistically update local user so the card reflects new details immediately
+            setUser((prev) => ({
+                ...(prev || {}),
+                name: trimmedName,
+                phone: digitsOnly,
+            }))
+
+            // Optional: refresh from auth API to keep in sync with server
+            try {
+                const response = await authAPI.getCurrentUser()
+                const userData = response?.data?.data?.user || response?.data?.user || response?.data
+                if (userData) {
+                    setUser(userData)
+                }
+            } catch {
+                // Ignore refresh errors; local optimistic data is already updated
+            }
+
             toast.success("Details updated")
             setIsEditModalOpen(false)
         } catch (err) {
-            toast.error(err.response?.data?.message || "Failed to update details")
+            toast.error(err?.response?.data?.message || "Failed to update details")
         } finally {
             setSavingEdit(false)
         }
@@ -327,23 +390,23 @@ export default function TableBookingConfirmation() {
                 )}
             </AnimatePresence>
 
-            {/* Edit Details Modal */}
+            {/* Edit Details Modal – full-screen popup */}
             <AnimatePresence>
                 {isEditModalOpen && (
-                    <>
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+                        onClick={() => setIsEditModalOpen(false)}
+                    >
                         <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setIsEditModalOpen(false)}
-                            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100]"
-                        />
-                        <motion.div
-                            initial={{ y: "100%" }}
-                            animate={{ y: 0 }}
-                            exit={{ y: "100%" }}
-                            transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                            className="fixed bottom-0 left-0 w-full bg-white rounded-t-[32px] p-6 z-[101] max-h-[80vh] overflow-y-auto"
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto"
                         >
                             <div className="flex items-center justify-between mb-6">
                                 <h3 className="text-xl font-bold text-gray-900">Your Details</h3>
@@ -361,7 +424,7 @@ export default function TableBookingConfirmation() {
                                     <input
                                         type="text"
                                         value={editName}
-                                        onChange={(e) => setEditName(e.target.value)}
+                                        onChange={(e) => handleEditNameChange(e.target.value)}
                                         placeholder="Your name"
                                         className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#2B9C64] focus:bg-white outline-none transition-all font-medium text-gray-700"
                                     />
@@ -371,7 +434,7 @@ export default function TableBookingConfirmation() {
                                     <input
                                         type="tel"
                                         value={editPhone}
-                                        onChange={(e) => setEditPhone(e.target.value)}
+                                        onChange={(e) => handleEditPhoneChange(e.target.value)}
                                         placeholder="Phone number"
                                         className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#2B9C64] focus:bg-white outline-none transition-all font-medium text-gray-700"
                                     />
@@ -395,7 +458,7 @@ export default function TableBookingConfirmation() {
                                 </Button>
                             </div>
                         </motion.div>
-                    </>
+                    </motion.div>
                 )}
             </AnimatePresence>
         </AnimatedPage>

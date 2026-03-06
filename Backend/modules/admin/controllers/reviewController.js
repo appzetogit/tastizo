@@ -1,4 +1,5 @@
 import Order from '../../order/models/Order.js';
+import OrderReview from '../../order/models/OrderReview.js';
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import mongoose from 'mongoose';
@@ -15,57 +16,53 @@ export const getAllReviews = asyncHandler(async (req, res) => {
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
     
-    // Build query
-    const query = {
-      status: 'delivered',
-      'review.rating': { $exists: true, $ne: null }
-    };
+    // Build query on canonical OrderReview collection
+    const reviewQuery = {};
     
     if (restaurantId) {
-      query.restaurantId = restaurantId;
+      reviewQuery.restaurantId = restaurantId;
     }
     
     if (rating) {
       const ratingNum = parseInt(rating);
       if (ratingNum >= 1 && ratingNum <= 5) {
-        query['review.rating'] = ratingNum;
+        reviewQuery.rating = ratingNum;
       }
     }
     
     // Sort options
     const sortOptions = {};
     if (sortBy === 'rating') {
-      sortOptions['review.rating'] = sortOrder === 'asc' ? 1 : -1;
+      sortOptions.rating = sortOrder === 'asc' ? 1 : -1;
     } else if (sortBy === 'submittedAt') {
-      sortOptions['review.submittedAt'] = sortOrder === 'asc' ? 1 : -1;
+      sortOptions.createdAt = sortOrder === 'asc' ? 1 : -1;
     } else {
-      sortOptions['review.submittedAt'] = -1; // Default: newest first
+      sortOptions.createdAt = -1; // Default: newest first
     }
     
     // Fetch reviews with pagination
-    const reviews = await Order.find(query)
+    const reviews = await OrderReview.find(reviewQuery)
       .populate('userId', 'name phone email')
       .populate('restaurantId', 'name')
-      .populate('deliveryPartnerId', 'name phone')
-      .select('orderId restaurantId restaurantName userId review deliveredAt createdAt items deliveryPartnerId')
+      .populate('orderId', 'orderId restaurantName items deliveredAt createdAt deliveryPartnerId')
       .sort(sortOptions)
       .skip(skip)
       .limit(limitNum)
       .lean();
     
     // Get total count
-    const totalReviews = await Order.countDocuments(query);
+    const totalReviews = await OrderReview.countDocuments(reviewQuery);
     
     // Calculate average rating
-    const avgRatingResult = await Order.aggregate([
-      { $match: query },
+    const avgRatingResult = await OrderReview.aggregate([
+      { $match: reviewQuery },
       {
         $group: {
           _id: null,
-          avgRating: { $avg: '$review.rating' },
+          avgRating: { $avg: '$rating' },
           totalReviews: { $sum: 1 },
           ratingDistribution: {
-            $push: '$review.rating'
+            $push: '$rating'
           }
         }
       }
@@ -85,28 +82,43 @@ export const getAllReviews = asyncHandler(async (req, res) => {
     }
     
     return successResponse(res, 200, 'Reviews fetched successfully', {
-      reviews: reviews.map(review => ({
-        orderId: review.orderId,
-        orderMongoId: review._id,
+      reviews: reviews.map((review) => ({
+        orderId: review.orderId?.orderId || review.orderId?._id || review.orderId,
+        orderMongoId: review.orderId?._id || review.orderId,
         restaurantId: review.restaurantId?._id || review.restaurantId,
-        restaurantName: review.restaurantName || review.restaurantId?.name,
+        restaurantName: review.orderId?.restaurantName || review.restaurantName || review.restaurantId?.name,
         customer: {
           id: review.userId?._id || review.userId,
           name: review.userId?.name,
           phone: review.userId?.phone,
-          email: review.userId?.email
+          email: review.userId?.email,
         },
-        deliveryPartner: review.deliveryPartnerId ? {
-          id: review.deliveryPartnerId?._id ? review.deliveryPartnerId._id.toString() : (typeof review.deliveryPartnerId === 'object' && review.deliveryPartnerId.toString ? review.deliveryPartnerId.toString() : String(review.deliveryPartnerId || '')),
-          name: review.deliveryPartnerId?.name || null,
-          phone: review.deliveryPartnerId?.phone || null
-        } : null,
-        items: review.items || [],
-        rating: review.review?.rating,
-        comment: review.review?.comment,
-        submittedAt: review.review?.submittedAt || review.deliveredAt,
-        deliveredAt: review.deliveredAt,
-        createdAt: review.createdAt
+        // Delivery partner and items are read from the linked order, when available
+        deliveryPartner:
+          review.orderId?.deliveryPartnerId || review.deliveryPartnerId
+            ? {
+                id:
+                  review.orderId?.deliveryPartnerId?._id ||
+                  review.orderId?.deliveryPartnerId ||
+                  review.deliveryPartnerId?._id ||
+                  review.deliveryPartnerId ||
+                  null,
+                name:
+                  review.orderId?.deliveryPartnerId?.name ||
+                  review.deliveryPartnerId?.name ||
+                  null,
+                phone:
+                  review.orderId?.deliveryPartnerId?.phone ||
+                  review.deliveryPartnerId?.phone ||
+                  null,
+              }
+            : null,
+        items: review.orderId?.items || review.items || [],
+        rating: review.rating,
+        comment: review.reviewText,
+        submittedAt: review.createdAt,
+        deliveredAt: review.orderId?.deliveredAt || null,
+        createdAt: review.createdAt,
       })),
       pagination: {
         currentPage: pageNum,
@@ -135,38 +147,43 @@ export const getReviewByOrderId = asyncHandler(async (req, res) => {
     const { orderId } = req.params;
     
     const order = await Order.findOne({
-      $or: [
-        { orderId: orderId },
-        { _id: orderId }
-      ],
+      $or: [{ orderId: orderId }, { _id: orderId }],
       status: 'delivered',
-      'review.rating': { $exists: true, $ne: null }
     })
-      .populate('userId', 'name phone email')
-      .populate('restaurantId', 'name')
-      .select('orderId restaurantId restaurantName userId review deliveredAt createdAt')
+      .select('orderId restaurantId restaurantName userId deliveredAt createdAt')
       .lean();
     
     if (!order) {
+      return errorResponse(res, 404, 'Order not found for this ID');
+    }
+    
+    const review = await OrderReview.findOne({
+      orderId: order._id,
+    })
+      .populate('userId', 'name phone email')
+      .populate('restaurantId', 'name')
+      .lean();
+    
+    if (!review) {
       return errorResponse(res, 404, 'Review not found for this order');
     }
     
     return successResponse(res, 200, 'Review fetched successfully', {
       orderId: order.orderId,
       orderMongoId: order._id,
-      restaurantId: order.restaurantId?._id || order.restaurantId,
-      restaurantName: order.restaurantName || order.restaurantId?.name,
+      restaurantId: review.restaurantId?._id || order.restaurantId,
+      restaurantName: order.restaurantName || review.restaurantId?.name,
       customer: {
-        id: order.userId?._id || order.userId,
-        name: order.userId?.name,
-        phone: order.userId?.phone,
-        email: order.userId?.email
+        id: review.userId?._id || order.userId,
+        name: review.userId?.name,
+        phone: review.userId?.phone,
+        email: review.userId?.email,
       },
-      rating: order.review?.rating,
-      comment: order.review?.comment,
-      submittedAt: order.review?.submittedAt || order.deliveredAt,
+      rating: review.rating,
+      comment: review.reviewText,
+      submittedAt: review.createdAt,
       deliveredAt: order.deliveredAt,
-      createdAt: order.createdAt
+      createdAt: review.createdAt,
     });
   } catch (error) {
     console.error('Error fetching review:', error);

@@ -1,4 +1,5 @@
 import Order from '../../order/models/Order.js';
+import OrderReview from '../../order/models/OrderReview.js';
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 
@@ -21,49 +22,46 @@ export const getRestaurantReviews = asyncHandler(async (req, res) => {
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
     
-    const query = {
+    const reviewQuery = {
       restaurantId: restaurantId,
-      status: 'delivered',
-      'review.rating': { $exists: true, $ne: null }
     };
     
     if (rating) {
       const ratingNum = parseInt(rating);
       if (ratingNum >= 1 && ratingNum <= 5) {
-        query['review.rating'] = ratingNum;
+        reviewQuery.rating = ratingNum;
       }
     }
     
     const sortOptions = {};
     if (sortBy === 'rating') {
-      sortOptions['review.rating'] = sortOrder === 'asc' ? 1 : -1;
+      sortOptions.rating = sortOrder === 'asc' ? 1 : -1;
     } else {
-      sortOptions['review.submittedAt'] = sortOrder === 'asc' ? 1 : -1;
+      sortOptions.createdAt = sortOrder === 'asc' ? 1 : -1;
     }
     
-    const reviews = await Order.find(query)
-      .populate('userId', 'name phone')
-      .select('orderId userId review deliveredAt createdAt')
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(limitNum)
-      .lean();
-    
-    const totalReviews = await Order.countDocuments(query);
-    
-    // Calculate average rating and distribution
-    const avgRatingResult = await Order.aggregate([
-      { $match: query },
-      {
-        $group: {
-          _id: null,
-          avgRating: { $avg: '$review.rating' },
-          totalReviews: { $sum: 1 },
-          ratingDistribution: {
-            $push: '$review.rating'
+    const [reviews, totalReviews, avgRatingResult] = await Promise.all([
+      OrderReview.find(reviewQuery)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limitNum)
+        .populate('userId', 'name phone')
+        .populate('orderId', 'orderId deliveredAt createdAt')
+        .lean(),
+      OrderReview.countDocuments(reviewQuery),
+      OrderReview.aggregate([
+        { $match: reviewQuery },
+        {
+          $group: {
+            _id: null,
+            avgRating: { $avg: '$rating' },
+            totalReviews: { $sum: 1 },
+            ratingDistribution: {
+              $push: '$rating'
+            }
           }
         }
-      }
+      ]),
     ]);
     
     let avgRating = 0;
@@ -80,19 +78,19 @@ export const getRestaurantReviews = asyncHandler(async (req, res) => {
     }
     
     return successResponse(res, 200, 'Reviews fetched successfully', {
-      reviews: reviews.map(review => ({
-        orderId: review.orderId,
-        orderMongoId: review._id,
+      reviews: reviews.map((review) => ({
+        orderId: review.orderId?.orderId || review.orderId?._id || review.orderId,
+        orderMongoId: review.orderId?._id || review.orderId,
         customer: {
           id: review.userId?._id || review.userId,
           name: review.userId?.name || 'Anonymous',
-          phone: review.userId?.phone
+          phone: review.userId?.phone,
         },
-        rating: review.review?.rating,
-        comment: review.review?.comment,
-        submittedAt: review.review?.submittedAt || review.deliveredAt,
-        deliveredAt: review.deliveredAt,
-        createdAt: review.createdAt
+        rating: review.rating,
+        comment: review.reviewText,
+        submittedAt: review.createdAt,
+        deliveredAt: review.orderId?.deliveredAt || null,
+        createdAt: review.createdAt,
       })),
       pagination: {
         currentPage: pageNum,

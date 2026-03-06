@@ -43,7 +43,7 @@ export default function Under250() {
 
   const sortOptions = [
     { id: null, label: 'Relevance' },
-    { id: 'rating-high', label: 'Rating: High to Low' },
+    { id: 'rating-high', label: 'Rating: Low to High' },
     { id: 'delivery-time-low', label: 'Delivery Time: Low to High' },
     { id: 'distance-low', label: 'Distance: Low to High' },
   ]
@@ -81,52 +81,65 @@ export default function Under250() {
     return 999
   }
 
-  // Sort and filter restaurants based on selected sort and filters
-  const sortedAndFilteredRestaurants = useMemo(() => {
-    let filtered = [...under250Restaurants]
+  // Flatten all dishes and apply sorting/filters at dish level
+  const sortedAndFilteredDishes = useMemo(() => {
+    const allDishes = []
 
-    // Apply "Under 30 mins" filter
+    under250Restaurants.forEach((restaurant) => {
+      const restaurantName = restaurant.name
+      const restaurantSlug = restaurant.slug || restaurant.name?.toLowerCase().replace(/\s+/g, "-")
+      const deliveryTime = restaurant.deliveryTime
+      const distance = restaurant.distance
+      const rating = restaurant.rating || 0
+
+      ;(restaurant.menuItems || []).forEach((item) => {
+        allDishes.push({
+          ...item,
+          restaurantName,
+          restaurantSlug,
+          deliveryTime,
+          distance,
+          rating,
+        })
+      })
+    })
+
+    let filtered = [...allDishes]
+
+    // Apply "Under 30 mins" filter based on restaurant delivery time
     if (under30MinsFilter) {
-      filtered = filtered.filter(restaurant => {
-        const deliveryTime = parseDeliveryTime(restaurant.deliveryTime)
-        return deliveryTime <= 30
+      filtered = filtered.filter((dish) => {
+        const time = parseDeliveryTime(dish.deliveryTime)
+        return time <= 30
       })
     }
 
-    // Apply sorting
-    if (selectedSort === 'rating-high') {
+    // Apply sorting at dish level
+    if (selectedSort === "rating-high") {
+      // Despite the id name, this option now means Rating: Low to High
       filtered.sort((a, b) => {
         const ratingA = a.rating || 0
         const ratingB = b.rating || 0
-        if (ratingB !== ratingA) {
-          return ratingB - ratingA
-        }
-        // Secondary sort by number of dishes
-        return (b.menuItems?.length || 0) - (a.menuItems?.length || 0)
+        if (ratingA !== ratingB) return ratingA - ratingB
+        // Secondary sort by price (cheaper first)
+        return (a.price || 0) - (b.price || 0)
       })
-    } else if (selectedSort === 'delivery-time-low') {
+    } else if (selectedSort === "delivery-time-low") {
       filtered.sort((a, b) => {
         const timeA = parseDeliveryTime(a.deliveryTime)
         const timeB = parseDeliveryTime(b.deliveryTime)
-        if (timeA !== timeB) {
-          return timeA - timeB
-        }
+        if (timeA !== timeB) return timeA - timeB
         // Secondary sort by rating
         return (b.rating || 0) - (a.rating || 0)
       })
-    } else if (selectedSort === 'distance-low') {
+    } else if (selectedSort === "distance-low") {
       filtered.sort((a, b) => {
         const distA = parseDistance(a.distance)
         const distB = parseDistance(b.distance)
-        if (distA !== distB) {
-          return distA - distB
-        }
+        if (distA !== distB) return distA - distB
         // Secondary sort by rating
         return (b.rating || 0) - (a.rating || 0)
       })
-    } else {
-      // Default: Relevance (keep original order from backend - already sorted by rating)
-      // No additional sorting needed
     }
 
     return filtered
@@ -505,248 +518,194 @@ export default function Under250() {
         </section>
 
 
-        {/* Restaurant Menu Sections */}
+        {/* Dish list (flattened across restaurants) */}
         {loadingRestaurants ? (
           <div className="flex justify-center items-center py-12">
-            <div className="text-gray-500 dark:text-gray-400">Loading restaurants...</div>
+            <div className="text-gray-500 dark:text-gray-400">Loading dishes...</div>
           </div>
-        ) : sortedAndFilteredRestaurants.length === 0 ? (
+        ) : sortedAndFilteredDishes.length === 0 ? (
           <div className="flex justify-center items-center py-12">
             <div className="text-gray-500 dark:text-gray-400">
               {under250Restaurants.length === 0
-                ? "No restaurants with dishes under ₹250 found."
-                : "No restaurants match the selected filters."}
+                ? "No dishes under ₹250 found."
+                : "No dishes match the selected filters."}
             </div>
           </div>
         ) : (
-          sortedAndFilteredRestaurants.map((restaurant) => {
-            const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
-            return (
-              <section key={restaurant.id} className="pt-4 sm:pt-6 md:pt-8 lg:pt-10">
-                {/* Restaurant Header */}
-                <div className="flex items-start justify-between mb-3 md:mb-4 lg:mb-6">
-                  <div className="flex-1">
-                    <h3 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-gray-900 dark:text-white mb-1 md:mb-2">
-                      {restaurant.name}
-                    </h3>
-                    <div className="flex items-center gap-2 text-sm md:text-base lg:text-lg text-gray-500 dark:text-gray-400">
-                      <Clock className="h-4 w-4 md:h-5 md:w-5 lg:h-6 lg:w-6" strokeWidth={1.5} />
-                      <span className="font-medium">{restaurant.deliveryTime}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    {typeof restaurant.rating === "number" && restaurant.rating > 0 ? (
-                      <>
-                        <div className="flex items-center gap-1 bg-green-800 text-white px-1 py-1 md:px-2 md:py-1.5 lg:px-3 lg:py-2 rounded-full">
-                          <div className="bg-white text-green-700 px-1 py-1 md:px-1.5 md:py-1.5 lg:px-2 lg:py-2 rounded-full">
-                            <Star className="h-3.5 w-3.5 md:h-4 md:w-4 lg:h-5 lg:w-5 fill-green-800 text-green-800" />
-                          </div>
-                          <span className="text-xs md:text-sm lg:text-base font-bold">
-                            {restaurant.rating.toFixed(1)}
-                          </span>
-                        </div>
-                        <span className="text-xs md:text-sm lg:text-base text-gray-400 dark:text-gray-500 mt-0.5">
-                          {restaurant.totalRatings > 0
-                            ? `By ${
-                                restaurant.totalRatings >= 1000
-                                  ? `${(restaurant.totalRatings / 1000).toFixed(1)}K+`
-                                  : `${restaurant.totalRatings}+`
-                              }`
-                            : ""}
-                        </span>
-                      </>
-                    ) : (
-                      <div className="flex items-center gap-1 bg-gray-200 dark:bg-gray-800 px-2 py-1 rounded-full">
-                        <Star className="h-3.5 w-3.5 md:h-4 md:w-4 lg:h-5 lg:w-5 text-gray-400 dark:text-gray-500" />
-                        <span className="text-xs md:text-sm lg:text-base font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-                          New
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Menu Items Horizontal Scroll */}
-                {restaurant.menuItems && restaurant.menuItems.length > 0 && (
-                  <div className="space-y-2 md:space-y-3 lg:space-y-4">
-                    {/* Menu items list - vertically scrollable with grid layout */}
-                    <div
-                      className="grid gap-3 sm:gap-4 md:gap-5 lg:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                    >
-                      {restaurant.menuItems.map((item, itemIndex) => {
-                        const quantity = quantities[item.id] || 0
-                        const isBookmarked = bookmarkedItems.has(item.id)
-                        return (
-                          <motion.div
-                            key={item.id}
-                            className="w-full bg-white dark:bg-[#1a1a1a] rounded-lg md:rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden cursor-pointer"
-                            onClick={() => handleItemClick(item, restaurant)}
-                            initial={{ opacity: 0, y: 20 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true, margin: "-50px" }}
-                            transition={{ duration: 0.4, delay: itemIndex * 0.05 }}
-                            whileHover={{ y: -8, scale: 1.02 }}
-                            style={{ boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" }}
-                          >
-                            {/* Item Row: image + info + Add (Under 200 style) */}
-                            <div className="flex items-center gap-3 sm:gap-4 p-3 md:p-4 lg:p-5">
-                              {/* Circular image */}
-                              <div className="relative flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
-                                <OptimizedImage
-                                  src={item.image}
-                                  alt={item.name}
-                                  className="w-full h-full"
-                                  objectFit="cover"
-                                  sizes="80px"
-                                  placeholder="blur"
-                                  priority={itemIndex < 4}
-                                />
-                              </div>
-
-                              {/* Text + price/time + description + Add */}
-                              <div className="flex-1 flex items-center justify-between gap-2">
-                                <div className="min-w-0 space-y-1.5">
-                                  {/* Veg indicator + name */}
-                                  <div className="flex items-center gap-1.5">
-                                    {item.isVeg && (
-                                      <div className="h-3 w-3 md:h-4 md:w-4 lg:h-5 lg:w-5 rounded-sm border-2 border-green-600 flex items-center justify-center">
-                                        <div className="h-1.5 w-1.5 md:h-2 md:w-2 lg:h-2.5 lg:w-2.5 rounded-full bg-green-600" />
-                                      </div>
-                                    )}
-                                    <h3 className="text-sm md:text-base lg:text-lg font-semibold text-gray-900 dark:text-white truncate">
-                                      {item.name}
-                                    </h3>
-                                  </div>
-
-                                  {/* Price + time pill */}
-                                  <div className="flex items-center gap-2 text-xs sm:text-sm">
-                                    <span className="font-semibold text-gray-900 dark:text-white">
-                                      ₹{Math.round(item.price)}
-                                    </span>
-                                    <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                                      <Clock className="h-3 w-3" strokeWidth={1.5} />
-                                      <span className="text-[11px] sm:text-xs font-medium">
-                                        {restaurant.deliveryTime || "20-25 mins"}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  {/* Description */}
-                                  {item.description && (
-                                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
-                                      {item.description}
-                                    </p>
-                                  )}
-
-                                  {/* Bookmark & Share */}
-                                  <div className="flex items-center gap-2 pt-1">
-                                    <Button
-                                      variant="outline"
-                                      size="icon"
-                                      className="h-7 w-7 sm:h-8 sm:w-8 rounded-full border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111] hover:bg-gray-100 dark:hover:bg-gray-800"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleBookmarkClick(item.id)
-                                      }}
-                                    >
-                                      <Bookmark
-                                        className={`h-4 w-4 ${isBookmarked ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"
-                                          }`}
-                                        strokeWidth={2}
-                                      />
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="icon"
-                                      className="h-7 w-7 sm:h-8 sm:w-8 rounded-full border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111] hover:bg-gray-100 dark:hover:bg-gray-800"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        // Share action placeholder
-                                      }}
-                                    >
-                                      <Share2 className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                                    </Button>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center">
-                                  {quantity > 0 && !shouldShowGrayscale ? (
-                                    <div className="flex items-center gap-1 sm:gap-2 bg-white dark:bg-[#111] border border-green-500/70 rounded-full px-1.5 sm:px-2 py-0.5 sm:py-1 shadow-sm">
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          updateItemQuantity(
-                                            item,
-                                            Math.max(0, quantity - 1),
-                                            e,
-                                            restaurant.name,
-                                          )
-                                        }}
-                                        className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-green-50 dark:bg-green-900/30 text-green-600 disabled:opacity-50"
-                                      >
-                                        <Minus className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                                      </button>
-                                      <span className="min-w-[1.25rem] sm:min-w-[1.5rem] text-center text-[11px] sm:text-xs md:text-sm font-semibold text-gray-900 dark:text-white">
-                                        {quantity}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          updateItemQuantity(
-                                            item,
-                                            quantity + 1,
-                                            e,
-                                            restaurant.name,
-                                          )
-                                        }}
-                                        className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#2A9C64] text-white disabled:opacity-50"
-                                      >
-                                        <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <Button
-                                      variant={"outline"}
-                                      size="sm"
-                                      disabled={shouldShowGrayscale}
-                                      className={`h-7 md:h-8 lg:h-9 px-3 md:px-4 lg:px-5 text-xs md:text-sm lg:text-base rounded-full ${shouldShowGrayscale
-                                        ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 border-gray-300 dark:border-gray-700 cursor-not-allowed opacity-50'
-                                        : 'bg-[#2A9C64]/10 text-[#2A9C64] border-[#2A9C64] hover:bg-[#2A9C64] hover:text-white'
-                                        }`}
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        if (!shouldShowGrayscale) {
-                                          handleItemClick(item, restaurant)
-                                        }
-                                      }}
-                                    >
-                                      Add
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
+          <section className="pt-4 sm:pt-6 md:pt-8 lg:pt-10">
+            <div className="grid gap-3 sm:gap-4 md:gap-5 lg:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {sortedAndFilteredDishes.map((item, itemIndex) => {
+                const quantity = quantities[item.id] || 0
+                const isBookmarked = bookmarkedItems.has(item.id)
+                return (
+                  <motion.div
+                    key={item.id}
+                    className="w-full bg-white dark:bg-[#1a1a1a] rounded-2xl overflow-hidden cursor-pointer"
+                    onClick={() => handleItemClick(item, { name: item.restaurantName || "Under 250" })}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "-50px" }}
+                    transition={{ duration: 0.4, delay: itemIndex * 0.05 }}
+                    whileHover={{ y: -8, scale: 1.02 }}
+                  >
+                    {/* Item Row: left details, right image with floating ADD/qty pill */}
+                    <div className="flex gap-4 p-4 md:p-5 lg:p-6">
+                      {/* Left Side - Details */}
+                      <div className="flex-1 min-w-0">
+                        {/* Veg indicator + name */}
+                        <div className="flex items-center gap-2 mb-1">
+                          {item.isVeg ? (
+                            <div className="w-4 h-4 border-2 border-green-600 flex items-center justify-center rounded-sm flex-shrink-0">
+                              <div className="w-2 h-2 bg-green-600 rounded-full"></div>
                             </div>
-                          </motion.div>
-                        )
-                      })}
-                    </div>
+                          ) : (
+                            <div className="w-4 h-4 border-2 border-orange-600 flex items-center justify-center rounded-sm flex-shrink-0">
+                              <div className="w-2 h-2 bg-orange-600 rounded-full"></div>
+                            </div>
+                          )}
+                          <h3 className="font-semibold text-gray-900 dark:text-white text-sm md:text-base lg:text-lg line-clamp-1">
+                            {item.name}
+                          </h3>
+                        </div>
 
-                    {/* View Full Menu Button */}
-                    <Link className="flex justify-center mt-2 md:mt-3 lg:mt-4" to={`/user/restaurants/${restaurantSlug}?under250=true`}>
-                      <Button
-                        variant="outline"
-                        className="w-min align-center text-center rounded-lg md:rounded-xl mx-auto bg-gray-50 dark:bg-[#1a1a1a] hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-white text-gray-700 border-gray-200 dark:border-gray-800 h-9 md:h-10 lg:h-11 px-4 md:px-6 lg:px-8 text-sm md:text-base lg:text-lg"
-                      >
-                        View full menu <ArrowRight className="h-4 w-4 md:h-5 md:w-5 lg:h-6 lg:w-6 ml-2 text-gray-700 dark:text-gray-300" />
-                      </Button>
-                    </Link>
-                  </div>
-                )}
-              </section>
-            )
-          }))}
+                        {/* Price + time pill */}
+                        <div className="flex items-center gap-3 mt-1 text-xs sm:text-sm">
+                          <p className="font-semibold text-gray-900 dark:text-white">
+                            ₹{Math.round(item.price)}
+                          </p>
+                          <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                            <Clock className="h-3 w-3" strokeWidth={1.5} />
+                            <span className="text-[11px] sm:text-xs font-medium">
+                              {item.deliveryTime || "20-25 mins"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Restaurant name */}
+                        {item.restaurantName && (
+                          <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-clamp-1">
+                            {item.restaurantName}
+                          </p>
+                        )}
+
+                        {/* Description */}
+                        {item.description && (
+                          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
+                            {item.description}
+                          </p>
+                        )}
+
+                        {/* Bookmark & Share */}
+                        <div className="flex items-center gap-2 mt-3">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7 sm:h-8 sm:w-8 rounded-full border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111] hover:bg-gray-100 dark:hover:bg-gray-800"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleBookmarkClick(item.id)
+                            }}
+                          >
+                            <Bookmark
+                              className={`h-4 w-4 ${isBookmarked ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"
+                                }`}
+                              strokeWidth={2}
+                            />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7 sm:h-8 sm:w-8 rounded-full border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111] hover:bg-gray-100 dark:hover:bg-gray-800"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              // Share action placeholder
+                            }}
+                          >
+                            <Share2 className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Right Side - Image and ADD/qty pill */}
+                      <div className="relative w-28 h-28 sm:w-32 sm:h-32 flex-shrink-0">
+                        {item.image ? (
+                          <OptimizedImage
+                            src={item.image}
+                            alt={item.name}
+                            className="w-full h-full rounded-2xl"
+                            objectFit="cover"
+                            sizes="128px"
+                            placeholder="blur"
+                            priority={itemIndex < 4}
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center">
+                            <span className="text-xs text-gray-400">No image</span>
+                          </div>
+                        )}
+
+                        {quantity > 0 && !shouldShowGrayscale ? (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.85 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-[#111] font-bold px-4 py-1.5 rounded-lg flex items-center gap-2 text-green-600"
+                          >
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                updateItemQuantity(
+                                  item,
+                                  Math.max(0, quantity - 1),
+                                  e,
+                                  item.restaurantName,
+                                )
+                              }}
+                              className="text-green-600 hover:text-green-700"
+                            >
+                              <Minus size={14} />
+                            </button>
+                            <span className="text-sm">{quantity}</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                updateItemQuantity(
+                                  item,
+                                  quantity + 1,
+                                  e,
+                                  item.restaurantName,
+                                )
+                              }}
+                              className="text-green-600 hover:text-green-700"
+                            >
+                              <Plus size={14} className="stroke-[3px]" />
+                            </button>
+                          </motion.div>
+                        ) : (
+                          <motion.button
+                            initial={false}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (!shouldShowGrayscale) {
+                                updateItemQuantity(item, 1, e, item.restaurantName)
+                              }
+                            }}
+                            disabled={shouldShowGrayscale}
+                            className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-[#111] font-bold px-6 py-1.5 rounded-lg flex items-center gap-1 ${shouldShowGrayscale
+                              ? 'text-gray-400 cursor-not-allowed opacity-50'
+                              : 'text-green-600 hover:bg-green-50'
+                              }`}
+                          >
+                            ADD <Plus size={14} className="stroke-[3px]" />
+                          </motion.button>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+          </section>
+        )}
       </div>
 
       {/* Sort Popup - Bottom Sheet */}

@@ -292,7 +292,7 @@ export default function Dining() {
             </p>
           </div>
 
-          {/* Category grid – compact cards to match hero style */}
+          {/* Category grid – full image cards with visible name */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
             {categories.map((category, index) => (
               <Link
@@ -300,26 +300,30 @@ export default function Dining() {
                 to={`/user/dining/${category.name.toLowerCase().replace(/\s+/g, '-')}`}
               >
                 <motion.div
-                  className="group relative flex flex-col items-center justify-center rounded-2xl border border-gray-200/70 bg-white shadow-sm hover:shadow-md cursor-pointer h-[110px] sm:h-[120px] md:h-[130px] transition-all duration-300"
+                  className="group relative rounded-2xl overflow-hidden bg-gray-100 cursor-pointer h-[110px] sm:h-[120px] md:h-[130px] shadow-sm hover:shadow-md transition-all duration-300"
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-50px" }}
                   transition={{ duration: 0.4, delay: index * 0.05 }}
                   whileHover={{ y: -6, scale: 1.03 }}
                 >
-                  <div className="flex flex-col items-center justify-center gap-2 sm:gap-2.5 px-2">
-                    <div className="relative h-12 w-12 sm:h-14 sm:w-14 rounded-full overflow-hidden ring-2 ring-white shadow-md bg-gray-100 group-hover:ring-green-500 transition-all duration-300">
-                      <OptimizedImage
-                        src={category.imageUrl}
-                        alt={category.name}
-                        className="w-full h-full"
-                        objectFit="cover"
-                        sizes="64px"
-                        placeholder="blur"
-                        priority={index < 4}
-                      />
-                    </div>
-                    <p className="text-xs sm:text-sm font-semibold text-gray-900 text-center leading-tight group-hover:text-green-700">
+                  {/* Full-size image */}
+                  <OptimizedImage
+                    src={category.imageUrl}
+                    alt={category.name}
+                    className="w-full h-full"
+                    objectFit="cover"
+                    sizes="160px"
+                    placeholder="blur"
+                    priority={index < 4}
+                  />
+
+                  {/* Subtle overlay for readability */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80 group-hover:opacity-90 transition-opacity duration-300" />
+
+                  {/* Category name */}
+                  <div className="absolute inset-x-2 bottom-2 sm:bottom-2.5 flex items-end">
+                    <p className="w-full text-xs sm:text-sm font-semibold text-white text-center leading-tight drop-shadow-md">
                       {category.name}
                     </p>
                   </div>

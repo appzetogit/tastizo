@@ -104,13 +104,6 @@ export function getCurrentUserRole(module = null) {
   if (module) {
     const token = getModuleToken(module);
     if (!token) return null;
-
-    if (isTokenExpired(token)) {
-      // Token expired, clear it
-      clearModuleAuth(module);
-      return null;
-    }
-
     return getRoleFromToken(token);
   }
 
@@ -119,7 +112,7 @@ export function getCurrentUserRole(module = null) {
   const modules = ["user", "restaurant", "delivery", "admin"];
   for (const mod of modules) {
     const token = getModuleToken(mod);
-    if (token && !isTokenExpired(token)) {
+    if (token) {
       return getRoleFromToken(token);
     }
   }
@@ -134,14 +127,9 @@ export function getCurrentUserRole(module = null) {
  */
 export function isModuleAuthenticated(module) {
   const token = getModuleToken(module);
-  if (!token) return false;
-
-  if (isTokenExpired(token)) {
-    clearModuleAuth(module);
-    return false;
-  }
-
-  return true;
+  // If we have any token, treat as authenticated and let
+  // axios + refresh-token flow decide when to log out.
+  return !!token;
 }
 
 /**

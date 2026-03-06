@@ -2029,24 +2029,8 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       updateData["payment.status"] = "completed";
     }
 
-    // Add review and rating if provided
-    if (rating && rating >= 1 && rating <= 5) {
-      updateData["review.rating"] = rating;
-      updateData["review.submittedAt"] = new Date();
-      if (order.userId) {
-        updateData["review.reviewedBy"] = order.userId;
-      }
-    }
-
-    if (review && review.trim()) {
-      updateData["review.comment"] = review.trim();
-      if (!updateData["review.submittedAt"]) {
-        updateData["review.submittedAt"] = new Date();
-      }
-      if (order.userId && !updateData["review.reviewedBy"]) {
-        updateData["review.reviewedBy"] = order.userId;
-      }
-    }
+    // Delivery partners should not overwrite user-submitted ratings/comments.
+    // Any rating UI for delivery can be handled via a separate feedback flow.
 
     // Update order to delivered
     const updatedOrder = await Order.findByIdAndUpdate(

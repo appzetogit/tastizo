@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { DateRangeCalendar } from "@/components/ui/date-range-calendar"
-import { Bell, HelpCircle, Menu, Search, TrendingUp, BarChart3, Users, CalendarRange, Download, MoreVertical, ChevronLeft, ChevronRight, Wand2, X, MapPin } from "lucide-react"
+import { Bell, HelpCircle, Menu, Search, TrendingUp, BarChart3, Users, CalendarRange, Download, ChevronLeft, ChevronRight, Wand2, X, MapPin } from "lucide-react"
 import {
   FaPhone,
   FaHistory,
@@ -76,7 +76,6 @@ export default function ToHub() {
   const isMouseDown = useRef(false)
   
   // Learn more popup states
-  const [showLearnMoreButton, setShowLearnMoreButton] = useState(null) // cardId
   const [learnMorePopupOpen, setLearnMorePopupOpen] = useState(false)
   const [selectedCardInfo, setSelectedCardInfo] = useState(null)
 
@@ -194,7 +193,6 @@ export default function ToHub() {
     e.stopPropagation()
     setSelectedCardInfo(cardDefinitions[cardId])
     setLearnMorePopupOpen(true)
-    setShowLearnMoreButton(null)
   }
 
   const scrollToTopTab = (index) => {
@@ -1310,29 +1308,6 @@ export default function ToHub() {
                   : "Last updated: a day ago"}
               </p>
             </div>
-            <div className="relative">
-              <button 
-                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'sales' ? null : 'sales')}
-                className="p-2 rounded-full hover:bg-gray-100"
-              >
-                <MoreVertical className="w-5 h-5 text-gray-600" />
-              </button>
-              {showLearnMoreButton === 'sales' && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="absolute right-0 top-full mt-1 z-10"
-                >
-                  <button
-                    onClick={(e) => handleLearnMoreClick('sales', e)}
-                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
-                  >
-                    Learn more
-                  </button>
-                </motion.div>
-              )}
-            </div>
-
           </div>
 
           {[
@@ -1407,28 +1382,6 @@ export default function ToHub() {
                   : "Last updated: a day ago"}
               </p>
             </div>
-            <div className="relative">
-              <button 
-                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'customers-myfeed' ? null : 'customers-myfeed')}
-                className="p-2 rounded-full hover:bg-gray-100"
-              >
-                <MoreVertical className="w-5 h-5 text-gray-600" />
-              </button>
-              {showLearnMoreButton === 'customers-myfeed' && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="absolute right-0 top-full mt-1 z-10"
-                >
-                  <button
-                    onClick={(e) => handleLearnMoreClick('customers', e)}
-                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
-                  >
-                    Learn more
-                  </button>
-                </motion.div>
-              )}
-            </div>
           </div>
 
           <div className="space-y-4">
@@ -1473,28 +1426,6 @@ export default function ToHub() {
                   : "Last updated: a day ago"}
               </p>
             </div>
-            <div className="relative">
-              <button 
-                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'orders-by-mealtime-myfeed' ? null : 'orders-by-mealtime-myfeed')}
-                className="p-2 rounded-full hover:bg-gray-100"
-              >
-                <MoreVertical className="w-5 h-5 text-gray-600" />
-              </button>
-              {showLearnMoreButton === 'orders-by-mealtime-myfeed' && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="absolute right-0 top-full mt-1 z-10"
-                >
-                  <button
-                    onClick={(e) => handleLearnMoreClick('orders-by-mealtime', e)}
-                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
-                  >
-                    Learn more
-                  </button>
-                </motion.div>
-              )}
-            </div>
           </div>
 
           <div className="space-y-3">
@@ -1527,28 +1458,6 @@ export default function ToHub() {
             <div>
               <p className="text-base font-bold text-gray-900">Offers</p>
               <p className="text-xs text-gray-500">Last updated: an hour ago</p>
-            </div>
-            <div className="relative">
-              <button 
-                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'offers-myfeed' ? null : 'offers-myfeed')}
-                className="p-2 rounded-full hover:bg-gray-100"
-              >
-                <MoreVertical className="w-5 h-5 text-gray-600" />
-              </button>
-              {showLearnMoreButton === 'offers-myfeed' && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="absolute right-0 top-full mt-1 z-10"
-                >
-                  <button
-                    onClick={(e) => handleLearnMoreClick('offers', e)}
-                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
-                  >
-                    Learn more
-                  </button>
-                </motion.div>
-              )}
             </div>
           </div>
 
@@ -1679,28 +1588,6 @@ export default function ToHub() {
                 <p className="text-base font-bold text-gray-900">Sales</p>
                 <p className="text-xs text-gray-500">Last updated: few seconds ago</p>
               </div>
-              <div className="relative">
-                <button 
-                  onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'sales-tab' ? null : 'sales-tab')}
-                  className="p-2 rounded-full hover:bg-gray-100"
-                >
-                  <MoreVertical className="w-5 h-5 text-gray-600" />
-                </button>
-                {showLearnMoreButton === 'sales-tab' && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="absolute right-0 top-full mt-1 z-10"
-                  >
-                    <button
-                      onClick={(e) => handleLearnMoreClick('sales', e)}
-                      className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
-                    >
-                      Learn more
-                    </button>
-                  </motion.div>
-                )}
-              </div>
             </div>
 
             {[
@@ -1764,28 +1651,6 @@ export default function ToHub() {
               <div>
                 <p className="text-base font-bold text-gray-900">Sales & orders</p>
                 <p className="text-xs text-gray-500">Last updated: few seconds ago</p>
-              </div>
-              <div className="relative">
-                <button 
-                  onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'sales-orders' ? null : 'sales-orders')}
-                  className="p-2 rounded-full hover:bg-gray-100"
-                >
-                  <MoreVertical className="w-5 h-5 text-gray-600" />
-                </button>
-                {showLearnMoreButton === 'sales-orders' && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="absolute right-0 top-full mt-1 z-10"
-                  >
-                    <button
-                      onClick={(e) => handleLearnMoreClick('sales-orders', e)}
-                      className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
-                    >
-                      Learn more
-                    </button>
-                  </motion.div>
-                )}
               </div>
             </div>
 
@@ -1884,28 +1749,6 @@ export default function ToHub() {
                 <p className="text-base font-bold text-gray-900">Average order value</p>
                 <p className="text-xs text-gray-500">Last updated: few seconds ago</p>
               </div>
-              <div className="relative">
-                <button 
-                  onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'avg-order-value' ? null : 'avg-order-value')}
-                  className="p-2 rounded-full hover:bg-gray-100"
-                >
-                  <MoreVertical className="w-5 h-5 text-gray-600" />
-                </button>
-                {showLearnMoreButton === 'avg-order-value' && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="absolute right-0 top-full mt-1 z-10"
-                  >
-                    <button
-                      onClick={(e) => handleLearnMoreClick('avg-order-value', e)}
-                      className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
-                    >
-                      Learn more
-                    </button>
-                  </motion.div>
-                )}
-              </div>
             </div>
 
             <div className="space-y-1">
@@ -1964,28 +1807,6 @@ export default function ToHub() {
                     ? `Last updated: ${formatTimeAgo(lastUpdated)}`
                     : "Last updated: a day ago"}
                 </p>
-              </div>
-              <div className="relative">
-                <button 
-                  onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'orders-by-mealtime-sales' ? null : 'orders-by-mealtime-sales')}
-                  className="p-2 rounded-full hover:bg-gray-100"
-                >
-                  <MoreVertical className="w-5 h-5 text-gray-600" />
-                </button>
-                {showLearnMoreButton === 'orders-by-mealtime-sales' && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="absolute right-0 top-full mt-1 z-10"
-                  >
-                    <button
-                      onClick={(e) => handleLearnMoreClick('orders-by-mealtime', e)}
-                      className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
-                    >
-                      Learn more
-                    </button>
-                  </motion.div>
-                )}
               </div>
             </div>
 

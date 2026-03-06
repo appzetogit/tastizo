@@ -332,16 +332,6 @@ export default function SwitchOutlet() {
                       <p className="text-xs text-gray-600">Outlet ID: {outlet.id}</p>
                     </div>
                   </div>
-                  <div className="flex p-2 rounded-b-lg items-center w-full bg-gray-200 border border-blue-200 gap-1.5 mt-3">
-                    <Power
-                      className={`w-4 h-4 ${outlet.status === "offline" ? "text-red-600" : "text-green-600"}`}
-                    />
-                    <span
-                      className={`text-sm font-medium ${outlet.status === "offline" ? "text-red-600" : "text-green-600"}`}
-                    >
-                      {outlet.status === "offline" ? "Offline" : "Online"}
-                    </span>
-                  </div>
                 </motion.div>
               ))
             )}

@@ -1,4 +1,5 @@
 import Order from "../models/Order.js";
+import OrderReview from "../models/OrderReview.js";
 import Payment from "../../payment/models/Payment.js";
 import {
   createOrder as createRazorpayOrder,
@@ -1469,10 +1470,49 @@ export const submitOrderReview = async (req, res) => {
       });
     }
 
-    // Update order with review
+    // Ensure order is delivered before allowing review
+    if (order.status !== "delivered") {
+      return res.status(400).json({
+        success: false,
+        message: "You can only review delivered orders",
+      });
+    }
+
+    const restaurantObjectId =
+      typeof order.restaurantId === "string"
+        ? order.restaurantId
+        : order.restaurantId?._id || order.restaurantId;
+
+    if (!restaurantObjectId) {
+      return res.status(400).json({
+        success: false,
+        message: "Restaurant information missing on order",
+      });
+    }
+
+    const trimmedComment = comment ? comment.trim() : "";
+
+    // Upsert canonical review document (one per order per user)
+    const reviewDoc = await OrderReview.findOneAndUpdate(
+      { orderId: order._id, userId },
+      {
+        $set: {
+          restaurantId: restaurantObjectId,
+          rating: numericRating,
+          reviewText: trimmedComment,
+        },
+      },
+      {
+        new: true,
+        upsert: true,
+        runValidators: true,
+      },
+    );
+
+    // Keep embedded snapshot on Order in sync (for backward compatibility)
     order.review = {
       rating: numericRating,
-      comment: comment ? comment.trim() : "",
+      comment: trimmedComment,
       submittedAt: new Date(),
       reviewedBy: userId,
     };
@@ -1488,7 +1528,12 @@ export const submitOrderReview = async (req, res) => {
       message: "Review submitted successfully",
       data: {
         orderId: order.orderId,
-        review: order.review,
+        review: {
+          rating: reviewDoc.rating,
+          comment: reviewDoc.reviewText,
+          createdAt: reviewDoc.createdAt,
+          updatedAt: reviewDoc.updatedAt,
+        },
       },
     });
   } catch (error) {

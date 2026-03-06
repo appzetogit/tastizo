@@ -80,7 +80,7 @@ export default function UserOrderDetails() {
     fetchOrderDetails()
   }, [orderId, navigate])
 
-  // On first load, restore "already rated" state and saved rating/comment so we show details view
+  // On first load, restore \"already rated\" state and saved rating/comment so we show details view
   useEffect(() => {
     try {
       if (typeof window === "undefined" || !window.localStorage) return
@@ -145,15 +145,6 @@ export default function UserOrderDetails() {
   const restaurantObj = restaurant || order.restaurantId || order.restaurant || {}
   const restaurantName =
     order.restaurantName || restaurantObj.name || "Restaurant"
-
-  // Normalize order status and detect any cancelled state to control rating visibility
-  const rawOriginalStatus = (order.originalStatus || order.status || "").toString()
-  const lowerOriginalStatus = rawOriginalStatus.toLowerCase()
-  const isCancelledStatus =
-    lowerOriginalStatus === "cancelled" ||
-    lowerOriginalStatus === "canceled" ||
-    lowerOriginalStatus === "restaurant_cancelled" ||
-    lowerOriginalStatus === "user_cancelled"
 
   // Build restaurant address (try restaurant fields first, then fall back)
   const restaurantLocation = (() => {
@@ -252,22 +243,10 @@ export default function UserOrderDetails() {
     try {
       setSubmittingRating(true)
 
-      const restaurantId =
-        restaurant?._id ||
-        (typeof order.restaurantId === "object" ? order.restaurantId?._id : order.restaurantId) ||
-        null
-
-      await api.post(API_ENDPOINTS.ADMIN.FEEDBACK_EXPERIENCE_CREATE, {
+      // Submit canonical order review so restaurant/admin panels see the correct rating and comment
+      await orderAPI.submitOrderReview(String(order._id || orderIdDisplay), {
         rating,
-        module: "user",
-        restaurantId,
-        metadata: {
-          orderId: orderIdDisplay,
-          orderMongoId: order._id,
-          orderTotal: pricing.totalPayable || pricing.total || pricing.grandTotal || null,
-          restaurantName,
-          comment: feedbackText || undefined,
-        },
+        comment: feedbackText?.trim() || "",
       })
 
       setHasRated(true)

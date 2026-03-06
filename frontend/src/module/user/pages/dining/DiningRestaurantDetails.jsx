@@ -598,12 +598,12 @@ export default function DiningRestaurantDetails() {
                     <div className="absolute inset-0 bg-black/50 pointer-events-auto" onClick={() => setIsBookingOpen(false)} />
 
                     {/* Modal Panel */}
-                    <div className="relative w-full sm:w-[400px] bg-white dark:bg-[#111111] rounded-t-2xl sm:rounded-2xl p-6 pointer-events-auto animate-in slide-in-from-bottom-5">
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">Book a Table</h3>
+                    <div className="relative w-full sm:w-[400px] bg-white rounded-t-2xl sm:rounded-2xl p-6 pointer-events-auto animate-in slide-in-from-bottom-5">
+                        <h3 className="text-xl font-bold mb-4">Book a Table</h3>
 
                         <div className="space-y-4">
                             <div className="space-y-3">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-100 block">Number of Guests</label>
+                                <label className="text-sm font-medium text-gray-700 block">Number of Guests</label>
 
                                 {/* Manual Input */}
                                 <div className="relative">
@@ -626,9 +626,9 @@ export default function DiningRestaurantDetails() {
                                         onBlur={(e) => {
                                             if (!selectedGuests || selectedGuests < 1) setSelectedGuests(1)
                                         }}
-                                        className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-[#020617] focus:bg-white dark:focus:bg-[#020617] focus:border-[#2B9C64] focus:ring-1 focus:ring-[#2B9C64] transition-all text-lg font-semibold text-center text-gray-900 dark:text-gray-100"
+                                        className="w-full p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#2B9C64] focus:ring-1 focus:ring-[#2B9C64] transition-all text-lg font-semibold text-center"
                                     />
-                                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm font-medium pointer-events-none">
+                                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium pointer-events-none">
                                         Guests
                                     </span>
                                 </div>
