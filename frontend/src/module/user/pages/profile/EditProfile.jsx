@@ -146,6 +146,68 @@ export default function EditProfile() {
     }))
   }
 
+  // Open camera via Flutter InAppWebView if available, otherwise fall back to hidden file input
+  const handleCameraClick = async () => {
+    if (window.flutter_inappwebview && typeof window.flutter_inappwebview.callHandler === "function") {
+      try {
+        const result = await window.flutter_inappwebview.callHandler("openCamera", {
+          source: "camera",
+          accept: "image/*",
+          multiple: false,
+          quality: 0.8,
+        })
+
+        if (result && result.success) {
+          let file = null
+
+          if (result.file) {
+            file = result.file
+          } else if (result.base64) {
+            let base64Data = result.base64
+            if (base64Data.includes(",")) {
+              base64Data = base64Data.split(",")[1]
+            }
+            try {
+              const byteCharacters = atob(base64Data)
+              const byteNumbers = new Array(byteCharacters.length)
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i)
+              }
+              const byteArray = new Uint8Array(byteNumbers)
+              const mimeType = result.mimeType || "image/jpeg"
+              const blob = new Blob([byteArray], { type: mimeType })
+              file = new File(
+                [blob],
+                result.fileName || `profile-image-${Date.now()}.jpg`,
+                { type: mimeType },
+              )
+            } catch (error) {
+              console.error("Error converting base64 camera image:", error)
+              toast.error("Failed to process camera image. Please try again.")
+            }
+          }
+
+          if (file) {
+            await handleImageSelect({
+              target: {
+                files: [file],
+                value: "",
+              },
+            })
+            return
+          }
+        }
+      } catch (error) {
+        console.error("Error using Flutter camera handler:", error)
+      }
+    }
+
+    // Fallback to standard hidden camera input for web/PWA
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click()
+    }
+  }
+
   const handleImageSelect = async (e) => {
     const inputEl = e.target
     const file = inputEl.files?.[0]
@@ -314,7 +376,7 @@ export default function EditProfile() {
             <div className="absolute bottom-0 right-0 flex gap-1">
               <button
                 type="button"
-                onClick={() => cameraInputRef.current?.click()}
+                onClick={handleCameraClick}
                 disabled={isUploadingImage}
                 className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center shadow-lg border-2 border-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Take photo"
