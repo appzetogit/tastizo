@@ -91,13 +91,32 @@ export function useDeliveryOrderChat(orderId, options = {}) {
 
   const sendMessage = useCallback(
     async (text) => {
-      if (!text?.trim() || !orderId || !chatAllowed) return { success: false };
+      const trimmed = text?.trim();
+      if (!trimmed || !orderId || !chatAllowed) return { success: false };
+
+      // Optimistic UI update: show message instantly for delivery partner
+      const tempId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const optimisticMessage = {
+        _id: tempId,
+        sender: "delivery",
+        message: trimmed,
+        timestamp: new Date().toISOString(),
+        _optimistic: true,
+      };
+
+      setMessages((prev) => [...prev, optimisticMessage]);
+
       try {
-        await deliveryAPI.sendOrderChatMessage(orderId, text.trim());
-        // Do not add locally - backend emits to room, we add once via socket (avoids duplicates)
+        await deliveryAPI.sendOrderChatMessage(orderId, trimmed);
+        // Real message will arrive via socket; duplicate guard will keep only one copy
         return { success: true };
       } catch (err) {
-        return { success: false, error: err?.response?.data?.message || err?.message };
+        // Roll back optimistic message on failure
+        setMessages((prev) => prev.filter((m) => m._id !== tempId));
+        return {
+          success: false,
+          error: err?.response?.data?.message || err?.message,
+        };
       }
     },
     [orderId, chatAllowed]
