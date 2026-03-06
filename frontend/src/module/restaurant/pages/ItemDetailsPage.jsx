@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch"
 // Removed getAllFoods and saveFood - now using menu API
 import api from "@/lib/api"
 import { restaurantAPI, uploadAPI } from "@/lib/api"
+import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 import { toast } from "sonner"
 
 export default function ItemDetailsPage() {
@@ -962,6 +963,21 @@ export default function ItemDetailsPage() {
             {images.length < maxImages && (
               <label
                 htmlFor="image-upload"
+                onClick={async (e) => {
+                  if (hasFlutterCameraBridge()) {
+                    // Prefer native Flutter camera for WebView environments
+                    e.preventDefault();
+                    const { success, file } = await openCameraViaFlutter({
+                      source: "camera",
+                      accept: "image/*",
+                      multiple: false,
+                      quality: 0.8,
+                    });
+                    if (success && file) {
+                      await handleImageAdd({ target: { files: [file] } });
+                    }
+                  }
+                }}
                 className="flex items-center justify-center gap-2.5 px-6 py-3.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl text-sm font-semibold cursor-pointer hover:from-gray-800 hover:to-gray-700 transition-all shadow-md hover:shadow-lg active:scale-95"
               >
                 <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">

@@ -21,6 +21,7 @@ import { restaurantAPI } from "@/lib/api"
 import OptimizedImage from "@/components/OptimizedImage"
 import { clearModuleAuth } from "@/lib/utils/auth"
 import { firebaseAuth } from "@/lib/firebase"
+import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 
 const STORAGE_KEY = "restaurant_owner_contact"
 
@@ -138,6 +139,37 @@ export default function EditOwner() {
         }))
       }
       reader.readAsDataURL(file)
+    }
+  }
+
+  const handleEditPhotoClick = async () => {
+    if (!hasFlutterCameraBridge()) {
+      fileInputRef.current?.click()
+      return
+    }
+
+    if (loading || saving) return
+
+    try {
+      const result = await openCameraViaFlutter({
+        source: "camera",
+        accept: "image/*",
+        multiple: false,
+      })
+
+      if (result?.success && result.file) {
+        const syntheticEvent = { target: { files: [result.file] } }
+        handlePhotoChange(syntheticEvent)
+      } else if (result && !result.success) {
+        console.error("Flutter camera returned unsuccessful result for owner photo:", result)
+        alert("Failed to capture image from camera.")
+      } else {
+        console.log("Owner photo camera cancelled by user or no result returned")
+      }
+    } catch (error) {
+      console.error("Error opening camera for owner photo:", error)
+      alert("Failed to open camera. Please try again.")
+      fileInputRef.current?.click()
     }
   }
 
@@ -293,7 +325,7 @@ export default function EditOwner() {
             </div>
           </div>
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={handleEditPhotoClick}
             disabled={loading || saving}
             className="text-blue-600 text-sm font-normal hover:text-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >

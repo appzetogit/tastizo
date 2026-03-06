@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { uploadAPI, api } from "@/lib/api"
+import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 import { MobileTimePicker } from "@mui/x-date-pickers/MobileTimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns"
@@ -1607,10 +1608,28 @@ export default function RestaurantOnboarding() {
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(e) => setStep3({ ...step3, fssaiImage: e.target.files?.[0] || null })}
+              onChange={(e) =>
+                setStep3({ ...step3, fssaiImage: e.target.files?.[0] || null })
+              }
             />
           </label>
-          <label className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50">
+          <label
+            className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50"
+            onClick={async (e) => {
+              if (hasFlutterCameraBridge()) {
+                e.preventDefault();
+                const { success, file } = await openCameraViaFlutter({
+                  source: "camera",
+                  accept: "image/*",
+                  multiple: false,
+                  quality: 0.8,
+                });
+                if (success && file) {
+                  setStep3({ ...step3, fssaiImage: file });
+                }
+              }
+            }}
+          >
             <Camera className="w-4 h-4" />
             <span>Camera</span>
             <Input
@@ -1618,7 +1637,9 @@ export default function RestaurantOnboarding() {
               accept="image/*"
               capture="environment"
               className="hidden"
-              onChange={(e) => setStep3({ ...step3, fssaiImage: e.target.files?.[0] || null })}
+              onChange={(e) =>
+                setStep3({ ...step3, fssaiImage: e.target.files?.[0] || null })
+              }
             />
           </label>
         </div>

@@ -3,6 +3,7 @@ import { Plus, Trash2, GripVertical, Star, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { restaurantAPI } from "@/lib/api"
 import * as diningContentService from "../services/diningContentService"
+import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 
 export default function PhotoManager({ initialData, onUpdate }) {
   const [photos, setPhotos] = useState(initialData?.diningPhotos ?? [])
@@ -29,6 +30,41 @@ export default function PhotoManager({ initialData, onUpdate }) {
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
+  const handleAddPhotoClick = async (e) => {
+    if (!hasFlutterCameraBridge()) {
+      // Let the default label behavior trigger the native file picker
+      return
+    }
+
+    e.preventDefault()
+    if (uploading) return
+
+    try {
+      const result = await openCameraViaFlutter({
+        source: "camera",
+        accept: "image/*",
+        multiple: false,
+      })
+
+      if (result?.success && result.file) {
+        const syntheticEvent = { target: { files: [result.file] } }
+        await handleUpload(syntheticEvent)
+      } else if (result && !result.success) {
+        console.error("Flutter camera returned unsuccessful result for dining photo:", result)
+        toast.error("Failed to capture image from camera")
+      } else {
+        console.log("Dining photo camera cancelled by user or no result returned")
+      }
+    } catch (error) {
+      console.error("Error opening camera for dining photo:", error)
+      toast.error("Failed to open camera. Please try again.")
+      // Fallback to native picker
+      if (fileInputRef.current) {
+        fileInputRef.current.click()
+      }
     }
   }
 
@@ -131,7 +167,10 @@ export default function PhotoManager({ initialData, onUpdate }) {
             )}
           </div>
         ))}
-        <label className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#2B9C64] hover:bg-slate-50 transition-colors">
+        <label
+          className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#2B9C64] hover:bg-slate-50 transition-colors"
+          onClick={handleAddPhotoClick}
+        >
           <input
             ref={fileInputRef}
             type="file"

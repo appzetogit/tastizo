@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { restaurantAPI } from "@/lib/api"
 import { toast } from "sonner"
+import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 
 const CUISINES_STORAGE_KEY = "restaurant_cuisines"
 
@@ -264,6 +265,36 @@ export default function OutletInfo() {
     }
   }
 
+  // Bridge-aware handler for editing profile photo
+  const handleEditPhotoClick = async () => {
+    if (!hasFlutterCameraBridge()) {
+      profileImageInputRef.current?.click()
+      return
+    }
+
+    try {
+      const result = await openCameraViaFlutter({
+        source: "camera",
+        accept: "image/*",
+        multiple: false,
+      })
+
+      if (result?.success && result.file) {
+        const syntheticEvent = { target: { files: [result.file] } }
+        await handleProfileImageReplace(syntheticEvent)
+      } else if (result && !result.success) {
+        console.error("Flutter camera returned unsuccessful result:", result)
+        toast.error("Failed to capture image from camera")
+      } else {
+        console.log("Camera cancelled by user or no result returned")
+      }
+    } catch (error) {
+      console.error("Error opening camera for profile image:", error)
+      toast.error("Failed to open camera. Please try again.")
+      profileImageInputRef.current?.click()
+    }
+  }
+
   // Handle multiple cover images addition (separate from menu images)
   const handleCoverImageAdd = async (event) => {
     const files = Array.from(event.target.files || [])
@@ -397,6 +428,36 @@ export default function OutletInfo() {
       if (menuImageInputRef.current) {
         menuImageInputRef.current.value = null
       }
+    }
+  }
+
+  // Bridge-aware handler for adding cover images
+  const handleAddCoverImageClick = async () => {
+    if (!hasFlutterCameraBridge()) {
+      menuImageInputRef.current?.click()
+      return
+    }
+
+    try {
+      const result = await openCameraViaFlutter({
+        source: "camera",
+        accept: "image/*",
+        multiple: false,
+      })
+
+      if (result?.success && result.file) {
+        const syntheticEvent = { target: { files: [result.file] } }
+        await handleCoverImageAdd(syntheticEvent)
+      } else if (result && !result.success) {
+        console.error("Flutter camera returned unsuccessful result for cover image:", result)
+        toast.error("Failed to capture image from camera")
+      } else {
+        console.log("Cover image camera cancelled by user or no result returned")
+      }
+    } catch (error) {
+      console.error("Error opening camera for cover image:", error)
+      toast.error("Failed to open camera. Please try again.")
+      menuImageInputRef.current?.click()
     }
   }
 
@@ -623,7 +684,7 @@ export default function OutletInfo() {
         
         {/* Add Image Button - Black background with white text */}
         <button
-          onClick={() => menuImageInputRef.current?.click()}
+          onClick={handleAddCoverImageClick}
           disabled={uploadingImage}
           className="absolute top-4 right-4 bg-black/90 hover:bg-black px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium text-white transition-colors shadow-lg z-10 disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -689,7 +750,7 @@ export default function OutletInfo() {
             />
           </div>
           <button
-            onClick={() => profileImageInputRef.current?.click()}
+            onClick={handleEditPhotoClick}
             disabled={uploadingImage}
             className="text-blue-600 text-sm font-semibold hover:text-blue-700 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
           >

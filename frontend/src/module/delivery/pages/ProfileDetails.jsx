@@ -5,6 +5,7 @@ import BottomPopup from "../components/BottomPopup"
 import { toast } from "sonner"
 import { deliveryAPI } from "@/lib/api"
 import apiClient from "@/lib/api/axios"
+import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 
 const BANK_OPTIONS = [
   "State Bank of India",
@@ -649,9 +650,27 @@ export default function ProfileDetails() {
           <button
             type="button"
             disabled={isUpdatingPhoto}
-            onClick={() => {
+            onClick={async () => {
               setShowPhotoSourcePopup(false)
-              // Hint to use camera if supported; many browsers/devices respect capture when opening picker
+              // Prefer Flutter camera bridge when available
+              if (hasFlutterCameraBridge()) {
+                const { success, file } = await openCameraViaFlutter({
+                  source: "camera",
+                  accept: "image/*",
+                  multiple: false,
+                  quality: 0.8,
+                })
+                if (success && file) {
+                  // Reuse upload pipeline by calling the same logic as the file input change
+                  const fakeEvent = { target: { files: [file] } }
+                  const handler = fileInputRef.current?.onchange
+                  if (typeof handler === "function") {
+                    await handler(fakeEvent)
+                    return
+                  }
+                }
+              }
+              // Fallback to native capture flow
               if (fileInputRef.current) {
                 fileInputRef.current.setAttribute("capture", "environment")
                 fileInputRef.current.click()

@@ -4,6 +4,7 @@ import { ArrowLeft, Upload, X, Check } from "lucide-react"
 import { deliveryAPI } from "@/lib/api"
 import apiClient from "@/lib/api/axios"
 import { toast } from "sonner"
+import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 
 export default function SignupStep2() {
   const navigate = useNavigate()
@@ -131,6 +132,36 @@ export default function SignupStep2() {
     const uploaded = uploadedDocs[docType]
     const isUploading = uploading[docType]
 
+    const handleClick = async (e) => {
+      if (!hasFlutterCameraBridge()) {
+        // Let the native file input open in browsers
+        return
+      }
+
+      e.preventDefault()
+      if (isUploading) return
+
+      try {
+        const result = await openCameraViaFlutter({
+          source: "camera",
+          accept: "image/*",
+          multiple: false,
+        })
+
+        if (result?.success && result.file) {
+          await handleFileSelect(docType, result.file)
+        } else if (result && !result.success) {
+          console.error("Flutter camera returned unsuccessful result for document:", result)
+          toast.error("Failed to capture image from camera")
+        } else {
+          console.log("Document camera cancelled by user or no result returned")
+        }
+      } catch (error) {
+        console.error("Error opening camera for document:", error)
+        toast.error("Failed to open camera. Please try again.")
+      }
+    }
+
     return (
       <div className="bg-white rounded-lg p-4 border border-gray-200">
         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -157,7 +188,10 @@ export default function SignupStep2() {
             </div>
           </div>
         ) : (
-          <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 transition-colors">
+          <label
+            className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 transition-colors"
+            onClick={handleClick}
+          >
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
               {isUploading ? (
                 <>

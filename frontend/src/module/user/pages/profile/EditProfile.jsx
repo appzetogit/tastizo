@@ -15,6 +15,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useProfile } from "../../context/ProfileContext"
 import { userAPI } from "@/lib/api"
+import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 import { toast } from "sonner"
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
@@ -146,68 +147,6 @@ export default function EditProfile() {
     }))
   }
 
-  // Open camera via Flutter InAppWebView if available, otherwise fall back to hidden file input
-  const handleCameraClick = async () => {
-    if (window.flutter_inappwebview && typeof window.flutter_inappwebview.callHandler === "function") {
-      try {
-        const result = await window.flutter_inappwebview.callHandler("openCamera", {
-          source: "camera",
-          accept: "image/*",
-          multiple: false,
-          quality: 0.8,
-        })
-
-        if (result && result.success) {
-          let file = null
-
-          if (result.file) {
-            file = result.file
-          } else if (result.base64) {
-            let base64Data = result.base64
-            if (base64Data.includes(",")) {
-              base64Data = base64Data.split(",")[1]
-            }
-            try {
-              const byteCharacters = atob(base64Data)
-              const byteNumbers = new Array(byteCharacters.length)
-              for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i)
-              }
-              const byteArray = new Uint8Array(byteNumbers)
-              const mimeType = result.mimeType || "image/jpeg"
-              const blob = new Blob([byteArray], { type: mimeType })
-              file = new File(
-                [blob],
-                result.fileName || `profile-image-${Date.now()}.jpg`,
-                { type: mimeType },
-              )
-            } catch (error) {
-              console.error("Error converting base64 camera image:", error)
-              toast.error("Failed to process camera image. Please try again.")
-            }
-          }
-
-          if (file) {
-            await handleImageSelect({
-              target: {
-                files: [file],
-                value: "",
-              },
-            })
-            return
-          }
-        }
-      } catch (error) {
-        console.error("Error using Flutter camera handler:", error)
-      }
-    }
-
-    // Fallback to standard hidden camera input for web/PWA
-    if (cameraInputRef.current) {
-      cameraInputRef.current.click()
-    }
-  }
-
   const handleImageSelect = async (e) => {
     const inputEl = e.target
     const file = inputEl.files?.[0]
@@ -260,6 +199,41 @@ export default function EditProfile() {
       if (inputEl) {
         inputEl.value = ""
       }
+    }
+  }
+
+  const handleCameraClick = async () => {
+    if (isUploadingImage) return
+
+    // Prefer Flutter bridge when available (WebView/PWA in Flutter shell)
+    if (hasFlutterCameraBridge()) {
+      try {
+        const { success, file, error } = await openCameraViaFlutter({
+          source: "camera",
+          accept: "image/*",
+          multiple: false,
+          quality: 0.8,
+        })
+
+        if (!success || !file) {
+          if (error) {
+            console.error("Error capturing image via Flutter bridge:", error)
+          }
+          toast.error("Could not capture image from camera. Please try again.")
+          return
+        }
+
+        // Reuse existing upload logic by faking a change event
+        await handleImageSelect({ target: { files: [file] } })
+        return
+      } catch (err) {
+        console.error("Camera bridge failed, falling back to browser input:", err)
+      }
+    }
+
+    // Fallback: use native file input with capture attribute
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click()
     }
   }
 
