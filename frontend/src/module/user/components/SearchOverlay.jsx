@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import { X, Search, Clock } from "lucide-react"
+import { X, Search, Clock, Mic, MicOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { restaurantAPI } from "@/lib/api"
@@ -12,10 +12,19 @@ const MAX_HISTORY_ITEMS = 10
 export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchChange }) {
   const navigate = useNavigate()
   const inputRef = useRef(null)
+  const recognitionRef = useRef(null)
   const [allFoods, setAllFoods] = useState([])
   const [filteredFoods, setFilteredFoods] = useState([])
   const [recentSearches, setRecentSearches] = useState([])
   const [loadingFoods, setLoadingFoods] = useState(false)
+  const [isListening, setIsListening] = useState(false)
+  const [micSupported, setMicSupported] = useState(false)
+
+  // Check if browser supports speech recognition
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    setMicSupported(!!SpeechRecognition)
+  }, [])
 
   // Focus input when opened
   useEffect(() => {
@@ -61,56 +70,105 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     }
   }, [isOpen])
 
-  // Load real dish suggestions from backend restaurants (featured dishes)
+  // Load restaurants + menu dishes so search matches food names
   useEffect(() => {
     if (!isOpen || allFoods.length > 0 || loadingFoods) return
 
     const loadFoods = async () => {
       try {
         setLoadingFoods(true)
-        const response = await restaurantAPI.getRestaurants({})
+        const response = await restaurantAPI.getRestaurants({ limit: 50 })
         const restaurants = response?.data?.data?.restaurants || []
 
-        const foods = restaurants
+        const restaurantSlug = (r) =>
+          r.slug || (r.name || "").toLowerCase().trim().replace(/\s+/g, "-")
+
+        const getRestaurantImage = (r) => {
+          const cover = r.coverImages && r.coverImages.length > 0 ? r.coverImages.map((img) => img.url || img).filter(Boolean) : []
+          const menu = r.menuImages && r.menuImages.length > 0 ? r.menuImages.map((img) => img.url || img).filter(Boolean) : []
+          const first = cover[0] || menu[0] || r.profileImage?.url
+          return first || foodImages[0]
+        }
+
+        // 1) Restaurant entries (searchable by name, cuisine, featuredDish)
+        const restaurantEntries = restaurants
           .map((restaurant, index) => {
-            // Show restaurant cards (not dish names)
             const name = restaurant.name || restaurant.featuredDish
             if (!name) return null
-
-            const coverImages = restaurant.coverImages && restaurant.coverImages.length > 0
-              ? restaurant.coverImages.map((img) => img.url || img).filter(Boolean)
-              : []
-
-            const fallbackImages = restaurant.menuImages && restaurant.menuImages.length > 0
-              ? restaurant.menuImages.map((img) => img.url || img).filter(Boolean)
-              : []
-
-            const allImages = coverImages.length > 0
-              ? coverImages
-              : (fallbackImages.length > 0
-                ? fallbackImages
-                : (restaurant.profileImage?.url ? [restaurant.profileImage.url] : []))
-
-            const image = allImages[0] || foodImages[0]
-            const slug =
-              restaurant.slug ||
-              (restaurant.name || "")
-                .toLowerCase()
-                .trim()
-                .replace(/\s+/g, "-")
-
+            const cuisineStr = Array.isArray(restaurant.cuisines) && restaurant.cuisines.length > 0
+              ? restaurant.cuisines.join(" ").toLowerCase()
+              : ""
             return {
-              id: restaurant.restaurantId || restaurant._id || index,
+              id: `restaurant-${restaurant.restaurantId || restaurant._id || index}`,
               name,
-              image,
-              restaurantSlug: slug,
+              image: getRestaurantImage(restaurant),
+              restaurantSlug: restaurantSlug(restaurant),
               featuredDish: restaurant.featuredDish || null,
+              cuisine: cuisineStr,
+              isDish: false,
             }
           })
           .filter(Boolean)
 
-        setAllFoods(foods)
-        setFilteredFoods(foods)
+        // 2) Flatten menu items from first N restaurants so "food" search works
+        const MAX_RESTAURANTS_FOR_MENU = 20
+        const dishEntries = []
+        const restToFetch = restaurants.slice(0, MAX_RESTAURANTS_FOR_MENU)
+
+        await Promise.all(
+          restToFetch.map(async (restaurant) => {
+            try {
+              const id = restaurant._id || restaurant.restaurantId
+              if (!id) return
+              const menuRes = await restaurantAPI.getMenuByRestaurantId(id)
+              const menu = menuRes?.data?.data?.menu || menuRes?.data?.menu
+              if (!menu || !menu.sections || !Array.isArray(menu.sections)) return
+
+              const slug = restaurantSlug(restaurant)
+              const restImage = getRestaurantImage(restaurant)
+
+              menu.sections.forEach((section) => {
+                const items = section.items || []
+                items.forEach((item) => {
+                  if (item.name && item.name.trim()) {
+                    dishEntries.push({
+                      id: `dish-${id}-${item.id || item.name}`,
+                      name: item.name.trim(),
+                      image: item.image || item.images?.[0] || restImage,
+                      restaurantSlug: slug,
+                      featuredDish: null,
+                      cuisine: "",
+                      isDish: true,
+                    })
+                  }
+                })
+                const subsections = section.subsections || []
+                subsections.forEach((sub) => {
+                  const subItems = sub.items || []
+                  subItems.forEach((item) => {
+                    if (item.name && item.name.trim()) {
+                      dishEntries.push({
+                        id: `dish-${id}-${item.id || item.name}`,
+                        name: item.name.trim(),
+                        image: item.image || item.images?.[0] || restImage,
+                        restaurantSlug: slug,
+                        featuredDish: null,
+                        cuisine: "",
+                        isDish: true,
+                      })
+                    }
+                  })
+                })
+              })
+            } catch (err) {
+              // ignore per-restaurant menu fetch errors
+            }
+          })
+        )
+
+        const combined = [...restaurantEntries, ...dishEntries]
+        setAllFoods(combined)
+        setFilteredFoods(combined)
       } catch (error) {
         console.error("Error loading search suggestions:", error)
         setAllFoods([])
@@ -123,7 +181,7 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     loadFoods()
   }, [isOpen, allFoods.length, loadingFoods])
 
-  // Filter foods based on search input
+  // Filter foods based on search input (name, cuisine, featured dish)
   useEffect(() => {
     if (!allFoods || allFoods.length === 0) {
       setFilteredFoods([])
@@ -133,10 +191,13 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     if (searchValue.trim() === "") {
       setFilteredFoods(allFoods)
     } else {
-      const query = searchValue.toLowerCase()
-      const filtered = allFoods.filter((food) =>
-        food.name.toLowerCase().includes(query)
-      )
+      const query = searchValue.toLowerCase().trim()
+      const filtered = allFoods.filter((food) => {
+        const nameMatch = (food.name || "").toLowerCase().includes(query)
+        const cuisineMatch = (food.cuisine || "").includes(query)
+        const dishMatch = (food.featuredDish || "").toLowerCase().includes(query)
+        return nameMatch || cuisineMatch || dishMatch
+      })
       setFilteredFoods(filtered)
     }
   }, [searchValue, allFoods])
@@ -203,6 +264,45 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     onSearchChange("")
   }
 
+  const handleMicClick = () => {
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognitionAPI) return
+
+    if (isListening) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+      }
+      setIsListening(false)
+      return
+    }
+
+    const recognition = new SpeechRecognitionAPI()
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.lang = "en-IN"
+
+    recognition.onstart = () => setIsListening(true)
+
+    recognition.onend = () => setIsListening(false)
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim() || ""
+      if (transcript) {
+        onSearchChange(transcript)
+      }
+    }
+
+    recognition.onerror = (event) => {
+      setIsListening(false)
+      if (event.error === "not-allowed") {
+        console.warn("Microphone access denied")
+      }
+    }
+
+    recognitionRef.current = recognition
+    recognition.start()
+  }
+
   if (!isOpen) return null
 
   return (
@@ -215,23 +315,40 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
       {/* Header with Search Bar */}
       <div className="flex-shrink-0 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <form onSubmit={handleSearchSubmit} className="flex items-center gap-4">
+          <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 sm:gap-4">
             <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground dark:text-gray-400 z-10" />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground dark:text-gray-400 z-10 pointer-events-none" />
               <Input
                 ref={inputRef}
                 value={searchValue}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder="Search for food, restaurants..."
-                className="pl-12 pr-4 h-12 w-full bg-white dark:bg-[#1a1a1a] border-gray-100 dark:border-gray-800 focus:border-primary-orange dark:focus:border-primary-orange rounded-full text-lg dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                className={`pl-12 h-12 w-full bg-white dark:bg-[#1a1a1a] border-gray-100 dark:border-gray-800 focus:border-primary-orange dark:focus:border-primary-orange rounded-full text-lg dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 ${micSupported ? "pr-12" : "pr-4"}`}
               />
+              {micSupported && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleMicClick}
+                  disabled={isListening}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-primary-orange disabled:opacity-70"
+                  aria-label={isListening ? "Stop listening" : "Search by voice"}
+                >
+                  {isListening ? (
+                    <MicOff className="h-5 w-5 text-red-500" />
+                  ) : (
+                    <Mic className="h-5 w-5" />
+                  )}
+                </Button>
+              )}
             </div>
             <Button
               type="button"
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 flex-shrink-0"
             >
               <X className="h-5 w-5 text-gray-700 dark:text-gray-300" />
             </Button>

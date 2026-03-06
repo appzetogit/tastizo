@@ -752,6 +752,24 @@ export default function Home() {
             ? restaurant.cuisines[0]
             : "Multi-cuisine"
 
+          // Detect "pure veg" restaurants
+          // Prefer explicit backend flags if present, but gracefully fall back to cuisine text
+          const explicitPureVeg =
+            restaurant.isPureVeg === true ||
+            restaurant.pureVeg === true ||
+            restaurant.vegOnly === true
+
+          const cuisinesText = Array.isArray(restaurant.cuisines)
+            ? restaurant.cuisines.join(" ").toLowerCase()
+            : (restaurant.cuisines || "").toString().toLowerCase()
+
+          const cuisineIndicatesPureVeg =
+            cuisinesText.includes("pure veg") ||
+            cuisinesText.includes("veg only") ||
+            cuisinesText.includes("vegetarian only")
+
+          const isPureVegRestaurant = explicitPureVeg || cuisineIndicatesPureVeg
+
           // Get cover images (separate from menu images) for carousel
           const coverImages = restaurant.coverImages && restaurant.coverImages.length > 0
             ? restaurant.coverImages.map(img => img.url || img)
@@ -805,6 +823,7 @@ export default function Home() {
             location: restaurant.location, // Store location for distance recalculation
             isActive: restaurant.isActive !== false, // Default to true if not specified
             isAcceptingOrders: restaurant.isAcceptingOrders !== false, // Default to true if not specified
+            isPureVeg: isPureVegRestaurant,
           }
         })
 
@@ -907,6 +926,16 @@ export default function Home() {
     // Use only API data - no mock data fallback
     let filtered = [...restaurantsData]
 
+    // Apply Veg Mode preference
+    if (vegMode) {
+      if (vegModeOption === "pure-veg") {
+        // Show only restaurants that are marked as pure veg
+        filtered = filtered.filter((r) => r.isPureVeg === true)
+      }
+      // If vegMode is ON and option is "all", we keep all restaurants in the list.
+      // Item-level veg filtering is handled on RestaurantDetails and menu screens.
+    }
+
     // Apply filters
     if (activeFilters.has('price-under-200')) {
       filtered = filtered.filter(r => r.priceRange === "$" || r.priceRange === "$$")
@@ -1003,7 +1032,7 @@ export default function Home() {
     }
 
     return filtered
-  }, [restaurantsData, activeFilters, selectedCuisine, sortBy])
+  }, [restaurantsData, activeFilters, selectedCuisine, sortBy, vegMode, vegModeOption])
 
   // Featured foods removed - will be handled by restaurants data from API
   const filteredFeaturedFoods = useMemo(() => {
