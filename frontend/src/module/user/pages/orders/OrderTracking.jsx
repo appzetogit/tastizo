@@ -456,12 +456,14 @@ export default function OrderTracking() {
           setOrder(transformedOrder)
 
           // Update orderStatus based on API order status
+          // 'ready' = food ready at restaurant, waiting for delivery partner (show "Food is ready")
+          // 'out_for_delivery' = delivery partner picked up and on the way (show "Order picked up")
           if (apiOrder.status === 'cancelled') {
             setOrderStatus('cancelled');
           } else if (apiOrder.status === 'preparing') {
             setOrderStatus('preparing');
           } else if (apiOrder.status === 'ready') {
-            setOrderStatus('pickup');
+            setOrderStatus('prepared');
           } else if (apiOrder.status === 'out_for_delivery') {
             setOrderStatus('pickup');
           } else if (apiOrder.status === 'delivered') {
@@ -826,7 +828,7 @@ export default function OrderTracking() {
         } else if (apiOrder.status === 'preparing') {
           setOrderStatus('preparing')
         } else if (apiOrder.status === 'ready') {
-          setOrderStatus('pickup')
+          setOrderStatus('prepared')
         } else if (apiOrder.status === 'out_for_delivery') {
           setOrderStatus('pickup')
         } else if (apiOrder.status === 'delivered') {
@@ -876,6 +878,11 @@ export default function OrderTracking() {
     preparing: {
       title: "Preparing your order",
       subtitle: `Arriving in ${estimatedTime} mins`,
+      color: "bg-green-700"
+    },
+    prepared: {
+      title: "Food is ready",
+      subtitle: "Waiting for delivery partner to pick up",
       color: "bg-green-700"
     },
     pickup: {
@@ -1119,12 +1126,13 @@ export default function OrderTracking() {
 
         {/* Food Cooking Status - Show until delivery partner accepts pickup */}
         {(() => {
-          // Check if delivery partner has accepted pickup
-          // Delivery partner accepts when status is 'ready' or 'out_for_delivery' or tracking shows outForDelivery
+          // Delivery partner has accepted / picked up only when out_for_delivery or tracking confirms (not when restaurant just marks 'ready')
           const hasAcceptedPickup = order?.tracking?.outForDelivery?.status === true ||
             order?.tracking?.out_for_delivery?.status === true ||
             order?.status === 'out_for_delivery' ||
-            order?.status === 'ready'
+            order?.deliveryState?.currentPhase === 'en_route_to_delivery' ||
+            order?.deliveryState?.currentPhase === 'at_delivery' ||
+            order?.deliveryState?.status === 'order_confirmed'
 
           // Show "Food is Cooking" until delivery partner accepts pickup
           if (!hasAcceptedPickup) {

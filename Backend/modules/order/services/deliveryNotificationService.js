@@ -724,6 +724,180 @@ export async function notifyMultipleDeliveryBoys(
 }
 
 /**
+ * Broadcast new order to ALL connected delivery boys (entire /delivery namespace).
+ * Ensures every active delivery boy sees the order in their available orders list in real time.
+ * @param {Object} order - Order document (populated or with ids)
+ * @param {string} phase - Optional phase: 'priority', 'expanded', 'immediate'
+ */
+export async function broadcastNewOrderToAllDeliveryBoys(order, phase = "priority") {
+  try {
+    if (!order || !order.orderId) {
+      console.warn("broadcastNewOrderToAllDeliveryBoys: invalid order");
+      return;
+    }
+    if (order.status === "cancelled") {
+      console.log(`⚠️ Order ${order.orderId} is cancelled. Skipping broadcast.`);
+      return;
+    }
+
+    const io = await getIOInstance();
+    if (!io) {
+      console.warn("Socket.IO not initialized, skipping broadcast to delivery boys");
+      return;
+    }
+
+    const deliveryNamespace = io.of("/delivery");
+
+    let orderWithUser = order;
+    if (order.userId && typeof order.userId === "object" && order.userId._id) {
+      orderWithUser = order;
+    } else if (order.userId) {
+      const OrderModel = await import("../models/Order.js");
+      orderWithUser = await OrderModel.default
+        .findById(order._id)
+        .populate("userId", "name phone")
+        .populate("restaurantId", "name address location phone ownerPhone")
+        .lean();
+    }
+
+    let restaurantAddress = "Restaurant address";
+    let restaurantLocation = null;
+    if (orderWithUser.restaurantId && typeof orderWithUser.restaurantId === "object") {
+      restaurantAddress =
+        orderWithUser.restaurantId.address ||
+        orderWithUser.restaurantId.location?.formattedAddress ||
+        orderWithUser.restaurantId.location?.address ||
+        "Restaurant address";
+      restaurantLocation = orderWithUser.restaurantId.location;
+    }
+
+    const deliveryFeeFromOrder = orderWithUser.pricing?.deliveryFee ?? 0;
+    let deliveryDistance = 0;
+    if (
+      restaurantLocation?.coordinates &&
+      orderWithUser.address?.location?.coordinates
+    ) {
+      const [restaurantLng, restaurantLat] = restaurantLocation.coordinates;
+      const [customerLng, customerLat] = orderWithUser.address.location.coordinates;
+      if (
+        restaurantLat && restaurantLng && customerLat && customerLng &&
+        !isNaN(restaurantLat) && !isNaN(restaurantLng) && !isNaN(customerLat) && !isNaN(customerLng)
+      ) {
+        const R = 6371;
+        const dLat = ((customerLat - restaurantLat) * Math.PI) / 180;
+        const dLng = ((customerLng - restaurantLng) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((restaurantLat * Math.PI) / 180) *
+            Math.cos((customerLat * Math.PI) / 180) *
+            Math.sin(dLng / 2) *
+            Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        deliveryDistance = R * c;
+      }
+    }
+
+    let estimatedEarnings = null;
+    try {
+      estimatedEarnings = await calculateEstimatedEarnings(deliveryDistance);
+      const earnedValue =
+        typeof estimatedEarnings === "object"
+          ? (estimatedEarnings.totalEarning ?? 0)
+          : Number(estimatedEarnings) || 0;
+      if (earnedValue <= 0 && deliveryFeeFromOrder > 0) {
+        estimatedEarnings =
+          typeof estimatedEarnings === "object"
+            ? { ...estimatedEarnings, totalEarning: deliveryFeeFromOrder }
+            : deliveryFeeFromOrder;
+      }
+    } catch (e) {
+      estimatedEarnings =
+        deliveryFeeFromOrder > 0
+          ? deliveryFeeFromOrder
+          : { totalEarning: 10, breakdown: "Default" };
+    }
+
+    const orderNotificationRaw = {
+      orderId: orderWithUser.orderId || orderWithUser._id,
+      mongoId: orderWithUser._id?.toString(),
+      orderMongoId: orderWithUser._id?.toString(),
+      status: orderWithUser.status || "preparing",
+      restaurantName:
+        orderWithUser.restaurantName || orderWithUser.restaurantId?.name,
+      restaurantAddress,
+      restaurantLocation: restaurantLocation
+        ? {
+            latitude: restaurantLocation.coordinates?.[1],
+            longitude: restaurantLocation.coordinates?.[0],
+            address:
+              restaurantLocation.formattedAddress ||
+              restaurantLocation.address ||
+              restaurantAddress,
+            formattedAddress:
+              restaurantLocation.formattedAddress ||
+              restaurantLocation.address ||
+              restaurantAddress,
+          }
+        : null,
+      customerName: orderWithUser.userId?.name || "Customer",
+      customerPhone: orderWithUser.userId?.phone || "",
+      deliveryAddress:
+        orderWithUser.address?.address ||
+        orderWithUser.address?.location?.address ||
+        orderWithUser.address?.formattedAddress,
+      customerLocation: orderWithUser.address?.location
+        ? {
+            latitude: orderWithUser.address.location.coordinates?.[1],
+            longitude: orderWithUser.address.location.coordinates?.[0],
+            address:
+              orderWithUser.address.formattedAddress ||
+              orderWithUser.address.address,
+          }
+        : null,
+      totalAmount: orderWithUser.pricing?.total || 0,
+      deliveryFee: deliveryFeeFromOrder,
+      estimatedEarnings,
+      deliveryDistance:
+        deliveryDistance > 0
+          ? `${deliveryDistance.toFixed(2)} km`
+          : "Calculating...",
+      paymentMethod: orderWithUser.payment?.method || "cash",
+      message: `New order available: ${orderWithUser.orderId || orderWithUser._id}`,
+      timestamp: new Date().toISOString(),
+      phase,
+      restaurantLat:
+        restaurantLocation?.coordinates?.[1] ||
+        orderWithUser.restaurantId?.location?.coordinates?.[1],
+      restaurantLng:
+        restaurantLocation?.coordinates?.[0] ||
+        orderWithUser.restaurantId?.location?.coordinates?.[0],
+      deliveryLat:
+        orderWithUser.address?.location?.coordinates?.[1] ||
+        orderWithUser.address?.location?.latitude,
+      deliveryLng:
+        orderWithUser.address?.location?.coordinates?.[0] ||
+        orderWithUser.address?.location?.longitude,
+    };
+
+    const orderNotification = redactPII(orderNotificationRaw);
+
+    deliveryNamespace.emit("new_order_available", orderNotification);
+    deliveryNamespace.emit("play_notification_sound", {
+      type: "new_order_available",
+      orderId: order.orderId,
+      message: `New order available: ${order.orderId}`,
+      phase,
+    });
+
+    console.log(
+      `✅ Broadcast new_order_available to all delivery boys for order ${order.orderId} (phase: ${phase})`,
+    );
+  } catch (error) {
+    console.error("❌ Error broadcasting to all delivery boys:", error);
+  }
+}
+
+/**
  * Notify delivery boy that order is ready for pickup
  * @param {Object} order - Order document
  * @param {string} deliveryPartnerId - Delivery partner ID

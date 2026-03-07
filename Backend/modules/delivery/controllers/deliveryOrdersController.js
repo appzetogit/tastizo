@@ -370,90 +370,53 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         );
       }
 
-      // Proceed with assignment (first come first serve)
-
-      // Reload order as document (not lean) to update it
-      let orderDoc;
-      try {
-        orderDoc = await Order.findOne({
-          $or: [{ _id: orderId }, { orderId: orderId }],
-        });
-
-        if (!orderDoc) {
-          console.error(`❌ Order document not found for ID: ${orderId}`);
-          return errorResponse(res, 404, "Order not found");
-        }
-      } catch (findError) {
-        console.error(`❌ Error finding order document: ${findError.message}`);
-        console.error(`❌ Error stack: ${findError.stack}`);
-        return errorResponse(
-          res,
-          500,
-          "Error finding order. Please try again.",
-        );
-      }
-
-      // Check again if order was assigned in the meantime (race condition)
-      if (orderDoc.deliveryPartnerId) {
-        const assignedId = orderDoc.deliveryPartnerId.toString();
-        if (assignedId !== currentDeliveryId) {
-          console.error(
-            `❌ Order ${order.orderId} was just assigned to another delivery partner ${assignedId}`,
-          );
-          return errorResponse(
-            res,
-            403,
-            "Order was just assigned to another delivery partner. Please try another order.",
-          );
-        }
-      }
-
-      // Assign order to this delivery partner
-      try {
-        orderDoc.deliveryPartnerId = delivery._id;
-        orderDoc.assignmentInfo = {
-          ...(orderDoc.assignmentInfo || {}),
+      // Proceed with assignment: atomic update to prevent multiple delivery boys accepting the same order
+      const orderMongoIdForAssign = order._id;
+      const assignmentUpdate = {
+        deliveryPartnerId: delivery._id,
+        assignmentInfo: {
+          ...(order.assignmentInfo || {}),
           deliveryPartnerId: currentDeliveryId,
           assignedAt: new Date(),
           assignedBy: "delivery_accept",
           acceptedFromNotification: true,
-        };
-        await orderDoc.save();
-        console.log(
-          `✅ Order ${order.orderId} assigned to delivery partner ${currentDeliveryId} upon acceptance`,
+        },
+      };
+
+      const assignFilter = {
+        _id: orderMongoIdForAssign,
+        status: { $in: ["preparing", "ready"] },
+        $or: [
+          { deliveryPartnerId: null },
+          { deliveryPartnerId: { $exists: false } },
+        ],
+      };
+
+      let orderDoc = await Order.findOneAndUpdate(
+        assignFilter,
+        { $set: assignmentUpdate },
+        { new: true },
+      );
+
+      if (!orderDoc) {
+        console.error(
+          `❌ Order ${order.orderId} was already accepted by another delivery partner (atomic check failed)`,
         );
-      } catch (saveError) {
-        console.error(`❌ Error saving order assignment: ${saveError.message}`);
-        console.error(`❌ Error stack: ${saveError.stack}`);
-        // Log validation errors if present
-        if (saveError.errors) {
-          console.error(
-            `❌ Validation errors:`,
-            JSON.stringify(saveError.errors, null, 2),
-          );
-        }
-        if (saveError.name === "ValidationError") {
-          const validationMessages = Object.values(saveError.errors || {})
-            .map((err) => err.message)
-            .join(", ");
-          return errorResponse(
-            res,
-            400,
-            `Validation error: ${validationMessages || saveError.message}`,
-          );
-        }
         return errorResponse(
           res,
-          500,
-          "Failed to assign order. Please try again.",
+          409,
+          "Order was accepted by another delivery partner. Please try another order.",
         );
       }
 
-      // Reload order with populated data (use orderDoc._id to ensure we get the updated order)
-      const updatedOrderId = orderDoc._id || orderId;
+      console.log(
+        `✅ Order ${order.orderId} atomically assigned to delivery partner ${currentDeliveryId}`,
+      );
+
+      // Reload order with populated data
       try {
         order = await Order.findOne({
-          $or: [{ _id: updatedOrderId }, { orderId: orderId }],
+          $or: [{ _id: orderDoc._id }, { orderId: orderId }],
         })
           .populate("restaurantId", "name location address phone ownerPhone")
           .populate("userId", "name phone")
@@ -461,7 +424,7 @@ export const acceptOrder = asyncHandler(async (req, res) => {
 
         if (!order) {
           console.error(
-            `❌ Order not found after assignment: ${updatedOrderId}`,
+            `❌ Order not found after assignment: ${orderDoc._id}`,
           );
           return errorResponse(
             res,
@@ -473,24 +436,10 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         console.error(
           `❌ Error reloading order after assignment: ${reloadError.message}`,
         );
-        console.error(`❌ Error stack: ${reloadError.stack}`);
         return errorResponse(
           res,
           500,
           "Error reloading order. Please try again.",
-        );
-      }
-
-      // Update orderDeliveryPartnerId after assignment
-      const updatedOrderDeliveryPartnerId = order.deliveryPartnerId?.toString();
-      if (updatedOrderDeliveryPartnerId !== currentDeliveryId) {
-        console.error(
-          `❌ Order assignment failed - order still not assigned to ${currentDeliveryId}, got ${updatedOrderDeliveryPartnerId}`,
-        );
-        return errorResponse(
-          res,
-          500,
-          "Failed to assign order. Please try again.",
         );
       }
     } else if (orderDeliveryPartnerId !== currentDeliveryId) {
@@ -994,6 +943,26 @@ export const acceptOrder = asyncHandler(async (req, res) => {
       }
     }
     const orderWithPayment = { ...updatedOrder, paymentMethod };
+
+    // Emit to all delivery boys so accepted order disappears from their available list in real time
+    try {
+      const serverModule = await import("../../../server.js");
+      const getIO = serverModule.getIO;
+      const io = getIO ? getIO() : null;
+      if (io) {
+        const deliveryNamespace = io.of("/delivery");
+        deliveryNamespace.emit("order_accepted", {
+          orderId: updatedOrder.orderId,
+          mongoId: updatedOrder._id?.toString?.() || String(updatedOrder._id),
+          acceptedBy: delivery._id?.toString?.() || String(delivery._id),
+        });
+        console.log(
+          `📢 Emitted order_accepted for ${updatedOrder.orderId} to all delivery boys`,
+        );
+      }
+    } catch (emitErr) {
+      console.error("Error emitting order_accepted:", emitErr);
+    }
 
     return successResponse(res, 200, "Order accepted successfully", {
       order: orderWithPayment,
@@ -2170,13 +2139,12 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       );
     }
 
-    // Add earning to delivery boy's wallet
+    // Automatically update delivery boy's wallet: add delivery earning and save transaction for earnings history
     let walletTransaction = null;
     try {
-      // Find or create wallet for delivery boy
       let wallet = await DeliveryWallet.findOrCreateByDeliveryId(delivery._id);
 
-      // Check if transaction already exists for this order
+      // Check if transaction already exists for this order (idempotent)
       const orderIdForTransaction =
         (orderMongoId && orderMongoId.toString()) ||
         (order && order._id && order._id.toString()) ||

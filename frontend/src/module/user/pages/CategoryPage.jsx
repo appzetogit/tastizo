@@ -18,6 +18,7 @@ import { useLocation } from "../hooks/useLocation"
 import { useZone } from "../hooks/useZone"
 import { useCart } from "../context/CartContext"
 import { isModuleAuthenticated } from "@/lib/utils/auth"
+import StickyCartCard from "../components/StickyCartCard"
 
 // Filter options
 const filterOptions = [
@@ -1006,48 +1007,6 @@ export default function CategoryPage() {
                             {restaurant.rating}
                             <Star className="h-2.5 w-2.5 md:h-3 md:w-3 fill-white" />
                           </div>
-
-                          {/* Add to Cart Button Overlay */}
-                          <div className="absolute top-2 right-2 z-10">
-                            {quantities[dish.itemId] > 0 ? (
-                              <div className="flex items-center gap-2 bg-white dark:bg-[#1a1a1a] border border-green-600 rounded-lg shadow-lg px-1 py-0.5">
-                                <button
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    updateQuantity(dish.itemId, quantities[dish.itemId] - 1)
-                                  }}
-                                  className="w-5 h-5 flex items-center justify-center text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
-                                >
-                                  <Minus className="h-3 w-3" />
-                                </button>
-                                <span className="text-[11px] font-bold text-gray-900 dark:text-white min-w-[12px] text-center">
-                                  {quantities[dish.itemId]}
-                                </span>
-                                <button
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    updateQuantity(dish.itemId, quantities[dish.itemId] + 1)
-                                  }}
-                                  className="w-5 h-5 flex items-center justify-center text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
-                                >
-                                  <Plus className="h-3 w-3" />
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  handleAddDishToCart(restaurant, dish, e)
-                                }}
-                                className="flex items-center gap-1 bg-white dark:bg-[#1a1a1a] border border-green-600 text-green-600 text-[10px] md:text-[11px] font-bold px-2 py-1 rounded-lg shadow-md hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
-                              >
-                                ADD <Plus className="h-2.5 w-2.5" />
-                              </button>
-                            )}
-                          </div>
                         </div>
 
                         {/* Restaurant Info - Show category dish name if available, otherwise restaurant name */}
@@ -1212,7 +1171,7 @@ export default function CategoryPage() {
                             </div>
                           )}
 
-                          {/* Add to Cart Button Overlay */}
+                          {/* Add to Cart Button Overlay - only on ALL RESTAURANTS cards */}
                           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
                             {quantities[restaurant.dishId || restaurant.id] > 0 ? (
                               <div className="flex items-center gap-2 bg-white dark:bg-[#1a1a1a] border border-green-600 rounded-lg shadow-lg px-1 py-0.5">
@@ -1255,9 +1214,9 @@ export default function CategoryPage() {
                                   }
                                   handleAddDishToCart(restaurant, dish, e)
                                 }}
-                                className="flex items-center gap-1 bg-white dark:bg-[#1a1a1a] border border-green-600 text-green-600 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-lg shadow-md hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors whitespace-nowrap"
+                                className="flex items-center gap-1.5 bg-white dark:bg-[#1a1a1a] border-2 border-green-600 text-green-600 text-xs md:text-sm font-bold px-3 py-1.5 md:px-4 md:py-2 rounded-xl shadow-md hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors whitespace-nowrap"
                               >
-                                ADD <Plus className="h-2.5 w-2.5" />
+                                ADD <Plus className="h-3.5 w-3.5 md:h-4 md:w-4" />
                               </button>
                             )}
                           </div>
@@ -1735,6 +1694,7 @@ export default function CategoryPage() {
           }
         }
       `}</style>
+      <StickyCartCard />
     </div>
   )
 }

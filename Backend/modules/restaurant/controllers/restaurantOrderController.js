@@ -5,7 +5,7 @@ import { successResponse, errorResponse } from '../../../shared/utils/response.j
 import asyncHandler from '../../../shared/middleware/asyncHandler.js';
 import { notifyRestaurantOrderUpdate } from '../../order/services/restaurantNotificationService.js';
 import { assignOrderToDeliveryBoy, findNearestDeliveryBoys, findNearestDeliveryBoy } from '../../order/services/deliveryAssignmentService.js';
-import { notifyDeliveryBoyNewOrder, notifyMultipleDeliveryBoys } from '../../order/services/deliveryNotificationService.js';
+import { notifyDeliveryBoyNewOrder, notifyMultipleDeliveryBoys, broadcastNewOrderToAllDeliveryBoys } from '../../order/services/deliveryNotificationService.js';
 import mongoose from 'mongoose';
 
 /**
@@ -317,153 +317,8 @@ export const acceptOrder = asyncHandler(async (req, res) => {
       console.error('Error sending notification:', notifError);
     }
 
-    // Priority-based order notification: First notify nearest delivery boys, then expand after 30 seconds
-    if (!order.deliveryPartnerId) {
-      try {
-        console.log(`🔄 Starting priority-based order notification for order ${order.orderId}...`);
-
-        // Get restaurant location
-        let restaurantDoc = null;
-        if (mongoose.Types.ObjectId.isValid(restaurantId)) {
-          restaurantDoc = await Restaurant.findById(restaurantId).lean();
-        }
-        if (!restaurantDoc) {
-          restaurantDoc = await Restaurant.findOne({
-            $or: [
-              { restaurantId: restaurantId },
-              { _id: restaurantId }
-            ]
-          }).lean();
-        }
-
-        if (!restaurantDoc) {
-          console.error(`❌ Restaurant not found for restaurantId: ${restaurantId}`);
-        } else if (!restaurantDoc.location || !restaurantDoc.location.coordinates ||
-          restaurantDoc.location.coordinates.length < 2 ||
-          (restaurantDoc.location.coordinates[0] === 0 && restaurantDoc.location.coordinates[1] === 0)) {
-          console.error(`❌ Restaurant location not found or invalid for restaurant ${restaurantId}`);
-        } else {
-          const [restaurantLng, restaurantLat] = restaurantDoc.location.coordinates;
-          console.log(`📍 Restaurant location: ${restaurantLat}, ${restaurantLng}`);
-
-          // Reload order to ensure we have the latest version
-          const freshOrder = await Order.findById(order._id);
-          if (!freshOrder) {
-            console.error(`❌ Order ${order.orderId} not found after save`);
-          } else if (freshOrder.deliveryPartnerId) {
-            console.log(`⚠️ Order ${order.orderId} already has delivery partner: ${freshOrder.deliveryPartnerId}`);
-          } else {
-            // Step 1: Find nearest delivery boys (within 5km priority distance)
-            const priorityDeliveryBoys = await findNearestDeliveryBoys(restaurantLat, restaurantLng, restaurantId, 5);
-            
-            if (priorityDeliveryBoys && priorityDeliveryBoys.length > 0) {
-              console.log(`✅ Found ${priorityDeliveryBoys.length} priority delivery partners within 5km`);
-              
-              // Store priority notification info in order
-              freshOrder.assignmentInfo = {
-                priorityNotifiedAt: new Date(),
-                priorityDeliveryPartnerIds: priorityDeliveryBoys.map(db => db.deliveryPartnerId),
-                notificationPhase: 'priority'
-              };
-              await freshOrder.save();
-
-              // Reload order with populated userId and restaurantId (with location)
-              const populatedOrder = await Order.findById(freshOrder._id)
-                .populate('userId', 'name phone')
-                .populate('restaurantId', 'name address location phone ownerPhone')
-                .lean();
-
-              if (populatedOrder) {
-                // Notify priority delivery boys (without assigning)
-                const priorityIds = priorityDeliveryBoys.map(db => db.deliveryPartnerId);
-                await notifyMultipleDeliveryBoys(populatedOrder, priorityIds, 'priority');
-                console.log(`✅ Notified ${priorityIds.length} priority delivery partners for order ${order.orderId}`);
-
-                // Step 2: Set timeout to expand to other delivery boys after 30 seconds
-                setTimeout(async () => {
-                  try {
-                    // Re-check if order still doesn't have delivery partner
-                    const checkOrder = await Order.findById(order._id);
-                    if (!checkOrder || checkOrder.deliveryPartnerId) {
-                      console.log(`ℹ️ Order ${order.orderId} already assigned, skipping expanded notification`);
-                      return;
-                    }
-
-                    console.log(`⏰ 30 seconds passed, expanding notification to other delivery partners for order ${order.orderId}`);
-                    
-                    // Find all other delivery boys (excluding already notified priority ones)
-                    // Get all delivery boys within 50km, excluding priority ones
-                    const allDeliveryBoys = await findNearestDeliveryBoys(
-                      restaurantLat, 
-                      restaurantLng, 
-                      restaurantId, 
-                      50 // Max distance 50km
-                    );
-
-                    // Filter out priority delivery boys
-                    const expandedDeliveryBoys = allDeliveryBoys.filter(
-                      db => !priorityIds.includes(db.deliveryPartnerId)
-                    );
-
-                    if (expandedDeliveryBoys && expandedDeliveryBoys.length > 0) {
-                      const expandedIds = expandedDeliveryBoys.map(db => db.deliveryPartnerId);
-                      
-                      // Update assignment info
-                      checkOrder.assignmentInfo = {
-                        ...(checkOrder.assignmentInfo || {}),
-                        expandedNotifiedAt: new Date(),
-                        expandedDeliveryPartnerIds: expandedIds,
-                        notificationPhase: 'expanded'
-                      };
-                      await checkOrder.save();
-
-                      // Reload with populated userId and restaurantId (with location)
-                      const expandedOrder = await Order.findById(checkOrder._id)
-                        .populate('userId', 'name phone')
-                        .populate('restaurantId', 'name address location phone ownerPhone')
-                        .lean();
-
-                      if (expandedOrder) {
-                        // Notify all expanded delivery boys
-                        await notifyMultipleDeliveryBoys(expandedOrder, expandedIds, 'expanded');
-                        console.log(`✅ Notified ${expandedIds.length} expanded delivery partners for order ${order.orderId}`);
-                      }
-                    } else {
-                      console.warn(`⚠️ No additional delivery partners found for order ${order.orderId}`);
-                    }
-                  } catch (expandError) {
-                    console.error(`❌ Error in expanded notification for order ${order.orderId}:`, expandError);
-                  }
-                }, 30000); // 30 seconds timeout
-              }
-            } else {
-              // No priority delivery boys found, immediately try to find any delivery boy
-              console.log(`⚠️ No priority delivery partners found, searching for any available delivery partner`);
-              const anyDeliveryBoy = await findNearestDeliveryBoy(restaurantLat, restaurantLng, restaurantId, 50);
-              
-              if (anyDeliveryBoy) {
-                const populatedOrder = await Order.findById(freshOrder._id)
-                  .populate('userId', 'name phone')
-                  .lean();
-
-                if (populatedOrder) {
-                  await notifyMultipleDeliveryBoys(populatedOrder, [anyDeliveryBoy.deliveryPartnerId], 'immediate');
-                  console.log(`✅ Notified delivery partner immediately for order ${order.orderId}`);
-                }
-              } else {
-                console.warn(`⚠️ No delivery partners available for order ${order.orderId}`);
-              }
-            }
-          }
-        }
-      } catch (assignmentError) {
-        console.error('❌ Error in priority-based order notification:', assignmentError);
-        console.error('❌ Error stack:', assignmentError.stack);
-        // Don't fail the order acceptance if notification fails
-      }
-    } else {
-      console.log(`ℹ️ Order ${order.orderId} already has delivery partner assigned: ${order.deliveryPartnerId}`);
-    }
+    // Delivery boys receive the order only when restaurant marks it as "Ready" (PATCH /ready), not on accept.
+    console.log(`ℹ️ Order ${order.orderId} accepted (preparing). Delivery partners will be notified when order is marked Ready for Pickup.`);
 
     return successResponse(res, 200, 'Order accepted successfully', {
       order
@@ -744,50 +599,58 @@ export const markOrderReady = asyncHandler(async (req, res) => {
       console.error('Error sending restaurant notification:', notifError);
     }
 
-    // If no delivery partner is assigned yet, assign now (at READY stage)
+    // Only when restaurant marks "Ready for Pickup": emit order to all delivery boys (real-time available orders list)
+    // Order.restaurantId is String, so populate does not fill it — fetch Restaurant for location and payload
     if (!populatedOrder.deliveryPartnerId) {
       try {
-        const coords = populatedOrder.restaurantId?.location?.coordinates;
-        if (!coords || coords.length < 2 || (coords[0] === 0 && coords[1] === 0)) {
-          console.error(`❌ Restaurant location not found or invalid for restaurant ${restaurantId}`);
-        } else {
-          const [restaurantLng, restaurantLat] = coords;
-          console.log(`📍 Assigning at READY stage, restaurant location: ${restaurantLat}, ${restaurantLng}`);
-
-          const freshOrder = await Order.findById(order._id);
-          if (freshOrder && !freshOrder.deliveryPartnerId && freshOrder.status !== 'cancelled') {
-            const assignmentResult = await assignOrderToDeliveryBoy(
-              freshOrder,
-              restaurantLat,
-              restaurantLng,
-              restaurantId,
-            );
-
-            if (assignmentResult && assignmentResult.deliveryPartnerId) {
-              populatedOrder = await Order.findById(order._id)
-                .populate('restaurantId', 'name location address phone')
-                .populate('userId', 'name phone')
-                .populate('deliveryPartnerId', 'name phone')
-                .lean();
-              console.log(
-                `✅ Order ${order.orderId} assigned to delivery partner ${assignmentResult.deliveryPartnerId} at READY stage`,
-              );
-            } else {
-              console.warn(
-                `⚠️ Could not assign order ${order.orderId} at READY stage - no available delivery partners`,
-              );
-            }
-          }
+        const restId = order.restaurantId || restaurantId;
+        let restaurantDoc = null;
+        if (mongoose.Types.ObjectId.isValid(restId) && String(restId).length === 24) {
+          restaurantDoc = await Restaurant.findById(restId).select('name address location phone ownerPhone').lean();
         }
+        if (!restaurantDoc) {
+          restaurantDoc = await Restaurant.findOne({ $or: [{ _id: restId }, { restaurantId: restId }] })
+            .select('name address location phone ownerPhone').lean();
+        }
+        if (restaurantDoc) {
+          populatedOrder.restaurantId = restaurantDoc;
+        }
+
+        const coords = populatedOrder.restaurantId?.location?.coordinates;
+        const hasValidCoords = coords && coords.length >= 2 && !(coords[0] === 0 && coords[1] === 0);
+
+        console.log(`📍 Order ${order.orderId} marked Ready for Pickup — notifying delivery partners`);
+
+        if (hasValidCoords) {
+          const [restaurantLng, restaurantLat] = coords;
+          const priorityDeliveryBoys = await findNearestDeliveryBoys(restaurantLat, restaurantLng, restId, 15);
+
+          if (priorityDeliveryBoys && priorityDeliveryBoys.length > 0) {
+            const priorityIds = priorityDeliveryBoys.map(db => db.deliveryPartnerId);
+            await Order.findByIdAndUpdate(order._id, {
+              $set: {
+                assignmentInfo: {
+                  priorityNotifiedAt: new Date(),
+                  priorityDeliveryPartnerIds: priorityIds,
+                  notificationPhase: 'priority',
+                },
+              },
+            });
+            await notifyMultipleDeliveryBoys(populatedOrder, priorityIds, 'priority');
+          }
+        } else {
+          console.warn(`⚠️ Restaurant location missing or invalid for ${restId}; broadcasting to all delivery boys anyway`);
+        }
+
+        // Always broadcast to entire /delivery namespace so every connected delivery boy sees the order
+        await broadcastNewOrderToAllDeliveryBoys(populatedOrder, 'priority');
+        console.log(`✅ Order ${order.orderId} emitted to all delivery boys (Ready for Pickup)`);
       } catch (assignmentError) {
-        console.error(
-          `❌ Error assigning delivery partner at READY stage for order ${order.orderId}:`,
-          assignmentError,
-        );
+        console.error(`❌ Error in READY stage delivery notification:`, assignmentError);
       }
     }
 
-    // Notify delivery boy that a new READY order has been assigned
+    // If a delivery partner WAS already assigned but maybe not notified, notify them specifically too
     if (populatedOrder?.deliveryPartnerId) {
       try {
         const { notifyDeliveryBoyOrderReady } = await import('../../order/services/deliveryNotificationService.js');
@@ -798,11 +661,9 @@ export const markOrderReady = asyncHandler(async (req, res) => {
         // Then, send order_ready to update any UI badges/state
         await notifyDeliveryBoyOrderReady(populatedOrder, deliveryPartnerId);
 
-        console.log(
-          `✅ New READY order ${order.orderId} sent to delivery partner ${deliveryPartnerId}`,
-        );
+        console.log(`✅ New READY order ${order.orderId} sent to specific delivery partner ${deliveryPartnerId}`);
       } catch (deliveryNotifError) {
-        console.error('Error sending delivery boy notification at READY stage:', deliveryNotifError);
+        console.error('Error sending specific delivery boy notification at READY stage:', deliveryNotifError);
       }
     }
 

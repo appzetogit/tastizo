@@ -4639,6 +4639,21 @@ export default function DeliveryHome() {
     }
   }, [deliveryStatus])
 
+  // Refetch wallet when delivery is completed so earnings / weekly total update immediately
+  useEffect(() => {
+    const handleWalletUpdate = async () => {
+      if (deliveryStatus === 'pending') return
+      try {
+        const walletData = await fetchDeliveryWallet()
+        setWalletState(walletData)
+      } catch (e) {
+        if (e?.code !== 'ERR_NETWORK') console.error('Error refetching wallet after delivery:', e)
+      }
+    }
+    window.addEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
+    return () => window.removeEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
+  }, [deliveryStatus])
+
   // Fetch assigned orders from API when delivery person goes online
   const fetchAssignedOrders = useCallback(async () => {
     if (!isOnline) {
@@ -10486,7 +10501,7 @@ export default function DeliveryHome() {
             const isCod = m === 'cash' || m === 'cod'
             const total = Number(selectedRestaurant.total) || 0
             return (
-              <div className={`rounded-xl p-4 mb-6 ${isCod ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+              <div className={`rounded-xl p-4 mb-4 ${isCod ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <IndianRupee className={`w-4 h-4 ${isCod ? 'text-amber-600' : 'text-emerald-600'}`} />
@@ -10496,6 +10511,31 @@ export default function DeliveryHome() {
                   </div>
                   <span className={`text-lg font-bold ${isCod ? 'text-amber-700' : 'text-emerald-700'}`}>
                     ₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Your earning: delivery commission added to wallet when you confirm */}
+          {(() => {
+            const earned = orderEarnings > 0
+              ? orderEarnings
+              : (typeof selectedRestaurant?.estimatedEarnings === 'object' && selectedRestaurant?.estimatedEarnings != null
+                  ? (selectedRestaurant.estimatedEarnings.totalEarning ?? selectedRestaurant.estimatedEarnings.amount ?? 0)
+                  : Number(selectedRestaurant?.estimatedEarnings || selectedRestaurant?.amount || 0) || 0)
+            if (earned <= 0) return null
+            return (
+              <div className="rounded-xl p-4 mb-6 bg-green-50 border border-green-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-medium text-green-800">
+                      Your earning {orderEarnings > 0 ? '(added to wallet)' : '(will be added when you confirm)'}
+                    </span>
+                  </div>
+                  <span className="text-lg font-bold text-green-700">
+                    ₹{Number(earned).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>

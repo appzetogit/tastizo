@@ -143,12 +143,12 @@ export default function RestaurantDetails() {
         }
 
         // Fallback to search
-        if (!apiRestaurant) {
+              if (!apiRestaurant) {
           try {
             const searchRes = await diningAPI.searchRestaurants({ q: slug })
             if (searchRes.data?.success && searchRes.data.data?.restaurants) {
               apiRestaurant = searchRes.data.data.restaurants.find(r => r.slug === slug)
-            }
+              }
           } catch (err) {
             console.error('Search fallback failed:', err)
           }
@@ -236,7 +236,7 @@ export default function RestaurantDetails() {
               console.error('Menu/Inventory fetch error:', err)
               setRestaurant(baseData)
             }
-          } else {
+              } else {
             setRestaurant(baseData)
           }
         } else {
@@ -245,7 +245,7 @@ export default function RestaurantDetails() {
         }
       } catch (error) {
         console.error('Fetch error:', error)
-        setRestaurantError(error.message || 'Failed to load restaurant')
+          setRestaurantError(error.message || 'Failed to load restaurant')
       } finally {
         setLoadingRestaurant(false)
       }
@@ -930,7 +930,7 @@ export default function RestaurantDetails() {
   // Only show grayscale when user is out of service (not based on restaurant availability)
   const shouldShowGrayscale = isOutOfService
 
-  return (
+    return (
     <AnimatedPage
       id="scrollingelement"
       className={`min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col transition-all duration-300 ${shouldShowGrayscale ? 'grayscale opacity-75' : ''
@@ -1392,9 +1392,9 @@ export default function RestaurantDetails() {
                                   }}
                                   disabled={shouldShowGrayscale}
                                   className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border font-bold px-6 py-1.5 rounded-lg shadow-md flex items-center gap-1 transition-colors ${shouldShowGrayscale
-                                        ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
-                                        : 'border-green-600 text-green-600 hover:bg-green-50'
-                                        }`}
+                                    ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
+                                    : 'border-green-600 text-green-600 hover:bg-green-50'
+                                    }`}
                                 >
                                   ADD <Plus size={14} className="stroke-[3px]" />
                                 </motion.button>
