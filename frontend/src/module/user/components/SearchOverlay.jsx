@@ -182,6 +182,7 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
   }, [isOpen, allFoods.length, loadingFoods])
 
   // Filter foods based on search input (name, cuisine, featured dish)
+  // When search is empty, "Popular restaurants around you" shows only restaurants (no dishes)
   useEffect(() => {
     if (!allFoods || allFoods.length === 0) {
       setFilteredFoods([])
@@ -189,7 +190,8 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     }
 
     if (searchValue.trim() === "") {
-      setFilteredFoods(allFoods)
+      const onlyRestaurants = allFoods.filter((food) => !food.isDish)
+      setFilteredFoods(onlyRestaurants)
     } else {
       const query = searchValue.toLowerCase().trim()
       const filtered = allFoods.filter((food) => {

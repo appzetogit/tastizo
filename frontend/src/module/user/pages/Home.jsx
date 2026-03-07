@@ -57,10 +57,19 @@ const placeholders = [
   "Search \"dosa\""
 ]
 
+// Default placeholder for restaurant/dish when image is missing or invalid
+const RESTAURANT_PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
+
 // Restaurant Image Carousel Component
 const RestaurantImageCarousel = React.memo(({ restaurant, priority = false }) => {
-  const images = useMemo(() => restaurant.images || [restaurant.image], [restaurant])
+  const images = useMemo(() => {
+    const raw = restaurant.images || (restaurant.image ? [restaurant.image] : [])
+    const list = Array.isArray(raw) ? raw : [raw]
+    const valid = list.filter((url) => typeof url === "string" && url.trim().length > 0)
+    return valid.length > 0 ? valid : []
+  }, [restaurant?.images, restaurant?.image])
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [currentError, setCurrentError] = useState(false)
   const touchStartX = useRef(0)
   const touchEndX = useRef(0)
   const isSwiping = useRef(false)
@@ -69,7 +78,7 @@ const RestaurantImageCarousel = React.memo(({ restaurant, priority = false }) =>
     return (
       <div className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0 bg-gray-200">
         <OptimizedImage
-          src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
+          src={RESTAURANT_PLACEHOLDER_IMAGE}
           alt={restaurant.name}
           className="w-full h-full rounded-t-2xl sm:rounded-t-3xl"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -120,6 +129,15 @@ const RestaurantImageCarousel = React.memo(({ restaurant, priority = false }) =>
     touchEndX.current = 0
   }
 
+  const currentSrc = images[currentIndex]
+  const showPlaceholder = currentError || !currentSrc
+  const displaySrc = showPlaceholder ? RESTAURANT_PLACEHOLDER_IMAGE : currentSrc
+
+  // Reset error when switching to another image in carousel
+  useEffect(() => {
+    setCurrentError(false)
+  }, [currentIndex])
+
   return (
     <div
       className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-2xl sm:rounded-t-3xl flex-shrink-0 group"
@@ -129,13 +147,14 @@ const RestaurantImageCarousel = React.memo(({ restaurant, priority = false }) =>
     >
       <div className="absolute inset-0 transition-transform duration-500 ease-out group-hover:scale-110">
         <OptimizedImage
-          src={images[currentIndex]}
-          alt={`${restaurant.name} - Image ${currentIndex + 1}`}
+          src={displaySrc}
+          alt={restaurant.featuredDish ? `${restaurant.name} - ${restaurant.featuredDish}` : `${restaurant.name} - Image ${currentIndex + 1}`}
           className="w-full h-full rounded-t-2xl sm:rounded-t-3xl"
           priority={priority && currentIndex === 0}
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           objectFit="cover"
           placeholder="blur"
+          onError={() => setCurrentError(true)}
         />
       </div>
 
@@ -282,8 +301,8 @@ export default function Home() {
         if (response.data.success && response.data.data.banners) {
           const banners = response.data.data.banners
           setHeroBannersData(banners)
-          // Extract image URLs for display
-          setHeroBannerImages(banners.map(b => b.imageUrl || b))
+          // Extract image URLs for display, ensuring they are strings
+          setHeroBannerImages(banners.map(b => (typeof b === 'string' ? b : b.imageUrl)).filter(Boolean))
         }
       } catch (error) {
         console.error('Error fetching hero banners:', error)
@@ -781,13 +800,21 @@ export default function Home() {
             : []
 
           // Use cover images first, then fallback to menu images, then profile image
-          const allImages = coverImages.length > 0
+          let allImages = coverImages.length > 0
             ? coverImages
             : (fallbackImages.length > 0
               ? fallbackImages
               : (restaurant.profileImage?.url
                 ? [restaurant.profileImage.url]
-                : ["https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"]))
+                : []))
+
+          // Filter out any invalid/undefined images
+          allImages = allImages.filter(img => typeof img === 'string' && img.trim().length > 0)
+          
+          // Ensure we have at least one image
+          if (allImages.length === 0) {
+            allImages = ["https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"]
+          }
 
           // Keep single image for backward compatibility
           const image = allImages[0]

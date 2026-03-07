@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react"
 import { useParams, Link, useNavigate } from "react-router-dom"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeft, Star, Clock, Search, SlidersHorizontal, ChevronDown, Bookmark, BadgePercent, Mic, MapPin, ArrowDownUp, Timer, IndianRupee, UtensilsCrossed, ShieldCheck, X, Loader2, Share2 } from "lucide-react"
+import { ArrowLeft, Star, Clock, Search, SlidersHorizontal, ChevronDown, Bookmark, BadgePercent, Mic, MapPin, ArrowDownUp, Timer, IndianRupee, UtensilsCrossed, ShieldCheck, X, Loader2, Share2, Plus, Minus } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -247,7 +247,7 @@ export default function CategoryPage() {
               "Flat 50% OFF",
               "Flat ₹40 OFF above ₹149"
             ]
-            const defaultDeliveryTimes = ["25-30 mins", "20-25 mins", "30-35 mins"]
+            const defaultDeliveryTimes = [] // Relaxing filtering to show available times
             const defaultDistances = ["1.2 km", "1 km", "0.8 km"]
             const defaultFeaturedPrice = 249
 
@@ -263,10 +263,7 @@ export default function CategoryPage() {
           const restaurantsWithIds = restaurantsArray
             .filter((restaurant) => {
               const hasName = restaurant.name && restaurant.name.trim().length > 0
-              const hasRealImage = restaurant.profileImage?.url ||
-                (restaurant.coverImages && restaurant.coverImages.length > 0) ||
-                (restaurant.menuImages && restaurant.menuImages.length > 0)
-              return hasName && hasRealImage
+              return hasName
             })
             .map((restaurant) => {
               let deliveryTime = restaurant.estimatedDeliveryTime || null
@@ -289,13 +286,24 @@ export default function CategoryPage() {
                 ? restaurant.menuImages.map(img => img.url || img).filter(Boolean)
                 : []
 
-              const allImages = coverImages.length > 0
+              let allImages = coverImages.length > 0
                 ? coverImages
                 : (fallbackImages.length > 0
                   ? fallbackImages
                   : (restaurant.profileImage?.url ? [restaurant.profileImage.url] : []))
 
-              const image = allImages[0] || null
+              // Filter and ensure at least one image
+              allImages = allImages.filter(img => typeof img === 'string' && img.trim().length > 0)
+              if (allImages.length === 0) {
+                allImages = ["https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"]
+              }
+
+              const image = allImages[0]
+              
+              // Ensure delivery time is never "Not available" if possible
+              if (!deliveryTime) {
+                deliveryTime = "25-30 mins"
+              }
               const restaurantId = restaurant.restaurantId || restaurant._id
 
               let featuredDish = restaurant.featuredDish || null
@@ -998,6 +1006,48 @@ export default function CategoryPage() {
                             {restaurant.rating}
                             <Star className="h-2.5 w-2.5 md:h-3 md:w-3 fill-white" />
                           </div>
+
+                          {/* Add to Cart Button Overlay */}
+                          <div className="absolute top-2 right-2 z-10">
+                            {quantities[dish.itemId] > 0 ? (
+                              <div className="flex items-center gap-2 bg-white dark:bg-[#1a1a1a] border border-green-600 rounded-lg shadow-lg px-1 py-0.5">
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    updateQuantity(dish.itemId, quantities[dish.itemId] - 1)
+                                  }}
+                                  className="w-5 h-5 flex items-center justify-center text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </button>
+                                <span className="text-[11px] font-bold text-gray-900 dark:text-white min-w-[12px] text-center">
+                                  {quantities[dish.itemId]}
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    updateQuantity(dish.itemId, quantities[dish.itemId] + 1)
+                                  }}
+                                  className="w-5 h-5 flex items-center justify-center text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  handleAddDishToCart(restaurant, dish, e)
+                                }}
+                                className="flex items-center gap-1 bg-white dark:bg-[#1a1a1a] border border-green-600 text-green-600 text-[10px] md:text-[11px] font-bold px-2 py-1 rounded-lg shadow-md hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
+                              >
+                                ADD <Plus className="h-2.5 w-2.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         {/* Restaurant Info - Show category dish name if available, otherwise restaurant name */}
@@ -1101,7 +1151,7 @@ export default function CategoryPage() {
                           </div>
 
                           {/* Bottom actions: bookmark & share */}
-                          <div className="flex items-center gap-2 pt-2">
+                          <div className="flex items-center gap-1 pt-2">
                             <Button
                               variant="outline"
                               size="icon"
@@ -1125,7 +1175,6 @@ export default function CategoryPage() {
                               onClick={(e) => {
                                 e.preventDefault()
                                 e.stopPropagation()
-                                // Share action can be implemented later
                               }}
                             >
                               <Share2 className="h-4 w-4 text-gray-600 dark:text-gray-400" />
@@ -1133,7 +1182,7 @@ export default function CategoryPage() {
                           </div>
                         </CardContent>
 
-                        {/* Right: Image */}
+                        {/* Right: Image & Add Button Overlay */}
                         <div className="relative flex-shrink-0 w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 lg:w-36 lg:h-36 rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-800">
                           {restaurant.categoryDishImage ? (
                             <img
@@ -1162,6 +1211,56 @@ export default function CategoryPage() {
                               🍽️
                             </div>
                           )}
+
+                          {/* Add to Cart Button Overlay */}
+                          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
+                            {quantities[restaurant.dishId || restaurant.id] > 0 ? (
+                              <div className="flex items-center gap-2 bg-white dark:bg-[#1a1a1a] border border-green-600 rounded-lg shadow-lg px-1 py-0.5">
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    updateQuantity(restaurant.dishId || restaurant.id, quantities[restaurant.dishId || restaurant.id] - 1)
+                                  }}
+                                  className="w-5 h-5 flex items-center justify-center text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </button>
+                                <span className="text-[11px] font-bold text-gray-900 dark:text-white min-w-[12px] text-center">
+                                  {quantities[restaurant.dishId || restaurant.id]}
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    updateQuantity(restaurant.dishId || restaurant.id, quantities[restaurant.dishId || restaurant.id] + 1)
+                                  }}
+                                  className="w-5 h-5 flex items-center justify-center text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  const dish = restaurant.categoryDish || {
+                                    name: displayName,
+                                    price: displayPrice,
+                                    image: restaurant.categoryDishImage || restaurant.image,
+                                    itemId: restaurant.dishId || restaurant.id,
+                                    originalPrice: restaurant.categoryDish?.originalPrice || restaurant.featuredPrice,
+                                    foodType: restaurant.categoryDish?.foodType,
+                                  }
+                                  handleAddDishToCart(restaurant, dish, e)
+                                }}
+                                className="flex items-center gap-1 bg-white dark:bg-[#1a1a1a] border border-green-600 text-green-600 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-lg shadow-md hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors whitespace-nowrap"
+                              >
+                                ADD <Plus className="h-2.5 w-2.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </Card>
