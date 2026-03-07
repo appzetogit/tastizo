@@ -639,15 +639,16 @@ export const markOrderPreparing = asyncHandler(async (req, res) => {
       return errorResponse(res, 404, 'Order not found');
     }
 
-    // Allow marking as preparing if status is 'confirmed', 'pending', or already 'preparing' (for retry scenarios)
-    // If already preparing, we allow it to retry delivery assignment if no delivery partner is assigned
+    // Allow marking as preparing if status is 'confirmed', 'pending', or already 'preparing'.
+    // From this point we ONLY update the status to 'preparing'.
+    // Delivery partner assignment and rider notifications are now handled when
+    // the order is marked as READY, so riders don't receive orders too early.
     const allowedStatuses = ['confirmed', 'pending', 'preparing'];
     if (!allowedStatuses.includes(order.status)) {
       return errorResponse(res, 400, `Order cannot be marked as preparing. Current status: ${order.status}`);
     }
 
     // Only update status if it's not already preparing
-    // If already preparing, we're just retrying delivery assignment
     const wasAlreadyPreparing = order.status === 'preparing';
     if (!wasAlreadyPreparing) {
       order.status = 'preparing';
@@ -664,185 +665,14 @@ export const markOrderPreparing = asyncHandler(async (req, res) => {
       }
     }
 
-    // CRITICAL: Don't assign delivery partner if order is cancelled
-    if (freshOrder.status === 'cancelled') {
-      console.log(`⚠️ Order ${freshOrder.orderId} is cancelled. Cannot assign delivery partner.`);
-      return successResponse(res, 200, 'Order is cancelled. Cannot assign delivery partner.', {
-        order: freshOrder
-      });
-    }
+    // From here we intentionally do NOT assign a delivery partner or send any
+    // rider notifications. Assignment + notifications now happen when the
+    // restaurant marks the order as READY.
 
-    // Assign order to nearest delivery boy and notify them (if not already assigned)
-    // This is critical - even if order is already preparing, we need to assign delivery partner
-    // Reload order first to get the latest state (in case it was updated elsewhere)
-    const freshOrder = await Order.findById(order._id);
-    if (!freshOrder) {
-      console.error(`❌ Order ${order.orderId} not found after save`);
-      return errorResponse(res, 404, 'Order not found after update');
-    }
-
-    // CRITICAL: Don't assign delivery partner if order is cancelled
-    if (freshOrder.status === 'cancelled') {
-      console.log(`⚠️ Order ${freshOrder.orderId} is cancelled. Cannot assign delivery partner.`);
-      return successResponse(res, 200, 'Order is cancelled. Cannot assign delivery partner.', {
-        order: freshOrder
-      });
-    }
-
-    // Check if delivery partner is already assigned (after reload)
-    if (!freshOrder.deliveryPartnerId) {
-      try {
-        console.log(`🔄 Attempting to assign order ${freshOrder.orderId} to delivery boy (status: ${freshOrder.status})...`);
-
-        // Get restaurant location
-        let restaurantDoc = null;
-        if (mongoose.Types.ObjectId.isValid(restaurantId)) {
-          restaurantDoc = await Restaurant.findById(restaurantId).lean();
-        }
-        if (!restaurantDoc) {
-          restaurantDoc = await Restaurant.findOne({
-            $or: [
-              { restaurantId: restaurantId },
-              { _id: restaurantId }
-            ]
-          }).lean();
-        }
-
-        if (!restaurantDoc) {
-          console.error(`❌ Restaurant not found for restaurantId: ${restaurantId}`);
-          return errorResponse(res, 500, 'Restaurant location not found. Cannot assign delivery partner.');
-        }
-
-        if (!restaurantDoc.location || !restaurantDoc.location.coordinates ||
-          restaurantDoc.location.coordinates.length < 2 ||
-          (restaurantDoc.location.coordinates[0] === 0 && restaurantDoc.location.coordinates[1] === 0)) {
-          console.error(`❌ Restaurant location not found or invalid for restaurant ${restaurantId}`);
-          return errorResponse(res, 500, 'Restaurant location is invalid. Please update restaurant location.');
-        }
-
-        const [restaurantLng, restaurantLat] = restaurantDoc.location.coordinates;
-        console.log(`📍 Restaurant location: ${restaurantLat}, ${restaurantLng}`);
-
-        // Check if order already has delivery partner assigned
-        const orderCheck = await Order.findById(freshOrder._id).select('deliveryPartnerId');
-        const isResendRequest = req.query.resend === 'true' || req.body.resend === true;
-
-        // If order already has delivery partner and it's a resend request, resend notification to existing partner
-        if (orderCheck && orderCheck.deliveryPartnerId && isResendRequest) {
-          console.log(`🔄 Resend request detected - resending notification to existing delivery partner ${orderCheck.deliveryPartnerId}`);
-
-          // Reload order with populated userId
-          const populatedOrder = await Order.findById(freshOrder._id)
-            .populate('userId', 'name phone')
-            .lean();
-
-          if (!populatedOrder) {
-            console.error(`❌ Could not reload order ${freshOrder.orderId} for resend`);
-            return errorResponse(res, 500, 'Could not reload order for resend');
-          }
-
-          // Resend notification to existing delivery partner
-          try {
-            await notifyDeliveryBoyNewOrder(populatedOrder, orderCheck.deliveryPartnerId);
-            console.log(`✅ Resent notification to delivery partner ${orderCheck.deliveryPartnerId} for order ${freshOrder.orderId}`);
-
-            const finalOrder = await Order.findById(freshOrder._id);
-            return successResponse(res, 200, 'Notification resent to delivery partner', {
-              order: finalOrder,
-              resend: true,
-              deliveryPartnerId: orderCheck.deliveryPartnerId
-            });
-          } catch (notifyError) {
-            console.error(`❌ Error resending notification:`, notifyError);
-            // Continue to try reassignment if notification fails
-            console.log(`🔄 Notification failed, attempting to reassign to new delivery partner...`);
-          }
-        }
-
-        // If order already has delivery partner and it's NOT a resend request, just return
-        if (orderCheck && orderCheck.deliveryPartnerId && !isResendRequest) {
-          console.log(`⚠️ Order ${freshOrder.orderId} was assigned delivery partner ${orderCheck.deliveryPartnerId} by another process`);
-          // Reload full order for response
-          const updatedOrder = await Order.findById(freshOrder._id);
-          return successResponse(res, 200, 'Order marked as preparing', {
-            order: updatedOrder
-          });
-        }
-
-        // If resend request failed notification, or no partner assigned, try to assign/reassign
-        // Clear existing assignment if resend request
-        if (isResendRequest && orderCheck && orderCheck.deliveryPartnerId) {
-          console.log(`🔄 Resend request - clearing existing delivery partner to allow reassignment`);
-          freshOrder.deliveryPartnerId = null;
-          freshOrder.assignmentInfo = undefined;
-          await freshOrder.save();
-          // Reload to get fresh state
-          const reloadedOrder = await Order.findById(freshOrder._id);
-          if (reloadedOrder) {
-            freshOrder = reloadedOrder;
-          }
-        }
-
-        // Assign to nearest delivery boy
-        const assignmentResult = await assignOrderToDeliveryBoy(freshOrder, restaurantLat, restaurantLng, restaurantId);
-
-        if (assignmentResult && assignmentResult.deliveryPartnerId) {
-          // Reload order with populated userId after assignment
-          const populatedOrder = await Order.findById(freshOrder._id)
-            .populate('userId', 'name phone')
-            .lean();
-
-          if (!populatedOrder) {
-            console.error(`❌ Could not reload order ${freshOrder.orderId} after assignment`);
-            return errorResponse(res, 500, 'Order assignment succeeded but could not reload order');
-          } else {
-            // Notify delivery boy about the new order
-            try {
-              await notifyDeliveryBoyNewOrder(populatedOrder, assignmentResult.deliveryPartnerId);
-              console.log(`✅ Order ${freshOrder.orderId} assigned to delivery boy ${assignmentResult.deliveryPartnerId} and notification sent`);
-            } catch (notifyError) {
-              console.error(`❌ Error notifying delivery boy:`, notifyError);
-              console.error(`❌ Notification error details:`, {
-                message: notifyError.message,
-                stack: notifyError.stack
-              });
-              // Assignment succeeded but notification failed - still return success but log error
-              console.warn(`⚠️ Order assigned but notification failed. Delivery boy may need to refresh.`);
-            }
-
-            // Reload full order for response
-            const finalOrder = await Order.findById(freshOrder._id);
-            return successResponse(res, 200, 'Order marked as preparing and assigned to delivery partner', {
-              order: finalOrder,
-              assignment: assignmentResult
-            });
-          }
-        } else {
-          console.warn(`⚠️ Could not assign order ${freshOrder.orderId} to delivery boy - no available delivery partners`);
-          // Return success but warn about no delivery partners
-          const finalOrder = await Order.findById(freshOrder._id);
-          return successResponse(res, 200, 'Order marked as preparing, but no delivery partners available', {
-            order: finalOrder,
-            warning: 'No delivery partners available. Order will be assigned when a delivery partner comes online.'
-          });
-        }
-      } catch (assignmentError) {
-        console.error('❌ Error assigning order to delivery boy:', assignmentError);
-        console.error('❌ Error stack:', assignmentError.stack);
-        // Return error so restaurant knows assignment failed
-        const finalOrder = await Order.findById(freshOrder._id);
-        return errorResponse(res, 500, `Order marked as preparing, but delivery assignment failed: ${assignmentError.message}`, {
-          order: finalOrder
-        });
-      }
-    } else {
-      console.log(`ℹ️ Order ${freshOrder.orderId} already has delivery partner assigned: ${freshOrder.deliveryPartnerId}`);
-      // Reload full order for response
-      const finalOrder = await Order.findById(freshOrder._id);
-      return successResponse(res, 200, 'Order marked as preparing', {
-        order: finalOrder
-      });
-    }
+    const latestOrder = await Order.findById(order._id);
+    return successResponse(res, 200, 'Order marked as preparing', {
+      order: latestOrder || order
+    });
   } catch (error) {
     console.error('Error updating order status:', error);
     return errorResponse(res, 500, 'Failed to update order status');
@@ -901,8 +731,8 @@ export const markOrderReady = asyncHandler(async (req, res) => {
     };
     await order.save();
 
-    // Populate order for notifications
-    const populatedOrder = await Order.findById(order._id)
+    // Populate order for notifications and potential assignment
+    let populatedOrder = await Order.findById(order._id)
       .populate('restaurantId', 'name location address phone')
       .populate('userId', 'name phone')
       .populate('deliveryPartnerId', 'name phone')
@@ -914,20 +744,70 @@ export const markOrderReady = asyncHandler(async (req, res) => {
       console.error('Error sending restaurant notification:', notifError);
     }
 
-    // Notify delivery boy that order is ready for pickup
-    if (populatedOrder.deliveryPartnerId) {
+    // If no delivery partner is assigned yet, assign now (at READY stage)
+    if (!populatedOrder.deliveryPartnerId) {
+      try {
+        const coords = populatedOrder.restaurantId?.location?.coordinates;
+        if (!coords || coords.length < 2 || (coords[0] === 0 && coords[1] === 0)) {
+          console.error(`❌ Restaurant location not found or invalid for restaurant ${restaurantId}`);
+        } else {
+          const [restaurantLng, restaurantLat] = coords;
+          console.log(`📍 Assigning at READY stage, restaurant location: ${restaurantLat}, ${restaurantLng}`);
+
+          const freshOrder = await Order.findById(order._id);
+          if (freshOrder && !freshOrder.deliveryPartnerId && freshOrder.status !== 'cancelled') {
+            const assignmentResult = await assignOrderToDeliveryBoy(
+              freshOrder,
+              restaurantLat,
+              restaurantLng,
+              restaurantId,
+            );
+
+            if (assignmentResult && assignmentResult.deliveryPartnerId) {
+              populatedOrder = await Order.findById(order._id)
+                .populate('restaurantId', 'name location address phone')
+                .populate('userId', 'name phone')
+                .populate('deliveryPartnerId', 'name phone')
+                .lean();
+              console.log(
+                `✅ Order ${order.orderId} assigned to delivery partner ${assignmentResult.deliveryPartnerId} at READY stage`,
+              );
+            } else {
+              console.warn(
+                `⚠️ Could not assign order ${order.orderId} at READY stage - no available delivery partners`,
+              );
+            }
+          }
+        }
+      } catch (assignmentError) {
+        console.error(
+          `❌ Error assigning delivery partner at READY stage for order ${order.orderId}:`,
+          assignmentError,
+        );
+      }
+    }
+
+    // Notify delivery boy that a new READY order has been assigned
+    if (populatedOrder?.deliveryPartnerId) {
       try {
         const { notifyDeliveryBoyOrderReady } = await import('../../order/services/deliveryNotificationService.js');
         const deliveryPartnerId = populatedOrder.deliveryPartnerId._id || populatedOrder.deliveryPartnerId;
+
+        // First, send full new_order so it appears in the rider's order list
+        await notifyDeliveryBoyNewOrder(populatedOrder, deliveryPartnerId);
+        // Then, send order_ready to update any UI badges/state
         await notifyDeliveryBoyOrderReady(populatedOrder, deliveryPartnerId);
-        console.log(`✅ Order ready notification sent to delivery partner ${deliveryPartnerId}`);
+
+        console.log(
+          `✅ New READY order ${order.orderId} sent to delivery partner ${deliveryPartnerId}`,
+        );
       } catch (deliveryNotifError) {
-        console.error('Error sending delivery boy notification:', deliveryNotifError);
+        console.error('Error sending delivery boy notification at READY stage:', deliveryNotifError);
       }
     }
 
     return successResponse(res, 200, 'Order marked as ready', {
-      order: populatedOrder || order
+      order: populatedOrder || order,
     });
   } catch (error) {
     console.error('Error updating order status:', error);

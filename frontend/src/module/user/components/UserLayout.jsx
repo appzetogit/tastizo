@@ -152,6 +152,12 @@ export default function UserLayout() {
     location.pathname === "/user/profile" ||
     location.pathname.startsWith("/user/profile")
 
+  // Auth pages (sign-in, otp, etc.) should fill viewport without layout constraints
+  const isAuthRoute = location.pathname === "/auth/sign-in" ||
+    location.pathname === "/auth/otp" ||
+    location.pathname === "/auth/callback" ||
+    location.pathname.startsWith("/auth/")
+
   return (
     <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] transition-colors duration-200">
       <CartProvider>
@@ -162,7 +168,7 @@ export default function UserLayout() {
                 {/* <Navbar /> */}
                 {showBottomNav && <DesktopNavbar />}
                 <LocationPrompt />
-                <main>
+                <main className={isAuthRoute ? "min-h-screen" : ""}>
                   <Outlet />
                 </main>
                 {showBottomNav && <BottomNavigation />}

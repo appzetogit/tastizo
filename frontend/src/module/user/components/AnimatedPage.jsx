@@ -11,6 +11,7 @@ export default function AnimatedPage({ children, className = "" }) {
     // Simple fade-in using CSS
     container.style.opacity = '0'
     container.style.transform = 'translateY(20px)'
+    container.style.transition = 'opacity 0.4s ease-out, transform 0.4s ease-out'
     
     // Trigger animation on next frame
     requestAnimationFrame(() => {

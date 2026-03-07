@@ -102,6 +102,7 @@ export default function Cart() {
   const [sendCutlery, setSendCutlery] = useState(true)
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
   const [showBillDetails, setShowBillDetails] = useState(false)
+  const billDetailsRef = useRef(null)
   const [showPlacingOrder, setShowPlacingOrder] = useState(false)
   const [orderProgress, setOrderProgress] = useState(0)
   const [showOrderSuccess, setShowOrderSuccess] = useState(false)
@@ -220,6 +221,15 @@ export default function Cart() {
       document.body.style.top = ''
     }
   }, [showPlacingOrder, showOrderSuccess])
+
+  // Scroll to bill details when shown
+  useEffect(() => {
+    if (showBillDetails && billDetailsRef.current) {
+      setTimeout(() => {
+        billDetailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [showBillDetails]);
 
   // Fetch restaurant data when cart has items
   useEffect(() => {
@@ -1859,7 +1869,7 @@ export default function Cart() {
               </div>
 
               {/* Bill Details - hidden on desktop when right-column Order Summary is shown */}
-              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl lg:hidden">
+              <div ref={billDetailsRef} className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl lg:hidden">
                 <button
                   onClick={() => setShowBillDetails(!showBillDetails)}
                   className="flex items-center justify-between w-full"
@@ -1888,7 +1898,7 @@ export default function Cart() {
                       <span className="text-gray-800 dark:text-gray-200">₹{subtotal.toFixed(0)}</span>
                     </div>
                     <div className="flex justify-between text-sm md:text-base">
-                      <span className="text-gray-600 dark:text-gray-400">Shipping charges</span>
+                      <span className="text-gray-600 dark:text-gray-400">Delivery charges</span>
                       <span className={deliveryFee === 0 ? "text-red-600 dark:text-red-400" : "text-gray-800 dark:text-gray-200"}>
                         {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
                       </span>
@@ -1929,7 +1939,7 @@ export default function Cart() {
                       <span className="text-gray-800 dark:text-gray-200">₹{subtotal.toFixed(0)}</span>
                     </div>
                     <div className="flex justify-between text-sm md:text-base">
-                      <span className="text-gray-600 dark:text-gray-400">Shipping charges</span>
+                      <span className="text-gray-600 dark:text-gray-400">Delivery charges</span>
                       <span className={deliveryFee === 0 ? "text-red-600 dark:text-red-400" : "text-gray-800 dark:text-gray-200"}>
                         {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
                       </span>

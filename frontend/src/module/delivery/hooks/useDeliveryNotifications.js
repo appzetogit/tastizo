@@ -319,12 +319,12 @@ export const useDeliveryNotifications = () => {
     });
 
     // Listen for priority-based order notifications (new_order_available)
+    // These are early "available" pings while the restaurant is still working.
+    // To avoid riders receiving orders before the restaurant marks them READY,
+    // we log them for debugging but do not surface them in the UI.
     socketRef.current.on('new_order_available', (orderData) => {
-      console.log('📦 New order available (priority notification):', orderData);
+      console.log('📦 New order available (priority notification, ignored for UI):', orderData);
       console.log('📦 Notification phase:', orderData.phase || 'unknown');
-      // Treat it the same as new_order for now - delivery boy can accept it
-      setNewOrder(orderData);
-      playNotificationSound();
     });
 
     socketRef.current.on('play_notification_sound', (data) => {

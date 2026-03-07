@@ -412,6 +412,7 @@ export default function OrderTracking() {
           // Transform API order to match component structure
           const transformedOrder = {
             id: apiOrder.orderId || apiOrder._id,
+            mongoId: apiOrder._id,
             restaurant: apiOrder.restaurantName || 'Restaurant',
             restaurantId: apiOrder.restaurantId || null, // Include restaurantId for location access
             userId: apiOrder.userId || null, // Include user data for phone number
@@ -606,20 +607,25 @@ export default function OrderTracking() {
 
     try {
       setIsSubmittingReview(true)
-      const response = await orderAPI.submitOrderReview(orderId, {
+
+      // Prefer MongoDB _id for the review API; fall back to route orderId if needed
+      const orderMongoId = order?.mongoId || order?._id || orderId
+
+      const response = await orderAPI.submitOrderReview(String(orderMongoId), {
         rating,
         comment: reviewComment
       })
 
-      if (response.data.success) {
+      if (response.data?.success) {
         toast.success("Review submitted! Thank you for your feedback.")
         setReviewSubmitted(true)
       } else {
-        toast.error(response.data.message || "Failed to submit review")
+        toast.error(response.data?.message || "Failed to submit review")
       }
     } catch (error) {
       console.error("Error submitting review:", error)
-      toast.error("Failed to submit review. Please try again.")
+      const message = error?.response?.data?.message || "Failed to submit review. Please try again."
+      toast.error(message)
     } finally {
       setIsSubmittingReview(false)
     }
@@ -774,6 +780,7 @@ export default function OrderTracking() {
 
         const transformedOrder = {
           id: apiOrder.orderId || apiOrder._id,
+          mongoId: apiOrder._id,
           restaurant: apiOrder.restaurantName || 'Restaurant',
           restaurantId: apiOrder.restaurantId || null, // Include restaurantId for location access
           userId: apiOrder.userId || null, // Include user data for phone number

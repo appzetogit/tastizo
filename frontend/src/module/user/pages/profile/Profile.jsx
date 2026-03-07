@@ -253,8 +253,19 @@ export default function Profile() {
           </Link>
         </div>
 
-        {/* Profile Info Card */}
-        <Card className="bg-white dark:bg-[#1a1a1a] rounded-2xl py-0 pt-1 shadow-sm mb-0 border-0 dark:border-gray-800 overflow-hidden">
+        {/* Profile Info Card - tap to edit profile */}
+        <Card
+          className="bg-white dark:bg-[#1a1a1a] rounded-2xl py-0 pt-1 shadow-sm mb-0 border-0 dark:border-gray-800 overflow-hidden cursor-pointer"
+          onClick={() => navigate("/profile/edit")}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault()
+              navigate("/profile/edit")
+            }
+          }}
+        >
           <CardContent className="p-4 py-0 pt-2">
             <div className="flex items-start gap-4 mb-4">
               <motion.div

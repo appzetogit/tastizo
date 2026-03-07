@@ -461,7 +461,7 @@ export default function SignIn() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen flex flex-col bg-white dark:bg-[#0a0a0a] !pb-0 md:flex-row">
+    <AnimatedPage className="min-h-screen md:min-h-0 md:h-screen flex flex-col bg-white dark:bg-[#0a0a0a] !pb-0 md:flex-row">
 
       {/* Mobile: Top Section - Banner Image */}
       {/* Desktop: Left Section - Banner Image */}
@@ -474,8 +474,8 @@ export default function SignIn() {
         />
       </div>
 
-      {/* Desktop: Left Section - Logo with matching green background */}
-      <div className="relative hidden md:flex w-full shrink-0 md:w-1/2 md:h-full items-center justify-center" style={{ backgroundColor: "#2B9C64" }}>
+      {/* Desktop: Left Section - Logo with matching green background (full height) */}
+      <div className="relative hidden md:flex md:w-1/2 md:min-h-full shrink-0 items-center justify-center" style={{ backgroundColor: "#2B9C64" }}>
         <img
           src={tastizoLogo}
           alt="Tastizo Logo"
@@ -484,7 +484,7 @@ export default function SignIn() {
       </div>
 
       {/* Mobile: Bottom Section - White Login Form; Desktop: Right Section - Login Form */}
-      <div className="flex-1 flex flex-col md:w-1/2 md:h-full">
+      <div className="flex-1 flex flex-col md:w-1/2 md:min-h-0 md:overflow-y-auto">
         <div className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10 md:flex md:items-center md:justify-center bg-white dark:bg-[#1a1a1a]">
         <div className="max-w-md lg:max-w-lg xl:max-w-xl mx-auto space-y-6 md:space-y-8 lg:space-y-10 w-full">
           {/* Heading */}
@@ -535,7 +535,7 @@ export default function SignIn() {
                     >
                       <SelectValue>
                         <span className="flex items-center gap-2 text-sm md:text-base">
-                          <span>{selectedCountry.flag}</span>
+                          <span>{selectedCountry.country}</span>
                           <span>{selectedCountry.code}</span>
                         </span>
                       </SelectValue>
@@ -544,7 +544,7 @@ export default function SignIn() {
                       {countryCodes.map((country) => (
                         <SelectItem key={country.code} value={country.code}>
                           <span className="flex items-center gap-2">
-                            <span>{country.flag}</span>
+                            <span>{country.country}</span>
                             <span>{country.code}</span>
                           </span>
                         </SelectItem>

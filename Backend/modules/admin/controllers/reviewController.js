@@ -204,63 +204,82 @@ export const getReviewsByRestaurant = asyncHandler(async (req, res) => {
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
     
-    const query = {
+    // Build query on canonical OrderReview collection for this restaurant
+    const reviewQuery = {
       restaurantId: restaurantId,
-      status: 'delivered',
-      'review.rating': { $exists: true, $ne: null }
     };
     
     if (rating) {
       const ratingNum = parseInt(rating);
       if (ratingNum >= 1 && ratingNum <= 5) {
-        query['review.rating'] = ratingNum;
+        reviewQuery.rating = ratingNum;
       }
     }
     
     const sortOptions = {};
     if (sortBy === 'rating') {
-      sortOptions['review.rating'] = sortOrder === 'asc' ? 1 : -1;
+      sortOptions.rating = sortOrder === 'asc' ? 1 : -1;
+    } else if (sortBy === 'submittedAt') {
+      sortOptions.createdAt = sortOrder === 'asc' ? 1 : -1;
     } else {
-      sortOptions['review.submittedAt'] = sortOrder === 'asc' ? 1 : -1;
+      sortOptions.createdAt = -1;
     }
     
-    const reviews = await Order.find(query)
+    const reviews = await OrderReview.find(reviewQuery)
       .populate('userId', 'name phone email')
-      .select('orderId userId review deliveredAt createdAt')
+      .populate('restaurantId', 'name')
+      .populate('orderId', 'orderId deliveredAt createdAt')
       .sort(sortOptions)
       .skip(skip)
       .limit(limitNum)
       .lean();
     
-    const totalReviews = await Order.countDocuments(query);
+    const totalReviews = await OrderReview.countDocuments(reviewQuery);
     
-    const avgRatingResult = await Order.aggregate([
-      { $match: query },
+    const avgRatingResult = await OrderReview.aggregate([
+      { $match: reviewQuery },
       {
         $group: {
           _id: null,
-          avgRating: { $avg: '$review.rating' },
-          totalReviews: { $sum: 1 }
+          avgRating: { $avg: '$rating' },
+          totalReviews: { $sum: 1 },
+          ratingDistribution: {
+            $push: '$rating'
+          }
         }
       }
     ]);
     
-    const avgRating = avgRatingResult.length > 0 ? (avgRatingResult[0].avgRating || 0) : 0;
+    let avgRating = 0;
+    let ratingDistribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    
+    if (avgRatingResult.length > 0) {
+      avgRating = avgRatingResult[0].avgRating || 0;
+      const distribution = avgRatingResult[0].ratingDistribution || [];
+      distribution.forEach((r) => {
+        if (r >= 1 && r <= 5) {
+          ratingDistribution[r] = (ratingDistribution[r] || 0) + 1;
+        }
+      });
+    }
     
     return successResponse(res, 200, 'Restaurant reviews fetched successfully', {
-      reviews: reviews.map(review => ({
-        orderId: review.orderId,
-        orderMongoId: review._id,
+      reviews: reviews.map((review) => ({
+        orderId: review.orderId?.orderId || review.orderId?._id || review.orderId,
+        orderMongoId: review.orderId?._id || review.orderId,
+        restaurantId: review.restaurantId?._id || review.restaurantId,
+        restaurantName: review.orderId?.restaurantName || review.restaurantId?.name,
         customer: {
           id: review.userId?._id || review.userId,
           name: review.userId?.name,
           phone: review.userId?.phone,
           email: review.userId?.email
         },
-        rating: review.review?.rating,
-        comment: review.review?.comment,
-        submittedAt: review.review?.submittedAt || review.deliveredAt,
-        deliveredAt: review.deliveredAt
+        rating: review.rating,
+        comment: review.reviewText,
+        submittedAt: review.createdAt,
+        deliveredAt: review.orderId?.deliveredAt || null,
+        createdAt: review.createdAt
       })),
       pagination: {
         currentPage: pageNum,
@@ -270,7 +289,8 @@ export const getReviewsByRestaurant = asyncHandler(async (req, res) => {
       },
       statistics: {
         averageRating: Math.round(avgRating * 10) / 10,
-        totalReviews
+        totalReviews,
+        ratingDistribution
       }
     });
   } catch (error) {

@@ -421,101 +421,104 @@ export default function Under250() {
       {/* Content Section */}
       <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-2 sm:pt-3 md:pt-4 lg:pt-6 pb-24 md:pb-28 lg:pb-32">
 
-        <section className="space-y-1 sm:space-y-1.5">
-          <div
-            className="flex gap-3 sm:gap-4 md:gap-5 lg:gap-6 overflow-x-auto md:overflow-x-visible overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 py-2 sm:py-3 md:py-4"
-            style={{
-              scrollbarWidth: "none",
-              msOverflowStyle: "none",
-              touchAction: "pan-x pan-y pinch-zoom",
-              overflowY: "hidden",
-            }}
-          >
-            {/* All Button */}
-            <div className="flex-shrink-0">
-              <Link to="/under-250" onClick={() => setActiveCategory(null)}>
-                <motion.div
-                  className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28 cursor-pointer"
-                  whileHover={{ scale: 1.1, y: -4 }}
-                  whileTap={{ scale: 0.95 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                >
-                  <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden shadow-md transition-all">
-                    <OptimizedImage
-                      src={offerImage}
-                      alt="All"
-                      className="w-full h-full bg-white rounded-full"
-                      objectFit="cover"
-                      sizes="(max-width: 640px) 62px, (max-width: 768px) 96px, 112px"
-                      placeholder="blur"
-                    />
+        {/* Sticky Header: Categories and Filters */}
+        <div className="sticky top-0 md:top-16 z-30 bg-white dark:bg-[#0a0a0a] -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8 xl:-mx-12 xl:px-12 shadow-sm transition-all duration-300">
+          <section className="space-y-1 sm:space-y-1.5 pb-2">
+            <div
+              className="flex gap-3 sm:gap-4 md:gap-5 lg:gap-6 overflow-x-auto md:overflow-x-visible overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 py-2 sm:py-3 md:py-4"
+              style={{
+                scrollbarWidth: "none",
+                msOverflowStyle: "none",
+                touchAction: "pan-x pan-y pinch-zoom",
+                overflowY: "hidden",
+              }}
+            >
+              {/* All Button */}
+              <div className="flex-shrink-0">
+                <Link to="/under-250" onClick={() => setActiveCategory(null)}>
+                  <motion.div
+                    className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28 cursor-pointer"
+                    whileHover={{ scale: 1.1, y: -4 }}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  >
+                    <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden shadow-md transition-all">
+                      <OptimizedImage
+                        src={offerImage}
+                        alt="All"
+                        className="w-full h-full bg-white rounded-full"
+                        objectFit="cover"
+                        sizes="(max-width: 640px) 62px, (max-width: 768px) 96px, 112px"
+                        placeholder="blur"
+                      />
+                    </div>
+                    <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center pb-1">
+                      All
+                    </span>
+                  </motion.div>
+                </Link>
+              </div>
+              {categories.map((category, index) => {
+                const isActive = activeCategory === category.id
+                const categorySlug = category.slug || category.name.toLowerCase().replace(/\s+/g, '-')
+                return (
+                  <div key={category.id} className="flex-shrink-0">
+                    <Link to={`/user/category/${categorySlug}`}>
+                      <motion.div
+                        className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28"
+                        onClick={() => setActiveCategory(category.id)}
+                        whileHover={{ scale: 1.1, y: -4 }}
+                        whileTap={{ scale: 0.95 }}
+                        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                      >
+                        <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all">
+                          <OptimizedImage
+                            src={category.image}
+                            alt={category.name}
+                            className="w-full h-full bg-white rounded-full"
+                            objectFit="cover"
+                            sizes="(max-width: 640px) 62px, (max-width: 768px) 96px, 112px"
+                            placeholder="blur"
+                          />
+                        </div>
+                        <span className={`text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center pb-1 ${isActive ? 'border-b-2 border-green-600' : ''}`}>
+                          {category.name.length > 7 ? `${category.name.slice(0, 7)}...` : category.name}
+                        </span>
+                      </motion.div>
+                    </Link>
                   </div>
-                  <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center pb-1">
-                    All
-                  </span>
-                </motion.div>
-              </Link>
+                )
+              })}
             </div>
-            {categories.map((category, index) => {
-              const isActive = activeCategory === category.id
-              const categorySlug = category.slug || category.name.toLowerCase().replace(/\s+/g, '-')
-              return (
-                <div key={category.id} className="flex-shrink-0">
-                  <Link to={`/user/category/${categorySlug}`}>
-                    <motion.div
-                      className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28"
-                      onClick={() => setActiveCategory(category.id)}
-                      whileHover={{ scale: 1.1, y: -4 }}
-                      whileTap={{ scale: 0.95 }}
-                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                    >
-                      <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all">
-                        <OptimizedImage
-                          src={category.image}
-                          alt={category.name}
-                          className="w-full h-full bg-white rounded-full"
-                          objectFit="cover"
-                          sizes="(max-width: 640px) 62px, (max-width: 768px) 96px, 112px"
-                          placeholder="blur"
-                        />
-                      </div>
-                      <span className={`text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center pb-1 ${isActive ? 'border-b-2 border-green-600' : ''}`}>
-                        {category.name.length > 7 ? `${category.name.slice(0, 7)}...` : category.name}
-                      </span>
-                    </motion.div>
-                  </Link>
-                </div>
-              )
-            })}
-          </div>
-        </section>
+          </section>
 
-        <section className="py-2 sm:py-3 md:py-4">
-          <div className="flex items-center gap-2 md:gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setShowSortPopup(true)}
-              className="h-8 sm:h-9 md:h-10 px-3 sm:px-4 md:px-5 rounded-md flex items-center gap-2 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm md:text-base"
-            >
-              <ArrowDownUp className="h-4 w-4 md:h-5 md:w-5 rotate-90" />
-              <span className="text-sm md:text-base font-medium">
-                {selectedSort ? sortOptions.find(opt => opt.id === selectedSort)?.label : 'Sort'}
-              </span>
-              <ChevronDown className="h-3 w-3 md:h-4 md:w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setUnder30MinsFilter(!under30MinsFilter)}
-              className={`h-8 sm:h-9 md:h-10 px-3 sm:px-4 md:px-5 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all text-sm md:text-base ${under30MinsFilter
-                ? 'bg-green-600 text-white border border-green-600 hover:bg-green-600/90'
-                : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
-                }`}
-            >
-              <Timer className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5" />
-              <span className="text-xs sm:text-sm md:text-base font-medium">Under 30 mins</span>
-            </Button>
-          </div>
-        </section>
+          <section className="py-2 sm:py-3 md:py-4 border-t dark:border-gray-800/50">
+            <div className="flex items-center gap-2 md:gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowSortPopup(true)}
+                className="h-8 sm:h-9 md:h-10 px-3 sm:px-4 md:px-5 rounded-md flex items-center gap-2 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm md:text-base"
+              >
+                <ArrowDownUp className="h-4 w-4 md:h-5 md:w-5 rotate-90" />
+                <span className="text-sm md:text-base font-medium">
+                  {selectedSort ? sortOptions.find(opt => opt.id === selectedSort)?.label : 'Sort'}
+                </span>
+                <ChevronDown className="h-3 w-3 md:h-4 md:w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setUnder30MinsFilter(!under30MinsFilter)}
+                className={`h-8 sm:h-9 md:h-10 px-3 sm:px-4 md:px-5 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all text-sm md:text-base ${under30MinsFilter
+                  ? 'bg-green-600 text-white border border-green-600 hover:bg-green-600/90'
+                  : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
+                  }`}
+              >
+                <Timer className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5" />
+                <span className="text-xs sm:text-sm md:text-base font-medium">Under 30 mins</span>
+              </Button>
+            </div>
+          </section>
+        </div>
 
 
         {/* Dish list (flattened across restaurants) */}
