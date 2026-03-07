@@ -133,7 +133,15 @@ class FirebaseAuthService {
       });
       return decoded;
     } catch (error) {
-      logger.error(`Error verifying Firebase ID token: ${error.message}`);
+      logger.error(`Error verifying Firebase ID token: ${error.message}`, {
+        code: error.code,
+        message: error.message,
+      });
+      if (error.code === "auth/argument-error") {
+        logger.warn(
+          "Firebase project mismatch? Ensure backend FIREBASE_PROJECT_ID (service account) matches frontend Firebase app project.",
+        );
+      }
       throw new Error("Invalid or expired Firebase ID token");
     }
   }

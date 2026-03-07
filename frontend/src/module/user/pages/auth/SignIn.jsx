@@ -104,8 +104,9 @@ export default function SignIn() {
     setApiError("")
 
     try {
-      const idToken = await user.getIdToken()
-      console.log(`✅ Got ID token from ${source}, calling backend...`)
+      // Force refresh so backend always gets a valid token (avoids expired/stale token 400)
+      const idToken = await user.getIdToken(true)
+      console.log(`✅ Got fresh ID token from ${source}, calling backend...`)
 
       const response = await authAPI.firebaseGoogleLogin(idToken, "user")
       const data = response?.data?.data || {}
@@ -145,6 +146,14 @@ export default function SignIn() {
       console.error(`❌ Error processing user from ${source}:`, error)
       redirectHandledRef.current = false
       setIsLoading(false)
+
+      // If backend rejected the token (400), sign out from Firebase so user can try again with a fresh sign-in
+      if (error?.response?.status === 400 && firebaseAuth?.currentUser) {
+        try {
+          const { signOut } = await import("firebase/auth")
+          await signOut(firebaseAuth)
+        } catch (_) {}
+      }
 
       let errorMessage = "Failed to complete sign-in. Please try again."
       if (error?.response?.data?.message) {

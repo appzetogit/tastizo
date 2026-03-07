@@ -14,7 +14,7 @@ class SMSIndiaHubService {
     // Credentials will be loaded from database dynamically
     this.apiKey = null;
     this.senderId = null;
-    this.baseUrl = "http://cloud.smsindiahub.in/vendorsms/pushsms.aspx";
+    this.baseUrl = "https://cloud.smsindiahub.in/vendorsms/pushsms.aspx";
     this.initializeCredentials();
   }
 
@@ -143,7 +143,7 @@ class SMSIndiaHubService {
           senderId ? "✓ Set" : "✗ Missing",
         );
         throw new Error(
-          "SMSIndia Hub not configured. Please check your environment variables SMSINDIAHUB_API_KEY and SMSINDIAHUB_SENDER_ID in .env file.",
+          "OTP service is not configured. Please contact support.",
         );
       }
 
@@ -152,7 +152,7 @@ class SMSIndiaHubService {
       // Validate phone number (should be 12 digits with country code)
       if (normalizedPhone.length !== 12 || !normalizedPhone.startsWith("91")) {
         throw new Error(
-          `Invalid phone number format: ${phone}. Expected 10-digit Indian mobile number.`,
+          "Invalid mobile number. Please enter a valid 10-digit Indian number.",
         );
       }
 
@@ -218,15 +218,39 @@ class SMSIndiaHubService {
 
       const apiUrl = `${this.baseUrl}?${params.toString()}`;
 
-      // Make GET request to SMSIndia Hub API
-      const response = await axios.get(apiUrl, {
+      const requestOptions = {
         headers: {
           "User-Agent": "DriveOn/1.0",
           Accept:
             "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         },
         timeout: 15000, // 15 second timeout
-      });
+      };
+
+      // Make GET request with one retry on network/timeout errors
+      let response;
+      const maxAttempts = 2;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          response = await axios.get(apiUrl, requestOptions);
+          break;
+        } catch (err) {
+          const retryable = [
+            "ECONNABORTED",
+            "ENOTFOUND",
+            "ECONNREFUSED",
+            "ECONNRESET",
+          ].includes(err.code);
+          if (attempt < maxAttempts && retryable) {
+            console.warn(
+              `SMS send attempt ${attempt} failed (${err.code}), retrying in 1.5s...`,
+            );
+            await new Promise((r) => setTimeout(r, 1500));
+            continue;
+          }
+          throw err;
+        }
+      }
 
       console.log("📱 SMSIndia Hub Response Status:", response.status);
       console.log("📱 SMSIndia Hub Response Data:", response.data);
@@ -278,10 +302,16 @@ class SMSIndiaHubService {
           parsedResponse.ErrorCode !== "000"
         ) {
           const errorMsg = parsedResponse.ErrorMessage || "Unknown error";
+          const code = parsedResponse.ErrorCode;
           console.error("❌ SMS failed - JSON error response:", parsedResponse);
-          throw new Error(
-            `SMSIndia Hub API error: ${errorMsg} (Code: ${parsedResponse.ErrorCode})`,
-          );
+          // User-friendly messages for common DLT/API issues
+          const userMsg =
+            code === "006" || errorMsg.toLowerCase().includes("template")
+              ? "OTP could not be sent. Your DLT template may not match the message. Please contact support."
+              : code === "001" || errorMsg.toLowerCase().includes("invalid") || errorMsg.toLowerCase().includes("auth")
+                ? "OTP service is misconfigured. Please contact support."
+                : `OTP could not be sent. Please check your mobile number and try again. (${errorMsg})`;
+          throw new Error(userMsg);
         }
       }
 
@@ -312,57 +342,59 @@ class SMSIndiaHubService {
           "❌ SMS failed - error indicator found in text:",
           responseText,
         );
-        throw new Error(`SMSIndia Hub API error: ${responseText}`);
-      } else {
-        // If we can't determine success/failure from response, assume success if we got a response (same as RentYatra)
-        console.log(
-          "⚠️ Ambiguous response - assuming success (same as RentYatra)",
+        throw new Error(
+          "OTP could not be sent. Please check your mobile number and try again, or contact support.",
         );
-        return {
-          success: true,
-          messageId: `sms_${Date.now()}`,
-          status: "sent",
-          to: normalizedPhone,
-          body: message,
-          provider: "SMSIndia Hub",
-          response: responseText,
-        };
+      } else {
+        // Ambiguous response = provider did not confirm success; treat as failure so user is not left without OTP
+        console.error(
+          "❌ SMS ambiguous response (not confirmed) - raw response:",
+          responseText,
+        );
+        console.error(
+          "❌ SMS India Hub may have rejected the message (DLT/template/sender). Check API key, sender ID, and DLT template.",
+        );
+        throw new Error(
+          "OTP could not be sent. Please try again or contact support.",
+        );
       }
     } catch (error) {
-      // Handle specific error cases
+      // Handle specific error cases with user-friendly messages
       if (error.response) {
         const errorData = error.response.data;
 
         if (error.response.status === 401) {
           throw new Error(
-            "SMSIndia Hub authentication failed. Please check your API key.",
+            "OTP service is misconfigured. Please contact support.",
           );
         } else if (error.response.status === 400) {
           throw new Error(
-            `SMSIndia Hub request error: Invalid request parameters`,
+            "OTP could not be sent. Please check your mobile number and try again.",
           );
         } else if (error.response.status === 429) {
           throw new Error(
-            "SMSIndia Hub rate limit exceeded. Please try again later.",
+            "Too many OTP requests. Please try again after a few minutes.",
           );
         } else if (error.response.status === 500) {
-          throw new Error("SMSIndia Hub server error. Please try again later.");
+          throw new Error("OTP service is temporarily unavailable. Please try again in a moment.");
         } else {
           throw new Error(
-            `SMSIndia Hub API error (${error.response.status}): ${errorData}`,
+            "OTP could not be sent. Please try again or contact support.",
           );
         }
       } else if (error.code === "ECONNABORTED") {
-        throw new Error("SMSIndia Hub request timeout. Please try again.");
+        throw new Error("OTP request timed out. Please try again.");
       } else if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
         throw new Error(
-          "Unable to connect to SMSIndia Hub service. Please check your internet connection.",
+          "Could not reach OTP service. Please check your connection and try again.",
         );
       } else if (error.code === "ECONNRESET") {
-        throw new Error("SMSIndia Hub connection was reset. Please try again.");
+        throw new Error("OTP request was interrupted. Please try again.");
       }
 
-      throw error;
+      throw new Error(
+        "OTP could not be sent. Please try again or contact support.",
+      );
     }
   }
 
@@ -400,7 +432,7 @@ class SMSIndiaHubService {
           senderId ? "✓ Set" : "✗ Missing",
         );
         throw new Error(
-          "SMSIndia Hub not configured. Please check your environment variables SMSINDIAHUB_API_KEY and SMSINDIAHUB_SENDER_ID in .env file.",
+          "OTP service is not configured. Please contact support.",
         );
       }
 
@@ -409,7 +441,7 @@ class SMSIndiaHubService {
       // Validate phone number (should be 12 digits with country code)
       if (normalizedPhone.length !== 12 || !normalizedPhone.startsWith("91")) {
         throw new Error(
-          `Invalid phone number format: ${phone}. Expected 10-digit Indian mobile number.`,
+          "Invalid mobile number. Please enter a valid 10-digit Indian number.",
         );
       }
 
@@ -507,7 +539,7 @@ class SMSIndiaHubService {
           senderId ? "✓ Set" : "✗ Missing",
         );
         throw new Error(
-          "SMSIndia Hub not configured. Please check your environment variables SMSINDIAHUB_API_KEY and SMSINDIAHUB_SENDER_ID in .env file.",
+          "OTP service is not configured. Please contact support.",
         );
       }
 
@@ -574,7 +606,7 @@ class SMSIndiaHubService {
           apiKey ? "✓ Set" : "✗ Missing",
         );
         throw new Error(
-          "SMSIndia Hub not configured. Please check your environment variable SMSINDIAHUB_API_KEY in .env file.",
+          "OTP service is not configured. Please contact support.",
         );
       }
 
