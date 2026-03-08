@@ -43,6 +43,7 @@ const getAddressIcon = (address) => {
 export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const navigate = useNavigate()
   const inputRef = useRef(null)
+  const addressFormSearchRef = useRef(null) // Search input in "Select delivery location" form - for focus and Places Autocomplete
   const [searchValue, setSearchValue] = useState("")
   const { location, loading, requestLocation } = useGeoLocation()
   const { addresses = [], addAddress, updateAddress, userProfile } = useProfile()
@@ -62,6 +63,8 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const mapContainerRef = useRef(null)
   const googleMapRef = useRef(null) // Google Maps instance
   const greenMarkerRef = useRef(null) // Green marker for address selection
+  const placesAutocompleteRef = useRef(null) // Places Autocomplete on address-form search input
+  const googleMapsApiRef = useRef(null) // Google API object for cleanup (e.g. Autocomplete)
   const blueDotCircleRef = useRef(null) // Blue dot circle for Google Maps
   const userLocationMarkerRef = useRef(null) // Blue dot marker for user location
   const userLocationAccuracyCircleRef = useRef(null) // Accuracy circle for MapLibre/Mapbox
@@ -441,6 +444,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         })
 
         const google = await loader.load()
+        googleMapsApiRef.current = google
 
         if (!isMounted || !mapContainerRef.current) return
 
@@ -652,6 +656,36 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         })
 
         setMapLoading(false)
+
+        // Attach Places Autocomplete to address-form search input so user can search location
+        setTimeout(() => {
+          if (!isMounted || !addressFormSearchRef.current || !google) return
+          try {
+            if (placesAutocompleteRef.current) return // already attached
+            const autocomplete = new google.maps.places.Autocomplete(addressFormSearchRef.current, {
+              types: ['address'],
+              componentRestrictions: { country: 'in' },
+              fields: ['geometry', 'formatted_address']
+            })
+            placesAutocompleteRef.current = autocomplete
+            autocomplete.addListener('place_changed', () => {
+              const place = autocomplete.getPlace()
+              if (!place.geometry?.location) return
+              const lat = place.geometry.location.lat()
+              const lng = place.geometry.location.lng()
+              setMapPosition([lat, lng])
+              if (greenMarkerRef.current) greenMarkerRef.current.setPosition({ lat, lng })
+              if (googleMapRef.current) {
+                googleMapRef.current.panTo({ lat, lng })
+                googleMapRef.current.setZoom(17)
+              }
+              setSearchValue(place.formatted_address || '')
+              handleMapMoveEnd(lat, lng)
+            })
+          } catch (err) {
+            console.warn('Places Autocomplete setup failed:', err)
+          }
+        }, 500)
       } catch (error) {
         console.error("Error initializing Google Maps:", error)
         setMapLoading(false)
@@ -685,6 +719,14 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         } catch (e) {
           console.warn("Error cleaning up accuracy circle:", e)
         }
+      }
+      if (placesAutocompleteRef.current && googleMapsApiRef.current?.maps?.event) {
+        try {
+          googleMapsApiRef.current.maps.event.clearInstanceListeners(placesAutocompleteRef.current)
+        } catch (e) {
+          console.warn("Error cleaning up Places Autocomplete:", e)
+        }
+        placesAutocompleteRef.current = null
       }
     }
   }, [showAddressForm, GOOGLE_MAPS_API_KEY, location?.latitude, location?.longitude])
@@ -2290,6 +2332,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           <div className="relative">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-600 z-10" />
             <Input
+              ref={addressFormSearchRef}
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               placeholder="Search for area, street name..."
@@ -2357,7 +2400,14 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
                 Delivery details
               </Label>
-              <div className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  addressFormSearchRef.current?.focus?.()
+                  addressFormSearchRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+                }}
+                className="w-full text-left bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex items-center gap-3 hover:border-green-600 dark:hover:border-green-500 transition-colors"
+              >
                 <MapPin className="h-5 w-5 text-green-600 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -2367,7 +2417,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                   </p>
                 </div>
                 <ChevronRight className="h-5 w-5 text-gray-400 flex-shrink-0" />
-              </div>
+              </button>
             </div>
 
             {/* Address Details */}

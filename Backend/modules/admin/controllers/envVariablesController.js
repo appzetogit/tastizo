@@ -68,6 +68,11 @@ export const getPublicEnvVariables = asyncHandler(async (req, res) => {
       FIREBASE_APP_ID: envData.FIREBASE_APP_ID || "",
       FIREBASE_VAPID_KEY: envData.FIREBASE_VAPID_KEY || "",
       MEASUREMENT_ID: envData.MEASUREMENT_ID || "",
+      // Realtime DB URL for live delivery tracking (same default as config/firebaseRealtime.js)
+      FIREBASE_DATABASE_URL:
+        envData.FIREBASE_DATABASE_URL ||
+        process.env.FIREBASE_DATABASE_URL ||
+        "https://tastizoo-default-rtdb.asia-southeast1.firebasedatabase.app",
     };
 
     return successResponse(

@@ -11,6 +11,7 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || "",
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "",
   vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY || import.meta.env.VITE_FCM_VAPID_KEY || "",
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "", // Realtime DB for live tracking
 };
 
 // Fetch config from backend
@@ -36,6 +37,8 @@ const fetchFirebaseConfig = async () => {
       if (config.FIREBASE_VAPID_KEY) firebaseConfig.vapidKey = config.FIREBASE_VAPID_KEY;
       if (config.MEASUREMENT_ID)
         firebaseConfig.measurementId = config.MEASUREMENT_ID;
+      if (config.FIREBASE_DATABASE_URL)
+        firebaseConfig.databaseURL = config.FIREBASE_DATABASE_URL;
 
       console.log("✅ Firebase config loaded from database");
       return true;
@@ -113,6 +116,11 @@ async function ensureFirebaseInitialized() {
 
 export function getFirebaseVapidKey() {
   return firebaseConfig.vapidKey || import.meta.env.VITE_FIREBASE_VAPID_KEY || import.meta.env.VITE_FCM_VAPID_KEY || "";
+}
+
+/** Realtime Database URL for live tracking (must match backend). Use with getDatabase(app, url). */
+export function getFirebaseDatabaseURL() {
+  return firebaseConfig.databaseURL || import.meta.env.VITE_FIREBASE_DATABASE_URL || "";
 }
 
 export { firebaseAuth, googleProvider, ensureFirebaseInitialized };

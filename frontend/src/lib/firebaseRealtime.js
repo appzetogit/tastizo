@@ -1,5 +1,5 @@
 import { getDatabase, onValue, ref as dbRef } from "firebase/database"
-import { ensureFirebaseInitialized } from "./firebase"
+import { ensureFirebaseInitialized, getFirebaseDatabaseURL } from "./firebase"
 
 let dbInstance = null
 
@@ -12,7 +12,12 @@ async function getRealtimeDb() {
     return null
   }
 
-  dbInstance = getDatabase(app)
+  const databaseURL = getFirebaseDatabaseURL()
+  if (databaseURL) {
+    dbInstance = getDatabase(app, databaseURL)
+  } else {
+    dbInstance = getDatabase(app)
+  }
   return dbInstance
 }
 

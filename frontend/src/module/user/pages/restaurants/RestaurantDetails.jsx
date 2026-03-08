@@ -1035,7 +1035,14 @@ export default function RestaurantDetails() {
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{restaurant?.name || "Unknown Restaurant"}</h1>
-              <Info className="h-5 w-5 text-gray-400" />
+              <button
+                type="button"
+                onClick={() => slug && navigate(`/restaurants/${slug}/info`)}
+                className="rounded-full p-1 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300"
+                aria-label="Restaurant information"
+              >
+                <Info className="h-5 w-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
+              </button>
             </div>
             <div className="flex flex-col items-end">
               <Badge className="bg-green-500 text-white mb-1 flex items-center gap-1 px-2 py-1">
