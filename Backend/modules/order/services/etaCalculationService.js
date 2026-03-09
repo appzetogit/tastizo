@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import googleMapsService from './googleMapsService.js';
 import Order from '../models/Order.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
@@ -43,8 +44,11 @@ class ETACalculationService {
     } = orderData;
 
     try {
-      // 1. Get restaurant data
-      const restaurant = await Restaurant.findOne({ restaurantId });
+      // 1. Get restaurant data (order may store restaurantId as _id or as restaurantId string)
+      let restaurant = await Restaurant.findOne({ restaurantId });
+      if (!restaurant && restaurantId && mongoose.Types.ObjectId.isValid(restaurantId)) {
+        restaurant = await Restaurant.findById(restaurantId);
+      }
       if (!restaurant) {
         throw new Error('Restaurant not found');
       }
@@ -451,7 +455,10 @@ class ETACalculationService {
    * Get restaurant preparation time
    */
   async getRestaurantPrepTime(restaurantId) {
-    const restaurant = await Restaurant.findOne({ restaurantId });
+    let restaurant = await Restaurant.findOne({ restaurantId });
+    if (!restaurant && restaurantId && mongoose.Types.ObjectId.isValid(restaurantId)) {
+      restaurant = await Restaurant.findById(restaurantId);
+    }
     if (!restaurant) return 15; // Default 15 minutes
 
     // Parse estimatedDeliveryTime string like "25-30 mins" or use default
@@ -493,7 +500,10 @@ class ETACalculationService {
    * Get restaurant location
    */
   async getRestaurantLocation(restaurantId) {
-    const restaurant = await Restaurant.findOne({ restaurantId });
+    let restaurant = await Restaurant.findOne({ restaurantId });
+    if (!restaurant && restaurantId && mongoose.Types.ObjectId.isValid(restaurantId)) {
+      restaurant = await Restaurant.findById(restaurantId);
+    }
     if (!restaurant || !restaurant.location) {
       throw new Error('Restaurant location not found');
     }

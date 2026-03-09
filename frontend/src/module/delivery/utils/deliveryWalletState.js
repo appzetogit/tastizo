@@ -68,6 +68,9 @@ export const fetchDeliveryWallet = async () => {
         pendingWithdrawals: walletData.pendingWithdrawals || 0,
         joiningBonusClaimed: walletData.joiningBonusClaimed || false,
         joiningBonusAmount: walletData.joiningBonusAmount || 0,
+        // Server-computed weekly values (used by Pocket so earnings/orders always correct)
+        weeklyEarnings: walletData.weeklyEarnings != null && !Number.isNaN(Number(walletData.weeklyEarnings)) ? Number(walletData.weeklyEarnings) : undefined,
+        weeklyOrders: walletData.weeklyOrders != null && !Number.isNaN(Number(walletData.weeklyOrders)) ? Number(walletData.weeklyOrders) : undefined,
         // Use 'transactions' field (all transactions) for weekly calculations, fallback to recentTransactions for backward compatibility
         transactions: walletData.transactions || walletData.recentTransactions || [],
         totalTransactions: walletData.totalTransactions || 0

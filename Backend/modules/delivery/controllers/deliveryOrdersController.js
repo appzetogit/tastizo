@@ -423,9 +423,7 @@ export const acceptOrder = asyncHandler(async (req, res) => {
           .lean();
 
         if (!order) {
-          console.error(
-            `❌ Order not found after assignment: ${orderDoc._id}`,
-          );
+          console.error(`❌ Order not found after assignment: ${orderDoc._id}`);
           return errorResponse(
             res,
             500,
@@ -1348,19 +1346,20 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
             polyline,
             distance: routeData.distance,
             duration: routeData.duration,
-            status: "assigned"
+            status: "assigned",
           });
 
           await updateDeliveryBoyLocation(
             delivery._id.toString(),
             deliveryLat,
             deliveryLng,
-            rtdbOrderId
+            rtdbOrderId,
           );
         }
       } catch (firebaseErr) {
         console.warn(
-          "Firebase sync (already-confirmed order) failed: " + firebaseErr.message
+          "Firebase sync (already-confirmed order) failed: " +
+            firebaseErr.message,
         );
       }
 
@@ -1613,19 +1612,19 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
             polyline,
             distance: routeData.distance,
             duration: routeData.duration,
-            status: "assigned"
+            status: "assigned",
           });
 
           await updateDeliveryBoyLocation(
             delivery._id.toString(),
             deliveryLat,
             deliveryLng,
-            rtdbOrderId
+            rtdbOrderId,
           );
         }
       } catch (firebaseErr) {
         console.warn(
-          "Firebase sync (order ID confirmed) failed: " + firebaseErr.message
+          "Firebase sync (order ID confirmed) failed: " + firebaseErr.message,
         );
       }
     })();
@@ -1904,51 +1903,117 @@ export const completeDelivery = asyncHandler(async (req, res) => {
         `ℹ️ Order ${order.orderId || order._id} is already delivered/completed. Returning success (idempotent).`,
       );
 
-      // Return success with existing order data (idempotent operation)
-      // Still calculate earnings if not already calculated
+      const orderIdForLog = order.orderId || order._id?.toString() || orderId;
+      const orderMongoIdForAlready = order._id;
+
       let earnings = null;
       try {
-        // Check if earnings were already calculated
-        const wallet = await DeliveryWallet.findOne({
-          deliveryPartnerId: delivery._id,
-        });
-        const orderIdForTransaction = order._id?.toString
-          ? order._id.toString()
-          : order._id;
-        const existingTransaction = wallet?.transactions?.find(
+        const wallet = await DeliveryWallet.findOrCreateByDeliveryId(
+          delivery._id,
+        );
+        const orderIdStr = orderMongoIdForAlready
+          ? orderMongoIdForAlready.toString()
+          : String(order._id || "");
+        const existingTransaction = (wallet.transactions || []).find(
           (t) =>
             t.orderId &&
-            t.orderId.toString() === orderIdForTransaction &&
+            String(t.orderId.toString()) === orderIdStr &&
             t.type === "payment",
         );
 
-        if (existingTransaction) {
+        if (existingTransaction && existingTransaction.amount > 0) {
           earnings = {
             amount: existingTransaction.amount,
             transactionId:
               existingTransaction._id?.toString() || existingTransaction.id,
           };
         } else {
-          // Calculate earnings even if order is already delivered (for consistency)
+          // Remove stale ₹0 transaction if present
+          if (existingTransaction && existingTransaction.amount <= 0) {
+            wallet.transactions = wallet.transactions.filter(
+              (t) =>
+                !(
+                  t.orderId &&
+                  String(t.orderId.toString()) === orderIdStr &&
+                  t.type === "payment" &&
+                  t.amount <= 0
+                ),
+            );
+            await wallet.save();
+            console.log(
+              `⚠️ Removed stale ₹0 earning for order ${orderIdForLog}`,
+            );
+          }
+          // Earning was never added to wallet — add it now so Pocket and Earnings update
           let deliveryDistance = 0;
           if (order.deliveryState?.routeToDelivery?.distance) {
             deliveryDistance = order.deliveryState.routeToDelivery.distance;
           } else if (order.assignmentInfo?.distance) {
             deliveryDistance = order.assignmentInfo.distance;
+          } else if (
+            order.restaurantId?.location?.coordinates &&
+            order.address?.location?.coordinates
+          ) {
+            const [restaurantLng, restaurantLat] =
+              order.restaurantId.location.coordinates;
+            const [customerLng, customerLat] =
+              order.address.location.coordinates;
+            const R = 6371;
+            const dLat = ((customerLat - restaurantLat) * Math.PI) / 180;
+            const dLng = ((customerLng - restaurantLng) * Math.PI) / 180;
+            const a =
+              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos((restaurantLat * Math.PI) / 180) *
+                Math.cos((customerLat * Math.PI) / 180) *
+                Math.sin(dLng / 2) *
+                Math.sin(dLng / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            deliveryDistance = R * c;
           }
 
-          if (deliveryDistance > 0) {
+          let totalEarning = 0;
+          let commissionBreakdown = null;
+          try {
             const commissionResult =
               await DeliveryBoyCommission.calculateCommission(deliveryDistance);
-            earnings = {
-              amount: commissionResult.commission,
-              breakdown: commissionResult.breakdown,
+            totalEarning = commissionResult.commission;
+            commissionBreakdown = commissionResult.breakdown;
+          } catch (commissionError) {
+            totalEarning = order.pricing?.deliveryFee || 10;
+            commissionBreakdown = {
+              basePayout: totalEarning,
+              distance: deliveryDistance,
+              commissionPerKm: 0,
+              distanceCommission: 0,
             };
+            console.warn(
+              `⚠️ Commission rules not configured or failed (${commissionError.message}). Using fallback earning: ₹${totalEarning}`,
+            );
           }
+
+          const walletTransaction = wallet.addTransaction({
+            amount: totalEarning,
+            type: "payment",
+            status: "Completed",
+            description: `Delivery earnings for Order #${orderIdForLog} (Distance: ${deliveryDistance.toFixed(2)} km)`,
+            orderId: orderMongoIdForAlready || order._id,
+            paymentCollected: false,
+          });
+          await wallet.save();
+
+          console.log(
+            `✅ Backfilled earning ₹${totalEarning.toFixed(2)} to wallet for already-delivered order ${orderIdForLog}`,
+          );
+          earnings = {
+            amount: totalEarning,
+            transactionId:
+              walletTransaction._id?.toString() || walletTransaction.id,
+            breakdown: commissionBreakdown,
+          };
         }
       } catch (earningsError) {
         console.error(
-          "⚠️ Error calculating earnings for already delivered order:",
+          "⚠️ Error calculating/backfilling earnings for already delivered order:",
           earningsError.message,
         );
       }
@@ -2126,8 +2191,8 @@ export const completeDelivery = asyncHandler(async (req, res) => {
         "⚠️ Error calculating commission using rules:",
         commissionError.message,
       );
-      // Fallback: Use delivery fee as earnings if commission calculation fails
-      totalEarning = order.pricing?.deliveryFee || 0;
+      // Fallback: Use delivery fee as earnings if commission calculation fails; minimum ₹10
+      totalEarning = order.pricing?.deliveryFee || 10;
       commissionBreakdown = {
         basePayout: totalEarning,
         distance: deliveryDistance,
@@ -2145,18 +2210,39 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       let wallet = await DeliveryWallet.findOrCreateByDeliveryId(delivery._id);
 
       // Check if transaction already exists for this order (idempotent)
-      const orderIdForTransaction =
+      const orderIdStr =
         (orderMongoId && orderMongoId.toString()) ||
         (order && order._id && order._id.toString()) ||
-        null;
-      const existingTransaction = wallet.transactions?.find(
+        "";
+      const existingTransaction = (wallet.transactions || []).find(
         (t) =>
           t.orderId &&
-          t.orderId.toString() === orderIdForTransaction &&
+          String(t.orderId.toString()) === orderIdStr &&
           t.type === "payment",
       );
 
-      if (orderIdForTransaction && existingTransaction) {
+      // Remove stale ₹0 transaction if present
+      if (
+        orderIdStr &&
+        existingTransaction &&
+        existingTransaction.amount <= 0
+      ) {
+        wallet.transactions = wallet.transactions.filter(
+          (t) =>
+            !(
+              t.orderId &&
+              String(t.orderId.toString()) === orderIdStr &&
+              t.type === "payment" &&
+              t.amount <= 0
+            ),
+        );
+        await wallet.save();
+        console.log(
+          `⚠️ Removed stale ₹0 earning for order ${orderIdForLog}, will re-add`,
+        );
+      }
+
+      if (orderIdStr && existingTransaction && existingTransaction.amount > 0) {
         console.warn(
           `⚠️ Earning already added for order ${orderIdForLog}, skipping wallet update`,
         );

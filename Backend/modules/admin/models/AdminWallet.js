@@ -94,9 +94,8 @@ const adminWalletSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
+// Indexes (transactions.restaurantId omitted to avoid duplicate - Mongoose may auto-index subdoc paths)
 adminWalletSchema.index({ 'transactions.orderId': 1 });
-adminWalletSchema.index({ 'transactions.restaurantId': 1 });
 adminWalletSchema.index({ 'transactions.type': 1 });
 adminWalletSchema.index({ 'transactions.createdAt': -1 });
 adminWalletSchema.index({ lastTransactionAt: -1 });

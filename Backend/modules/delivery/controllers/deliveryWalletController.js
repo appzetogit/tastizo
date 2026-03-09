@@ -1,25 +1,150 @@
-import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
-import { successResponse, errorResponse } from '../../../shared/utils/response.js';
-import DeliveryWallet from '../models/DeliveryWallet.js';
-import DeliveryWithdrawalRequest from '../models/DeliveryWithdrawalRequest.js';
-import Order from '../../order/models/Order.js';
-import BusinessSettings from '../../admin/models/BusinessSettings.js';
-import { validate } from '../../../shared/middleware/validate.js';
-import Joi from 'joi';
-import winston from 'winston';
-import { createOrder as createRazorpayOrder } from '../../payment/services/razorpayService.js';
-import { verifyPayment } from '../../payment/services/razorpayService.js';
-import { getRazorpayCredentials } from '../../../shared/utils/envService.js';
+import { asyncHandler } from "../../../shared/middleware/asyncHandler.js";
+import {
+  successResponse,
+  errorResponse,
+} from "../../../shared/utils/response.js";
+import DeliveryWallet from "../models/DeliveryWallet.js";
+import DeliveryWithdrawalRequest from "../models/DeliveryWithdrawalRequest.js";
+import Order from "../../order/models/Order.js";
+import BusinessSettings from "../../admin/models/BusinessSettings.js";
+import DeliveryBoyCommission from "../../admin/models/DeliveryBoyCommission.js";
+import { validate } from "../../../shared/middleware/validate.js";
+import Joi from "joi";
+import winston from "winston";
+import { createOrder as createRazorpayOrder } from "../../payment/services/razorpayService.js";
+import { verifyPayment } from "../../payment/services/razorpayService.js";
+import { getRazorpayCredentials } from "../../../shared/utils/envService.js";
 
 const logger = winston.createLogger({
-  level: 'info',
+  level: "info",
   format: winston.format.json(),
   transports: [
     new winston.transports.Console({
-      format: winston.format.simple()
-    })
-  ]
+      format: winston.format.simple(),
+    }),
+  ],
 });
+
+/**
+ * Sync wallet: backfill earnings for any delivered orders that don't have a wallet transaction.
+ * Called when wallet is fetched so Pocket and Earnings screens show up-to-date data.
+ * Exported for testing.
+ */
+export async function syncMissingEarningsForDelivery(deliveryId) {
+  try {
+    // Same query as Trip History: find all delivered orders for this delivery partner
+    // Use $or to handle both ObjectId and string storage of deliveryPartnerId
+    const idStr = deliveryId?.toString?.() ?? String(deliveryId);
+    let deliveredOrders = await Order.find({
+      $or: [{ deliveryPartnerId: deliveryId }, { deliveryPartnerId: idStr }],
+      status: "delivered",
+    })
+      .populate("restaurantId", "location")
+      .lean();
+
+    logger.info(
+      `Wallet sync: found ${deliveredOrders?.length ?? 0} delivered orders for delivery ${deliveryId}`,
+    );
+
+    if (!deliveredOrders || deliveredOrders.length === 0) return;
+
+    let wallet = await DeliveryWallet.findOrCreateByDeliveryId(deliveryId);
+    let backfilled = 0;
+
+    for (const order of deliveredOrders) {
+      const orderIdStr = order._id
+        ? order._id.toString()
+        : String(order._id || "");
+      // Only skip if there is already a *Completed* payment transaction with amount > 0 for this order
+      // If a ₹0 transaction exists (from failed commission calc), remove it and re-process
+      const existingTx = (wallet.transactions || []).find(
+        (t) =>
+          t.orderId &&
+          String(t.orderId.toString()) === orderIdStr &&
+          t.type === "payment" &&
+          t.status === "Completed",
+      );
+      if (existingTx && existingTx.amount > 0) continue;
+
+      // Remove stale ₹0 transaction if present so we can add the correct one
+      if (existingTx && existingTx.amount <= 0) {
+        wallet.transactions = wallet.transactions.filter(
+          (t) =>
+            !(
+              t.orderId &&
+              String(t.orderId.toString()) === orderIdStr &&
+              t.type === "payment" &&
+              t.amount <= 0
+            ),
+        );
+        // Recalculate totalBalance/totalEarned (undo the ₹0 add — no net effect but keeps data clean)
+        logger.info(
+          `Wallet sync: removing stale ₹0 transaction for order ${orderIdStr}`,
+        );
+      }
+
+      let deliveryDistance = 0;
+      if (order.deliveryState?.routeToDelivery?.distance) {
+        deliveryDistance = order.deliveryState.routeToDelivery.distance;
+      } else if (order.assignmentInfo?.distance) {
+        deliveryDistance = order.assignmentInfo.distance;
+      } else if (
+        order.restaurantId?.location?.coordinates &&
+        order.address?.location?.coordinates
+      ) {
+        const [restaurantLng, restaurantLat] =
+          order.restaurantId.location.coordinates;
+        const [customerLng, customerLat] = order.address.location.coordinates;
+        const R = 6371;
+        const dLat = ((customerLat - restaurantLat) * Math.PI) / 180;
+        const dLng = ((customerLng - restaurantLng) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((restaurantLat * Math.PI) / 180) *
+            Math.cos((customerLat * Math.PI) / 180) *
+            Math.sin(dLng / 2) *
+            Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        deliveryDistance = R * c;
+      }
+
+      let totalEarning = 0;
+      try {
+        const commissionResult =
+          await DeliveryBoyCommission.calculateCommission(deliveryDistance);
+        totalEarning = commissionResult.commission;
+      } catch (commErr) {
+        totalEarning = order.pricing?.deliveryFee || 10;
+        logger.warn(
+          `Wallet sync: commission rules failed (${commErr?.message}), using fallback ₹${totalEarning}`,
+        );
+      }
+
+      const orderIdForLog =
+        order.orderId || order._id?.toString() || orderIdStr;
+      wallet.addTransaction({
+        amount: totalEarning,
+        type: "payment",
+        status: "Completed",
+        description: `Delivery earnings for Order #${orderIdForLog} (Distance: ${deliveryDistance.toFixed(2)} km)`,
+        orderId: order._id,
+        paymentCollected: false,
+      });
+      await wallet.save();
+      backfilled++;
+      logger.info(
+        `Wallet sync: backfilled earning ₹${totalEarning.toFixed(2)} for order ${orderIdForLog}`,
+      );
+    }
+    if (backfilled > 0) {
+      logger.info(
+        `Wallet sync: backfilled ${backfilled} earnings for delivery ${deliveryId}`,
+      );
+    }
+  } catch (err) {
+    logger.warn("Wallet sync (missing earnings) failed:", err?.message || err);
+  }
+}
 
 /**
  * Get Wallet Balance
@@ -30,7 +155,10 @@ export const getWallet = asyncHandler(async (req, res) => {
   try {
     const delivery = req.delivery;
 
-    // Find or create wallet for this delivery partner
+    // Sync missing earnings for delivered orders so Pocket and Earnings update
+    await syncMissingEarningsForDelivery(delivery._id);
+
+    // Find or create wallet for this delivery partner (re-fetch after sync)
     let wallet = await DeliveryWallet.findOne({ deliveryId: delivery._id });
 
     if (!wallet) {
@@ -40,13 +168,13 @@ export const getWallet = asyncHandler(async (req, res) => {
         totalBalance: 0,
         cashInHand: 0,
         totalWithdrawn: 0,
-        totalEarned: 0
+        totalEarned: 0,
       });
     }
 
     // Calculate pending withdrawals
-    const pendingWithdrawals = wallet.transactions
-      .filter(t => t.type === 'withdrawal' && t.status === 'Pending')
+    const pendingWithdrawals = (wallet.transactions || [])
+      .filter((t) => t.type === "withdrawal" && t.status === "Pending")
       .reduce((sum, t) => sum + t.amount, 0);
 
     // Global cash limit and withdrawal limit (same for all delivery partners)
@@ -86,58 +214,67 @@ export const getWallet = asyncHandler(async (req, res) => {
                 // deliveryPartnerId matches current delivery (handles ObjectId or string)
                 {
                   $eq: [
-                    { $toString: { $ifNull: ['$deliveryPartnerId', ''] } },
-                    deliveryIdStr
-                  ]
+                    { $toString: { $ifNull: ["$deliveryPartnerId", ""] } },
+                    deliveryIdStr,
+                  ],
                 },
                 // COD / Cash payment method (handles casing + some legacy values)
                 {
                   $in: [
                     {
                       $toLower: {
-                        $ifNull: ['$payment.method', '']
-                      }
+                        $ifNull: ["$payment.method", ""],
+                      },
                     },
-                    ['cash', 'cod', 'cash on delivery']
-                  ]
+                    ["cash", "cod", "cash on delivery"],
+                  ],
                 },
                 // Delivered status can be in status or deliveryState fields
                 {
                   $or: [
                     {
                       $eq: [
-                        { $toLower: { $ifNull: ['$status', ''] } },
-                        'delivered'
-                      ]
+                        { $toLower: { $ifNull: ["$status", ""] } },
+                        "delivered",
+                      ],
                     },
                     {
                       $eq: [
-                        { $toLower: { $ifNull: ['$deliveryState.status', ''] } },
-                        'delivered'
-                      ]
+                        {
+                          $toLower: { $ifNull: ["$deliveryState.status", ""] },
+                        },
+                        "delivered",
+                      ],
                     },
                     {
                       $eq: [
-                        { $toLower: { $ifNull: ['$deliveryState.currentPhase', ''] } },
-                        'completed'
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+                        {
+                          $toLower: {
+                            $ifNull: ["$deliveryState.currentPhase", ""],
+                          },
+                        },
+                        "completed",
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
         },
         {
           $group: {
             _id: null,
-            total: { $sum: { $ifNull: ['$pricing.total', 0] } }
-          }
-        }
+            total: { $sum: { $ifNull: ["$pricing.total", 0] } },
+          },
+        },
       ]);
       codCollectedTotal = Number(codAgg?.[0]?.total) || 0;
     } catch (e) {
-      console.warn('⚠️ Failed to compute COD cash in hand from orders:', e?.message || e);
+      console.warn(
+        "⚠️ Failed to compute COD cash in hand from orders:",
+        e?.message || e,
+      );
       codCollectedTotal = 0;
     }
 
@@ -145,16 +282,17 @@ export const getWallet = asyncHandler(async (req, res) => {
     // reduces cash in hand and increases available limit. Do not override with COD.
     const cashInHandForLimit = Math.max(0, Number(wallet.cashInHand) || 0);
 
-    // Get all transactions (sorted by date, newest first)
-    // Frontend needs all transactions to calculate weekly earnings and orders
-    const allTransactions = wallet.transactions
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    // Get all transactions (sorted by date, newest first); copy so we don't mutate doc
+    const txList = wallet.transactions || [];
+    const allTransactions = [...txList].sort(
+      (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+    );
 
     // Get recent transactions (last 10) for display purposes
     const recentTransactions = allTransactions.slice(0, 10);
 
     // Map all transactions for frontend calculations
-    const transactions = allTransactions.map(t => ({
+    const transactions = allTransactions.map((t) => ({
       id: t._id,
       _id: t._id,
       amount: t.amount,
@@ -165,13 +303,67 @@ export const getWallet = asyncHandler(async (req, res) => {
       createdAt: t.createdAt,
       orderId: t.orderId,
       paymentMethod: t.paymentMethod,
-      paymentCollected: t.paymentCollected
+      paymentCollected: t.paymentCollected,
     }));
 
     // Calculate bonus amount from transactions for logging
-    const bonusTransactions = transactions.filter(t => t.type === 'bonus' && t.status === 'Completed');
-    const totalBonus = bonusTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-    
+    const bonusTransactions = transactions.filter(
+      (t) => t.type === "bonus" && t.status === "Completed",
+    );
+    const totalBonus = bonusTransactions.reduce(
+      (sum, t) => sum + (t.amount || 0),
+      0,
+    );
+
+    // Server-side weekly earnings and orders so Pocket always shows correct values
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const isPaymentTxInRange = (t, from, to) => {
+      if (
+        (t.type !== "payment" && t.type !== "earning_addon") ||
+        t.status !== "Completed"
+      )
+        return false;
+      const txDate = t.date
+        ? new Date(t.date)
+        : t.createdAt
+          ? new Date(t.createdAt)
+          : null;
+      if (!txDate || isNaN(txDate.getTime())) return false;
+      return txDate >= from && txDate <= to;
+    };
+
+    const weeklyPaymentTx = transactions.filter((t) =>
+      isPaymentTxInRange(t, startOfWeek, now),
+    );
+    let weeklyEarnings = weeklyPaymentTx.reduce(
+      (sum, t) => sum + (t.amount || 0),
+      0,
+    );
+    let weeklyOrders = weeklyPaymentTx.filter(
+      (t) => t.type === "payment",
+    ).length;
+
+    // If week (Sunday–now) shows 0 but there are earnings in last 7 days, use last 7 days so Pocket shows non-zero
+    if (weeklyEarnings === 0 && weeklyOrders === 0) {
+      const last7Tx = transactions.filter((t) =>
+        isPaymentTxInRange(t, sevenDaysAgo, now),
+      );
+      const last7Earnings = last7Tx.reduce(
+        (sum, t) => sum + (t.amount || 0),
+        0,
+      );
+      const last7Orders = last7Tx.filter((t) => t.type === "payment").length;
+      if (last7Earnings > 0 || last7Orders > 0) {
+        weeklyEarnings = last7Earnings;
+        weeklyOrders = last7Orders;
+      }
+    }
+
     const walletData = {
       totalBalance: wallet.totalBalance || 0,
       cashInHand: cashInHandForLimit,
@@ -185,32 +377,33 @@ export const getWallet = asyncHandler(async (req, res) => {
       pendingWithdrawals: pendingWithdrawals,
       joiningBonusClaimed: wallet.joiningBonusClaimed || false,
       joiningBonusAmount: wallet.joiningBonusAmount || 0,
+      // Server-computed weekly values so Pocket shows correct earnings/orders even after sync
+      weeklyEarnings,
+      weeklyOrders,
       // Return all transactions for frontend calculations (weekly earnings, orders count, etc.)
       transactions: transactions,
       // Also include recentTransactions for backward compatibility
       recentTransactions: transactions.slice(0, 10),
-      totalTransactions: wallet.transactions.length
+      totalTransactions: wallet.transactions.length,
     };
 
     // Log wallet data for debugging
-    console.log('💰 Wallet API Response:', {
+    console.log("💰 Wallet API Response:", {
       deliveryId: delivery._id,
       totalBalance: walletData.totalBalance,
       pocketBalance: walletData.pocketBalance,
       cashInHand: walletData.cashInHand,
-      availableCashLimit: walletData.availableCashLimit,
-      codCollectedTotal,
-      totalBonus: totalBonus,
-      bonusTransactionsCount: bonusTransactions.length,
-      totalTransactions: walletData.totalTransactions
+      weeklyEarnings: walletData.weeklyEarnings,
+      weeklyOrders: walletData.weeklyOrders,
+      totalTransactions: walletData.totalTransactions,
     });
 
-    return successResponse(res, 200, 'Wallet balance retrieved successfully', {
-      wallet: walletData
+    return successResponse(res, 200, "Wallet balance retrieved successfully", {
+      wallet: walletData,
     });
   } catch (error) {
-    logger.error('Error fetching wallet:', error);
-    return errorResponse(res, 500, 'Failed to fetch wallet balance');
+    logger.error("Error fetching wallet:", error);
+    return errorResponse(res, 500, "Failed to fetch wallet balance");
   }
 });
 
@@ -227,14 +420,14 @@ export const getTransactions = asyncHandler(async (req, res) => {
     let wallet = await DeliveryWallet.findOne({ deliveryId: delivery._id });
 
     if (!wallet) {
-      return successResponse(res, 200, 'No transactions found', {
+      return successResponse(res, 200, "No transactions found", {
         transactions: [],
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
           total: 0,
-          pages: 0
-        }
+          pages: 0,
+        },
       });
     }
 
@@ -242,11 +435,11 @@ export const getTransactions = asyncHandler(async (req, res) => {
     let transactions = wallet.transactions || [];
 
     if (type) {
-      transactions = transactions.filter(t => t.type === type);
+      transactions = transactions.filter((t) => t.type === type);
     }
 
     if (status) {
-      transactions = transactions.filter(t => t.status === status);
+      transactions = transactions.filter((t) => t.status === status);
     }
 
     // Sort by date (newest first)
@@ -255,10 +448,13 @@ export const getTransactions = asyncHandler(async (req, res) => {
     // Pagination
     const total = transactions.length;
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    const paginatedTransactions = transactions.slice(skip, skip + parseInt(limit));
+    const paginatedTransactions = transactions.slice(
+      skip,
+      skip + parseInt(limit),
+    );
 
-    return successResponse(res, 200, 'Transactions retrieved successfully', {
-      transactions: paginatedTransactions.map(t => ({
+    return successResponse(res, 200, "Transactions retrieved successfully", {
+      transactions: paginatedTransactions.map((t) => ({
         id: t._id,
         amount: t.amount,
         type: t.type,
@@ -269,18 +465,18 @@ export const getTransactions = asyncHandler(async (req, res) => {
         paymentMethod: t.paymentMethod,
         paymentCollected: t.paymentCollected,
         processedAt: t.processedAt,
-        failureReason: t.failureReason
+        failureReason: t.failureReason,
       })),
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
         total,
-        pages: Math.ceil(total / parseInt(limit))
-      }
+        pages: Math.ceil(total / parseInt(limit)),
+      },
     });
   } catch (error) {
-    logger.error('Error fetching transactions:', error);
-    return errorResponse(res, 500, 'Failed to fetch transactions');
+    logger.error("Error fetching transactions:", error);
+    return errorResponse(res, 500, "Failed to fetch transactions");
   }
 });
 
@@ -290,29 +486,31 @@ export const getTransactions = asyncHandler(async (req, res) => {
  */
 const createWithdrawalSchema = Joi.object({
   amount: Joi.number().positive().required(),
-  paymentMethod: Joi.string().valid('bank_transfer', 'upi', 'card').required(),
+  paymentMethod: Joi.string().valid("bank_transfer", "upi", "card").required(),
   bankDetails: Joi.object({
-    accountNumber: Joi.string().when('paymentMethod', {
-      is: 'bank_transfer',
-      then: Joi.required()
+    accountNumber: Joi.string().when("paymentMethod", {
+      is: "bank_transfer",
+      then: Joi.required(),
     }),
-    ifscCode: Joi.string().when('paymentMethod', {
-      is: 'bank_transfer',
-      then: Joi.required()
+    ifscCode: Joi.string().when("paymentMethod", {
+      is: "bank_transfer",
+      then: Joi.required(),
     }),
-    accountHolderName: Joi.string().when('paymentMethod', {
-      is: 'bank_transfer',
-      then: Joi.required()
+    accountHolderName: Joi.string().when("paymentMethod", {
+      is: "bank_transfer",
+      then: Joi.required(),
     }),
-    bankName: Joi.string().when('paymentMethod', {
-      is: 'bank_transfer',
-      then: Joi.required()
-    })
+    bankName: Joi.string().when("paymentMethod", {
+      is: "bank_transfer",
+      then: Joi.required(),
+    }),
   }).optional(),
-  upiId: Joi.string().when('paymentMethod', {
-    is: 'upi',
-    then: Joi.required()
-  }).optional()
+  upiId: Joi.string()
+    .when("paymentMethod", {
+      is: "upi",
+      then: Joi.required(),
+    })
+    .optional(),
 });
 
 export const createWithdrawalRequest = asyncHandler(async (req, res) => {
@@ -321,7 +519,9 @@ export const createWithdrawalRequest = asyncHandler(async (req, res) => {
     const { amount, paymentMethod, bankDetails, upiId } = req.body;
 
     // Validation
-    const { error: validationError } = createWithdrawalSchema.validate(req.body);
+    const { error: validationError } = createWithdrawalSchema.validate(
+      req.body,
+    );
     if (validationError) {
       return errorResponse(res, 400, validationError.details[0].message);
     }
@@ -335,29 +535,39 @@ export const createWithdrawalRequest = asyncHandler(async (req, res) => {
       const settings = await BusinessSettings.getSettings();
       const wl = Number(settings?.deliveryWithdrawalLimit);
       if (Number.isFinite(wl) && wl >= 0) minWithdrawalAmount = wl;
-    } catch (e) { /* keep default */ }
+    } catch (e) {
+      /* keep default */
+    }
     if (amount < minWithdrawalAmount) {
-      return errorResponse(res, 400, `Minimum withdrawal amount is ₹${minWithdrawalAmount}`);
+      return errorResponse(
+        res,
+        400,
+        `Minimum withdrawal amount is ₹${minWithdrawalAmount}`,
+      );
     }
 
     // Withdrawal is based on totalBalance only. No connection to cash-in-hand (COD collected).
     const availableForWithdrawal = Number(wallet.totalBalance) || 0;
     if (amount > availableForWithdrawal) {
-      return errorResponse(res, 400, `Insufficient balance. Available balance: ₹${availableForWithdrawal.toFixed(2)}`);
+      return errorResponse(
+        res,
+        400,
+        `Insufficient balance. Available balance: ₹${availableForWithdrawal.toFixed(2)}`,
+      );
     }
     // Withdrawal allowed only when withdrawable >= limit (enforced via min amount check above)
 
     // Create withdrawal transaction (Pending)
     wallet.addTransaction({
       amount: amount,
-      type: 'withdrawal',
-      status: 'Pending',
+      type: "withdrawal",
+      status: "Pending",
       description: `Withdrawal request via ${paymentMethod}`,
       paymentMethod: paymentMethod,
       metadata: {
         bankDetails: bankDetails || null,
-        upiId: upiId || null
-      }
+        upiId: upiId || null,
+      },
     });
 
     // Deduct balance on request create (refund on reject)
@@ -368,23 +578,28 @@ export const createWithdrawalRequest = asyncHandler(async (req, res) => {
     const lastTx = wallet.transactions[wallet.transactions.length - 1];
     const transactionId = lastTx?._id;
     if (!transactionId) {
-      return errorResponse(res, 500, 'Failed to create withdrawal: transaction id missing');
+      return errorResponse(
+        res,
+        500,
+        "Failed to create withdrawal: transaction id missing",
+      );
     }
 
-    const deliveryName = delivery.name || 'Delivery Partner';
-    const deliveryIdString = delivery.deliveryId || delivery._id?.toString?.() || 'N/A';
+    const deliveryName = delivery.name || "Delivery Partner";
+    const deliveryIdString =
+      delivery.deliveryId || delivery._id?.toString?.() || "N/A";
 
     const withdrawalRequest = await DeliveryWithdrawalRequest.create({
       deliveryId: delivery._id,
       amount,
-      status: 'Pending',
+      status: "Pending",
       paymentMethod,
-      bankDetails: paymentMethod === 'bank_transfer' ? bankDetails : undefined,
-      upiId: paymentMethod === 'upi' ? upiId : undefined,
+      bankDetails: paymentMethod === "bank_transfer" ? bankDetails : undefined,
+      upiId: paymentMethod === "upi" ? upiId : undefined,
       transactionId,
       walletId: wallet._id,
       deliveryName,
-      deliveryIdString
+      deliveryIdString,
     });
 
     logger.info(`Withdrawal request created for delivery: ${delivery._id}`, {
@@ -392,33 +607,38 @@ export const createWithdrawalRequest = asyncHandler(async (req, res) => {
       amount,
       paymentMethod,
       transactionId,
-      requestId: withdrawalRequest._id
+      requestId: withdrawalRequest._id,
     });
 
-    return successResponse(res, 201, 'Withdrawal request created successfully', {
-      request: {
-        id: withdrawalRequest._id,
-        amount: withdrawalRequest.amount,
-        status: withdrawalRequest.status,
-        requestedAt: withdrawalRequest.requestedAt
+    return successResponse(
+      res,
+      201,
+      "Withdrawal request created successfully",
+      {
+        request: {
+          id: withdrawalRequest._id,
+          amount: withdrawalRequest.amount,
+          status: withdrawalRequest.status,
+          requestedAt: withdrawalRequest.requestedAt,
+        },
+        transaction: {
+          id: lastTx._id,
+          amount: lastTx.amount,
+          type: lastTx.type,
+          status: lastTx.status,
+          description: lastTx.description,
+          date: lastTx.createdAt,
+        },
+        wallet: {
+          totalBalance: wallet.totalBalance,
+          cashInHand: wallet.cashInHand,
+          pocketBalance: wallet.totalBalance - wallet.cashInHand,
+        },
       },
-      transaction: {
-        id: lastTx._id,
-        amount: lastTx.amount,
-        type: lastTx.type,
-        status: lastTx.status,
-        description: lastTx.description,
-        date: lastTx.createdAt
-      },
-      wallet: {
-        totalBalance: wallet.totalBalance,
-        cashInHand: wallet.cashInHand,
-        pocketBalance: wallet.totalBalance - wallet.cashInHand
-      }
-    });
+    );
   } catch (error) {
-    logger.error('Error creating withdrawal request:', error);
-    return errorResponse(res, 500, 'Failed to create withdrawal request');
+    logger.error("Error creating withdrawal request:", error);
+    return errorResponse(res, 500, "Failed to create withdrawal request");
   }
 });
 
@@ -431,7 +651,7 @@ const addEarningSchema = Joi.object({
   amount: Joi.number().positive().required(),
   orderId: Joi.string().required(),
   description: Joi.string().optional(),
-  paymentCollected: Joi.boolean().default(false)
+  paymentCollected: Joi.boolean().default(false),
 });
 
 export const addEarning = asyncHandler(async (req, res) => {
@@ -449,11 +669,11 @@ export const addEarning = asyncHandler(async (req, res) => {
     const order = await Order.findOne({
       _id: orderId,
       deliveryPartnerId: delivery._id,
-      status: 'delivered'
+      status: "delivered",
     });
 
     if (!order) {
-      return errorResponse(res, 404, 'Order not found or not delivered');
+      return errorResponse(res, 404, "Order not found or not delivered");
     }
 
     // Find or create wallet
@@ -461,21 +681,26 @@ export const addEarning = asyncHandler(async (req, res) => {
 
     // Check if transaction already exists for this order
     const existingTransaction = wallet.transactions.find(
-      t => t.orderId && t.orderId.toString() === orderId.toString() && t.type === 'payment'
+      (t) =>
+        t.orderId &&
+        t.orderId.toString() === orderId.toString() &&
+        t.type === "payment",
     );
 
     if (existingTransaction) {
-      return errorResponse(res, 400, 'Earning already added for this order');
+      return errorResponse(res, 400, "Earning already added for this order");
     }
 
     // Add payment transaction
     const transaction = wallet.addTransaction({
       amount: amount,
-      type: 'payment',
-      status: 'Completed',
-      description: description || `Delivery earnings for Order #${order.orderId || orderId}`,
+      type: "payment",
+      status: "Completed",
+      description:
+        description ||
+        `Delivery earnings for Order #${order.orderId || orderId}`,
       orderId: orderId,
-      paymentCollected: paymentCollected
+      paymentCollected: paymentCollected,
     });
 
     await wallet.save();
@@ -484,27 +709,27 @@ export const addEarning = asyncHandler(async (req, res) => {
       deliveryId: delivery.deliveryId,
       orderId,
       amount,
-      transactionId: transaction._id
+      transactionId: transaction._id,
     });
 
-    return successResponse(res, 201, 'Earning added successfully', {
+    return successResponse(res, 201, "Earning added successfully", {
       transaction: {
         id: transaction._id,
         amount: transaction.amount,
         type: transaction.type,
         status: transaction.status,
         description: transaction.description,
-        date: transaction.createdAt
+        date: transaction.createdAt,
       },
       wallet: {
         totalBalance: wallet.totalBalance,
         cashInHand: wallet.cashInHand,
-        totalEarned: wallet.totalEarned
-      }
+        totalEarned: wallet.totalEarned,
+      },
     });
   } catch (error) {
-    logger.error('Error adding earning:', error);
-    return errorResponse(res, 500, 'Failed to add earning');
+    logger.error("Error adding earning:", error);
+    return errorResponse(res, 500, "Failed to add earning");
   }
 });
 
@@ -514,7 +739,7 @@ export const addEarning = asyncHandler(async (req, res) => {
  */
 const collectPaymentSchema = Joi.object({
   orderId: Joi.string().required(),
-  amount: Joi.number().positive().optional()
+  amount: Joi.number().positive().optional(),
 });
 
 export const collectPayment = asyncHandler(async (req, res) => {
@@ -531,18 +756,18 @@ export const collectPayment = asyncHandler(async (req, res) => {
     // Verify order exists and belongs to this delivery partner
     const order = await Order.findOne({
       _id: orderId,
-      deliveryPartnerId: delivery._id
+      deliveryPartnerId: delivery._id,
     });
 
     if (!order) {
-      return errorResponse(res, 404, 'Order not found');
+      return errorResponse(res, 404, "Order not found");
     }
 
     // Find wallet
     const wallet = await DeliveryWallet.findOne({ deliveryId: delivery._id });
 
     if (!wallet) {
-      return errorResponse(res, 404, 'Wallet not found');
+      return errorResponse(res, 404, "Wallet not found");
     }
 
     // Collect payment
@@ -553,26 +778,26 @@ export const collectPayment = asyncHandler(async (req, res) => {
       logger.info(`Payment collected for delivery: ${delivery._id}`, {
         deliveryId: delivery.deliveryId,
         orderId,
-        amount: amount || transaction.amount
+        amount: amount || transaction.amount,
       });
 
-      return successResponse(res, 200, 'Payment collected successfully', {
+      return successResponse(res, 200, "Payment collected successfully", {
         transaction: {
           id: transaction._id,
           amount: transaction.amount,
-          paymentCollected: transaction.paymentCollected
+          paymentCollected: transaction.paymentCollected,
         },
         wallet: {
           totalBalance: wallet.totalBalance,
-          cashInHand: wallet.cashInHand
-        }
+          cashInHand: wallet.cashInHand,
+        },
       });
     } catch (error) {
       return errorResponse(res, 400, error.message);
     }
   } catch (error) {
-    logger.error('Error collecting payment:', error);
-    return errorResponse(res, 500, 'Failed to collect payment');
+    logger.error("Error collecting payment:", error);
+    return errorResponse(res, 500, "Failed to collect payment");
   }
 });
 
@@ -589,23 +814,27 @@ export const claimJoiningBonus = asyncHandler(async (req, res) => {
 
     // Check if already claimed
     if (wallet.joiningBonusClaimed) {
-      return errorResponse(res, 400, 'Joining bonus already claimed');
+      return errorResponse(res, 400, "Joining bonus already claimed");
     }
 
     // Check if bonus is unlocked (completed at least 1 order)
     const completedOrders = await Order.countDocuments({
       deliveryPartnerId: delivery._id,
-      status: 'delivered'
+      status: "delivered",
     });
 
     if (completedOrders < 1) {
-      return errorResponse(res, 400, 'Complete at least 1 order to unlock joining bonus');
+      return errorResponse(
+        res,
+        400,
+        "Complete at least 1 order to unlock joining bonus",
+      );
     }
 
     // Check if bonus is still valid
-    const joiningBonusValidTill = new Date('2025-12-10');
+    const joiningBonusValidTill = new Date("2025-12-10");
     if (new Date() > joiningBonusValidTill) {
-      return errorResponse(res, 400, 'Joining bonus has expired');
+      return errorResponse(res, 400, "Joining bonus has expired");
     }
 
     // Add bonus amount
@@ -614,9 +843,9 @@ export const claimJoiningBonus = asyncHandler(async (req, res) => {
     // Add bonus transaction
     const transaction = wallet.addTransaction({
       amount: bonusAmount,
-      type: 'bonus',
-      status: 'Completed',
-      description: 'Joining bonus - Complete first order reward'
+      type: "bonus",
+      status: "Completed",
+      description: "Joining bonus - Complete first order reward",
     });
 
     // Update wallet
@@ -627,10 +856,10 @@ export const claimJoiningBonus = asyncHandler(async (req, res) => {
     logger.info(`Joining bonus claimed for delivery: ${delivery._id}`, {
       deliveryId: delivery.deliveryId,
       bonusAmount,
-      transactionId: transaction._id
+      transactionId: transaction._id,
     });
 
-    return successResponse(res, 200, 'Joining bonus claimed successfully', {
+    return successResponse(res, 200, "Joining bonus claimed successfully", {
       bonusAmount,
       transaction: {
         id: transaction._id,
@@ -638,17 +867,17 @@ export const claimJoiningBonus = asyncHandler(async (req, res) => {
         type: transaction.type,
         status: transaction.status,
         description: transaction.description,
-        date: transaction.createdAt
+        date: transaction.createdAt,
       },
       wallet: {
         totalBalance: wallet.totalBalance,
         totalEarned: wallet.totalEarned,
-        joiningBonusClaimed: wallet.joiningBonusClaimed
-      }
+        joiningBonusClaimed: wallet.joiningBonusClaimed,
+      },
     });
   } catch (error) {
-    logger.error('Error claiming joining bonus:', error);
-    return errorResponse(res, 500, 'Failed to claim joining bonus');
+    logger.error("Error claiming joining bonus:", error);
+    return errorResponse(res, 500, "Failed to claim joining bonus");
   }
 });
 
@@ -660,16 +889,16 @@ export const claimJoiningBonus = asyncHandler(async (req, res) => {
 export const getWalletStats = asyncHandler(async (req, res) => {
   try {
     const delivery = req.delivery;
-    const { period = 'week' } = req.query; // today, week, month, year
+    const { period = "week" } = req.query; // today, week, month, year
 
     const wallet = await DeliveryWallet.findOne({ deliveryId: delivery._id });
 
     if (!wallet) {
-      return successResponse(res, 200, 'No wallet statistics available', {
+      return successResponse(res, 200, "No wallet statistics available", {
         earnings: 0,
         withdrawals: 0,
         transactions: 0,
-        period
+        period,
       });
     }
 
@@ -678,18 +907,18 @@ export const getWalletStats = asyncHandler(async (req, res) => {
     let startDate = new Date();
 
     switch (period) {
-      case 'today':
+      case "today":
         startDate.setHours(0, 0, 0, 0);
         break;
-      case 'week':
+      case "week":
         startDate.setDate(now.getDate() - now.getDay()); // Start of week
         startDate.setHours(0, 0, 0, 0);
         break;
-      case 'month':
+      case "month":
         startDate.setDate(1); // First day of month
         startDate.setHours(0, 0, 0, 0);
         break;
-      case 'year':
+      case "year":
         startDate.setMonth(0, 1); // January 1st
         startDate.setHours(0, 0, 0, 0);
         break;
@@ -699,38 +928,47 @@ export const getWalletStats = asyncHandler(async (req, res) => {
     }
 
     // Filter transactions by date range
-    const periodTransactions = wallet.transactions.filter(t => {
+    const periodTransactions = wallet.transactions.filter((t) => {
       const transactionDate = new Date(t.createdAt);
       return transactionDate >= startDate && transactionDate <= now;
     });
 
     // Calculate statistics
     const earnings = periodTransactions
-      .filter(t => (t.type === 'payment' || t.type === 'bonus') && t.status === 'Completed')
+      .filter(
+        (t) =>
+          (t.type === "payment" || t.type === "bonus") &&
+          t.status === "Completed",
+      )
       .reduce((sum, t) => sum + t.amount, 0);
 
     const withdrawals = periodTransactions
-      .filter(t => t.type === 'withdrawal' && t.status === 'Completed')
+      .filter((t) => t.type === "withdrawal" && t.status === "Completed")
       .reduce((sum, t) => sum + t.amount, 0);
 
     const transactions = periodTransactions.length;
 
-    return successResponse(res, 200, 'Wallet statistics retrieved successfully', {
-      earnings,
-      withdrawals,
-      transactions,
-      period,
-      startDate,
-      endDate: now
-    });
+    return successResponse(
+      res,
+      200,
+      "Wallet statistics retrieved successfully",
+      {
+        earnings,
+        withdrawals,
+        transactions,
+        period,
+        startDate,
+        endDate: now,
+      },
+    );
   } catch (error) {
-    logger.error('Error fetching wallet statistics:', error);
-    return errorResponse(res, 500, 'Failed to fetch wallet statistics');
+    logger.error("Error fetching wallet statistics:", error);
+    return errorResponse(res, 500, "Failed to fetch wallet statistics");
   }
 });
 
 const createDepositOrderSchema = Joi.object({
-  amount: Joi.number().positive().required()
+  amount: Joi.number().positive().required(),
 });
 
 /**
@@ -741,29 +979,46 @@ const createDepositOrderSchema = Joi.object({
 export const createDepositOrder = asyncHandler(async (req, res) => {
   const delivery = req.delivery;
   if (!delivery?._id) {
-    return errorResponse(res, 401, 'Delivery authentication required');
+    return errorResponse(res, 401, "Delivery authentication required");
   }
   const { error: ve } = createDepositOrderSchema.validate(req.body || {});
   if (ve) {
-    return errorResponse(res, 400, ve.details[0].message || 'Amount is required');
+    return errorResponse(
+      res,
+      400,
+      ve.details[0].message || "Amount is required",
+    );
   }
   const amount = Number(req.body.amount);
   if (amount < 1) {
-    return errorResponse(res, 400, 'Minimum deposit amount is ₹1');
+    return errorResponse(res, 400, "Minimum deposit amount is ₹1");
   }
   if (amount > 500000) {
-    return errorResponse(res, 400, 'Maximum deposit amount is ₹5,00,000');
+    return errorResponse(res, 400, "Maximum deposit amount is ₹5,00,000");
   }
 
   let credentials;
   try {
     credentials = await getRazorpayCredentials();
   } catch (e) {
-    logger.error('Razorpay credentials error:', e);
-    return errorResponse(res, 500, 'Payment gateway is not configured. Please contact support.');
+    logger.error("Razorpay credentials error:", e);
+    return errorResponse(
+      res,
+      500,
+      "Payment gateway is not configured. Please contact support.",
+    );
   }
-  if (!credentials?.keyId || !credentials?.keySecret || !credentials.keyId.trim() || !credentials.keySecret.trim()) {
-    return errorResponse(res, 500, 'Payment gateway credentials are missing. Please configure Razorpay in admin.');
+  if (
+    !credentials?.keyId ||
+    !credentials?.keySecret ||
+    !credentials.keyId.trim() ||
+    !credentials.keySecret.trim()
+  ) {
+    return errorResponse(
+      res,
+      500,
+      "Payment gateway credentials are missing. Please configure Razorpay in admin.",
+    );
   }
 
   const receipt = `dl_dep_${delivery._id.toString().slice(-8)}_${Date.now().toString().slice(-8)}`;
@@ -771,26 +1026,34 @@ export const createDepositOrder = asyncHandler(async (req, res) => {
   try {
     razorpayOrder = await createRazorpayOrder({
       amount: Math.round(amount * 100),
-      currency: 'INR',
+      currency: "INR",
       receipt,
-      notes: { deliveryId: delivery._id.toString(), type: 'cash_limit_deposit', amount: String(amount) }
+      notes: {
+        deliveryId: delivery._id.toString(),
+        type: "cash_limit_deposit",
+        amount: String(amount),
+      },
     });
   } catch (e) {
-    logger.error('Razorpay create order error:', e);
-    return errorResponse(res, 500, e.message || 'Failed to create payment order');
+    logger.error("Razorpay create order error:", e);
+    return errorResponse(
+      res,
+      500,
+      e.message || "Failed to create payment order",
+    );
   }
   if (!razorpayOrder?.id) {
-    return errorResponse(res, 500, 'Failed to create payment order');
+    return errorResponse(res, 500, "Failed to create payment order");
   }
 
-  return successResponse(res, 201, 'Order created', {
+  return successResponse(res, 201, "Order created", {
     razorpay: {
       orderId: razorpayOrder.id,
       amount: razorpayOrder.amount,
-      currency: razorpayOrder.currency || 'INR',
-      key: credentials.keyId
+      currency: razorpayOrder.currency || "INR",
+      key: credentials.keyId,
     },
-    amount
+    amount,
   });
 });
 
@@ -798,7 +1061,7 @@ const verifyDepositSchema = Joi.object({
   razorpay_order_id: Joi.string().required(),
   razorpay_payment_id: Joi.string().required(),
   razorpay_signature: Joi.string().required(),
-  amount: Joi.number().positive().required()
+  amount: Joi.number().positive().required(),
 });
 
 /**
@@ -808,48 +1071,60 @@ const verifyDepositSchema = Joi.object({
 export const verifyDepositPayment = asyncHandler(async (req, res) => {
   const delivery = req.delivery;
   if (!delivery?._id) {
-    return errorResponse(res, 401, 'Delivery authentication required');
+    return errorResponse(res, 401, "Delivery authentication required");
   }
   const { error: ve } = verifyDepositSchema.validate(req.body || {});
   if (ve) {
-    return errorResponse(res, 400, ve.details[0].message || 'Invalid payload');
+    return errorResponse(res, 400, ve.details[0].message || "Invalid payload");
   }
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, amount } = req.body;
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, amount } =
+    req.body;
   const amt = Number(amount);
 
-  const isValid = await verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+  const isValid = await verifyPayment(
+    razorpay_order_id,
+    razorpay_payment_id,
+    razorpay_signature,
+  );
   if (!isValid) {
-    return errorResponse(res, 400, 'Invalid payment signature');
+    return errorResponse(res, 400, "Invalid payment signature");
   }
 
   const wallet = await DeliveryWallet.findOrCreateByDeliveryId(delivery._id);
   const cashInHand = Number(wallet.cashInHand) || 0;
   if (cashInHand < amt) {
-    return errorResponse(res, 400, `Insufficient cash in hand (₹${cashInHand.toFixed(2)}). Deposit amount cannot exceed cash in hand.`);
+    return errorResponse(
+      res,
+      400,
+      `Insufficient cash in hand (₹${cashInHand.toFixed(2)}). Deposit amount cannot exceed cash in hand.`,
+    );
   }
 
-  const pid = (t) => (t.metadata?.get ? t.metadata.get('razorpayPaymentId') : t.metadata?.razorpayPaymentId);
+  const pid = (t) =>
+    t.metadata?.get
+      ? t.metadata.get("razorpayPaymentId")
+      : t.metadata?.razorpayPaymentId;
   const existing = (wallet.transactions || []).find(
-    t => t.type === 'deposit' && pid(t) === razorpay_payment_id
+    (t) => t.type === "deposit" && pid(t) === razorpay_payment_id,
   );
   if (existing) {
-    return errorResponse(res, 400, 'Payment already processed');
+    return errorResponse(res, 400, "Payment already processed");
   }
 
   const meta = new Map();
-  meta.set('razorpayOrderId', razorpay_order_id);
-  meta.set('razorpayPaymentId', razorpay_payment_id);
+  meta.set("razorpayOrderId", razorpay_order_id);
+  meta.set("razorpayPaymentId", razorpay_payment_id);
 
   wallet.addTransaction({
     amount: amt,
-    type: 'deposit',
-    status: 'Completed',
+    type: "deposit",
+    status: "Completed",
     description: `Cash limit deposit via Razorpay`,
-    paymentMethod: 'other',
+    paymentMethod: "other",
     metadata: Object.fromEntries(meta),
-    processedAt: new Date()
+    processedAt: new Date(),
   });
-  wallet.markModified('transactions');
+  wallet.markModified("transactions");
   await wallet.save();
 
   let limit = 0;
@@ -860,10 +1135,9 @@ export const verifyDepositPayment = asyncHandler(async (req, res) => {
   const cashInHandNow = Math.max(0, Number(wallet.cashInHand) || 0);
   const availableCashLimit = Math.max(0, limit - cashInHandNow);
 
-  return successResponse(res, 200, 'Deposit successful', {
+  return successResponse(res, 200, "Deposit successful", {
     amount: amt,
     cashInHand: cashInHandNow,
-    availableCashLimit
+    availableCashLimit,
   });
 });
-

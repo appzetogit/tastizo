@@ -51,7 +51,7 @@ const diningCouponSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-diningCouponSchema.index({ code: 1 });
+// code already has unique: true in schema (creates unique index); avoid duplicate index
 diningCouponSchema.index({ isActive: 1, expiryDate: 1 });
 
 const DiningCoupon = mongoose.model("DiningCoupon", diningCouponSchema);

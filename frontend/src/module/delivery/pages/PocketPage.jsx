@@ -153,43 +153,40 @@ export default function PocketPage() {
     }
   }, [walletState, balances])
 
-  // Calculate weekly earnings from wallet transactions (payment + earning_addon bonus)
-  // Include both payment and earning_addon transactions in weekly earnings
-  const weeklyEarnings = walletState?.transactions
-    ?.filter(t => {
-      // Include both payment and earning_addon transactions
-      if ((t.type !== 'payment' && t.type !== 'earning_addon') || t.status !== 'Completed') return false
-      const now = new Date()
-      const startOfWeek = new Date(now)
-      startOfWeek.setDate(now.getDate() - now.getDay())
-      startOfWeek.setHours(0, 0, 0, 0)
-      const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)
-      if (!transactionDate) return false
-      return transactionDate >= startOfWeek && transactionDate <= now
-    })
-    .reduce((sum, t) => sum + (t.amount || 0), 0) || 0
+  // Weekly earnings: prefer server-computed value (always correct after sync), else compute from transactions
+  const weeklyEarnings =
+    (typeof walletState?.weeklyEarnings === 'number')
+      ? walletState.weeklyEarnings
+      : ((walletState?.transactions ?? [])
+          .filter(t => {
+            if ((t.type !== 'payment' && t.type !== 'earning_addon') || t.status !== 'Completed') return false
+            const now = new Date()
+            const startOfWeek = new Date(now)
+            startOfWeek.setDate(now.getDate() - now.getDay())
+            startOfWeek.setHours(0, 0, 0, 0)
+            const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)
+            if (!transactionDate || isNaN(transactionDate.getTime())) return false
+            return transactionDate >= startOfWeek && transactionDate <= now
+          })
+          .reduce((sum, t) => sum + (t.amount || 0), 0))
 
-  // Calculate weekly orders count from transactions
-  const calculateWeeklyOrders = () => {
-    if (!walletState || !walletState.transactions || !Array.isArray(walletState.transactions)) {
-      return 0
-    }
-
-    const now = new Date()
-    const startOfWeek = new Date(now)
-    startOfWeek.setDate(now.getDate() - now.getDay()) // Start of week (Sunday)
-    startOfWeek.setHours(0, 0, 0, 0)
-
-    return walletState.transactions.filter(t => {
-      // Count payment transactions (completed orders)
-      if (t.type !== 'payment' || t.status !== 'Completed') return false
-      const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)
-      if (!transactionDate) return false
-      return transactionDate >= startOfWeek && transactionDate <= now
-    }).length
-  }
-
-  const weeklyOrders = calculateWeeklyOrders()
+  // Weekly orders: prefer server-computed value, else count from transactions
+  const weeklyOrders =
+    (typeof walletState?.weeklyOrders === 'number')
+      ? walletState.weeklyOrders
+      : (() => {
+          if (!walletState?.transactions || !Array.isArray(walletState.transactions)) return 0
+          const now = new Date()
+          const startOfWeek = new Date(now)
+          startOfWeek.setDate(now.getDate() - now.getDay())
+          startOfWeek.setHours(0, 0, 0, 0)
+          return walletState.transactions.filter(t => {
+            if (t.type !== 'payment' || t.status !== 'Completed') return false
+            const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)
+            if (!transactionDate || isNaN(transactionDate.getTime())) return false
+            return transactionDate >= startOfWeek && transactionDate <= now
+          }).length
+        })()
 
   // Fetch active earning addon offers
   useEffect(() => {
@@ -828,6 +825,12 @@ export default function PocketPage() {
             <div className="text-black text-3xl font-bold text-center">
               ₹{weeklyEarnings.toFixed(0)}
             </div>
+            {/* When this week is 0 but partner has total earnings, show total so screen isn't empty */}
+            {weeklyEarnings === 0 && weeklyOrders === 0 && (Number(walletState?.totalEarned) > 0 || Number(walletState?.totalBalance) > 0) && (
+              <div className="text-gray-600 text-sm mt-2">
+                Total earned: ₹{(Number(walletState?.totalEarned) || Number(walletState?.totalBalance) || 0).toFixed(0)}
+              </div>
+            )}
 
           </CardContent>
         </Card>

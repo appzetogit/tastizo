@@ -246,6 +246,21 @@ const creditDeliveryWallet = async (
     ).default;
     const wallet = await DeliveryWallet.findOrCreateByDeliveryId(deliveryId);
 
+    // Check if transaction already exists for this order (prevent duplicates)
+    const orderIdStr = orderId?.toString() || "";
+    const existingTx = (wallet.transactions || []).find(
+      (t) =>
+        t.orderId &&
+        t.orderId.toString() === orderIdStr &&
+        t.type === "payment",
+    );
+    if (existingTx) {
+      console.log(
+        `⚠️ Escrow: earning already exists for order ${orderNumber}, skipping duplicate`,
+      );
+      return;
+    }
+
     wallet.addTransaction({
       amount: amount,
       type: "payment",

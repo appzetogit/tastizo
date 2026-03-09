@@ -764,6 +764,14 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     }
   }, [isOpen])
 
+  // Lock body scroll when overlay is open; restore cleanly on close to avoid right-side glitch
+  const restoreBodyScroll = () => {
+    document.body.style.removeProperty("overflow")
+    document.body.style.removeProperty("position")
+    // Force reflow so browser repaints and any scrollbar gutter is cleared
+    void document.body.offsetHeight
+  }
+
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === "Escape" && isOpen) {
@@ -778,9 +786,21 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
     return () => {
       document.removeEventListener("keydown", handleEscape)
-      document.body.style.overflow = "unset"
+      // Defer restore so overlay DOM is gone first; avoids right-side bar glitch
+      requestAnimationFrame(() => {
+        restoreBodyScroll()
+      })
     }
   }, [isOpen, onClose])
+
+  // Ensure body scroll is restored when overlay unmounts (e.g. navigate away)
+  useEffect(() => {
+    return () => {
+      requestAnimationFrame(() => {
+        restoreBodyScroll()
+      })
+    }
+  }, [])
 
   const handleUseCurrentLocation = async () => {
     try {
