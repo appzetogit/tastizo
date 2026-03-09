@@ -12,6 +12,31 @@ export function useLocation() {
   const updateTimerRef = useRef(null)
   const prevLocationCoordsRef = useRef({ latitude: null, longitude: null })
 
+  // Broadcast location so other useLocation instances (e.g. top nav) update instantly
+  const dispatchLocationUpdated = (locationData) => {
+    if (!locationData || typeof window === "undefined") return
+    const isPlaceholder =
+      locationData?.city === "Current Location" ||
+      locationData?.formattedAddress === "Select location" ||
+      locationData?.address === "Select location"
+    if (isPlaceholder) return
+    try {
+      const payload = {
+        latitude: locationData.latitude,
+        longitude: locationData.longitude,
+        city: locationData.city,
+        state: locationData.state,
+        area: locationData.area,
+        address: locationData.address,
+        formattedAddress: locationData.formattedAddress || locationData.address,
+        ...locationData
+      }
+      window.dispatchEvent(new CustomEvent("userLocationUpdated", { detail: payload }))
+    } catch {
+      // ignore
+    }
+  }
+
   /* ===================== DB UPDATE (LIVE LOCATION TRACKING) ===================== */
   const updateLocationInDB = async (locationData) => {
     try {
@@ -1507,6 +1532,7 @@ export function useLocation() {
               setPermissionGranted(true)
               if (showLoading) setLoading(false)
               setError(null)
+              dispatchLocationUpdated(finalLoc)
 
               if (updateDB) {
                 await updateLocationInDB(finalLoc).catch(err => {
@@ -1541,6 +1567,7 @@ export function useLocation() {
                   setPermissionGranted(true)
                   if (showLoading) setLoading(false)
                   setError(null)
+                  dispatchLocationUpdated(lastResortLoc)
                   if (updateDB) await updateLocationInDB(lastResortLoc).catch(() => { })
                   resolve(lastResortLoc)
                   return
@@ -1861,6 +1888,7 @@ export function useLocation() {
               setLocation(loc)
               setPermissionGranted(true)
               setError(null)
+              dispatchLocationUpdated(loc)
             } else {
               // Coordinates haven't changed significantly, skip state update to prevent re-renders
               // Still update localStorage silently for persistence
@@ -2133,6 +2161,7 @@ export function useLocation() {
                 // CRITICAL: Update state with fresh location so PageNavbar displays it
                 setLocation(location)
                 setPermissionGranted(true)
+                dispatchLocationUpdated(location)
                 // Start watching for live updates
                 startWatchingLocation()
               } else {
@@ -2146,6 +2175,7 @@ export function useLocation() {
                         retryLocation.city !== "Current Location") {
                         setLocation(retryLocation)
                         setPermissionGranted(true)
+                        dispatchLocationUpdated(retryLocation)
                         startWatchingLocation()
                       }
                     })
@@ -2194,14 +2224,23 @@ export function useLocation() {
     }
   }, [])
 
-  // Listen for address updates from cart (or profile) so we don't need a full page reload
+  // Listen for address updates (from overlay, cart, or other tabs) so top nav and all consumers update instantly
   useEffect(() => {
     const onUserLocationUpdated = (e) => {
       const payload = e?.detail
-      if (payload && (payload.latitude != null || payload.formattedAddress)) {
-        setLocation((prev) => ({ ...(prev || {}), ...payload }))
-        setPermissionGranted(true)
-      }
+      if (!payload || (payload.formattedAddress === "Select location" && payload.latitude == null)) return
+      setLocation((prev) => {
+        const next = { ...(prev || {}), ...payload }
+        try {
+          if (next.latitude != null && next.longitude != null) {
+            localStorage.setItem("userLocation", JSON.stringify(next))
+          }
+        } catch {
+          // ignore
+        }
+        return next
+      })
+      setPermissionGranted(true)
     }
     window.addEventListener("userLocationUpdated", onUserLocationUpdated)
     return () => window.removeEventListener("userLocationUpdated", onUserLocationUpdated)

@@ -17,7 +17,7 @@ const buildMinimalGeocodeData = (latNum, lngNum) => {
       {
         formatted_address: `${latNum.toFixed(6)}, ${lngNum.toFixed(6)}`,
         address_components: {
-          city: "Current Location",
+          city: "",
           state: "",
           country: "",
           area: "",
@@ -189,7 +189,7 @@ export const reverseGeocode = async (req, res) => {
           formatted_address:
             formattedAddress || `${latNum.toFixed(6)}, ${lngNum.toFixed(6)}`,
           address_components: {
-            city: city || "Current Location",
+            city: city || "",
             state: state || "",
             country: country || "",
             area: area || "",

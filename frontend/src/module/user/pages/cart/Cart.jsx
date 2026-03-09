@@ -1755,14 +1755,19 @@ export default function Cart() {
                         )}
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
                             setShowAddressPicker(false)
-                          try {
-                            localStorage.setItem("locationReturnPath", "/user/cart")
-                          } catch {
-                            // ignore storage errors
-                          }
-                            openLocationSelector()
+                            try {
+                              localStorage.setItem("locationReturnPath", "/user/cart")
+                            } catch {
+                              // ignore storage errors
+                            }
+                            // Defer so address picker can close before opening location selector (avoids stacking/focus issues)
+                            setTimeout(() => {
+                              openLocationSelector()
+                            }, 0)
                           }}
                           className="w-full flex items-center gap-3 p-3 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-600 dark:text-gray-400 text-left"
                         >

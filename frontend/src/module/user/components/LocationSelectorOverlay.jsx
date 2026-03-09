@@ -63,8 +63,13 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const mapContainerRef = useRef(null)
   const googleMapRef = useRef(null) // Google Maps instance
   const greenMarkerRef = useRef(null) // Green marker for address selection
-  const placesAutocompleteRef = useRef(null) // Places Autocomplete on address-form search input
-  const googleMapsApiRef = useRef(null) // Google API object for cleanup (e.g. Autocomplete)
+  const placesAutocompleteRef = useRef(null)
+  const googleMapsApiRef = useRef(null)
+  const autocompleteServiceRef = useRef(null)
+  const placesServiceRef = useRef(null)
+  const placePredictionsDebounceRef = useRef(null)
+  const [placeSuggestions, setPlaceSuggestions] = useState([])
+  const [placeSuggestionsLoading, setPlaceSuggestionsLoading] = useState(false)
   const blueDotCircleRef = useRef(null) // Blue dot circle for Google Maps
   const userLocationMarkerRef = useRef(null) // Blue dot marker for user location
   const userLocationAccuracyCircleRef = useRef(null) // Accuracy circle for MapLibre/Mapbox
@@ -72,6 +77,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const lastUserLocationRef = useRef(null) // Last user location for tracking
   const locationUpdateTimeoutRef = useRef(null) // Timeout for location updates
   const [currentAddress, setCurrentAddress] = useState("")
+  const [selectedPlaceAddress, setSelectedPlaceAddress] = useState("") // Full address from dropdown selection (shown in Delivery details)
   const [GOOGLE_MAPS_API_KEY, setGOOGLE_MAPS_API_KEY] = useState(null)
 
   // Decide where to send user after closing this overlay.
@@ -466,6 +472,9 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
         googleMapRef.current = map
 
+        autocompleteServiceRef.current = new google.maps.places.AutocompleteService()
+        placesServiceRef.current = new google.maps.places.PlacesService(map)
+
         // Create Green Marker (draggable for address selection)
         const greenMarker = new google.maps.Marker({
           position: initialLocation,
@@ -486,6 +495,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           const newPos = greenMarker.getPosition()
           const newLat = newPos.lat()
           const newLng = newPos.lng()
+          setSelectedPlaceAddress('')
           setMapPosition([newLat, newLng])
           handleMapMoveEnd(newLat, newLng)
         })
@@ -656,36 +666,6 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         })
 
         setMapLoading(false)
-
-        // Attach Places Autocomplete to address-form search input so user can search location
-        setTimeout(() => {
-          if (!isMounted || !addressFormSearchRef.current || !google) return
-          try {
-            if (placesAutocompleteRef.current) return // already attached
-            const autocomplete = new google.maps.places.Autocomplete(addressFormSearchRef.current, {
-              types: ['address'],
-              componentRestrictions: { country: 'in' },
-              fields: ['geometry', 'formatted_address']
-            })
-            placesAutocompleteRef.current = autocomplete
-            autocomplete.addListener('place_changed', () => {
-              const place = autocomplete.getPlace()
-              if (!place.geometry?.location) return
-              const lat = place.geometry.location.lat()
-              const lng = place.geometry.location.lng()
-              setMapPosition([lat, lng])
-              if (greenMarkerRef.current) greenMarkerRef.current.setPosition({ lat, lng })
-              if (googleMapRef.current) {
-                googleMapRef.current.panTo({ lat, lng })
-                googleMapRef.current.setZoom(17)
-              }
-              setSearchValue(place.formatted_address || '')
-              handleMapMoveEnd(lat, lng)
-            })
-          } catch (err) {
-            console.warn('Places Autocomplete setup failed:', err)
-          }
-        }, 500)
       } catch (error) {
         console.error("Error initializing Google Maps:", error)
         setMapLoading(false)
@@ -730,6 +710,53 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       }
     }
   }, [showAddressForm, GOOGLE_MAPS_API_KEY, location?.latitude, location?.longitude])
+
+  // Fetch up to 4 place suggestions when user types in address-form search
+  useEffect(() => {
+    if (!showAddressForm) {
+      setPlaceSuggestions([])
+      return
+    }
+    const query = (searchValue || '').trim()
+    if (query.length < 2) {
+      setPlaceSuggestions([])
+      setPlaceSuggestionsLoading(false)
+      if (placePredictionsDebounceRef.current) {
+        clearTimeout(placePredictionsDebounceRef.current)
+        placePredictionsDebounceRef.current = null
+      }
+      return
+    }
+    if (placePredictionsDebounceRef.current) clearTimeout(placePredictionsDebounceRef.current)
+    placePredictionsDebounceRef.current = setTimeout(() => {
+      const service = autocompleteServiceRef.current
+      if (!service) {
+        setPlaceSuggestions([])
+        setPlaceSuggestionsLoading(false)
+        return
+      }
+      setPlaceSuggestionsLoading(true)
+      service.getPlacePredictions(
+        {
+          input: query,
+          componentRestrictions: { country: 'in' }
+        },
+        (predictions, status) => {
+          setPlaceSuggestionsLoading(false)
+          if (status !== 'OK' || !predictions) {
+            setPlaceSuggestions([])
+            return
+          }
+          setPlaceSuggestions(
+            predictions.slice(0, 4).map((p) => ({ place_id: p.place_id, description: p.description }))
+          )
+        }
+      )
+    }, 300)
+    return () => {
+      if (placePredictionsDebounceRef.current) clearTimeout(placePredictionsDebounceRef.current)
+    }
+  }, [showAddressForm, searchValue])
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -1830,14 +1857,14 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             (area && city && state ? `${area}, ${city}, ${state}` : '') ||
             (city && state ? `${city}, ${state}` : '') ||
             ''
-
+          const isGenericAddress = !fullAddressForField || /^current location(\s|,|$)/i.test(fullAddressForField.trim())
           setAddressFormData(prev => ({
             ...prev,
             street: street || prev.street,
             city: city || prev.city,
             state: state || prev.state,
             zipCode: postalCode || prev.zipCode,
-            additionalDetails: fullAddressForField || prev.additionalDetails, // Store FULL address in Address details field
+            additionalDetails: isGenericAddress ? prev.additionalDetails : (fullAddressForField || prev.additionalDetails),
           }))
         } else {
           console.warn("⚠️ No address data found from Google Maps or backend")
@@ -1858,7 +1885,33 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     }, 300) // 300ms debounce delay
   }
 
+  const handleSelectPlaceSuggestion = (placeId, description) => {
+    setPlaceSuggestions([])
+    setSearchValue(description || '')
+    const service = placesServiceRef.current
+    if (!service) return
+    service.getDetails(
+      { placeId, fields: ['geometry', 'formatted_address'] },
+      (place, status) => {
+        if (status !== 'OK' || !place?.geometry?.location) return
+        const lat = place.geometry.location.lat()
+        const lng = place.geometry.location.lng()
+        const fullAddress = (place.formatted_address || description || '').trim()
+        setSelectedPlaceAddress(fullAddress)
+        setMapPosition([lat, lng])
+        if (greenMarkerRef.current) greenMarkerRef.current.setPosition({ lat, lng })
+        if (googleMapRef.current) {
+          googleMapRef.current.panTo({ lat, lng })
+          googleMapRef.current.setZoom(17)
+        }
+        setSearchValue(fullAddress || description || '')
+        handleMapMoveEnd(lat, lng)
+      }
+    )
+  }
+
   const handleUseCurrentLocationForAddress = async () => {
+    setSelectedPlaceAddress('')
     try {
       if (!navigator.geolocation) {
         toast.error("Location services are not supported")
@@ -2067,6 +2120,12 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
   const handleAddressFormSubmit = async (e) => {
     e.preventDefault()
+
+    const trimmedAddressDetails = (addressFormData.additionalDetails || '').trim()
+    if (!trimmedAddressDetails) {
+      toast.error("Please enter address details (e.g. floor, house no.) to save the address")
+      return
+    }
 
     // Validate required fields (zipCode is optional)
     if (!addressFormData.street || !addressFormData.city || !addressFormData.state) {
@@ -2327,7 +2386,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* Search Bar */}
+        {/* Search Bar + up to 4 location suggestions dropdown */}
         <div className="flex-shrink-0 bg-white dark:bg-[#1a1a1a] px-4 py-3 border-b border-gray-100 dark:border-gray-800">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-600 z-10" />
@@ -2338,6 +2397,28 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               placeholder="Search for area, street name..."
               className="pl-12 pr-4 h-12 w-full bg-gray-50 dark:bg-[#2a2a2a] border-gray-200 dark:border-gray-700 focus:border-green-600 dark:focus:border-green-600 rounded-xl"
             />
+            {(placeSuggestionsLoading || placeSuggestions.length > 0) && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-[100] bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden">
+                {placeSuggestionsLoading ? (
+                  <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                    <div className="h-4 w-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+                    Searching...
+                  </div>
+                ) : (
+                  placeSuggestions.map((suggestion) => (
+                    <button
+                      key={suggestion.place_id}
+                      type="button"
+                      onClick={() => handleSelectPlaceSuggestion(suggestion.place_id, suggestion.description)}
+                      className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-[#2a2a2a] border-b border-gray-100 dark:border-gray-800 last:border-b-0 transition-colors"
+                    >
+                      <MapPin className="h-4 w-4 text-green-600 flex-shrink-0" />
+                      <span className="text-sm text-gray-900 dark:text-white">{suggestion.description}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -2411,9 +2492,23 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                 <MapPin className="h-5 w-5 text-green-600 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                    {loadingAddress ? "Locating..." : (currentAddress || addressFormData.city && addressFormData.state
-                      ? `${addressFormData.city}, ${addressFormData.state}`
-                      : "Select location on map")}
+                    {loadingAddress ? "Locating..." : (() => {
+                      const fromPlace = (selectedPlaceAddress || '').trim()
+                      if (fromPlace) return fromPlace
+                      const city = (addressFormData.city || '').trim()
+                      const state = (addressFormData.state || '').trim()
+                      const isGenericCity = /^current location$/i.test(city)
+                      const selectedAddress = (currentAddress || '').trim()
+                      const hasRealAddress = selectedAddress && selectedAddress !== "Select location" && !selectedAddress.match(/^-?\d+\.\d+,\s*-?\d+\.\d+$/) && !/^current location(\s|,|$)/i.test(selectedAddress)
+                      const fullFromForm = (addressFormData.additionalDetails || '').trim()
+                      const hasFullFromForm = fullFromForm && !/^current location(\s|,|$)/i.test(fullFromForm)
+                      if (hasRealAddress) return selectedAddress
+                      if (hasFullFromForm) return fullFromForm
+                      if (city && state && !isGenericCity) return `${city}, ${state}`
+                      if (city && !isGenericCity) return city
+                      if (state && !/^current location$/i.test(state)) return state
+                      return "Select location on map"
+                    })()}
                   </p>
                 </div>
                 <ChevronRight className="h-5 w-5 text-gray-400 flex-shrink-0" />
