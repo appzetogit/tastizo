@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { useParams, useNavigate, useSearchParams } from "react-router-dom"
@@ -53,6 +53,7 @@ export default function RestaurantDetails() {
   const [searchParams] = useSearchParams()
   const showOnlyUnder250 = searchParams.get('under250') === 'true'
   const initialSearchQuery = searchParams.get('q') || ""
+  const categoryFromUrl = searchParams.get('q') || ""
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart, openVariantPicker, addItemOrAskVariant } = useCart()
   const {
     vegMode,
@@ -92,6 +93,7 @@ export default function RestaurantDetails() {
   const [showMenuOptionsSheet, setShowMenuOptionsSheet] = useState(false)
   const [expandedAddButtons, setExpandedAddButtons] = useState(new Set())
   const [expandedSections, setExpandedSections] = useState(new Set([0])) // Default: Recommended section is expanded
+  const [highlightedSection, setHighlightedSection] = useState(null)
   const [filters, setFilters] = useState({
     sortBy: null, // "low-to-high" | "high-to-low"
     vegNonVeg: null, // "veg" | "non-veg"
@@ -536,30 +538,52 @@ export default function RestaurantDetails() {
     }
   }
 
-  // Menu categories - dynamically generated from restaurant menu sections
-  const menuCategories = (restaurant?.menuSections && Array.isArray(restaurant.menuSections))
-    ? restaurant.menuSections.map((section, index) => {
-      // Handle section name - check for valid non-empty string
-      let sectionTitle = "Unnamed Section"
-      if (index === 0) {
-        sectionTitle = "Recommended for you"
-      } else if (section?.name && typeof section.name === 'string' && section.name.trim()) {
-        sectionTitle = section.name.trim()
-      } else if (section?.title && typeof section.title === 'string' && section.title.trim()) {
-        sectionTitle = section.title.trim()
+  // Helper: focus a specific menu section (collapse others, expand this, scroll & highlight)
+  const focusMenuSection = useCallback((sectionIndex) => {
+    if (sectionIndex == null || sectionIndex < 0) return
+
+    // Collapse everything except the selected section
+    setExpandedSections(new Set([sectionIndex]))
+
+    // Scroll & highlight after DOM update
+    requestAnimationFrame(() => {
+      const sectionId = `menu-section-${sectionIndex}`
+      const sectionElement = document.getElementById(sectionId)
+      if (sectionElement) {
+        sectionElement.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        })
       }
 
-      const itemCount = section?.items?.length || 0
-      const subsectionCount = section?.subsections?.reduce((sum, sub) => sum + (sub?.items?.length || 0), 0) || 0
-      const totalCount = itemCount + subsectionCount
-
-      return {
-        name: sectionTitle,
-        count: totalCount,
-        sectionIndex: index,
-      }
+      // Temporarily highlight the section header
+      setHighlightedSection(sectionIndex)
+      setTimeout(() => {
+        setHighlightedSection((current) => (current === sectionIndex ? null : current))
+      }, 1500)
     })
-    : []
+  }, [])
+
+  // When arriving with a ?q= from category/search page, auto-scroll to matching menu section
+  useEffect(() => {
+    if (!initialSearchQuery || !restaurant || !restaurant.menuSections) return
+
+    const target = initialSearchQuery.toLowerCase()
+    if (!target) return
+
+    // Find first section whose title includes the query
+    const index = restaurant.menuSections.findIndex((section, i) => {
+      let title = "recommended for you"
+      if (i > 0) {
+        title = (section?.name || section?.title || "").toString().toLowerCase()
+      }
+      return title.includes(target)
+    })
+
+    if (index >= 0) {
+      focusMenuSection(index)
+    }
+  }, [initialSearchQuery, restaurant, focusMenuSection])
 
   // Count active filters
   const getActiveFilterCount = () => {
@@ -761,11 +785,54 @@ export default function RestaurantDetails() {
     return Math.max(0, item.price || 0);
   };
 
+  // Derive keywords from category slug for matching (e.g. "maggie" -> ["maggie","maggi"], "paneer-tikka" -> ["paneer","tikka"])
+  const getCategoryKeywords = (categorySlug) => {
+    if (!categorySlug || !String(categorySlug).trim()) return []
+    const slug = String(categorySlug).toLowerCase().trim()
+    const words = slug.split(/[\s-]+/).filter(Boolean)
+    const keywords = [slug, ...words]
+    if (slug === "maggie") keywords.push("maggi")
+    if (slug.includes("-")) keywords.push(slug.replace(/-/g, " "))
+    return [...new Set(keywords)]
+  }
+
+  const itemMatchesCategory = (item, categorySlug) => {
+    if (!categorySlug || !item) return false
+    const keywords = getCategoryKeywords(categorySlug)
+    if (keywords.length === 0) return false
+    const itemName = (item.name || "").toLowerCase()
+    const itemCategory = (item.category || "").toLowerCase()
+    return keywords.some((kw) => itemName.includes(kw) || itemCategory.includes(kw))
+  }
+
+  const sectionHasMatchingCategoryItems = (section, categorySlug) => {
+    if (!categorySlug || !section) return false
+    const sectionName = (section.name || section.title || "").toLowerCase()
+    const keywords = getCategoryKeywords(categorySlug)
+    if (keywords.some((kw) => sectionName.includes(kw))) return true
+    if (section.items && section.items.length > 0) {
+      if (section.items.some((item) => item.isAvailable !== false && itemMatchesCategory(item, categorySlug))) return true
+    }
+    if (section.subsections && section.subsections.length > 0) {
+      for (const sub of section.subsections) {
+        const subName = (sub.name || sub.title || "").toLowerCase()
+        if (keywords.some((kw) => subName.includes(kw))) return true
+        if (sub.items && sub.items.some((item) => item.isAvailable !== false && itemMatchesCategory(item, categorySlug))) return true
+      }
+    }
+    return false
+  }
+
   // Filter menu items based on active filters
   const filterMenuItems = (items) => {
     if (!items) return items
 
     return items.filter((item) => {
+      // Category filter (when coming from category page with ?q=)
+      if (categoryFromUrl.trim()) {
+        if (!itemMatchesCategory(item, categoryFromUrl)) return false
+      }
+
       // Under 250 filter (when coming from Under 250 page)
       if (showOnlyUnder250) {
         const finalPrice = getFinalPrice(item);
@@ -846,18 +913,38 @@ export default function RestaurantDetails() {
     return false;
   }
 
-  // Filter sections to only show those with items under ₹250
-  // Returns array of { section, originalIndex } to preserve original index for expanded sections
+  // Filter sections to only show those with items under ₹250 and/or matching category
   const getFilteredSections = () => {
     if (!restaurant?.menuSections) return [];
-    if (!showOnlyUnder250) {
-      return restaurant.menuSections.map((section, index) => ({ section, originalIndex: index }));
+    let sections = restaurant.menuSections.map((section, index) => ({ section, originalIndex: index }))
+    if (showOnlyUnder250) {
+      sections = sections.filter(({ section }) => sectionHasItemsUnder250(section))
     }
-
-    return restaurant.menuSections
-      .map((section, index) => ({ section, originalIndex: index }))
-      .filter(({ section }) => sectionHasItemsUnder250(section));
+    if (categoryFromUrl.trim()) {
+      sections = sections.filter(({ section }) => sectionHasMatchingCategoryItems(section, categoryFromUrl))
+    }
+    return sections
   }
+
+  // Menu categories - use filtered sections so menu sheet matches main content
+  const menuCategories = (() => {
+    const filtered = getFilteredSections()
+    if (!filtered.length) return []
+    return filtered.map(({ section, originalIndex }) => {
+      let sectionTitle = "Unnamed Section"
+      if (originalIndex === 0) {
+        sectionTitle = "Recommended for you"
+      } else if (section?.name && typeof section.name === 'string' && section.name.trim()) {
+        sectionTitle = section.name.trim()
+      } else if (section?.title && typeof section.title === 'string' && section.title.trim()) {
+        sectionTitle = section.title.trim()
+      }
+      const itemCount = section?.items?.length || 0
+      const subsectionCount = section?.subsections?.reduce((sum, sub) => sum + (sub?.items?.length || 0), 0) || 0
+      const totalCount = itemCount + subsectionCount
+      return { name: sectionTitle, count: totalCount, sectionIndex: originalIndex }
+    })
+  })()
 
   // Highlight offers/texts for the blue offer line
   const highlightOffers = [
@@ -1111,6 +1198,23 @@ export default function RestaurantDetails() {
           </div>
         </div>
 
+        {/* Category filter banner */}
+        {categoryFromUrl.trim() && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-2">
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-2">
+              <span className="text-sm text-amber-800 dark:text-amber-200">
+                Showing only {categoryFromUrl.replace(/-/g, " ")} items
+              </span>
+              <button
+                onClick={() => navigate(`/restaurants/${slug}`)}
+                className="text-sm font-medium text-green-600 dark:text-green-400 hover:underline"
+              >
+                View full menu
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Menu Items Section */}
         {restaurant?.menuSections && Array.isArray(restaurant.menuSections) && restaurant.menuSections.length > 0 && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-6 sm:py-8 md:py-10 lg:py-12 space-y-6 md:space-y-8 lg:space-y-10">
@@ -1133,7 +1237,7 @@ export default function RestaurantDetails() {
                   {/* Section Header */}
                   {sectionIndex === 0 && (
                     <div className="flex items-center justify-between">
-                      <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                      <h2 className={`text-lg font-bold text-gray-900 dark:text-white ${highlightedSection === originalIndex ? 'bg-amber-50 border-l-4 border-l-green-500 rounded-md px-2 py-1' : ''}`}>
                         Recommended for you
                       </h2>
                       <button
@@ -1160,7 +1264,7 @@ export default function RestaurantDetails() {
                   )}
                   {sectionIndex > 0 && (
                     <div className="flex items-center justify-between">
-                      <div className="space-y-1">
+                      <div className={`space-y-1 ${highlightedSection === originalIndex ? 'bg-amber-50 border-l-4 border-l-green-500 rounded-md px-2 py-1' : ''}`}>
                         <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                           {(section?.name && typeof section.name === 'string' && section.name.trim())
                             ? section.name.trim()
@@ -1376,14 +1480,19 @@ export default function RestaurantDetails() {
                   {isExpanded && section.subsections && section.subsections.length > 0 && (
                     <div className="space-y-4">
                       {section.subsections.filter(subsection => {
-                        // Filter subsections to only show those with items under ₹250
-                        if (!showOnlyUnder250) return true;
-                        if (!subsection.items || subsection.items.length === 0) return false;
-                        return subsection.items.some(item => {
-                          if (item.isAvailable === false) return false;
-                          const finalPrice = getFinalPrice(item);
-                          return finalPrice <= 250;
-                        });
+                        if (categoryFromUrl.trim()) {
+                          if (!subsection.items || subsection.items.length === 0) return false;
+                          if (!subsection.items.some(item => item.isAvailable !== false && itemMatchesCategory(item, categoryFromUrl))) return false;
+                        }
+                        if (showOnlyUnder250) {
+                          if (!subsection.items || subsection.items.length === 0) return false;
+                          return subsection.items.some(item => {
+                            if (item.isAvailable === false) return false;
+                            const finalPrice = getFinalPrice(item);
+                            return finalPrice <= 250;
+                          });
+                        }
+                        return true;
                       }).map((subsection, subIndex) => {
                         const subsectionKey = `${originalIndex}-${subIndex}`
                         const isSubsectionExpanded = expandedSections.has(subsectionKey)
@@ -1644,17 +1753,10 @@ export default function RestaurantDetails() {
                           className="w-full flex items-center justify-between py-3 px-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
                           onClick={() => {
                             setShowMenuSheet(false)
-                            // Scroll to category section
+                            // Focus this menu section: collapse others, expand this, scroll & highlight
                             setTimeout(() => {
-                              const sectionId = `menu-section-${category.sectionIndex}`
-                              const sectionElement = document.getElementById(sectionId)
-                              if (sectionElement) {
-                                sectionElement.scrollIntoView({
-                                  behavior: 'smooth',
-                                  block: 'start'
-                                })
-                              }
-                            }, 300) // Small delay to allow sheet to close
+                              focusMenuSection(category.sectionIndex)
+                            }, 250) // Small delay to allow sheet to close
                           }}
                         >
                           <span className="text-base font-medium text-gray-900 dark:text-white">

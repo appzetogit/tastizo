@@ -127,7 +127,8 @@ const DeliveryWelcome = lazy(() => import("@/module/delivery/pages/auth/Welcome"
 function UserPathRedirect() {
   const location = useLocation()
   const newPath = location.pathname.replace(/^\/user/, "") || "/"
-  return <Navigate to={newPath} replace />
+  const to = location.search ? `${newPath}${location.search}` : newPath
+  return <Navigate to={to} replace />
 }
 
 export default function App() {

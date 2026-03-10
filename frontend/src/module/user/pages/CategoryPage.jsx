@@ -552,68 +552,35 @@ export default function CategoryPage() {
     setShowItemDetail(true)
   }
 
-  // Filter restaurants based on active filters and selected category
-  // If category is selected, expand restaurants into dish cards (one card per matching dish)
+  // Filter restaurants based on active filters and selected category (restaurant-level only)
   const filteredRecommended = useMemo(() => {
     const sourceData = restaurantsData.length > 0 ? restaurantsData : []
     let filtered = [...sourceData]
 
-    // Filter by category - Dynamic filtering based on menu items
+    // Filter by category - keep restaurants that have at least one dish in this category
     if (selectedCategory && selectedCategory !== 'all') {
-      const expandedDishes = []
-
-      filtered.forEach(r => {
+      filtered = filtered.filter(r => {
         if (r.menu) {
-          const hasCategoryItem = checkCategoryInMenu(r.menu, selectedCategory)
-          if (hasCategoryItem) {
-            // Get ALL matching dishes for this category
-            const categoryDishes = getAllCategoryDishesFromMenu(r.menu, selectedCategory)
-
-            if (categoryDishes.length > 0) {
-              // Create one card per dish
-              categoryDishes.forEach((dish, index) => {
-                expandedDishes.push({
-                  ...r,
-                  // Unique ID for each dish card
-                  id: `${r.id}-dish-${dish.itemId || index}`,
-                  dishId: dish.itemId || `${r.id}-dish-${index}`,
-                  // Category dish info for this specific dish
-                  categoryDish: dish,
-                  categoryDishName: dish.name,
-                  categoryDishPrice: dish.price,
-                  categoryDishImage: dish.image,
-                })
-              })
-            } else {
-              // If no dishes found but menu exists, skip this restaurant
-            }
-          }
-        } else {
-          // No menu - check other criteria
-          if (r.category === selectedCategory) {
-            expandedDishes.push(r)
-          } else if (selectedCategory === 'paneer-tikka' && r.hasPaneer) {
-            expandedDishes.push(r)
-          } else {
-            const keywords = categoryKeywords[selectedCategory] || []
-            if (keywords.length > 0) {
-              const featuredDishLower = (r.featuredDish || '').toLowerCase()
-              const cuisineLower = (r.cuisine || '').toLowerCase()
-              const nameLower = (r.name || '').toLowerCase()
-
-              if (keywords.some(keyword =>
-                featuredDishLower.includes(keyword) ||
-                cuisineLower.includes(keyword) ||
-                nameLower.includes(keyword)
-              )) {
-                expandedDishes.push(r)
-              }
-            }
-          }
+          return checkCategoryInMenu(r.menu, selectedCategory)
         }
-      })
 
-      filtered = expandedDishes
+        // Fallbacks for restaurants without menu data
+        if (r.category === selectedCategory) return true
+        if (selectedCategory === 'paneer-tikka' && r.hasPaneer) return true
+
+        const keywords = categoryKeywords[selectedCategory] || []
+        if (keywords.length === 0) return false
+
+        const featuredDishLower = (r.featuredDish || '').toLowerCase()
+        const cuisineLower = (r.cuisine || '').toLowerCase()
+        const nameLower = (r.name || '').toLowerCase()
+
+        return keywords.some(keyword =>
+          featuredDishLower.includes(keyword) ||
+          cuisineLower.includes(keyword) ||
+          nameLower.includes(keyword)
+        )
+      })
     }
 
     // Apply filters
@@ -631,21 +598,14 @@ export default function CategoryPage() {
       filtered = filtered.filter(r => r.offer && r.offer.includes('50%'))
     }
 
-    // Filter by search - match on restaurant and dish names
+    // Filter by search - match on restaurant name / cuisine / featured dish
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(r => {
-        const restaurantMatch =
-          r.name?.toLowerCase().includes(query) ||
-          r.cuisine?.toLowerCase().includes(query) ||
-          r.featuredDish?.toLowerCase().includes(query)
-
-        const dishMatch = r.categoryDishName
-          ? r.categoryDishName.toLowerCase().includes(query)
-          : false
-
-        return restaurantMatch || dishMatch
-      })
+      filtered = filtered.filter(r =>
+        r.name?.toLowerCase().includes(query) ||
+        r.cuisine?.toLowerCase().includes(query) ||
+        r.featuredDish?.toLowerCase().includes(query)
+      )
     }
 
     return filtered
@@ -655,66 +615,31 @@ export default function CategoryPage() {
     const sourceData = restaurantsData.length > 0 ? restaurantsData : []
     let filtered = [...sourceData]
 
-    // Filter by category - Dynamic filtering based on menu items
-    // If category is selected, expand restaurants into dish cards (one card per matching dish)
+    // Filter by category - restaurant level only
     if (selectedCategory && selectedCategory !== 'all') {
-      const expandedDishes = []
-
-      filtered.forEach(r => {
+      filtered = filtered.filter((r) => {
         if (r.menu) {
-          const hasCategoryItem = checkCategoryInMenu(r.menu, selectedCategory)
-          if (hasCategoryItem) {
-            // Get ALL matching dishes for this category
-            const categoryDishes = getAllCategoryDishesFromMenu(r.menu, selectedCategory)
-
-            if (categoryDishes.length > 0) {
-              // Create one card per dish
-              categoryDishes.forEach((dish, index) => {
-                // Filter by vegMode if enabled
-                if (vegMode && dish.foodType !== "Veg") {
-                  return // Skip non-veg dishes when vegMode is ON
-                }
-
-                expandedDishes.push({
-                  ...r,
-                  // Unique ID for each dish card
-                  id: `${r.id}-dish-${dish.itemId || index}`,
-                  dishId: dish.itemId || `${r.id}-dish-${index}`,
-                  // Category dish info for this specific dish
-                  categoryDish: dish,
-                  categoryDishName: dish.name,
-                  categoryDishPrice: dish.price,
-                  categoryDishImage: dish.image,
-                })
-              })
-            }
-          }
-        } else {
-          // No menu - check other criteria
-          if (r.category === selectedCategory) {
-            expandedDishes.push(r)
-          } else if (selectedCategory === 'paneer-tikka' && r.hasPaneer) {
-            expandedDishes.push(r)
-          } else {
-            const keywords = categoryKeywords[selectedCategory] || []
-            if (keywords.length > 0) {
-              const featuredDishLower = (r.featuredDish || '').toLowerCase()
-              const cuisineLower = (r.cuisine || '').toLowerCase()
-              const nameLower = (r.name || '').toLowerCase()
-
-              if (keywords.some(keyword =>
-                featuredDishLower.includes(keyword) ||
-                cuisineLower.includes(keyword) ||
-                nameLower.includes(keyword)
-              )) {
-                expandedDishes.push(r)
-              }
-            }
-          }
+          // Restaurant has a menu: show it only if the menu contains this category
+          return checkCategoryInMenu(r.menu, selectedCategory)
         }
-      })
 
-      filtered = expandedDishes
+        // Fallbacks for restaurants without menu data
+        if (r.category === selectedCategory) return true
+        if (selectedCategory === 'paneer-tikka' && r.hasPaneer) return true
+
+        const keywords = categoryKeywords[selectedCategory] || []
+        if (keywords.length === 0) return false
+
+        const featuredDishLower = (r.featuredDish || '').toLowerCase()
+        const cuisineLower = (r.cuisine || '').toLowerCase()
+        const nameLower = (r.name || '').toLowerCase()
+
+        return keywords.some((keyword) =>
+          featuredDishLower.includes(keyword) ||
+          cuisineLower.includes(keyword) ||
+          nameLower.includes(keyword),
+        )
+      })
     }
 
     // Apply filters
@@ -935,104 +860,6 @@ export default function CategoryPage() {
       {/* Content */}
       <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 sm:py-6 md:py-8 lg:py-10 space-y-6 md:space-y-8 lg:space-y-10">
         <div className="max-w-7xl mx-auto">
-          {/* RECOMMENDED FOR YOU Section - Hide when "All" category is selected */}
-          {filteredRecommended.length > 0 && selectedCategory !== 'all' && (
-            <section>
-              <h2 className="text-xs sm:text-sm md:text-base font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-4 md:mb-6">
-                RECOMMENDED FOR YOU
-              </h2>
-
-              {/* Small dish cards - grid */}
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
-                {(selectedCategory && selectedCategory !== 'all'
-                  ? filteredRecommended
-                  : filteredRecommended.slice(0, 6)
-                ).map((restaurant) => {
-                  const dish = restaurant.categoryDish || {
-                    name: restaurant.categoryDishName || restaurant.name,
-                    price: restaurant.categoryDishPrice || restaurant.featuredPrice,
-                    image: restaurant.categoryDishImage || restaurant.image,
-                    itemId: restaurant.dishId || restaurant.id,
-                    originalPrice: restaurant.categoryDish?.originalPrice || restaurant.featuredPrice,
-                    foodType: restaurant.categoryDish?.foodType,
-                  }
-
-                  return (
-                    <Link
-                      key={restaurant.id}
-                      to={`/user/restaurants/${restaurant.name.toLowerCase().replace(/\s+/g, '-')}`}
-                      className="block"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        handleDishClick(restaurant, dish)
-                      }}
-                    >
-                      <div className={`group ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
-                        {/* Image Container */}
-                        <div className="relative aspect-square rounded-xl md:rounded-2xl overflow-hidden mb-2">
-                          {/* Use category dish image if available, otherwise restaurant image */}
-                          {restaurant.categoryDishImage ? (
-                            <img
-                              src={restaurant.categoryDishImage}
-                              alt={restaurant.categoryDishName || restaurant.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              onError={(e) => {
-                                // Fallback to restaurant image if dish image fails
-                                if (restaurant.image) {
-                                  e.target.src = restaurant.image
-                                } else {
-                                  // Show emoji placeholder
-                                  e.target.style.display = 'none'
-                                  const placeholder = document.createElement('div')
-                                  placeholder.className = 'w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-6xl'
-                                  placeholder.textContent = '🍽️'
-                                  e.target.parentElement.appendChild(placeholder)
-                                }
-                              }}
-                            />
-                          ) : restaurant.image ? (
-                            <img
-                              src={restaurant.image}
-                              alt={restaurant.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              onError={(e) => {
-                                // Show emoji placeholder
-                                e.target.style.display = 'none'
-                                const placeholder = document.createElement('div')
-                                placeholder.className = 'w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-6xl'
-                                placeholder.textContent = '🍽️'
-                                e.target.parentElement.appendChild(placeholder)
-                              }}
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-6xl">
-                              🍽️
-                            </div>
-                          )}
-
-                          {/* Rating Badge (NOW ON IMAGE, bottom-left with white border) */}
-                          <div className="absolute bottom-0 left-0 bg-green-600 border-[4px] rounded-md border-white text-white text-[11px] md:text-xs font-bold px-1.5 py-0.5 flex items-center gap-0.5">
-                            {restaurant.rating}
-                            <Star className="h-2.5 w-2.5 md:h-3 md:w-3 fill-white" />
-                          </div>
-                        </div>
-
-                        {/* Restaurant Info - Show category dish name if available, otherwise restaurant name */}
-                        <h3 className="font-semibold text-gray-900 dark:text-white text-xs md:text-sm line-clamp-1">
-                          {restaurant.categoryDishName || restaurant.name}
-                        </h3>
-                        <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400 text-[10px] md:text-xs">
-                          <Clock className="h-2.5 w-2.5 md:h-3 md:w-3" />
-                          <span>{restaurant.deliveryTime || 'Not available'}</span>
-                        </div>
-                      </div>
-                    </Link>
-                  )
-                })}
-              </div>
-            </section>
-          )}
-
           {/* ALL RESTAURANTS Section */}
           <section className="relative">
             <h2 className="text-xs sm:text-sm md:text-base font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-4 md:mb-6">
@@ -1052,29 +879,21 @@ export default function CategoryPage() {
             {/* Large Restaurant Cards */}
             <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5 lg:gap-6 xl:gap-7 items-stretch ${isLoadingFilterResults ? 'opacity-50' : 'opacity-100'} transition-opacity duration-300`}>
               {filteredAllRestaurants.map((restaurant) => {
-                const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
+                const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
                 const isFavorite = favorites.has(restaurant.id)
-                const isVeg = restaurant.categoryDish?.foodType === "Veg"
-                const displayName = restaurant.categoryDishName || restaurant.name
-                const displayPrice = restaurant.categoryDishPrice || restaurant.featuredPrice
+                const isVeg = restaurant.isPureVeg === true || restaurant.vegOnly === true
+                const displayName = restaurant.name
+                const displayPrice = restaurant.featuredPrice
 
                 return (
                   <Link
                     key={restaurant.id}
-                    to={`/user/restaurants/${restaurantSlug}`}
+                    to={
+                      selectedCategory && selectedCategory !== 'all'
+                        ? `/user/restaurants/${restaurantSlug}?q=${encodeURIComponent(selectedCategory)}`
+                        : `/user/restaurants/${restaurantSlug}`
+                    }
                     className="h-full flex"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      const dish = restaurant.categoryDish || {
-                        name: displayName,
-                        price: displayPrice,
-                        image: restaurant.categoryDishImage || restaurant.image,
-                        itemId: restaurant.dishId || restaurant.id,
-                        originalPrice: restaurant.categoryDish?.originalPrice || restaurant.featuredPrice,
-                        foodType: restaurant.categoryDish?.foodType,
-                      }
-                      handleDishClick(restaurant, dish)
-                    }}
                   >
                     <Card
                       className={`overflow-hidden cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 rounded-xl h-full w-full ${shouldShowGrayscale ? 'grayscale opacity-75' : ''
@@ -1111,10 +930,12 @@ export default function CategoryPage() {
                               </div>
                             </div>
 
-                            {/* Subtext (restaurant name) */}
+                          {/* Subtext (cuisine) */}
+                          {restaurant.cuisine && (
                             <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
-                              {restaurant.name}
+                              {restaurant.cuisine}
                             </p>
+                          )}
                           </div>
 
                           {/* Bottom actions: bookmark & share */}
@@ -1180,54 +1001,7 @@ export default function CategoryPage() {
                           )}
 
                           {/* Add to Cart Button Overlay - only on ALL RESTAURANTS cards */}
-                          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
-                            {quantities[restaurant.dishId || restaurant.id] > 0 ? (
-                              <div className="flex items-center gap-2 bg-white dark:bg-[#1a1a1a] border border-green-600 rounded-lg shadow-lg px-1 py-0.5">
-                                <button
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    updateQuantity(restaurant.dishId || restaurant.id, quantities[restaurant.dishId || restaurant.id] - 1)
-                                  }}
-                                  className="w-5 h-5 flex items-center justify-center text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
-                                >
-                                  <Minus className="h-3 w-3" />
-                                </button>
-                                <span className="text-[11px] font-bold text-gray-900 dark:text-white min-w-[12px] text-center">
-                                  {quantities[restaurant.dishId || restaurant.id]}
-                                </span>
-                                <button
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    updateQuantity(restaurant.dishId || restaurant.id, quantities[restaurant.dishId || restaurant.id] + 1)
-                                  }}
-                                  className="w-5 h-5 flex items-center justify-center text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
-                                >
-                                  <Plus className="h-3 w-3" />
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  const dish = restaurant.categoryDish || {
-                                    name: displayName,
-                                    price: displayPrice,
-                                    image: restaurant.categoryDishImage || restaurant.image,
-                                    itemId: restaurant.dishId || restaurant.id,
-                                    originalPrice: restaurant.categoryDish?.originalPrice || restaurant.featuredPrice,
-                                    foodType: restaurant.categoryDish?.foodType,
-                                  }
-                                  handleAddDishToCart(restaurant, dish, e)
-                                }}
-                                className="flex items-center gap-1.5 bg-white dark:bg-[#1a1a1a] border-2 border-green-600 text-green-600 text-xs md:text-sm font-bold px-3 py-1.5 md:px-4 md:py-2 rounded-xl shadow-md hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors whitespace-nowrap"
-                              >
-                                ADD <Plus className="h-3.5 w-3.5 md:h-4 md:w-4" />
-                              </button>
-                            )}
-                          </div>
+                          {/* No direct ADD button on category page when viewing restaurants */}
                         </div>
                       </div>
                     </Card>
