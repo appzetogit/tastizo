@@ -1118,6 +1118,11 @@ export const adminAPI = {
     return apiClient.get(API_ENDPOINTS.ADMIN.DASHBOARD_STATS);
   },
 
+  // Send push notification
+  sendPushNotification: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.PUSH_NOTIFICATION, data);
+  },
+
   // Get users
   getUsers: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.USERS, { params });

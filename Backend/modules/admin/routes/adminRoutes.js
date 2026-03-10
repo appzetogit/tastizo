@@ -156,6 +156,7 @@ import {
   getEntityAuditLogs,
   getCommissionChangeLogs,
 } from "../controllers/auditLogController.js";
+import { sendPushNotificationAdmin } from "../controllers/pushNotificationController.js";
 import { getAbout, updateAbout } from "../controllers/aboutController.js";
 import {
   getTerms,
@@ -372,6 +373,9 @@ router.get(
 router.get("/earning-addon-history/:id", getEarningAddonHistoryById);
 router.post("/earning-addon-history/:id/credit", creditEarningToWallet);
 router.patch("/earning-addon-history/:id/cancel", cancelEarningAddonHistory);
+
+// Push Notification
+router.post("/push-notification", sendPushNotificationAdmin);
 
 // Environment Variables Management
 router.get("/env-variables", getEnvVariables);

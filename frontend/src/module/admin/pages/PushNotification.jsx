@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react"
 import { Search, Download, ChevronDown, Bell, Edit, Trash2, Upload, Settings, Image as ImageIcon } from "lucide-react"
+import { adminAPI } from "../../../lib/api/index.js"
 import { pushNotificationsDummy } from "../data/pushNotificationsDummy"
 // Using placeholders for notification images
 const notificationImage1 = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=400&fit=crop"
@@ -38,10 +39,33 @@ export default function PushNotification() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    console.log("Notification sent:", formData)
-    alert("Notification sent successfully!")
+    if (!formData.title?.trim() || !formData.description?.trim()) {
+      alert("Please fill in title and description.")
+      return
+    }
+    try {
+      const res = await adminAPI.sendPushNotification({
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        sendTo: formData.sendTo,
+        zone: formData.zone,
+      })
+      if (res?.data?.success) {
+        const { sent, failed, total } = res.data.data || {}
+        const msg = total === 0
+          ? "No devices with FCM tokens found. Users need to enable notifications."
+          : `Notification sent: ${sent} delivered${failed ? `, ${failed} failed` : ""} (${total} total)` 
+        alert(msg)
+        handleReset()
+      } else {
+        alert(res?.data?.message || "Failed to send notification.")
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || "Failed to send notification."
+      alert(msg)
+    }
   }
 
   const handleReset = () => {
