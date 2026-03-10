@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useState, useEffect } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import { Building2, Info, Tag, Upload, Calendar, FileText, MapPin, CheckCircle2, X, Image as ImageIcon, Clock, Loader2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -22,6 +22,9 @@ const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 export default function AddRestaurant() {
   const navigate = useNavigate()
+  const { id } = useParams()
+  const isEditMode = Boolean(id)
+  const [loadingRestaurant, setLoadingRestaurant] = useState(isEditMode)
   const [step, setStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
@@ -94,6 +97,58 @@ export default function AddRestaurant() {
     phone: "",
     signupMethod: "email",
   })
+
+  // Load restaurant data when editing
+  useEffect(() => {
+    if (!id) return
+    const load = async () => {
+      try {
+        setLoadingRestaurant(true)
+        const res = await adminAPI.getRestaurantById(id)
+        const r = res.data?.data?.restaurant || res.data?.restaurant
+        if (!r) throw new Error("Restaurant not found")
+        setStep1({
+          restaurantName: r.name || "",
+          ownerName: r.ownerName || "",
+          ownerEmail: r.ownerEmail || "",
+          ownerPhone: r.ownerPhone || r.phone || "",
+          primaryContactNumber: r.primaryContactNumber || "",
+          location: {
+            addressLine1: r.location?.addressLine1 || r.location?.address || "",
+            addressLine2: r.location?.addressLine2 || "",
+            area: r.location?.area || "",
+            city: r.location?.city || "",
+            state: r.location?.state || "",
+            pincode: r.location?.pincode || r.location?.zipCode || "",
+            landmark: r.location?.landmark || "",
+          },
+        })
+        const dt = r.deliveryTimings || {}
+        setStep2({
+          menuImages: Array.isArray(r.menuImages) ? r.menuImages.filter(Boolean) : [],
+          profileImage: r.profileImage || null,
+          cuisines: Array.isArray(r.cuisines) ? r.cuisines : [],
+          openingTime: dt.openingTime || "09:00",
+          closingTime: dt.closingTime || "22:00",
+          openDays: Array.isArray(r.openDays) ? r.openDays : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        })
+        setStep4({
+          estimatedDeliveryTime: r.estimatedDeliveryTime || "25-30 mins",
+          featuredDish: r.featuredDish || "",
+          featuredPrice: String(r.featuredPrice ?? 249),
+          offer: r.offer || "",
+          diningSettings: r.diningSettings || { isEnabled: false, maxGuests: 6, diningType: "family-dining" },
+        })
+      } catch (err) {
+        console.error(err)
+        toast.error(err?.response?.data?.message || "Failed to load restaurant")
+        navigate("/admin/restaurants/edit-details")
+      } finally {
+        setLoadingRestaurant(false)
+      }
+    }
+    load()
+  }, [id, navigate])
 
   const languageTabs = [
     { key: "default", label: "Default" },
@@ -189,11 +244,11 @@ export default function AddRestaurant() {
       validationErrors = validateStep1()
     } else if (step === 2) {
       validationErrors = validateStep2()
-    } else if (step === 3) {
+    } else if (step === 3 && !isEditMode) {
       validationErrors = validateStep3()
     } else if (step === 4) {
       validationErrors = validateStep4()
-    } else if (step === 5) {
+    } else if (step === 5 && !isEditMode) {
       validationErrors = validateAuth()
     }
 
@@ -204,8 +259,11 @@ export default function AddRestaurant() {
       return
     }
 
-    if (step < 5) {
-      setStep(step + 1)
+    const maxStep = isEditMode ? 4 : 5
+    if (step < maxStep) {
+      let next = step + 1
+      if (isEditMode && next === 3) next = 4
+      setStep(next)
     } else {
       handleSubmit()
     }
@@ -302,21 +360,43 @@ export default function AddRestaurant() {
         diningSettings: step4.diningSettings,
       }
 
-      // Call backend API
-      const response = await adminAPI.createRestaurant(payload)
+      let response
+      if (isEditMode) {
+        const updatePayload = {
+          name: step1.restaurantName,
+          ownerName: step1.ownerName,
+          ownerEmail: step1.ownerEmail,
+          ownerPhone: step1.ownerPhone,
+          primaryContactNumber: step1.primaryContactNumber,
+          location: step1.location,
+          profileImage: profileImageData,
+          menuImages: menuImagesData,
+          cuisines: step2.cuisines,
+          openDays: step2.openDays,
+          deliveryTimings: { openingTime: step2.openingTime, closingTime: step2.closingTime },
+          estimatedDeliveryTime: step4.estimatedDeliveryTime,
+          featuredDish: step4.featuredDish,
+          featuredPrice: parseFloat(step4.featuredPrice) || 249,
+          offer: step4.offer,
+          diningSettings: step4.diningSettings,
+        }
+        response = await adminAPI.updateRestaurant(id, updatePayload)
+      } else {
+        response = await adminAPI.createRestaurant(payload)
+      }
 
       if (response.data.success) {
-        toast.success("Restaurant created successfully!")
+        toast.success(isEditMode ? "Restaurant updated successfully!" : "Restaurant created successfully!")
         setShowSuccessDialog(true)
         setTimeout(() => {
-          navigate("/admin/restaurants")
+          navigate(isEditMode ? "/admin/restaurants/edit-details" : "/admin/restaurants")
         }, 2000)
       } else {
-        throw new Error(response.data.message || "Failed to create restaurant")
+        throw new Error(response.data.message || (isEditMode ? "Failed to update restaurant" : "Failed to create restaurant"))
       }
     } catch (error) {
-      console.error("Error creating restaurant:", error)
-      const errorMsg = error?.response?.data?.message || error?.message || "Failed to create restaurant. Please try again."
+      console.error(isEditMode ? "Error updating restaurant:" : "Error creating restaurant:", error)
+      const errorMsg = error?.response?.data?.message || error?.message || (isEditMode ? "Failed to update restaurant. Please try again." : "Failed to create restaurant. Please try again.")
       toast.error(errorMsg)
       setFormErrors({ submit: errorMsg })
     } finally {
@@ -803,14 +883,26 @@ export default function AddRestaurant() {
     return renderStep5()
   }
 
+  if (loadingRestaurant) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <span className="ml-3 text-slate-600">Loading restaurant...</span>
+      </div>
+    )
+  }
+
+  const totalSteps = isEditMode ? 3 : 5
+  const displayStep = isEditMode && step === 4 ? 3 : step
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       <header className="px-4 py-4 sm:px-6 sm:py-5 bg-white flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Building2 className="w-5 h-5 text-blue-600" />
-          <div className="text-sm font-semibold text-black">Add New Restaurant</div>
+          <div className="text-sm font-semibold text-black">{isEditMode ? "Edit Restaurant" : "Add New Restaurant"}</div>
         </div>
-        <div className="text-xs text-gray-600">Step {step} of 5</div>
+        <div className="text-xs text-gray-600">Step {displayStep} of {totalSteps}</div>
       </header>
 
       <main className="flex-1 px-4 sm:px-6 py-4 space-y-4">
@@ -826,7 +918,7 @@ export default function AddRestaurant() {
           <Button
             variant="ghost"
             disabled={step === 1 || isSubmitting}
-            onClick={() => setStep((s) => Math.max(1, s - 1))}
+            onClick={() => setStep((s) => (isEditMode && s === 4 ? 2 : Math.max(1, s - 1)))}
             className="text-sm text-gray-700 bg-transparent"
           >
             Back
@@ -836,7 +928,7 @@ export default function AddRestaurant() {
             disabled={isSubmitting}
             className="text-sm bg-black text-white px-6"
           >
-            {step === 5 ? (isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating... </> : "Create Restaurant") : isSubmitting ? "Saving..." : "Continue"}
+            {(step === 5 || (isEditMode && step === 4)) ? (isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {isEditMode ? "Updating..." : "Creating..."} </> : (isEditMode ? "Update Restaurant" : "Create Restaurant")) : isSubmitting ? "Saving..." : "Continue"}
           </Button>
         </div>
       </footer>
@@ -854,9 +946,9 @@ export default function AddRestaurant() {
               </div>
             </div>
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-slate-900 mb-2">Restaurant Created Successfully!</DialogTitle>
+              <DialogTitle className="text-2xl font-bold text-slate-900 mb-2">{isEditMode ? "Restaurant Updated Successfully!" : "Restaurant Created Successfully!"}</DialogTitle>
               <DialogDescription className="text-sm text-slate-600">
-                The restaurant has been created and can now login with the provided credentials.
+                {isEditMode ? "The restaurant details have been updated." : "The restaurant has been created and can now login with the provided credentials."}
               </DialogDescription>
             </DialogHeader>
           </div>

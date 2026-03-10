@@ -55,6 +55,7 @@ export const sidebarMenuData = [
         icon: "UtensilsCrossed",
         subItems: [
           { label: "Restaurants List", path: "/admin/restaurants" },
+          { label: "Edit Restaurant Details", path: "/admin/restaurants/edit-details" },
           {
             label: "New Joining Request",
             path: "/admin/restaurants/joining-request",

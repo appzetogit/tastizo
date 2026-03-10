@@ -1123,13 +1123,12 @@ export const getRestaurants = asyncHandler(async (req, res) => {
 
     // Status filter - Default to active only (approved restaurants)
     // Only show inactive if explicitly requested via status filter
-    // IMPORTANT: Restaurants should only appear in main list AFTER admin approval
-    // Inactive restaurants (pending approval) should only appear in "New Joining Request" section
+    // status=all shows both active and inactive
     if (status === "inactive") {
       query.isActive = false;
+    } else if (status === "all") {
+      // No isActive filter - show all
     } else {
-      // Default: Show only active (approved) restaurants
-      // This ensures that restaurants only appear in main list after admin approval
       query.isActive = true;
     }
 
@@ -2169,6 +2168,63 @@ export const deleteRestaurant = asyncHandler(async (req, res) => {
       error: error.stack,
     });
     return errorResponse(res, 500, "Failed to delete restaurant");
+  }
+});
+
+/**
+ * Get Restaurant by ID (Admin - includes inactive)
+ * GET /api/admin/restaurants/:id
+ */
+export const getRestaurantById = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const restaurant = await Restaurant.findById(id).select("-password").lean();
+    if (!restaurant) {
+      return errorResponse(res, 404, "Restaurant not found");
+    }
+    return successResponse(res, 200, "Restaurant retrieved successfully", {
+      restaurant,
+    });
+  } catch (error) {
+    logger.error(`Error fetching restaurant: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, "Failed to fetch restaurant");
+  }
+});
+
+/**
+ * Update Restaurant (Admin)
+ * PUT /api/admin/restaurants/:id
+ */
+export const updateRestaurant = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const restaurant = await Restaurant.findById(id);
+    if (!restaurant) {
+      return errorResponse(res, 404, "Restaurant not found");
+    }
+    const allowed = [
+      "name", "ownerName", "ownerEmail", "ownerPhone", "primaryContactNumber",
+      "profileImage", "menuImages", "cuisines", "openDays",
+      "estimatedDeliveryTime", "featuredDish", "featuredPrice", "offer",
+      "deliveryTimings", "isActive", "diningSettings", "diningCommissionPercentage",
+    ];
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) {
+        restaurant[key] = req.body[key];
+      }
+    }
+    if (req.body.location && typeof req.body.location === "object") {
+      const loc = restaurant.location ? restaurant.location.toObject ? restaurant.location.toObject() : { ...restaurant.location } : {};
+      Object.assign(loc, req.body.location);
+      restaurant.set("location", loc);
+    }
+    await restaurant.save();
+    return successResponse(res, 200, "Restaurant updated successfully", {
+      restaurant: await Restaurant.findById(id).select("-password").lean(),
+    });
+  } catch (error) {
+    logger.error(`Error updating restaurant: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, "Failed to update restaurant");
   }
 });
 

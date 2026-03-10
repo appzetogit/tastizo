@@ -21,6 +21,7 @@ const ViewZone = lazy(() => import("../pages/restaurant/ViewZone"));
 const AllZonesMap = lazy(() => import("../pages/restaurant/AllZonesMap"));
 const DeliveryBoyViewMap = lazy(() => import("../pages/restaurant/DeliveryBoyViewMap"));
 const RestaurantsList = lazy(() => import("../pages/restaurant/RestaurantsList"));
+const EditRestaurantDetails = lazy(() => import("../pages/restaurant/EditRestaurantDetails"));
 const AddRestaurant = lazy(() => import("../pages/restaurant/AddRestaurant"));
 const JoiningRequest = lazy(() => import("../pages/restaurant/JoiningRequest"));
 const RestaurantCommission = lazy(() => import("../pages/restaurant/RestaurantCommission"));
@@ -175,7 +176,9 @@ export default function AdminRouter() {
           <Route path="food-approval" element={<FoodApproval />} />
           {/* Restaurants */}
           <Route path="restaurants" element={<RestaurantsList />} />
+          <Route path="restaurants/edit-details" element={<EditRestaurantDetails />} />
           <Route path="restaurants/add" element={<AddRestaurant />} />
+          <Route path="restaurants/edit/:id" element={<AddRestaurant />} />
           <Route path="restaurants/joining-request" element={<JoiningRequest />} />
           <Route path="restaurants/commission" element={<RestaurantCommission />} />
           <Route path="restaurants/complaints" element={<RestaurantComplaints />} />
