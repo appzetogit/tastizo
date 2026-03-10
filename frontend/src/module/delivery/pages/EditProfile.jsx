@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { motion } from "framer-motion"
 import { useNavigate } from "react-router-dom"
 import { 
@@ -6,6 +6,7 @@ import {
   Camera,
   Save
 } from "lucide-react"
+import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
@@ -18,11 +19,20 @@ export default function EditProfile() {
     shift: "Morning (04:00 AM - 11:59 AM)"
   })
 
+  const fileInputRef = useRef(null)
+
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }))
+  }
+
+  const handleProfilePhotoSelect = (file) => {
+    if (file) {
+      // Handle image upload - for now log; integrate with deliveryAPI.updateProfile when available
+      console.log("Image selected:", file.name)
+    }
   }
 
   const handleSubmit = (e) => {
@@ -58,15 +68,25 @@ export default function EditProfile() {
                     alt="Profile"
                     className="w-20 h-20 md:w-32 md:h-32 rounded-full border-2 md:border-4 border-white object-cover shadow-md"
                   />
-                  <label className="absolute bottom-0 right-0 bg-[#ff8100] text-white p-1.5 md:p-2 rounded-full cursor-pointer hover:bg-[#e67300] transition-colors">
+                  <label
+                    className="absolute bottom-0 right-0 bg-[#ff8100] text-white p-1.5 md:p-2 rounded-full cursor-pointer hover:bg-[#e67300] transition-colors"
+                    onClick={async (e) => {
+                      if (hasFlutterCameraBridge()) {
+                        e.preventDefault()
+                        const { success, file } = await openCameraViaFlutter()
+                        if (success && file) handleProfilePhotoSelect(file)
+                      }
+                    }}
+                  >
                     <Camera className="w-3 h-3 md:w-4 md:h-4" />
                     <input
+                      ref={fileInputRef}
                       type="file"
                       accept="image/*"
                       className="hidden"
                       onChange={(e) => {
-                        // Handle image upload
-                        console.log("Image selected:", e.target.files[0])
+                        const file = e.target.files?.[0]
+                        if (file) handleProfilePhotoSelect(file)
                       }}
                     />
                   </label>

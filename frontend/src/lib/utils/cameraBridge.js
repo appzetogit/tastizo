@@ -37,10 +37,11 @@ export function hasFlutterCameraBridge() {
 }
 
 /**
- * Open camera (or gallery, depending on options) via Flutter bridge.
- * Returns a File object plus raw bridge response when successful.
+ * Open camera via Flutter InAppWebView bridge.
+ * Calls handler with no args to match Flutter: openCamera() -> { success, base64, mimeType, fileName }
+ * Returns a File object when successful.
  *
- * @param {Object} options
+ * @param {Object} options - Optional (Flutter may ignore). source, accept, multiple, quality.
  * @returns {Promise<{ success: boolean, file?: File, raw?: any, error?: any }>}
  */
 export async function openCameraViaFlutter(options = {}) {
@@ -49,23 +50,14 @@ export async function openCameraViaFlutter(options = {}) {
   }
 
   try {
-    const payload = {
-      source: options.source || "camera",
-      accept: options.accept || "image/*",
-      multiple: !!options.multiple,
-      quality: typeof options.quality === "number" ? options.quality : 0.8,
-    };
-
-    const result = await window.flutter_inappwebview.callHandler(
-      "openCamera",
-      payload,
-    );
+    // Call with no args for maximum Flutter compatibility (handler opens camera, returns base64)
+    const result = await window.flutter_inappwebview.callHandler("openCamera");
 
     if (!result || !result.success) {
       return { success: false, raw: result };
     }
 
-    // If Flutter ever returns a File directly, prefer it.
+    // If Flutter returns a File directly, prefer it
     if (result.file instanceof File) {
       return { success: true, file: result.file, raw: result };
     }
@@ -84,5 +76,36 @@ export async function openCameraViaFlutter(options = {}) {
     console.error("[CameraBridge] Failed to open camera via Flutter:", error);
     return { success: false, error };
   }
+}
+
+/**
+ * Pick image for upload: uses Flutter camera bridge when in WebView, else triggers file input.
+ * Use when you need a single flow that works in both Flutter and browser.
+ *
+ * @param {HTMLInputElement|null} fileInputRef - Ref to hidden file input (for browser fallback)
+ * @param {boolean} useCamera - If true, prefer camera. In Flutter always uses camera.
+ * @returns {Promise<File|null>} - The selected file, or null if cancelled/failed
+ */
+export async function pickImageForUpload(fileInputRef, useCamera = true) {
+  if (hasFlutterCameraBridge()) {
+    const { success, file } = await openCameraViaFlutter({ source: "camera" });
+    return success && file ? file : null;
+  }
+  if (fileInputRef?.current) {
+    return new Promise((resolve) => {
+      const input = fileInputRef.current;
+      const handler = (e) => {
+        const file = e.target?.files?.[0];
+        input.removeEventListener("change", handler);
+        input.value = "";
+        resolve(file || null);
+      };
+      input.addEventListener("change", handler);
+      if (useCamera) input.setAttribute("capture", "environment");
+      else input.removeAttribute("capture");
+      input.click();
+    });
+  }
+  return null;
 }
 

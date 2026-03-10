@@ -208,12 +208,7 @@ export default function EditProfile() {
     // Prefer Flutter bridge when available (WebView/PWA in Flutter shell)
     if (hasFlutterCameraBridge()) {
       try {
-        const { success, file, error } = await openCameraViaFlutter({
-          source: "camera",
-          accept: "image/*",
-          multiple: false,
-          quality: 0.8,
-        })
+        const { success, file, error } = await openCameraViaFlutter()
 
         if (!success || !file) {
           if (error) {

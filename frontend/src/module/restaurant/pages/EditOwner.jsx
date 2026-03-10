@@ -151,11 +151,7 @@ export default function EditOwner() {
     if (loading || saving) return
 
     try {
-      const result = await openCameraViaFlutter({
-        source: "camera",
-        accept: "image/*",
-        multiple: false,
-      })
+      const result = await openCameraViaFlutter()
 
       if (result?.success && result.file) {
         const syntheticEvent = { target: { files: [result.file] } }

@@ -23,6 +23,7 @@ import BottomNavOrders from "../components/BottomNavOrders"
 // Removed foodManagement - now using backend API directly
 import { useNavigate } from "react-router-dom"
 import { restaurantAPI, uploadAPI } from "@/lib/api"
+import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 import { toast } from "sonner"
 
 export default function HubMenu() {
@@ -2194,6 +2195,15 @@ export default function HubMenu() {
                   />
                   <label
                     htmlFor="addon-image-upload"
+                    onClick={async (e) => {
+                      if (hasFlutterCameraBridge()) {
+                        e.preventDefault()
+                        const { success, file } = await openCameraViaFlutter()
+                        if (success && file) {
+                          handleAddonImageAdd({ target: { files: [file] } })
+                        }
+                      }
+                    }}
                     className="flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-50 transition-colors"
                   >
                     <Camera className="h-5 w-5 text-gray-500" />

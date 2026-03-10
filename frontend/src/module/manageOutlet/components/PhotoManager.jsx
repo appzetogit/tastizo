@@ -43,11 +43,7 @@ export default function PhotoManager({ initialData, onUpdate }) {
     if (uploading) return
 
     try {
-      const result = await openCameraViaFlutter({
-        source: "camera",
-        accept: "image/*",
-        multiple: false,
-      })
+      const result = await openCameraViaFlutter()
 
       if (result?.success && result.file) {
         const syntheticEvent = { target: { files: [result.file] } }

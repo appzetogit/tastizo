@@ -1221,6 +1221,18 @@ export default function RestaurantOnboarding() {
             </div>
             <label
               htmlFor="menuImagesInput"
+              onClick={async (e) => {
+                if (hasFlutterCameraBridge()) {
+                  e.preventDefault()
+                  const { success, file } = await openCameraViaFlutter()
+                  if (success && file) {
+                    setStep2((prev) => ({
+                      ...prev,
+                      menuImages: [...(prev.menuImages || []), file],
+                    }))
+                  }
+                }
+              }}
               className="inline-flex justify-center items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white text-black  border-black text-xs font-medium cursor-pointer     w-full items-center"
             >
               <Upload className="w-4.5 h-4.5" />
@@ -1340,6 +1352,15 @@ export default function RestaurantOnboarding() {
           </div>
           <label
             htmlFor="profileImageInput"
+            onClick={async (e) => {
+              if (hasFlutterCameraBridge()) {
+                e.preventDefault()
+                const { success, file } = await openCameraViaFlutter()
+                if (success && file) {
+                  setStep2((prev) => ({ ...prev, profileImage: file }))
+                }
+              }
+            }}
             className="inline-flex justify-center items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white text-black  border-black text-xs font-medium cursor-pointer     w-full items-center"
           >
             <Upload className="w-4.5 h-4.5" />
@@ -1484,7 +1505,16 @@ export default function RestaurantOnboarding() {
                 onChange={(e) => setStep3({ ...step3, panImage: e.target.files?.[0] || null })}
               />
             </label>
-            <label className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50">
+            <label
+              className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50"
+              onClick={async (e) => {
+                if (hasFlutterCameraBridge()) {
+                  e.preventDefault()
+                  const { success, file } = await openCameraViaFlutter()
+                  if (success && file) setStep3({ ...step3, panImage: file })
+                }
+              }}
+            >
               <Camera className="w-4 h-4" />
               <span>Camera</span>
               <Input
@@ -1540,14 +1570,42 @@ export default function RestaurantOnboarding() {
               className="bg-white text-sm"
               placeholder="Registered address"
             />
-            <Input
-              type="file"
-              accept="image/*"
-              onChange={(e) =>
-                setStep3({ ...step3, gstImage: e.target.files?.[0] || null })
-              }
-              className="bg-white text-sm"
-            />
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50">
+                <Upload className="w-4 h-4" />
+                <span>Gallery</span>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) =>
+                    setStep3({ ...step3, gstImage: e.target.files?.[0] || null })
+                  }
+                  className="hidden"
+                />
+              </label>
+              <label
+                className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50"
+                onClick={async (e) => {
+                  if (hasFlutterCameraBridge()) {
+                    e.preventDefault()
+                    const { success, file } = await openCameraViaFlutter()
+                    if (success && file) setStep3({ ...step3, gstImage: file })
+                  }
+                }}
+              >
+                <Camera className="w-4 h-4" />
+                <span>Camera</span>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) =>
+                    setStep3({ ...step3, gstImage: e.target.files?.[0] || null })
+                  }
+                />
+              </label>
+            </div>
           </div>
         )}
       </section>
@@ -1618,12 +1676,7 @@ export default function RestaurantOnboarding() {
             onClick={async (e) => {
               if (hasFlutterCameraBridge()) {
                 e.preventDefault();
-                const { success, file } = await openCameraViaFlutter({
-                  source: "camera",
-                  accept: "image/*",
-                  multiple: false,
-                  quality: 0.8,
-                });
+                const { success, file } = await openCameraViaFlutter();
                 if (success && file) {
                   setStep3({ ...step3, fssaiImage: file });
                 }

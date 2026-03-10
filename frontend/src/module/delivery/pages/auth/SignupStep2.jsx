@@ -142,11 +142,7 @@ export default function SignupStep2() {
       if (isUploading) return
 
       try {
-        const result = await openCameraViaFlutter({
-          source: "camera",
-          accept: "image/*",
-          multiple: false,
-        })
+        const result = await openCameraViaFlutter()
 
         if (result?.success && result.file) {
           await handleFileSelect(docType, result.file)

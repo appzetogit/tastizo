@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import BottomNavbar from "../components/BottomNavbar"
 import MenuOverlay from "../components/MenuOverlay"
 import { getFoodById, saveFood } from "../utils/foodManagement"
+import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 
 export default function EditFoodPage() {
   const navigate = useNavigate()
@@ -285,7 +286,16 @@ export default function EditFoodPage() {
                     alt={formData.name}
                     className="w-32 h-32 md:w-40 md:h-40 rounded-lg object-cover"
                   />
-                  <label className="absolute bottom-0 right-0 bg-[#ff8100] text-white p-2 rounded-full cursor-pointer hover:bg-[#e67300]">
+                  <label
+                    className="absolute bottom-0 right-0 bg-[#ff8100] text-white p-2 rounded-full cursor-pointer hover:bg-[#e67300]"
+                    onClick={async (e) => {
+                      if (hasFlutterCameraBridge()) {
+                        e.preventDefault()
+                        const { success, file } = await openCameraViaFlutter()
+                        if (success && file) handleImageUpload("image", file)
+                      }
+                    }}
+                  >
                     <Upload className="w-4 h-4" />
                     <input
                       type="file"

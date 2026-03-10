@@ -78,6 +78,43 @@ export default function ProfileDetails() {
     }
   }
 
+  const handleProfilePhotoUpload = async (file) => {
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file")
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image size should be less than 5MB")
+      return
+    }
+    try {
+      setIsUpdatingPhoto(true)
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("folder", "appzeto/delivery/documents")
+      const response = await apiClient.post("/upload/media", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      if (response?.data?.success && response?.data?.data) {
+        const { url, publicId } = response.data.data
+        await deliveryAPI.updateProfile({ profileImage: { url, publicId } })
+        const profileRes = await deliveryAPI.getProfile()
+        if (profileRes?.data?.success && profileRes?.data?.data?.profile) {
+          setProfile(profileRes.data.data.profile)
+        }
+        toast.success("Profile photo updated successfully")
+      } else {
+        toast.error("Failed to upload profile photo")
+      }
+    } catch (error) {
+      console.error("Error updating profile photo:", error)
+      toast.error(error?.response?.data?.message || "Failed to update profile photo")
+    } finally {
+      setIsUpdatingPhoto(false)
+    }
+  }
+
   // Note: All alternate phone related code has been removed
 
   // Fetch profile data
@@ -176,59 +213,16 @@ export default function ProfileDetails() {
             )}
           </div>
 
-          {/* Hidden file input for camera/gallery */}
+          {/* Hidden file input for gallery fallback (camera uses Flutter bridge when in WebView) */}
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            capture="user"
             className="hidden"
-            onChange={async (e) => {
+            onChange={(e) => {
               const file = e.target.files?.[0]
-              if (!file) return
-
-              // Basic validation
-              if (!file.type.startsWith("image/")) {
-                toast.error("Please select an image file")
-                return
-              }
-              if (file.size > 5 * 1024 * 1024) {
-                toast.error("Image size should be less than 5MB")
-                return
-              }
-
-              try {
-                setIsUpdatingPhoto(true)
-                const formData = new FormData()
-                formData.append("file", file)
-                formData.append("folder", "appzeto/delivery/documents")
-
-                const response = await apiClient.post("/upload/media", formData, {
-                  headers: { "Content-Type": "multipart/form-data" },
-                })
-
-                if (response?.data?.success && response?.data?.data) {
-                  const { url, publicId } = response.data.data
-                  await deliveryAPI.updateProfile({
-                    profileImage: { url, publicId },
-                  })
-                  const profileRes = await deliveryAPI.getProfile()
-                  if (profileRes?.data?.success && profileRes?.data?.data?.profile) {
-                    setProfile(profileRes.data.data.profile)
-                  }
-                  toast.success("Profile photo updated successfully")
-                } else {
-                  toast.error("Failed to upload profile photo")
-                }
-              } catch (error) {
-                console.error("Error updating profile photo:", error)
-                toast.error(error?.response?.data?.message || "Failed to update profile photo")
-              } finally {
-                setIsUpdatingPhoto(false)
-                if (e.target) {
-                  e.target.value = ""
-                }
-              }
+              if (file) handleProfilePhotoUpload(file)
+              if (e.target) e.target.value = ""
             }}
           />
         </div>
@@ -256,60 +250,6 @@ export default function ProfileDetails() {
         )}
       </div>
 
-      {/* Hidden file input for gallery/camera capture (triggered by source chooser) */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={async (e) => {
-          const file = e.target.files?.[0]
-          if (!file) return
-
-          // Basic validation
-          if (!file.type.startsWith("image/")) {
-            toast.error("Please select an image file")
-            return
-          }
-          if (file.size > 5 * 1024 * 1024) {
-            toast.error("Image size should be less than 5MB")
-            return
-          }
-
-          try {
-            setIsUpdatingPhoto(true)
-            const formData = new FormData()
-            formData.append("file", file)
-            formData.append("folder", "appzeto/delivery/documents")
-
-            const response = await apiClient.post("/upload/media", formData, {
-              headers: { "Content-Type": "multipart/form-data" },
-            })
-
-            if (response?.data?.success && response?.data?.data) {
-              const { url, publicId } = response.data.data
-              await deliveryAPI.updateProfile({
-                profileImage: { url, publicId },
-              })
-              const profileRes = await deliveryAPI.getProfile()
-              if (profileRes?.data?.success && profileRes?.data?.data?.profile) {
-                setProfile(profileRes.data.data.profile)
-              }
-              toast.success("Profile photo updated successfully")
-            } else {
-              toast.error("Failed to upload profile photo")
-            }
-          } catch (error) {
-            console.error("Error updating profile photo:", error)
-            toast.error(error?.response?.data?.message || "Failed to update profile photo")
-          } finally {
-            setIsUpdatingPhoto(false)
-            if (e.target) {
-              e.target.value = ""
-            }
-          }
-        }}
-      />
 
       {/* Content */}
       <div className="px-4 py-6 space-y-6">
@@ -652,25 +592,13 @@ export default function ProfileDetails() {
             disabled={isUpdatingPhoto}
             onClick={async () => {
               setShowPhotoSourcePopup(false)
-              // Prefer Flutter camera bridge when available
               if (hasFlutterCameraBridge()) {
-                const { success, file } = await openCameraViaFlutter({
-                  source: "camera",
-                  accept: "image/*",
-                  multiple: false,
-                  quality: 0.8,
-                })
+                const { success, file } = await openCameraViaFlutter()
                 if (success && file) {
-                  // Reuse upload pipeline by calling the same logic as the file input change
-                  const fakeEvent = { target: { files: [file] } }
-                  const handler = fileInputRef.current?.onchange
-                  if (typeof handler === "function") {
-                    await handler(fakeEvent)
-                    return
-                  }
+                  await handleProfilePhotoUpload(file)
+                  return
                 }
               }
-              // Fallback to native capture flow
               if (fileInputRef.current) {
                 fileInputRef.current.setAttribute("capture", "environment")
                 fileInputRef.current.click()

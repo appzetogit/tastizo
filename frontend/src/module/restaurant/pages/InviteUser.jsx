@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { restaurantAPI } from "@/lib/api"
+import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 
 // Country codes
 const countryCodes = [
@@ -401,6 +402,13 @@ export default function InviteUser() {
               ) : (
                 <label
                   htmlFor="photoInput"
+                  onClick={async (e) => {
+                    if (hasFlutterCameraBridge()) {
+                      e.preventDefault()
+                      const { success, file } = await openCameraViaFlutter()
+                      if (success && file) handlePhotoChange({ target: { files: [file] } })
+                    }
+                  }}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-gray-300 text-sm font-medium text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors"
                 >
                   <Upload className="w-4 h-4" />

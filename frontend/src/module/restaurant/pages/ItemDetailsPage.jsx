@@ -967,12 +967,7 @@ export default function ItemDetailsPage() {
                   if (hasFlutterCameraBridge()) {
                     // Prefer native Flutter camera for WebView environments
                     e.preventDefault();
-                    const { success, file } = await openCameraViaFlutter({
-                      source: "camera",
-                      accept: "image/*",
-                      multiple: false,
-                      quality: 0.8,
-                    });
+                    const { success, file } = await openCameraViaFlutter();
                     if (success && file) {
                       await handleImageAdd({ target: { files: [file] } });
                     }
