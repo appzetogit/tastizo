@@ -23,7 +23,7 @@ export default function Under250() {
   const { location } = useLocation()
   const { zoneId, zoneStatus, isInService, isOutOfService } = useZone(location)
   const navigate = useNavigate()
-  const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
+  const { addToCart, updateQuantity, removeFromCart, getCartItem, cart, openVariantPicker } = useCart()
   const [activeCategory, setActiveCategory] = useState(null)
   const [showSortPopup, setShowSortPopup] = useState(false)
   const [selectedSort, setSelectedSort] = useState(null)
@@ -88,6 +88,7 @@ export default function Under250() {
     under250Restaurants.forEach((restaurant) => {
       const restaurantName = restaurant.name
       const restaurantSlug = restaurant.slug || restaurant.name?.toLowerCase().replace(/\s+/g, "-")
+      const restaurantId = restaurant.restaurantId || restaurant.id
       const deliveryTime = restaurant.deliveryTime
       const distance = restaurant.distance
       const rating = restaurant.rating || 0
@@ -97,6 +98,7 @@ export default function Under250() {
           ...item,
           restaurantName,
           restaurantSlug,
+          restaurantId,
           deliveryTime,
           distance,
           rating,
@@ -232,11 +234,11 @@ export default function Under250() {
     fetchCategories()
   }, [])
 
-  // Sync quantities from cart on mount
+  // Sync quantities from cart (sum by base item id so variants of same dish show total)
   useEffect(() => {
     const cartQuantities = {}
     cart.forEach((item) => {
-      cartQuantities[item.id] = item.quantity || 0
+      cartQuantities[item.id] = (cartQuantities[item.id] || 0) + (item.quantity || 0)
     })
     setQuantities(cartQuantities)
   }, [cart])
@@ -280,6 +282,13 @@ export default function Under250() {
     // CRITICAL: Check if user is in service zone
     if (isOutOfService) {
       toast.error('You are outside the service zone. Please select a location within the service area.')
+      return
+    }
+
+    // If item has variations and we're adding, show variant picker (same on every page)
+    const restaurantForPicker = { name: restaurantName || item.restaurant || item.restaurantName || "Under 250", restaurantId: item.restaurantId }
+    if (item.variations?.length && newQuantity > (quantities[item.id] || 0)) {
+      openVariantPicker(item, restaurantForPicker)
       return
     }
 

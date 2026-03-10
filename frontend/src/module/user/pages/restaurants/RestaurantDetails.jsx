@@ -53,7 +53,7 @@ export default function RestaurantDetails() {
   const [searchParams] = useSearchParams()
   const showOnlyUnder250 = searchParams.get('under250') === 'true'
   const initialSearchQuery = searchParams.get('q') || ""
-  const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
+  const { addToCart, updateQuantity, removeFromCart, getCartItem, cart, openVariantPicker, addItemOrAskVariant } = useCart()
   const {
     vegMode,
     addDishFavorite,
@@ -92,8 +92,6 @@ export default function RestaurantDetails() {
   const [showMenuOptionsSheet, setShowMenuOptionsSheet] = useState(false)
   const [expandedAddButtons, setExpandedAddButtons] = useState(new Set())
   const [expandedSections, setExpandedSections] = useState(new Set([0])) // Default: Recommended section is expanded
-  const [showVariantModal, setShowVariantModal] = useState(false)
-  const [itemForVariant, setItemForVariant] = useState(null)
   const [filters, setFilters] = useState({
     sortBy: null, // "low-to-high" | "high-to-low"
     vegNonVeg: null, // "veg" | "non-veg"
@@ -357,44 +355,6 @@ export default function RestaurantDetails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurant?.name, cart])
 
-  // Helper: add one item with selected variant (from variant modal)
-  const addItemWithVariant = (item, variation, event = null) => {
-    if (!restaurant?.name) return
-    const validRestaurantId = restaurant?.restaurantId || restaurant?._id || restaurant?.id
-    if (!validRestaurantId) return
-    const cartItem = {
-      id: item.id,
-      name: item.name,
-      price: variation.price != null ? Number(variation.price) : item.price,
-      image: item.image,
-      restaurant: restaurant.name,
-      restaurantId: validRestaurantId,
-      description: item.description,
-      originalPrice: item.originalPrice,
-      isVeg: item.isVeg !== false,
-      subCategory: item.subCategory || "",
-      selectedVariation: {
-        variationId: String(variation.id),
-        variationName: variation.name || '',
-        price: variation.price != null ? Number(variation.price) : item.price,
-      },
-    }
-    let sourcePosition = null
-    if (event?.currentTarget) {
-      const rect = event.currentTarget.getBoundingClientRect()
-      sourcePosition = { viewportX: rect.left + rect.width / 2, viewportY: rect.top + rect.height / 2, scrollX: window.pageXOffset || 0, scrollY: window.pageYOffset || 0, itemId: item.id }
-    }
-    try {
-      addToCart(cartItem, sourcePosition)
-      setQuantities((prev) => ({ ...prev, [item.id]: (prev[item.id] || 0) + 1 }))
-      setShowVariantModal(false)
-      setItemForVariant(null)
-      toast.success('Added to cart')
-    } catch (err) {
-      toast.error(err.message || 'Could not add to cart')
-    }
-  }
-
   // Helper function to update item quantity in both local state and cart
   const updateItemQuantity = (item, newQuantity, event = null) => {
     // Check authentication
@@ -410,12 +370,11 @@ export default function RestaurantDetails() {
       return;
     }
 
-    // If item has variations: add opens modal; minus removes one from any variant line
+    // If item has variations: add opens global variant picker (same on every page)
     if (item.variations && item.variations.length > 0) {
       const currentTotal = quantities[item.id] || 0
       if (newQuantity > currentTotal) {
-        setItemForVariant(item)
-        setShowVariantModal(true)
+        openVariantPicker(item, restaurant)
         return
       }
       if (newQuantity < currentTotal) {
@@ -2481,70 +2440,6 @@ export default function RestaurantDetails() {
         )}
 
       {/* Variant selection modal */}
-      {typeof window !== "undefined" &&
-        createPortal(
-          <AnimatePresence>
-            {showVariantModal && itemForVariant && (
-              <>
-                <motion.div
-                  className="fixed inset-0 bg-black/40 z-[9999]"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => {
-                    setShowVariantModal(false)
-                    setItemForVariant(null)
-                  }}
-                />
-                <motion.div
-                  className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[10000] bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl shadow-2xl max-h-[70vh] md:max-w-md w-full flex flex-col"
-                  initial={{ y: "100%" }}
-                  animate={{ y: 0 }}
-                  exit={{ y: "100%" }}
-                  transition={{ duration: 0.2, type: "spring", damping: 30, stiffness: 400 }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-10">
-                    <button
-                      onClick={() => {
-                        setShowVariantModal(false)
-                        setItemForVariant(null)
-                      }}
-                      className="h-9 w-9 rounded-full bg-gray-800 flex items-center justify-center hover:bg-gray-700"
-                    >
-                      <X className="h-4 w-4 text-white" />
-                    </button>
-                  </div>
-                  <div className="p-4 pt-8 pb-6 overflow-y-auto">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                      {itemForVariant.name}
-                    </h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Choose an option</p>
-                    <div className="space-y-2">
-                      {itemForVariant.variations.map((variation) => (
-                        <button
-                          key={variation.id}
-                          type="button"
-                          onClick={(e) => addItemWithVariant(itemForVariant, variation, e)}
-                          className="w-full flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-green-500 dark:hover:border-green-500 hover:bg-green-50/50 dark:hover:bg-green-900/10 transition-colors text-left"
-                        >
-                          <span className="font-medium text-gray-900 dark:text-white">
-                            {variation.name}
-                          </span>
-                          <span className="text-green-600 dark:text-green-400 font-semibold">
-                            ₹{Math.round(Number(variation.price) || 0)}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>,
-          document.body
-        )}
-
       {/* Schedule Delivery Time Modal */}
       {typeof window !== "undefined" &&
         createPortal(

@@ -94,7 +94,7 @@ export default function ProductDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const product = productsData[parseInt(id)]
-  const { addToCart, isInCart, getCartItem, updateQuantity } = useCart()
+  const { addToCart, addItemOrAskVariant, isInCart, getCartItem, updateQuantity } = useCart()
   const { getAllOrders } = useOrders()
   const [quantity, setQuantity] = useState(1)
   const [showReviewForm, setShowReviewForm] = useState(false)
@@ -130,10 +130,14 @@ export default function ProductDetail() {
   }, [reviews, product])
 
   const handleAddToCart = () => {
-    if (product) {
-      for (let i = 0; i < quantity; i++) {
-        addToCart(product)
-      }
+    if (!product) return
+    const rest = restaurant ? { name: restaurant.name, restaurantId: restaurant.id || restaurant.restaurantId } : { name: product.restaurant, restaurantId: product.restaurantId }
+    if (product.variations?.length) {
+      addItemOrAskVariant(product, rest, null)
+      return
+    }
+    for (let i = 0; i < quantity; i++) {
+      addToCart(product)
     }
   }
 

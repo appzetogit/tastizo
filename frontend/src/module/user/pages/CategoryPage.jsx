@@ -37,7 +37,7 @@ export default function CategoryPage() {
   const { vegMode } = useProfile()
   const { location } = useLocation()
   const { zoneId, isOutOfService } = useZone(location)
-  const { addToCart, updateQuantity, getCartItem, cart } = useCart()
+  const { addToCart, updateQuantity, getCartItem, cart, addItemOrAskVariant } = useCart()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState(category?.toLowerCase() || 'all')
   const [activeFilters, setActiveFilters] = useState(new Set())
@@ -487,7 +487,7 @@ export default function CategoryPage() {
   useEffect(() => {
     const next = {}
     cart.forEach((item) => {
-      next[item.id] = item.quantity || 0
+      next[item.id] = (next[item.id] || 0) + (item.quantity || 0)
     })
     setQuantities(next)
   }, [cart])
@@ -512,6 +512,14 @@ export default function CategoryPage() {
     const id = String(dish.itemId || dish.id || `${restaurant.id}-${dish.name}-${dish.price}`)
     const existing = getCartItem(id)
     const newQuantity = (existing?.quantity || 0) + 1
+
+    // If dish has variations, use global variant picker (ask on every page)
+    const rest = { name: restaurant.name, restaurantId: restaurant.restaurantId || restaurant.id || restaurant._id }
+    const dishItem = { ...dish, id: dish.itemId ?? dish.id ?? id, image: dish.image || restaurant.image, restaurant: restaurant.name, restaurantId: rest.restaurantId, description: dish.description || `${dish.name} from ${restaurant.name}`, originalPrice: dish.originalPrice || dish.price }
+    if (dish.variations?.length) {
+      addItemOrAskVariant(dishItem, rest, event)
+      return
+    }
 
     const cartItem = {
       id,

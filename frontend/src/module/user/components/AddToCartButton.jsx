@@ -5,12 +5,13 @@ import { isModuleAuthenticated } from "@/lib/utils/auth"
 import { useNavigate, useLocation } from "react-router-dom"
 import { toast } from "sonner"
 
-export default function AddToCartButton({ item, className = "" }) {
-  const { addToCart, isInCart, getCartItem, updateQuantity } = useCart()
+export default function AddToCartButton({ item, restaurant = null, className = "" }) {
+  const { addItemOrAskVariant, isInCart, getCartItem, updateQuantity } = useCart()
   const inCart = isInCart(item.id)
   const cartItem = getCartItem(item.id)
   const navigate = useNavigate()
   const location = useLocation()
+  const rest = restaurant || (item.restaurant ? { name: item.restaurant, restaurantId: item.restaurantId } : null)
 
   const handleAddToCart = (e) => {
     e.preventDefault()
@@ -22,19 +23,19 @@ export default function AddToCartButton({ item, className = "" }) {
       return
     }
 
-    addToCart(item)
+    addItemOrAskVariant(item, rest, e)
   }
 
   const handleIncrease = (e) => {
     e.preventDefault()
     e.stopPropagation()
-    updateQuantity(item.id, (cartItem?.quantity || 0) + 1)
+    updateQuantity(item.id, (cartItem?.quantity || 0) + 1, null, null, cartItem?.selectedVariation?.variationId)
   }
 
   const handleDecrease = (e) => {
     e.preventDefault()
     e.stopPropagation()
-    updateQuantity(item.id, (cartItem?.quantity || 0) - 1)
+    updateQuantity(item.id, (cartItem?.quantity || 0) - 1, null, null, cartItem?.selectedVariation?.variationId)
   }
 
   if (inCart) {

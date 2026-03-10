@@ -1,5 +1,32 @@
 // src/context/cart-context.jsx
-import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
+import VariantPickerModal from "../components/VariantPickerModal"
+
+// Build cart item from (item, restaurant, variation?). Used for add-to-cart and variant flow.
+function buildCartItem(item, restaurant, variation = null) {
+  const validRestaurantId = restaurant?.restaurantId || restaurant?._id || restaurant?.id
+  const base = {
+    id: String(item.itemId ?? item.id),
+    name: item.name,
+    price: variation != null && variation.price != null ? Number(variation.price) : Number(item.price ?? 0),
+    image: item.image,
+    restaurant: restaurant?.name ?? item.restaurant,
+    restaurantId: validRestaurantId ?? item.restaurantId,
+    description: item.description ?? "",
+    originalPrice: item.originalPrice ?? item.price,
+    isVeg: item.isVeg !== false,
+    subCategory: item.subCategory || "",
+  }
+  if (variation) {
+    base.selectedVariation = {
+      variationId: String(variation.id),
+      variationName: variation.name || "",
+      price: variation.price != null ? Number(variation.price) : item.price,
+    }
+  }
+  return base
+}
 
 // Default cart context value to prevent errors during initial render
 const defaultCartContext = {
@@ -28,6 +55,9 @@ const defaultCartContext = {
   cleanCartForRestaurant: () => {
     console.warn('CartProvider not available - cleanCartForRestaurant called');
   },
+  openVariantPicker: () => {},
+  closeVariantPicker: () => {},
+  addItemOrAskVariant: () => {},
 }
 
 const CartContext = createContext(defaultCartContext)
@@ -48,6 +78,77 @@ export function CartProvider({ children }) {
   const [lastAddEvent, setLastAddEvent] = useState(null)
   // Track last remove event for animation
   const [lastRemoveEvent, setLastRemoveEvent] = useState(null)
+
+  // Global variant picker: show "Choose option" on any page when item has variations
+  const [variantPicker, setVariantPicker] = useState({ item: null, restaurant: null })
+
+  const openVariantPicker = useCallback((item, restaurant) => {
+    if (item?.variations?.length) {
+      setVariantPicker({ item: { ...item, id: item.itemId ?? item.id }, restaurant: restaurant || null })
+    }
+  }, [])
+
+  const closeVariantPicker = useCallback(() => {
+    setVariantPicker({ item: null, restaurant: null })
+  }, [])
+
+  const addItemWithVariant = useCallback((item, variation, restaurant, event = null) => {
+    const r = restaurant || (item?.restaurant ? { name: item.restaurant, restaurantId: item.restaurantId } : null)
+    if (!r?.name && !item?.restaurant) {
+      toast.error("Restaurant information missing.")
+      return
+    }
+    const cartItem = buildCartItem(item, r, variation)
+    let sourcePosition = null
+    if (event?.currentTarget) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      sourcePosition = {
+        viewportX: rect.left + rect.width / 2,
+        viewportY: rect.top + rect.height / 2,
+        scrollX: window.pageXOffset || 0,
+        scrollY: window.pageYOffset || 0,
+        itemId: cartItem.id,
+      }
+    }
+    try {
+      addToCart(cartItem, sourcePosition)
+      closeVariantPicker()
+      toast.success("Added to cart")
+    } catch (err) {
+      toast.error(err.message || "Could not add to cart")
+    }
+  }, [])
+
+  const addItemOrAskVariant = useCallback((item, restaurant, event = null) => {
+    const hasVariations = item?.variations && item.variations.length > 0
+    if (hasVariations) {
+      openVariantPicker(item, restaurant)
+      return
+    }
+    const r = restaurant || { name: item.restaurant, restaurantId: item.restaurantId }
+    if (!r?.name && !item.restaurant) {
+      toast.error("Restaurant information missing.")
+      return
+    }
+    const cartItem = buildCartItem(item, r, null)
+    let sourcePosition = null
+    if (event?.currentTarget) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      sourcePosition = {
+        viewportX: rect.left + rect.width / 2,
+        viewportY: rect.top + rect.height / 2,
+        scrollX: window.pageXOffset || 0,
+        scrollY: window.pageYOffset || 0,
+        itemId: cartItem.id,
+      }
+    }
+    try {
+      addToCart(cartItem, sourcePosition)
+      toast.success("Added to cart")
+    } catch (err) {
+      toast.error(err.message || "Could not add to cart")
+    }
+  }, [])
 
   // Persist to localStorage whenever cart changes
   useEffect(() => {
@@ -375,11 +476,26 @@ export function CartProvider({ children }) {
       getCartItem,
       clearCart,
       cleanCartForRestaurant,
+      openVariantPicker,
+      closeVariantPicker,
+      addItemOrAskVariant,
+      addItemWithVariant,
     }),
     [cart, cartForAnimation, lastAddEvent, lastRemoveEvent]
   )
 
-  return <CartContext.Provider value={value}>{children}</CartContext.Provider>
+  return (
+    <CartContext.Provider value={value}>
+      {children}
+      {variantPicker.item && (
+        <VariantPickerModal
+          item={variantPicker.item}
+          onSelectVariation={(variation, e) => addItemWithVariant(variantPicker.item, variation, variantPicker.restaurant, e)}
+          onClose={closeVariantPicker}
+        />
+      )}
+    </CartContext.Provider>
+  )
 }
 
 export function useCart() {

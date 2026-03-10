@@ -88,8 +88,8 @@ export function ProfileProvider({ children }) {
   // VegMode state - stored in localStorage for persistence
   const [vegMode, setVegMode] = useState(() => {
     const saved = localStorage.getItem("userVegMode")
-    // Default to true (ON) if not set
-    return saved !== null ? saved === "true" : true
+    // Default to false (OFF) when user first visits; respect saved preference after that
+    return saved !== null ? saved === "true" : false
   })
 
   // Save to localStorage whenever userProfile, addresses or paymentMethods change
@@ -532,7 +532,7 @@ export function useProfile() {
       removeCollection: () => console.warn("ProfileProvider not available"),
       toggleItemInCollection: () => console.warn("ProfileProvider not available"),
       isItemInCollection: () => false,
-      vegMode: true,
+      vegMode: false,
       setVegMode: () => console.warn("ProfileProvider not available")
     }
   }

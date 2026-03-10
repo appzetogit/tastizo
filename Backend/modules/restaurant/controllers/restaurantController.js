@@ -1064,6 +1064,11 @@ export const getRestaurantsWithDishesUnder250 = async (req, res) => {
                   item.originalPrice > getFinalPrice(item)),
               description: item.description || "",
               category: item.category || item.sectionName || "",
+              variations: Array.isArray(item.variations) ? item.variations.map((v) => ({
+                id: String(v.id || v._id),
+                name: v.name || "",
+                price: v.price != null ? Number(v.price) : getFinalPrice(item),
+              })) : [],
             })),
           };
         }
