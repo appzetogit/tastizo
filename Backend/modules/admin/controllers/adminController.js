@@ -32,8 +32,44 @@ const logger = winston.createLogger({
  */
 export const getDashboardStats = asyncHandler(async (req, res) => {
   try {
-    const { period = "overall" } = req.query;
+    const { period = "overall", zone } = req.query;
     const now = new Date();
+
+    // Resolve zone to zoneId for filtering (when zone is not "all")
+    let zoneIdFilter = null;
+    let zoneMatch = {}; // Applied to order queries when zone filter is active
+    const Zone = (await import("../models/Zone.js")).default;
+
+    if (zone && zone !== "all") {
+      if (mongoose.Types.ObjectId.isValid(zone) && String(new mongoose.Types.ObjectId(zone)) === zone) {
+        zoneIdFilter = zone;
+      } else {
+        const zoneDoc = await Zone.findOne({
+          $or: [
+            { name: { $regex: new RegExp(`^${String(zone).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") } },
+            { zoneName: { $regex: new RegExp(`^${String(zone).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") } },
+          ],
+          isActive: true,
+        })
+          .select("_id")
+          .lean();
+        if (zoneDoc) zoneIdFilter = zoneDoc._id.toString();
+      }
+
+      if (zoneIdFilter) {
+        const totalZones = await Zone.countDocuments({ isActive: true });
+        // When only one zone exists, include orders without zoneId (legacy orders belong to that zone)
+        if (totalZones === 1) {
+          zoneMatch.$or = [
+            { "assignmentInfo.zoneId": zoneIdFilter },
+            { "assignmentInfo.zoneId": { $in: [null, ""] } },
+            { "assignmentInfo.zoneId": { $exists: false } },
+          ];
+        } else {
+          zoneMatch["assignmentInfo.zoneId"] = zoneIdFilter;
+        }
+      }
+    }
     const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     // Date range based on period filter
@@ -59,6 +95,9 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     };
     if (Object.keys(dateFilter).length > 0) {
       revenueMatch.deliveredAt = dateFilter;
+    }
+    if (Object.keys(zoneMatch).length > 0) {
+      Object.assign(revenueMatch, zoneMatch);
     }
 
     // Get total revenue (sum of all completed orders)
@@ -89,11 +128,13 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       last30DaysRevenue: 0,
     };
 
-    // Get all settlements for delivered orders only (to match with revenue calculation)
-    // First get delivered order IDs (with period filter if applied)
+    // Get all settlements for delivered orders only (with period and zone filter)
     const deliveredOrderMatch = { status: "delivered" };
     if (Object.keys(dateFilter).length > 0) {
       deliveredOrderMatch.deliveredAt = dateFilter;
+    }
+    if (Object.keys(zoneMatch).length > 0) {
+      Object.assign(deliveredOrderMatch, zoneMatch);
     }
     const deliveredOrderIds = await Order.find(deliveredOrderMatch)
       .select("_id")
@@ -178,10 +219,13 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       0,
     );
 
-    // Get order statistics (with period filter on createdAt)
+    // Get order statistics (with period and zone filter)
     const orderStatsMatch = {};
     if (Object.keys(dateFilter).length > 0) {
       orderStatsMatch.createdAt = dateFilter;
+    }
+    if (Object.keys(zoneMatch).length > 0) {
+      Object.assign(orderStatsMatch, zoneMatch);
     }
     const orderStats = await Order.aggregate([
       ...(Object.keys(orderStatsMatch).length > 0 ? [{ $match: orderStatsMatch }] : []),
@@ -198,10 +242,13 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       orderStatusMap[stat._id] = stat.count;
     });
 
-    // Get total orders processed (with period filter)
+    // Get total orders processed (with period and zone filter)
     const totalOrdersMatch = { status: "delivered" };
     if (Object.keys(dateFilter).length > 0) {
       totalOrdersMatch.deliveredAt = dateFilter;
+    }
+    if (Object.keys(zoneMatch).length > 0) {
+      Object.assign(totalOrdersMatch, zoneMatch);
     }
     const totalOrders = await Order.countDocuments(totalOrdersMatch);
 
@@ -399,11 +446,15 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
         999,
       );
 
-      // Get orders delivered in this month
-      const monthOrders = await Order.find({
+      // Get orders delivered in this month (with zone filter if applied)
+      const monthOrderMatch = {
         status: "delivered",
         deliveredAt: { $gte: monthStart, $lte: monthEnd },
-      })
+      };
+      if (Object.keys(zoneMatch).length > 0) {
+        Object.assign(monthOrderMatch, zoneMatch);
+      }
+      const monthOrders = await Order.find(monthOrderMatch)
         .select("_id pricing deliveredAt")
         .lean();
 

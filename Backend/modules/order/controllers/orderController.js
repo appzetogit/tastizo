@@ -374,6 +374,12 @@ export const createOrder = async (req, res) => {
         method: normalizedPaymentMethod,
         status: "pending",
       },
+      assignmentInfo: restaurantZone
+        ? {
+            zoneId: restaurantZone._id.toString(),
+            zoneName: restaurantZone.name || restaurantZone.zoneName || null,
+          }
+        : undefined,
     });
 
     // Parse preparation time from order items

@@ -1,13 +1,24 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { motion } from 'framer-motion'
 
+// Build optimized URL - Cloudinary uses path transforms, others use query params
+const buildOptimizedUrl = (imageSrc, width, useWebP = false) => {
+  if (imageSrc.includes('res.cloudinary.com')) {
+    const transform = `w_${width},q_75${useWebP ? ',f_webp' : ''}`
+    // Insert transform after /upload/ and before version (v123) or path
+    return imageSrc.replace(/\/upload\/(?:[^/]*\/)?(v\d+\/)/, `/upload/${transform}/$1`)
+  }
+  const sep = imageSrc.includes('?') ? '&' : '?'
+  return `${imageSrc}${sep}w=${width}&q=75${useWebP ? '&format=webp' : ''}`
+}
+
 /**
  * OptimizedImage Component
  * 
  * Features:
  * - Lazy loading with Intersection Observer
  * - Responsive srcset for different screen sizes
- * - WebP/AVIF format support with fallback
+ * - WebP format support with fallback
  * - Blur placeholder (LQIP) for smooth loading
  * - Preloading for critical images
  * - Proper decoding and fetchpriority
@@ -36,27 +47,24 @@ const OptimizedImage = React.memo(({
   const supportsOptimization = (imageSrc) => {
     if (!imageSrc || typeof imageSrc !== 'string' || imageSrc === '') return false
     if (imageSrc.startsWith('data:') || imageSrc.startsWith('/')) return false
-    // Check if it's an external URL (http/https)
     return /^https?:\/\//.test(imageSrc)
   }
 
-  // Generate responsive srcset
+  // Sizes array: include smaller widths for thumbnails (64-96px display = 128-200w)
+  const sizesArr = useMemo(() => {
+    const isSmall = /6[4-9]px|7[0-9]px|8[0-9]px|9[0-6]px/.test(sizes)
+    return isSmall ? [128, 200, 400, 600, 800] : [200, 400, 600, 800, 1200, 1600]
+  }, [sizes])
+
   const srcSet = useMemo(() => {
     if (!supportsOptimization(src)) return undefined
-    const sizesArr = [400, 600, 800, 1200, 1600]
-    return sizesArr
-      .map(size => `${src}?w=${size}&q=80 ${size}w`)
-      .join(', ')
-  }, [src])
+    return sizesArr.map(size => `${buildOptimizedUrl(src, size, false)} ${size}w`).join(', ')
+  }, [src, sizesArr])
 
-  // Generate WebP srcset
   const webPSrcSet = useMemo(() => {
     if (!supportsOptimization(src)) return undefined
-    const sizesArr = [400, 600, 800, 1200, 1600]
-    return sizesArr
-      .map(size => `${src}?w=${size}&q=80&format=webp ${size}w`)
-      .join(', ')
-  }, [src])
+    return sizesArr.map(size => `${buildOptimizedUrl(src, size, true)} ${size}w`).join(', ')
+  }, [src, sizesArr])
 
   // Intersection Observer for lazy loading
   useEffect(() => {
@@ -91,20 +99,18 @@ const OptimizedImage = React.memo(({
     }
   }, [priority, isInView])
 
-  // Preload critical images
+  // Preload critical images with optimized URL
   useEffect(() => {
-    if (priority && src && !src.startsWith('data:')) {
+    if (priority && src && !src.startsWith('data:') && supportsOptimization(src)) {
+      const preloadSrc = buildOptimizedUrl(src, 400, true)
       const link = document.createElement('link')
       link.rel = 'preload'
       link.as = 'image'
-      link.href = src
+      link.href = preloadSrc
       link.fetchPriority = 'high'
       link.crossOrigin = 'anonymous'
       document.head.appendChild(link)
-
-      return () => {
-        document.head.removeChild(link)
-      }
+      return () => document.head.removeChild(link)
     }
   }, [priority, src])
 

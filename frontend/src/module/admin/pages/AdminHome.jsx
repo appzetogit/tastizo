@@ -31,6 +31,22 @@ export default function AdminHome() {
   const [selectedPeriod, setSelectedPeriod] = useState("overall")
   const [isLoading, setIsLoading] = useState(true)
   const [dashboardData, setDashboardData] = useState(null)
+  const [zones, setZones] = useState([])
+
+  // Fetch zones for filter dropdown
+  useEffect(() => {
+    const fetchZones = async () => {
+      try {
+        const res = await adminAPI.getZones({ limit: 100, isActive: "true" })
+        if (res?.data?.success && res?.data?.data?.zones) {
+          setZones(res.data.data.zones)
+        }
+      } catch (err) {
+        console.error("Failed to fetch zones:", err)
+      }
+    }
+    fetchZones()
+  }, [])
 
   // Fetch dashboard stats when filters change
   useEffect(() => {
@@ -152,10 +168,11 @@ export default function AdminHome() {
               </SelectTrigger>
               <SelectContent className="border-neutral-200 bg-white text-neutral-900">
                 <SelectItem value="all">All zones</SelectItem>
-                <SelectItem value="zone1">Zone 1</SelectItem>
-                <SelectItem value="zone2">Zone 2</SelectItem>
-                <SelectItem value="zone3">Zone 3</SelectItem>
-                <SelectItem value="zone4">Zone 4</SelectItem>
+                {zones.map((z) => (
+                  <SelectItem key={z._id} value={z._id}>
+                    {z.name || z.zoneName || z.serviceLocation || z._id}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>

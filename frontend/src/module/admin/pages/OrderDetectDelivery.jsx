@@ -6,6 +6,7 @@ import OrdersTopbar from "../components/orders/OrdersTopbar"
 import OrderDetectDeliveryTable from "../components/orders/OrderDetectDeliveryTable"
 import ViewOrderDetectDeliveryDialog from "../components/orders/ViewOrderDetectDeliveryDialog"
 import SettingsDialog from "../components/orders/SettingsDialog"
+import OrderDetectDeliveryFilterPanel from "../components/orders/OrderDetectDeliveryFilterPanel"
 import { useGenericTableManagement } from "../components/orders/useGenericTableManagement"
 
 // Function to map backend order status to frontend display status
@@ -469,6 +470,14 @@ export default function OrderDetectDelivery() {
         </div>
       </div>
 
+      <OrderDetectDeliveryFilterPanel
+        isOpen={isFilterOpen}
+        onClose={() => setIsFilterOpen(false)}
+        filters={filters}
+        setFilters={setFilters}
+        onApply={handleApplyFilters}
+        onReset={handleResetFilters}
+      />
       <SettingsDialog
         isOpen={isSettingsOpen}
         onOpenChange={setIsSettingsOpen}

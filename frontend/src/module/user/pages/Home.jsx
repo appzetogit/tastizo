@@ -1431,7 +1431,7 @@ export default function Home() {
           >
             <div
               ref={categoryScrollRef}
-              className="flex gap-3 sm:gap-4 overflow-x-auto overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 lg:px-4 pt-0.5 sm:pt-1 pb-0"
+              className="flex gap-4 sm:gap-5 overflow-x-auto overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 lg:px-4 pt-0.5 sm:pt-1 pb-1.5 sm:pb-2"
               style={{
                 scrollbarWidth: "none",
                 msOverflowStyle: "none",
@@ -1452,6 +1452,11 @@ export default function Home() {
                   <img
                     src={offerImage}
                     alt="Special Offer"
+                    width={96}
+                    height={96}
+                    fetchPriority="high"
+                    loading="eager"
+                    decoding="async"
                     className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300"
                   />
                 </div>
@@ -1485,6 +1490,7 @@ export default function Home() {
                             sizes="(max-width: 640px) 64px, (max-width: 768px) 80px, 96px"
                             objectFit="cover"
                             placeholder="blur"
+                            priority={index === 0}
                             onError={() => { }}
                           />
                         </div>
@@ -1494,29 +1500,6 @@ export default function Home() {
                       </Link>
                     </motion.div>
                   ))}
-                  {/* See All button - show if there are more than 10 categories */}
-                  {realCategories.length > 10 && (
-                    <motion.div
-                      className="flex-shrink-0 cursor-pointer"
-                      initial={{ opacity: 1, scale: 1 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0 }}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setShowAllCategoriesModal(true)}
-                    >
-                      <div className="relative w-32 h-36 sm:w-36 sm:h-40 md:w-40 md:h-44 bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-sm border border-slate-100 dark:border-gray-800 overflow-hidden group hover:shadow-md transition-all flex items-center justify-center">
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-pink-100 dark:bg-pink-900/50 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <UtensilsCrossed className="w-5 h-5 sm:w-6 sm:h-6 text-pink-600 dark:text-pink-400" />
-                          </div>
-                          <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-white">
-                            See all
-                          </span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
                 </>
               ) : landingCategories.length > 0 ? (
                 <>
@@ -1535,6 +1518,7 @@ export default function Home() {
                             sizes="(max-width: 640px) 64px, (max-width: 768px) 80px, 96px"
                             objectFit="cover"
                             placeholder="blur"
+                            priority={index === 0}
                           />
                         </div>
                         <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 text-center whitespace-nowrap max-w-[80px] truncate">
@@ -1543,29 +1527,6 @@ export default function Home() {
                       </Link>
                     </div>
                   ))}
-                  {/* See All button - show if there are more than 10 categories */}
-                  {landingCategories.length > 10 && (
-                    <motion.div
-                      className="flex-shrink-0 cursor-pointer"
-                      initial={{ opacity: 1, scale: 1 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0 }}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setShowAllCategoriesModal(true)}
-                    >
-                      <div className="relative w-32 h-36 sm:w-36 sm:h-40 md:w-40 md:h-44 bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-sm border border-slate-100 dark:border-gray-800 overflow-hidden group hover:shadow-md transition-all flex items-center justify-center">
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-pink-100 dark:bg-pink-900/50 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <UtensilsCrossed className="w-5 h-5 sm:w-6 sm:h-6 text-pink-600 dark:text-pink-400" />
-                          </div>
-                          <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-white">
-                            See all
-                          </span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
                 </>
               ) : (
                 // No categories available from API
@@ -1578,13 +1539,13 @@ export default function Home() {
 
           {/* Filters */}
           <motion.section
-            className="-mt-6 sm:-mt-8 pt-0 pb-0"
+            className="mt-3 sm:mt-4 pt-0 pb-0"
             initial={{ opacity: 1, y: 0 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0 }}
           >
             <div
-              className="flex items-center gap-0 overflow-x-auto scrollbar-hide pb-0.5 lg:pb-1"
+              className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto scrollbar-hide pb-0.5 lg:pb-1"
               style={{
                 scrollbarWidth: "none",
                 msOverflowStyle: "none",

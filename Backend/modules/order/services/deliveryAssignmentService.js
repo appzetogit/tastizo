@@ -362,8 +362,10 @@ export async function assignOrderToDeliveryBoy(order, restaurantLat, restaurantL
 
     // Update order with delivery partner assignment
     // Note: Don't set outForDelivery yet - that should happen when delivery boy picks up the order
+    // Preserve zoneId/zoneName from order creation for dashboard filtering
     order.deliveryPartnerId = nearestDeliveryBoy.deliveryPartnerId;
     order.assignmentInfo = {
+      ...(order.assignmentInfo || {}),
       deliveryPartnerId: nearestDeliveryBoy.deliveryPartnerId,
       distance: nearestDeliveryBoy.distance,
       assignedAt: new Date(),

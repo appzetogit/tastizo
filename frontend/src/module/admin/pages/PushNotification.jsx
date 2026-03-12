@@ -1,5 +1,11 @@
-import { useState, useMemo } from "react"
-import { Search, Download, ChevronDown, Bell, Edit, Trash2, Upload, Settings, Image as ImageIcon } from "lucide-react"
+import { useState, useMemo, useRef } from "react"
+import { Search, Download, Bell, Edit, Trash2, Upload, Settings, Image as ImageIcon } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { adminAPI } from "../../../lib/api/index.js"
 import { pushNotificationsDummy } from "../data/pushNotificationsDummy"
 // Using placeholders for notification images
@@ -19,9 +25,13 @@ export default function PushNotification() {
     zone: "All",
     sendTo: "Customer",
     description: "",
+    bannerImage: null,
   })
   const [searchQuery, setSearchQuery] = useState("")
   const [notifications, setNotifications] = useState(pushNotificationsDummy)
+  const [editingNotification, setEditingNotification] = useState(null)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const fileInputRef = useRef(null)
 
   const filteredNotifications = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -74,7 +84,49 @@ export default function PushNotification() {
       zone: "All",
       sendTo: "Customer",
       description: "",
+      bannerImage: null,
     })
+  }
+
+  const handleBannerUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (file && file.type.startsWith("image/") && file.size <= 2 * 1024 * 1024) {
+      const reader = new FileReader()
+      reader.onload = () => setFormData(prev => ({ ...prev, bannerImage: reader.result }))
+      reader.readAsDataURL(file)
+    } else if (file) {
+      alert("Please upload an image (jpg, png, jpeg, gif, webp) under 2 MB.")
+    }
+  }
+
+  const handleEditNotification = (notification) => {
+    setEditingNotification(notification)
+    setFormData({
+      title: notification.title || "",
+      zone: notification.zone || "All",
+      sendTo: notification.target || "Customer",
+      description: notification.description || "",
+    })
+  }
+
+  const handleExportNotifications = () => {
+    const headers = ["SI", "Title", "Description", "Zone", "Target", "Status"]
+    const rows = filteredNotifications.map(n => [
+      n.sl,
+      n.title,
+      n.description,
+      n.zone,
+      n.target,
+      n.status ? "Active" : "Inactive",
+    ])
+    const csv = [headers.join(","), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(","))].join("\n")
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "notifications.csv"
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const handleToggleStatus = (sl) => {
@@ -150,8 +202,22 @@ export default function PushNotification() {
               <label className="block text-sm font-semibold text-slate-700 mb-3">
                 Notification banner
               </label>
-              <div className="border-2 border-dashed border-slate-300 rounded-lg p-12 text-center hover:border-blue-500 transition-colors cursor-pointer">
-                <Upload className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/jpg,image/gif,image/webp"
+                className="hidden"
+                onChange={handleBannerUpload}
+              />
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-slate-300 rounded-lg p-12 text-center hover:border-blue-500 transition-colors cursor-pointer"
+              >
+                {formData.bannerImage ? (
+                  <img src={formData.bannerImage} alt="Banner preview" className="max-h-24 mx-auto mb-2 rounded object-cover" />
+                ) : (
+                  <Upload className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                )}
                 <p className="text-sm font-medium text-blue-600 mb-1">Upload Image</p>
                 <p className="text-xs text-slate-500">Image format - jpg png jpeg gif webp Image Size -maximum size 2 MB Image Ratio - 3:1</p>
               </div>
@@ -186,7 +252,12 @@ export default function PushNotification() {
                 >
                   Send Notification
                 </button>
-                <button className="p-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-all">
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="p-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-all"
+                  title="Notification settings"
+                >
                   <Settings className="w-5 h-5" />
                 </button>
               </div>
@@ -216,10 +287,12 @@ export default function PushNotification() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               </div>
 
-              <button className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all">
+              <button
+                onClick={handleExportNotifications}
+                className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all"
+              >
                 <Download className="w-4 h-4" />
                 <span>Export</span>
-                <ChevronDown className="w-3 h-3" />
               </button>
             </div>
           </div>
@@ -295,6 +368,7 @@ export default function PushNotification() {
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
+                          onClick={() => handleEditNotification(notification)}
                           className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition-colors"
                           title="Edit"
                         >
@@ -316,6 +390,17 @@ export default function PushNotification() {
           </div>
         </div>
       </div>
+
+      <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Notification Settings</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-sm text-slate-600">
+            Configure default notification preferences, delivery options, and templates here.
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

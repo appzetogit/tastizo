@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
-import { Eye, Printer, ArrowUpDown, Loader2, Phone } from "lucide-react"
+import { Eye, Download, ArrowUpDown, Loader2, Phone } from "lucide-react"
 
 const getStatusColor = (orderStatus) => {
   const colors = {
@@ -320,9 +320,9 @@ export default function OrdersTable({ orders, visibleColumns, onViewOrder, onPri
                       <button
                         onClick={() => onPrintOrder(order)}
                         className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition-colors"
-                        title="Print Order"
+                        title="Download Order"
                       >
-                        <Printer className="w-4 h-4" />
+                        <Download className="w-4 h-4" />
                       </button>
                       {/* Show Refund button or Refunded status for cancelled orders with Online/Wallet payment (restaurant or user cancelled) */}
                       {(() => {
