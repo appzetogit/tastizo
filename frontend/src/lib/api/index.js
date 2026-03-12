@@ -1113,9 +1113,9 @@ export const adminAPI = {
     });
   },
 
-  // Get dashboard stats
-  getDashboardStats: () => {
-    return apiClient.get(API_ENDPOINTS.ADMIN.DASHBOARD_STATS);
+  // Get dashboard stats (params: zone, period for filtering)
+  getDashboardStats: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DASHBOARD_STATS, { params });
   },
 
   // Send push notification

@@ -230,8 +230,8 @@ export default function UserOrderDetails() {
       toast.error("Restaurant phone number not available")
       return
     }
-    const tel = restaurantPhone.startsWith("+") ? restaurantPhone : `+91${restaurantPhone.replace(/\D/g, "").slice(-10)}`
-    window.location.href = `tel:${tel}`
+    const digits = restaurantPhone.replace(/\D/g, "").slice(-10)
+    window.location.href = `tel:${digits}`
   }
 
   const handleSubmitRating = async () => {
@@ -674,8 +674,8 @@ export default function UserOrderDetails() {
           </div>
         </div>
 
-        {/* Rate Food Experience */}
-        {hasRated ? (
+        {/* Rate Food Experience - Only show after order is delivered */}
+        {(order.status === "delivered" || order.status === "completed") && (hasRated ? (
           <div className="bg-white p-4 rounded-xl shadow-sm space-y-4">
             <h3 className="font-semibold text-gray-800 text-base text-center">
               Thanks for rating your food experience!
@@ -758,10 +758,11 @@ export default function UserOrderDetails() {
               )}
             </button>
           </div>
-        )}
+        ))}
       </div>
 
-      {/* Fixed Bottom Buttons */}
+      {/* Fixed Bottom Buttons - Only show after order is delivered */}
+      {(order.status === "delivered" || order.status === "completed") && (
       <div className="fixed bottom-0 w-full bg-white border-t border-gray-200 p-4 flex gap-3 z-20">
         <button
           type="button"
@@ -780,9 +781,10 @@ export default function UserOrderDetails() {
           Invoice
         </button>
       </div>
+      )}
 
-      {/* Restaurant Complaint Button - Below Order Details */}
-      {order && (
+      {/* Restaurant Complaint Button - Only show after order is delivered */}
+      {order && (order.status === "delivered" || order.status === "completed") && (
         <div className="p-4 pb-24">
           <button
             type="button"

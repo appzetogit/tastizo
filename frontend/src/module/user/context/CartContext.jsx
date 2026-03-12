@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import VariantPickerModal from "../components/VariantPickerModal"
+import ReplaceCartModal from "../components/ReplaceCartModal"
 
 // Build cart item from (item, restaurant, variation?). Used for add-to-cart and variant flow.
 function buildCartItem(item, restaurant, variation = null) {
@@ -81,6 +82,9 @@ export function CartProvider({ children }) {
 
   // Global variant picker: show "Choose option" on any page when item has variations
   const [variantPicker, setVariantPicker] = useState({ item: null, restaurant: null })
+
+  // Replace cart modal: when user adds from different restaurant, show confirm dialog
+  const [replaceCartPending, setReplaceCartPending] = useState(null)
 
   const openVariantPicker = useCallback((item, restaurant) => {
     if (item?.variations?.length) {
@@ -174,47 +178,34 @@ export function CartProvider({ children }) {
   }, [])
 
   const addToCart = (item, sourcePosition = null) => {
-    setCart((prev) => {
-      // CRITICAL: Validate restaurant consistency
-      // If cart already has items, ensure new item belongs to the same restaurant
-      if (prev.length > 0) {
-        const firstItemRestaurantId = prev[0]?.restaurantId;
-        const firstItemRestaurantName = prev[0]?.restaurant;
-        const newItemRestaurantId = item?.restaurantId;
-        const newItemRestaurantName = item?.restaurant;
-        
-        // Normalize restaurant names for comparison (trim and case-insensitive)
-        const normalizeName = (name) => name ? name.trim().toLowerCase() : '';
-        const firstRestaurantNameNormalized = normalizeName(firstItemRestaurantName);
-        const newRestaurantNameNormalized = normalizeName(newItemRestaurantName);
-        
-        // Check restaurant name first (more reliable than IDs which can have different formats)
-        // If names match, allow it even if IDs differ (same restaurant, different ID format)
-        if (firstRestaurantNameNormalized && newRestaurantNameNormalized) {
-          if (firstRestaurantNameNormalized !== newRestaurantNameNormalized) {
-            console.error('❌ Cannot add item: Restaurant name mismatch!', {
-              cartRestaurantId: firstItemRestaurantId,
-              cartRestaurantName: firstItemRestaurantName,
-              newItemRestaurantId: newItemRestaurantId,
-              newItemRestaurantName: newItemRestaurantName
-            });
-            throw new Error(`Cart already contains items from "${firstItemRestaurantName}". Please clear cart or complete order first.`);
-          }
-          // Names match - allow it (even if IDs differ, it's the same restaurant)
-        } else if (firstItemRestaurantId && newItemRestaurantId) {
-          // If names are not available, fallback to ID comparison
-          if (firstItemRestaurantId !== newItemRestaurantId) {
-            console.error('❌ Cannot add item: Cart contains items from different restaurant!', {
-              cartRestaurantId: firstItemRestaurantId,
-              cartRestaurantName: firstItemRestaurantName,
-              newItemRestaurantId: newItemRestaurantId,
-              newItemRestaurantName: newItemRestaurantName
-            });
-            throw new Error(`Cart already contains items from "${firstItemRestaurantName || 'another restaurant'}". Please clear cart or complete order first.`);
-          }
-        }
+    // Check restaurant mismatch BEFORE setCart (to show Replace modal instead of throwing)
+    if (cart.length > 0) {
+      const firstItemRestaurantName = cart[0]?.restaurant;
+      const newItemRestaurantName = item?.restaurant;
+      const firstItemRestaurantId = cart[0]?.restaurantId;
+      const newItemRestaurantId = item?.restaurantId;
+
+      const normalizeName = (name) => name ? name.trim().toLowerCase() : '';
+      const firstRestaurantNameNormalized = normalizeName(firstItemRestaurantName);
+      const newRestaurantNameNormalized = normalizeName(newItemRestaurantName);
+
+      const isDifferentRestaurant =
+        (firstRestaurantNameNormalized && newRestaurantNameNormalized && firstRestaurantNameNormalized !== newRestaurantNameNormalized) ||
+        ((!firstRestaurantNameNormalized || !newRestaurantNameNormalized) && firstItemRestaurantId && newItemRestaurantId && String(firstItemRestaurantId) !== String(newItemRestaurantId));
+
+      if (isDifferentRestaurant) {
+        closeVariantPicker();
+        setReplaceCartPending({
+          cartRestaurantName: firstItemRestaurantName || 'another restaurant',
+          newRestaurantName: newItemRestaurantName || 'this restaurant',
+          item: { ...item, quantity: 1 },
+          sourcePosition,
+        });
+        return;
       }
-      
+    }
+
+    setCart((prev) => {
       // Same line = same item id + same variant (both no variant or same variationId)
       const lineKey = (i) => (i.selectedVariation?.variationId ? `${i.id}_${i.selectedVariation.variationId}` : i.id)
       const itemLineKey = lineKey(item)
@@ -340,6 +331,26 @@ export function CartProvider({ children }) {
   }
 
   const clearCart = () => setCart([])
+
+  const confirmReplaceCart = useCallback(() => {
+    if (!replaceCartPending) return
+    const { item, sourcePosition } = replaceCartPending
+    setReplaceCartPending(null)
+    closeVariantPicker()
+    setCart([item])
+    if (sourcePosition) {
+      setLastAddEvent({
+        product: { id: item.id, name: item.name, imageUrl: item.image || item.imageUrl },
+        sourcePosition,
+      })
+      setTimeout(() => setLastAddEvent(null), 1500)
+    }
+    toast.success("Added to cart")
+  }, [replaceCartPending])
+
+  const cancelReplaceCart = useCallback(() => {
+    setReplaceCartPending(null)
+  }, [])
 
   // Clean cart to remove items from different restaurants
   // Keeps only items from the specified restaurant
@@ -494,6 +505,13 @@ export function CartProvider({ children }) {
           onClose={closeVariantPicker}
         />
       )}
+      <ReplaceCartModal
+        isOpen={!!replaceCartPending}
+        cartRestaurantName={replaceCartPending?.cartRestaurantName}
+        newRestaurantName={replaceCartPending?.newRestaurantName}
+        onReplace={confirmReplaceCart}
+        onCancel={cancelReplaceCart}
+      />
     </CartContext.Provider>
   )
 }

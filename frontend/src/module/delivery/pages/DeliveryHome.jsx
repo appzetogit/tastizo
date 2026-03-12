@@ -7762,16 +7762,16 @@ export default function DeliveryHome() {
 
   // Bike marker update removed (Ola Maps removed)
 
-  // Carousel slides data - filter based on bank details status
+  // Carousel slides data - always show "Submit Bank Details" (even when filled, for editing)
   const carouselSlides = useMemo(() => [
-    ...(bankDetailsFilled ? [] : [{
+    {
       id: 2,
       title: "Submit bank details",
-      subtitle: "PAN & bank details required for payouts",
+      subtitle: bankDetailsFilled ? "Update your PAN & bank details for payouts" : "PAN & bank details required for payouts",
       icon: "bank",
       buttonText: "Submit",
       bgColor: "bg-yellow-400"
-    }])
+    }
   ], [bankDetailsFilled])
 
   // Auto-rotate carousel

@@ -106,6 +106,11 @@ export default function SignupStep1() {
       nextValue = value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10)
     }
 
+    if (name === "name") {
+      // Full name: only letters and spaces (no numbers/special chars)
+      nextValue = value.replace(/[^a-zA-Z\s]/g, "").trimStart()
+    }
+
     if (name === "aadharNumber") {
       // Only digits, format as XXXX XXXX XXXX
       const digits = value.replace(/\D/g, "").slice(0, 12)
@@ -149,6 +154,8 @@ export default function SignupStep1() {
     switch (name) {
       case "name":
         if (!trimmed) fieldError = "Name is required"
+        else if (!/^[a-zA-Z\s]{2,}$/.test(trimmed)) fieldError = "Enter valid name (letters and spaces only)"
+        else if (trimmed.split(/\s+/).filter(Boolean).length < 2) fieldError = "Please enter first and last name"
         break
       case "email":
         if (trimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
@@ -209,6 +216,10 @@ export default function SignupStep1() {
 
     if (!formData.name.trim()) {
       newErrors.name = "Name is required"
+    } else if (!/^[a-zA-Z\s]{2,}$/.test(formData.name.trim())) {
+      newErrors.name = "Enter valid name (letters and spaces only)"
+    } else if (formData.name.trim().split(/\s+/).filter(Boolean).length < 2) {
+      newErrors.name = "Please enter first and last name"
     }
 
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {

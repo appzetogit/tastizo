@@ -178,6 +178,9 @@ export default function RestaurantOnboarding() {
   const [saving, setSaving] = useState(false)
   const mainContentRef = useRef(null)
   const [error, setError] = useState("")
+  const panCameraInputRef = useRef(null)
+  const fssaiCameraInputRef = useRef(null)
+  const gstCameraInputRef = useRef(null)
 
   const [step1, setStep1] = useState({
     restaurantName: "",
@@ -229,6 +232,81 @@ export default function RestaurantOnboarding() {
     offer: "",
   })
 
+  const [step3Errors, setStep3Errors] = useState({})
+
+  const validateStep3Field = (field, value, allStep3 = step3) => {
+    const s = { ...allStep3, [field]: value }
+    switch (field) {
+      case "panNumber":
+        if (!s.panNumber?.trim()) return "PAN number is required"
+        if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(s.panNumber.trim().toUpperCase()))
+          return "5 letters + 4 digits + 1 letter (e.g., ABCDE1234F)"
+        return ""
+      case "nameOnPan":
+        if (!s.nameOnPan?.trim()) return "Name on PAN is required"
+        if (!/^[a-zA-Z\s]+$/.test(s.nameOnPan.trim())) return "Name on PAN must contain only letters"
+        return ""
+      case "panImage":
+        if (!s.panImage) return "PAN image is required"
+        const validPan = s.panImage instanceof File || (s.panImage?.url && typeof s.panImage.url === "string") || (typeof s.panImage === "string" && s.panImage.startsWith("http"))
+        return !validPan ? "Please upload a valid PAN image" : ""
+      case "fssaiNumber":
+        if (!s.fssaiNumber?.trim()) return "FSSAI number is required"
+        if (!/^\d{14}$/.test(s.fssaiNumber.trim())) return "FSSAI number must be 14 digits"
+        return ""
+      case "fssaiExpiry":
+        if (!s.fssaiExpiry?.trim()) return "FSSAI expiry date is required"
+        const expDate = new Date(s.fssaiExpiry + "T12:00:00")
+        if (expDate < new Date()) return "FSSAI expiry date must be in the future"
+        return ""
+      case "fssaiImage":
+        if (!s.fssaiImage) return "FSSAI image is required"
+        const validFssai = s.fssaiImage instanceof File || (s.fssaiImage?.url && typeof s.fssaiImage.url === "string") || (typeof s.fssaiImage === "string" && s.fssaiImage.startsWith("http"))
+        return !validFssai ? "Please upload a valid FSSAI image" : ""
+      case "gstNumber":
+        return s.gstRegistered && !s.gstNumber?.trim() ? "GST number is required" : ""
+      case "gstLegalName":
+        return s.gstRegistered && !s.gstLegalName?.trim() ? "Legal name is required" : ""
+      case "gstAddress":
+        return s.gstRegistered && !s.gstAddress?.trim() ? "Registered address is required" : ""
+      case "gstImage":
+        if (!s.gstRegistered) return ""
+        if (!s.gstImage) return "GST image is required"
+        const validGst = s.gstImage instanceof File || (s.gstImage?.url && typeof s.gstImage.url === "string") || (typeof s.gstImage === "string" && s.gstImage.startsWith("http"))
+        return !validGst ? "Please upload a valid GST image" : ""
+      case "accountNumber":
+        if (!s.accountNumber?.trim()) return "Account number is required"
+        if (!/^\d+$/.test(s.accountNumber.trim())) return "Account number must contain only digits"
+        if (s.accountNumber.trim().length < 9) return "Account number must be at least 9 digits"
+        if (s.accountNumber.trim().length > 18) return "Account number must be at most 18 digits"
+        return ""
+      case "confirmAccountNumber":
+        if (!s.confirmAccountNumber?.trim()) return "Please re-enter account number"
+        if (s.accountNumber?.trim() !== s.confirmAccountNumber?.trim()) return "Account numbers do not match"
+        return ""
+      case "ifscCode":
+        if (!s.ifscCode?.trim()) return "IFSC code is required"
+        if (s.ifscCode.trim().length !== 11) return "IFSC code must be exactly 11 characters"
+        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(s.ifscCode.trim().toUpperCase())) return "Invalid IFSC format (e.g., SBIN0018764)"
+        return ""
+      case "accountType":
+        if (!s.accountType?.trim()) return "Account type is required"
+        const at = s.accountType.trim().toLowerCase()
+        if (at !== "savings" && at !== "current") return "Must be 'savings' or 'current'"
+        return ""
+      case "accountHolderName":
+        if (!s.accountHolderName?.trim()) return "Account holder name is required"
+        if (!/^[a-zA-Z\s]+$/.test(s.accountHolderName.trim())) return "Account holder name must contain only letters"
+        return ""
+      default:
+        return ""
+    }
+  }
+
+  const handleStep3Blur = (field) => {
+    const err = validateStep3Field(field, step3[field])
+    setStep3Errors((prev) => ({ ...prev, [field]: err || null }))
+  }
 
   // Load from localStorage on mount and check URL parameter
   useEffect(() => {
@@ -557,6 +635,8 @@ export default function RestaurantOnboarding() {
     }
     if (!step3.nameOnPan?.trim()) {
       errors.push("Name on PAN is required")
+    } else if (!/^[a-zA-Z\s]+$/.test(step3.nameOnPan.trim())) {
+      errors.push("Name on PAN must contain only letters")
     }
     // Validate PAN image - must be a File or existing URL
     if (!step3.panImage) {
@@ -573,9 +653,16 @@ export default function RestaurantOnboarding() {
 
     if (!step3.fssaiNumber?.trim()) {
       errors.push("FSSAI number is required")
+    } else if (!/^\d{14}$/.test(step3.fssaiNumber.trim())) {
+      errors.push("FSSAI number must be exactly 14 digits")
     }
     if (!step3.fssaiExpiry?.trim()) {
       errors.push("FSSAI expiry date is required")
+    } else {
+      const expDate = new Date(step3.fssaiExpiry + "T12:00:00")
+      if (expDate < new Date()) {
+        errors.push("FSSAI expiry date must be in the future")
+      }
     }
     // Validate FSSAI image - must be a File or existing URL
     if (!step3.fssaiImage) {
@@ -617,21 +704,33 @@ export default function RestaurantOnboarding() {
 
     if (!step3.accountNumber?.trim()) {
       errors.push("Account number is required")
+    } else if (!/^\d+$/.test(step3.accountNumber.trim())) {
+      errors.push("Account number must contain only digits")
+    } else if (step3.accountNumber.trim().length < 9 || step3.accountNumber.trim().length > 18) {
+      errors.push("Account number must be 9–18 digits")
     }
     if (!step3.confirmAccountNumber?.trim()) {
       errors.push("Please confirm your account number")
-    }
-    if (step3.accountNumber && step3.confirmAccountNumber && step3.accountNumber !== step3.confirmAccountNumber) {
+    } else if (step3.accountNumber !== step3.confirmAccountNumber) {
       errors.push("Account number and confirmation do not match")
     }
     if (!step3.ifscCode?.trim()) {
       errors.push("IFSC code is required")
+    } else if (step3.ifscCode.trim().length !== 11 || !/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(step3.ifscCode.trim())) {
+      errors.push("IFSC code must be 11 characters (e.g., SBIN0018764)")
     }
     if (!step3.accountHolderName?.trim()) {
       errors.push("Account holder name is required")
+    } else if (!/^[a-zA-Z\s]+$/.test(step3.accountHolderName.trim())) {
+      errors.push("Account holder name must contain only letters")
     }
     if (!step3.accountType?.trim()) {
       errors.push("Account type is required")
+    } else {
+      const at = step3.accountType.trim().toLowerCase()
+      if (at !== "savings" && at !== "current") {
+        errors.push("Account type must be 'savings' or 'current'")
+      }
     }
 
     return errors
@@ -737,26 +836,23 @@ export default function RestaurantOnboarding() {
       validationErrors = validateStep3()
     } else if (step === 4) {
       validationErrors = validateStep4()
-      console.log('🔍 Step 4 validation:', {
-        step4,
-        errors: validationErrors,
-        estimatedDeliveryTime: step4.estimatedDeliveryTime,
-        featuredDish: step4.featuredDish,
-        featuredPrice: step4.featuredPrice,
-        offer: step4.offer
-      })
     }
 
     if (validationErrors.length > 0) {
-      // Show error toast for each validation error
+      if (step === 3) {
+        const fields = ["panNumber", "nameOnPan", "panImage", "fssaiNumber", "fssaiExpiry", "fssaiImage", "gstNumber", "gstLegalName", "gstAddress", "gstImage", "accountNumber", "confirmAccountNumber", "ifscCode", "accountType", "accountHolderName"]
+        const errs = {}
+        fields.forEach((f) => {
+          const e = validateStep3Field(f, step3[f])
+          if (e) errs[f] = e
+        })
+        setStep3Errors(errs)
+      }
       validationErrors.forEach((error, index) => {
         setTimeout(() => {
-          toast.error(error, {
-            duration: 4000,
-          })
+          toast.error(error, { duration: 4000 })
         }, index * 100)
       })
-      console.log('❌ Validation failed:', validationErrors)
       return
     }
 
@@ -981,10 +1077,8 @@ export default function RestaurantOnboarding() {
         const response = await api.put("/restaurant/onboarding", payload)
         console.log('✅ Step3 response:', response?.data)
 
-        if (response?.data?.data?.onboarding) {
-          console.log('✅ Step3 data saved successfully')
-        }
         setStep(4)
+        setStep3Errors({})
       } else if (step === 4) {
         console.log('📤 Submitting Step 4:', step4)
         const payload = {
@@ -1476,20 +1570,30 @@ export default function RestaurantOnboarding() {
                   else { if (/[A-Z]/.test(c)) pan += c }
                 }
                 setStep3({ ...step3, panNumber: pan })
+                if (step3Errors.panNumber) setStep3Errors((p) => ({ ...p, panNumber: null }))
               }}
+              onBlur={() => handleStep3Blur("panNumber")}
               maxLength={10}
-              className="mt-1 bg-white text-sm text-black placeholder-black uppercase"
+              className={`mt-1 bg-white text-sm text-black placeholder-black uppercase ${step3Errors.panNumber ? "border-red-500" : ""}`}
               placeholder="ABCDE1234F"
             />
             <p className="text-[11px] text-gray-500 mt-1">5 letters + 4 digits + 1 letter (e.g., ABCDE1234F)</p>
+            {step3Errors.panNumber && <p className="text-xs text-red-500 mt-1">{step3Errors.panNumber}</p>}
           </div>
           <div>
             <Label className="text-xs text-gray-700">Name on PAN</Label>
             <Input
               value={step3.nameOnPan || ""}
-              onChange={(e) => setStep3({ ...step3, nameOnPan: e.target.value })}
-              className="mt-1 bg-white text-sm text-black placeholder-black"
+              onChange={(e) => {
+                const v = e.target.value.replace(/[^a-zA-Z\s]/g, "")
+                setStep3({ ...step3, nameOnPan: v })
+                if (step3Errors.nameOnPan) setStep3Errors((p) => ({ ...p, nameOnPan: null }))
+              }}
+              onBlur={() => handleStep3Blur("nameOnPan")}
+              className={`mt-1 bg-white text-sm text-black placeholder-black ${step3Errors.nameOnPan ? "border-red-500" : ""}`}
+              placeholder="Letters only (e.g., John Doe)"
             />
+            {step3Errors.nameOnPan && <p className="text-xs text-red-500 mt-1">{step3Errors.nameOnPan}</p>}
           </div>
         </div>
         <div>
@@ -1502,30 +1606,46 @@ export default function RestaurantOnboarding() {
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) => setStep3({ ...step3, panImage: e.target.files?.[0] || null })}
+                onChange={(e) => {
+                  setStep3({ ...step3, panImage: e.target.files?.[0] || null })
+                  setStep3Errors((p) => ({ ...p, panImage: null }))
+                }}
               />
             </label>
-            <label
-              className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50"
-              onClick={async (e) => {
-                if (hasFlutterCameraBridge()) {
-                  e.preventDefault()
-                  const { success, file } = await openCameraViaFlutter()
-                  if (success && file) setStep3({ ...step3, panImage: file })
-                }
-              }}
-            >
-              <Camera className="w-4 h-4" />
-              <span>Camera</span>
+            <>
               <Input
+                ref={panCameraInputRef}
                 type="file"
                 accept="image/*"
                 capture="environment"
                 className="hidden"
-                onChange={(e) => setStep3({ ...step3, panImage: e.target.files?.[0] || null })}
+                onChange={(e) => {
+                  setStep3({ ...step3, panImage: e.target.files?.[0] || null })
+                  setStep3Errors((p) => ({ ...p, panImage: null }))
+                  e.target.value = ""
+                }}
               />
-            </label>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50"
+                onClick={async () => {
+                  if (hasFlutterCameraBridge()) {
+                    const { success, file } = await openCameraViaFlutter()
+                    if (success && file) {
+                      setStep3({ ...step3, panImage: file })
+                      setStep3Errors((p) => ({ ...p, panImage: null }))
+                    }
+                  } else {
+                    panCameraInputRef.current?.click()
+                  }
+                }}
+              >
+                <Camera className="w-4 h-4" />
+                <span>Camera</span>
+              </button>
+            </>
           </div>
+          {step3Errors.panImage && <p className="text-xs text-red-500 mt-1">{step3Errors.panImage}</p>}
         </div>
       </section>
 
@@ -1552,24 +1672,45 @@ export default function RestaurantOnboarding() {
         </div>
         {step3.gstRegistered && (
           <div className="space-y-3">
-            <Input
-              value={step3.gstNumber || ""}
-              onChange={(e) => setStep3({ ...step3, gstNumber: e.target.value })}
-              className="bg-white text-sm"
-              placeholder="GST number"
-            />
-            <Input
-              value={step3.gstLegalName || ""}
-              onChange={(e) => setStep3({ ...step3, gstLegalName: e.target.value })}
-              className="bg-white text-sm"
-              placeholder="Legal name"
-            />
-            <Input
-              value={step3.gstAddress || ""}
-              onChange={(e) => setStep3({ ...step3, gstAddress: e.target.value })}
-              className="bg-white text-sm"
-              placeholder="Registered address"
-            />
+            <div>
+              <Input
+                value={step3.gstNumber || ""}
+                onChange={(e) => {
+                  setStep3({ ...step3, gstNumber: e.target.value })
+                  if (step3Errors.gstNumber) setStep3Errors((p) => ({ ...p, gstNumber: null }))
+                }}
+                onBlur={() => handleStep3Blur("gstNumber")}
+                className={`bg-white text-sm ${step3Errors.gstNumber ? "border-red-500" : ""}`}
+                placeholder="GST number"
+              />
+              {step3Errors.gstNumber && <p className="text-xs text-red-500 mt-1">{step3Errors.gstNumber}</p>}
+            </div>
+            <div>
+              <Input
+                value={step3.gstLegalName || ""}
+                onChange={(e) => {
+                  setStep3({ ...step3, gstLegalName: e.target.value })
+                  if (step3Errors.gstLegalName) setStep3Errors((p) => ({ ...p, gstLegalName: null }))
+                }}
+                onBlur={() => handleStep3Blur("gstLegalName")}
+                className={`bg-white text-sm ${step3Errors.gstLegalName ? "border-red-500" : ""}`}
+                placeholder="Legal name"
+              />
+              {step3Errors.gstLegalName && <p className="text-xs text-red-500 mt-1">{step3Errors.gstLegalName}</p>}
+            </div>
+            <div>
+              <Input
+                value={step3.gstAddress || ""}
+                onChange={(e) => {
+                  setStep3({ ...step3, gstAddress: e.target.value })
+                  if (step3Errors.gstAddress) setStep3Errors((p) => ({ ...p, gstAddress: null }))
+                }}
+                onBlur={() => handleStep3Blur("gstAddress")}
+                className={`bg-white text-sm ${step3Errors.gstAddress ? "border-red-500" : ""}`}
+                placeholder="Registered address"
+              />
+              {step3Errors.gstAddress && <p className="text-xs text-red-500 mt-1">{step3Errors.gstAddress}</p>}
+            </div>
             <div className="flex flex-wrap gap-2">
               <label className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50">
                 <Upload className="w-4 h-4" />
@@ -1577,35 +1718,47 @@ export default function RestaurantOnboarding() {
                 <Input
                   type="file"
                   accept="image/*"
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setStep3({ ...step3, gstImage: e.target.files?.[0] || null })
-                  }
+                    setStep3Errors((p) => ({ ...p, gstImage: null }))
+                  }}
                   className="hidden"
                 />
               </label>
-              <label
-                className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50"
-                onClick={async (e) => {
-                  if (hasFlutterCameraBridge()) {
-                    e.preventDefault()
-                    const { success, file } = await openCameraViaFlutter()
-                    if (success && file) setStep3({ ...step3, gstImage: file })
-                  }
-                }}
-              >
-                <Camera className="w-4 h-4" />
-                <span>Camera</span>
+              <>
                 <Input
+                  ref={gstCameraInputRef}
                   type="file"
                   accept="image/*"
                   capture="environment"
                   className="hidden"
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setStep3({ ...step3, gstImage: e.target.files?.[0] || null })
-                  }
+                    setStep3Errors((p) => ({ ...p, gstImage: null }))
+                    e.target.value = ""
+                  }}
                 />
-              </label>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50"
+                  onClick={async () => {
+                    if (hasFlutterCameraBridge()) {
+                      const { success, file } = await openCameraViaFlutter()
+                      if (success && file) {
+                        setStep3({ ...step3, gstImage: file })
+                        setStep3Errors((p) => ({ ...p, gstImage: null }))
+                      }
+                    } else {
+                      gstCameraInputRef.current?.click()
+                    }
+                  }}
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Camera</span>
+                </button>
+              </>
             </div>
+            {step3Errors.gstImage && <p className="text-xs text-red-500 mt-1">{step3Errors.gstImage}</p>}
           </div>
         )}
       </section>
@@ -1613,19 +1766,27 @@ export default function RestaurantOnboarding() {
       <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
         <h2 className="text-lg font-semibold text-black">FSSAI details</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            value={step3.fssaiNumber || ""}
-            onChange={(e) => setStep3({ ...step3, fssaiNumber: e.target.value })}
-            className="bg-white text-sm"
-            placeholder="FSSAI number"
-          />
+          <div>
+            <Input
+              value={step3.fssaiNumber || ""}
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, "").slice(0, 14)
+                setStep3({ ...step3, fssaiNumber: v })
+                if (step3Errors.fssaiNumber) setStep3Errors((p) => ({ ...p, fssaiNumber: null }))
+              }}
+              onBlur={() => handleStep3Blur("fssaiNumber")}
+              className={`bg-white text-sm ${step3Errors.fssaiNumber ? "border-red-500" : ""}`}
+              placeholder="FSSAI number (14 digits)"
+            />
+            {step3Errors.fssaiNumber && <p className="text-xs text-red-500 mt-1">{step3Errors.fssaiNumber}</p>}
+          </div>
           <div>
             <Label className="text-xs text-gray-700 mb-1 block">FSSAI expiry date</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md bg-white text-sm text-left flex items-center justify-between hover:bg-gray-50"
+                  className={`w-full px-3 py-2 border rounded-md bg-white text-sm text-left flex items-center justify-between hover:bg-gray-50 ${step3Errors.fssaiExpiry ? "border-red-500" : "border-gray-200"}`}
                 >
                   <span className={step3.fssaiExpiry ? "text-gray-900" : "text-gray-500"}>
                     {step3.fssaiExpiry
@@ -1648,7 +1809,10 @@ export default function RestaurantOnboarding() {
                       const y = date.getFullYear()
                       const m = String(date.getMonth() + 1).padStart(2, "0")
                       const d = String(date.getDate()).padStart(2, "0")
-                      setStep3({ ...step3, fssaiExpiry: `${y}-${m}-${d}` })
+                      const val = `${y}-${m}-${d}`
+                      setStep3({ ...step3, fssaiExpiry: val })
+                      const err = validateStep3Field("fssaiExpiry", val)
+                      setStep3Errors((p) => ({ ...p, fssaiExpiry: err || null }))
                     }
                   }}
                   initialFocus
@@ -1656,6 +1820,7 @@ export default function RestaurantOnboarding() {
                 />
               </PopoverContent>
             </Popover>
+            {step3Errors.fssaiExpiry && <p className="text-xs text-red-500 mt-1">{step3Errors.fssaiExpiry}</p>}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1666,80 +1831,130 @@ export default function RestaurantOnboarding() {
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(e) =>
+              onChange={(e) => {
                 setStep3({ ...step3, fssaiImage: e.target.files?.[0] || null })
-              }
+                setStep3Errors((p) => ({ ...p, fssaiImage: null }))
+              }}
             />
           </label>
-          <label
-            className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50"
-            onClick={async (e) => {
-              if (hasFlutterCameraBridge()) {
-                e.preventDefault();
-                const { success, file } = await openCameraViaFlutter();
-                if (success && file) {
-                  setStep3({ ...step3, fssaiImage: file });
-                }
-              }
-            }}
-          >
-            <Camera className="w-4 h-4" />
-            <span>Camera</span>
+          <>
             <Input
+              ref={fssaiCameraInputRef}
               type="file"
               accept="image/*"
               capture="environment"
               className="hidden"
-              onChange={(e) =>
+              onChange={(e) => {
                 setStep3({ ...step3, fssaiImage: e.target.files?.[0] || null })
-              }
+                setStep3Errors((p) => ({ ...p, fssaiImage: null }))
+                e.target.value = ""
+              }}
             />
-          </label>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm cursor-pointer hover:bg-gray-50"
+              onClick={async () => {
+                if (hasFlutterCameraBridge()) {
+                  const { success, file } = await openCameraViaFlutter()
+                  if (success && file) {
+                    setStep3({ ...step3, fssaiImage: file })
+                    setStep3Errors((p) => ({ ...p, fssaiImage: null }))
+                  }
+                } else {
+                  fssaiCameraInputRef.current?.click()
+                }
+              }}
+            >
+              <Camera className="w-4 h-4" />
+              <span>Camera</span>
+            </button>
+          </>
         </div>
+        {step3Errors.fssaiImage && <p className="text-xs text-red-500 mt-1">{step3Errors.fssaiImage}</p>}
       </section>
 
       <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
         <h2 className="text-lg font-semibold text-black">Bank account details</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            value={step3.accountNumber || ""}
-            onChange={(e) =>
-              setStep3({ ...step3, accountNumber: e.target.value.trim() })
-            }
-            className="bg-white text-sm"
-            placeholder="Account number"
-          />
-          <Input
-            value={step3.confirmAccountNumber || ""}
-            onChange={(e) =>
-              setStep3({ ...step3, confirmAccountNumber: e.target.value.trim() })
-            }
-            className="bg-white text-sm"
-            placeholder="Re-enter account number"
-          />
+          <div>
+            <Input
+              value={step3.accountNumber || ""}
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, "").slice(0, 18)
+                setStep3({ ...step3, accountNumber: v })
+                if (step3Errors.accountNumber) setStep3Errors((p) => ({ ...p, accountNumber: null }))
+                if (step3.confirmAccountNumber && v !== step3.confirmAccountNumber) setStep3Errors((p) => ({ ...p, confirmAccountNumber: "Account numbers do not match" }))
+                else if (step3.confirmAccountNumber && v === step3.confirmAccountNumber) setStep3Errors((p) => ({ ...p, confirmAccountNumber: null }))
+              }}
+              onBlur={() => handleStep3Blur("accountNumber")}
+              className={`bg-white text-sm ${step3Errors.accountNumber ? "border-red-500" : ""}`}
+              placeholder="Account number (9-18 digits)"
+            />
+            {step3Errors.accountNumber && <p className="text-xs text-red-500 mt-1">{step3Errors.accountNumber}</p>}
+          </div>
+          <div>
+            <Input
+              value={step3.confirmAccountNumber || ""}
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, "").slice(0, 18)
+                setStep3({ ...step3, confirmAccountNumber: v })
+                if (step3Errors.confirmAccountNumber) setStep3Errors((p) => ({ ...p, confirmAccountNumber: null }))
+              }}
+              onBlur={() => handleStep3Blur("confirmAccountNumber")}
+              className={`bg-white text-sm ${step3Errors.confirmAccountNumber ? "border-red-500" : ""}`}
+              placeholder="Re-enter account number"
+            />
+            {step3Errors.confirmAccountNumber && <p className="text-xs text-red-500 mt-1">{step3Errors.confirmAccountNumber}</p>}
+          </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            value={step3.ifscCode || ""}
-            onChange={(e) => setStep3({ ...step3, ifscCode: e.target.value })}
-            className="bg-white text-sm"
-            placeholder="IFSC code"
-          />
-          <Input
-            value={step3.accountType || ""}
-            onChange={(e) => setStep3({ ...step3, accountType: e.target.value })}
-            className="bg-white text-sm"
-            placeholder="Account type (savings / current)"
-          />
+          <div>
+            <Input
+              value={step3.ifscCode || ""}
+              onChange={(e) => {
+                const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11)
+                setStep3({ ...step3, ifscCode: v })
+                if (step3Errors.ifscCode) setStep3Errors((p) => ({ ...p, ifscCode: null }))
+              }}
+              onBlur={() => handleStep3Blur("ifscCode")}
+              className={`bg-white text-sm uppercase ${step3Errors.ifscCode ? "border-red-500" : ""}`}
+              placeholder="IFSC code (e.g., SBIN0018764)"
+            />
+            {step3Errors.ifscCode && <p className="text-xs text-red-500 mt-1">{step3Errors.ifscCode}</p>}
+          </div>
+          <div>
+            <Select
+              value={step3.accountType || ""}
+              onValueChange={(val) => {
+                setStep3({ ...step3, accountType: val })
+                setStep3Errors((p) => ({ ...p, accountType: null }))
+              }}
+            >
+              <SelectTrigger className={`w-full bg-white text-sm h-9 ${step3Errors.accountType ? "border-red-500" : ""}`}>
+                <SelectValue placeholder="Account type (savings / current)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="savings">Savings</SelectItem>
+                <SelectItem value="current">Current</SelectItem>
+              </SelectContent>
+            </Select>
+            {step3Errors.accountType && <p className="text-xs text-red-500 mt-1">{step3Errors.accountType}</p>}
+          </div>
         </div>
-        <Input
-          value={step3.accountHolderName || ""}
-          onChange={(e) =>
-            setStep3({ ...step3, accountHolderName: e.target.value })
-          }
-          className="bg-white text-sm"
-          placeholder="Account holder name"
-        />
+        <div>
+          <Input
+            value={step3.accountHolderName || ""}
+            onChange={(e) => {
+              const v = e.target.value.replace(/[^a-zA-Z\s]/g, "")
+              setStep3({ ...step3, accountHolderName: v })
+              if (step3Errors.accountHolderName) setStep3Errors((p) => ({ ...p, accountHolderName: null }))
+            }}
+            onBlur={() => handleStep3Blur("accountHolderName")}
+            className={`bg-white text-sm ${step3Errors.accountHolderName ? "border-red-500" : ""}`}
+            placeholder="Letters only (e.g., John Doe)"
+          />
+          {step3Errors.accountHolderName && <p className="text-xs text-red-500 mt-1">{step3Errors.accountHolderName}</p>}
+        </div>
       </section>
     </div>
   )

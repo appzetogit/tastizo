@@ -86,7 +86,7 @@ export default function SendFeedback() {
                   placeholder="Tell us what you think..."
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
-                  className="min-h-[250px] md:min-h-[350px] lg:min-h-[400px] w-full resize-y text-sm md:text-base leading-relaxed"
+                  className="min-h-[250px] md:min-h-[350px] lg:min-h-[400px] w-full resize-y text-sm md:text-base leading-relaxed px-4 py-3 border border-gray-200 dark:border-gray-700 rounded-lg"
                   dir="ltr"
                   style={{
                     direction: 'ltr',

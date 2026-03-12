@@ -1406,14 +1406,14 @@ export default function Home() {
 
       {/* Rest of Content - Container Width with Unified Background */}
       <motion.div
-        className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-2 sm:pt-3 lg:pt-6"
+        className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-4 sm:pt-5 lg:pt-8"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.6, delay: 0.4 }}
       >
         {/* Sticky Section - Food Categories and Filters (no Lenis on this page so sticky is stable) */}
         <div
-          className="sticky top-0 z-40 bg-white dark:bg-[#0a0a0a]"
+          className="sticky top-0 z-40 bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5"
           style={{
             transform: 'translateZ(0)',
             WebkitTransform: 'translateZ(0)',
@@ -1424,14 +1424,14 @@ export default function Home() {
         >
           {/* Food Categories - Horizontal Scroll */}
           <motion.section
-            className="space-y-1 sm:space-y-1.5 lg:space-y-2"
+            className="space-y-0"
             initial={{ opacity: 1, y: 0 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0 }}
           >
             <div
               ref={categoryScrollRef}
-              className="flex gap-3 sm:gap-4 lg:gap-5 xl:gap-6 overflow-x-auto overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 lg:px-4 py-2 sm:py-3 lg:py-4"
+              className="flex gap-3 sm:gap-4 overflow-x-auto overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 lg:px-4 pt-0.5 sm:pt-1 pb-0"
               style={{
                 scrollbarWidth: "none",
                 msOverflowStyle: "none",
@@ -1578,13 +1578,13 @@ export default function Home() {
 
           {/* Filters */}
           <motion.section
-            className="py-1 lg:py-2"
+            className="-mt-6 sm:-mt-8 pt-0 pb-0"
             initial={{ opacity: 1, y: 0 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0 }}
           >
             <div
-              className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 overflow-x-auto scrollbar-hide pb-1 lg:pb-2"
+              className="flex items-center gap-0 overflow-x-auto scrollbar-hide pb-0.5 lg:pb-1"
               style={{
                 scrollbarWidth: "none",
                 msOverflowStyle: "none",
@@ -2975,8 +2975,9 @@ export default function Home() {
                     </button>
                   </div>
 
-                  {/* Collections List */}
-                  <div className="px-4 py-4 space-y-2 max-h-[60vh] overflow-y-auto">
+                  {/* Collections List - scrollable, Create new Collection fixed at bottom */}
+                  <div className="px-4 py-4 flex flex-col max-h-[60vh]">
+                    <div className="space-y-2 overflow-y-auto flex-1 min-h-0">
                     {/* Bookmarks Collection */}
                     <div
                       className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
@@ -3067,7 +3068,9 @@ export default function Home() {
                       </div>
                     ))}
 
-                    {/* Create new Collection */}
+                    </div>
+                    {/* Create new Collection - always visible, outside scroll */}
+                    <div className="flex-shrink-0 pt-2 mt-2 border-t border-gray-100">
                     {isAddingNewCollection ? (
                       <div className="p-3 space-y-3 bg-gray-50 rounded-lg">
                         <Input
@@ -3123,6 +3126,7 @@ export default function Home() {
                         </div>
                       </button>
                     )}
+                    </div>
                   </div>
 
                   {/* Done Button */}

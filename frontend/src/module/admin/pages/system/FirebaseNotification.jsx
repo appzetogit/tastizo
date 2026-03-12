@@ -69,8 +69,8 @@ const notificationMessages = [
   {
     id: 9,
     key: "orderCanceled",
-    label: "Order canceled message",
-    defaultText: "Your order {orderId} has been canceled",
+    label: "Order cancelled message",
+    defaultText: "Your order {orderId} has been cancelled",
     enabled: true
   },
   {
@@ -84,7 +84,7 @@ const notificationMessages = [
     id: 11,
     key: "orderRefundCancel",
     label: "Order Refund cancel message",
-    defaultText: "Refund for order {orderId} has been canceled",
+    defaultText: "Refund for order {orderId} has been cancelled",
     enabled: true
   },
   {

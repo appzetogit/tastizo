@@ -77,11 +77,13 @@ export default function TableBooking() {
         fetchRestaurant()
     }, [slug])
 
-    // Generate next 7 days
+    // Generate next 7 days (only future dates - start from today)
     const dates = useMemo(() => {
         const items = []
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
         for (let i = 0; i < 7; i++) {
-            const date = new Date()
+            const date = new Date(today)
             date.setDate(date.getDate() + i)
             items.push(date)
         }
@@ -296,9 +298,16 @@ export default function TableBooking() {
                         ))}
                     </div>
 
-                    {/* Slots Grid */}
+                    {/* Slots Grid - only show future time slots when today is selected */}
                     <div className="grid grid-cols-3 gap-3">
-                        {slots[activeTimeOfDay].map((slot, idx) => {
+                        {slots[activeTimeOfDay].filter(slot => {
+                            if (selectedDate.toDateString() !== new Date().toDateString()) return true
+                            const slotMinutes = parseTimeToMinutes(slot.time)
+                            if (slotMinutes == null) return true
+                            const now = new Date()
+                            const currentMinutes = now.getHours() * 60 + now.getMinutes()
+                            return slotMinutes > currentMinutes
+                        }).map((slot, idx) => {
                             const disabled = isSlotAfterClosing(slot.time)
                             const isSelected = selectedSlot?.time === slot.time && !disabled
 

@@ -1,6 +1,6 @@
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft, Upload, X, Check } from "lucide-react"
+import { ArrowLeft, X, Check, Camera, Image } from "lucide-react"
 import { deliveryAPI } from "@/lib/api"
 import apiClient from "@/lib/api/axios"
 import { toast } from "sonner"
@@ -131,31 +131,41 @@ export default function SignupStep2() {
     const file = documents[docType]
     const uploaded = uploadedDocs[docType]
     const isUploading = uploading[docType]
+    const galleryInputRef = useRef(null)
+    const cameraInputRef = useRef(null)
 
-    const handleClick = async (e) => {
-      if (!hasFlutterCameraBridge()) {
-        // Let the native file input open in browsers
-        return
-      }
-
+    const handleCamera = async (e) => {
       e.preventDefault()
+      e.stopPropagation()
       if (isUploading) return
 
-      try {
-        const result = await openCameraViaFlutter()
-
-        if (result?.success && result.file) {
-          await handleFileSelect(docType, result.file)
-        } else if (result && !result.success) {
-          console.error("Flutter camera returned unsuccessful result for document:", result)
-          toast.error("Failed to capture image from camera")
-        } else {
-          console.log("Document camera cancelled by user or no result returned")
+      if (hasFlutterCameraBridge()) {
+        try {
+          const result = await openCameraViaFlutter()
+          if (result?.success && result.file) {
+            await handleFileSelect(docType, result.file)
+          } else if (result && !result.success) {
+            toast.error("Failed to capture image from camera")
+          }
+        } catch (error) {
+          toast.error("Failed to open camera. Please try again.")
         }
-      } catch (error) {
-        console.error("Error opening camera for document:", error)
-        toast.error("Failed to open camera. Please try again.")
+      } else if (cameraInputRef.current) {
+        cameraInputRef.current.click()
       }
+    }
+
+    const handleGallery = (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (isUploading) return
+      galleryInputRef.current?.click()
+    }
+
+    const handleFileChange = (e, isCamera = false) => {
+      const selectedFile = e.target.files?.[0]
+      if (selectedFile) handleFileSelect(docType, selectedFile)
+      e.target.value = ""
     }
 
     return (
@@ -184,37 +194,53 @@ export default function SignupStep2() {
             </div>
           </div>
         ) : (
-          <label
-            className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 transition-colors"
-            onClick={handleClick}
-          >
-            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-gray-300 rounded-lg">
               {isUploading ? (
                 <>
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mb-2"></div>
                   <p className="text-sm text-gray-500">Uploading...</p>
                 </>
               ) : (
-                <>
-                  <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-500 mb-1">Click to upload</p>
-                  <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
-                </>
+                <p className="text-sm text-gray-500 py-4">PNG, JPG up to 5MB</p>
               )}
             </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleGallery}
+                disabled={isUploading}
+                className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg border border-gray-300 hover:border-green-500 hover:bg-green-50 transition-colors"
+              >
+                <Image className="w-5 h-5 text-gray-600" />
+                <span className="text-sm font-medium">Select From Gallery</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCamera}
+                disabled={isUploading}
+                className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg border border-gray-300 hover:border-green-500 hover:bg-green-50 transition-colors"
+              >
+                <Camera className="w-5 h-5 text-gray-600" />
+                <span className="text-sm font-medium">Camera</span>
+              </button>
+            </div>
             <input
+              ref={galleryInputRef}
               type="file"
               className="hidden"
               accept="image/*"
-              onChange={(e) => {
-                const selectedFile = e.target.files[0]
-                if (selectedFile) {
-                  handleFileSelect(docType, selectedFile)
-                }
-              }}
-              disabled={isUploading}
+              onChange={(e) => handleFileChange(e, false)}
             />
-          </label>
+            <input
+              ref={cameraInputRef}
+              type="file"
+              className="hidden"
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => handleFileChange(e, true)}
+            />
+          </div>
         )}
       </div>
     )

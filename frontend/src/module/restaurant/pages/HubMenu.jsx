@@ -17,7 +17,8 @@ import {
   ArrowLeft,
   Trash2,
   RefreshCw,
-  Loader2
+  Loader2,
+  Upload
 } from "lucide-react"
 import BottomNavOrders from "../components/BottomNavOrders"
 // Removed foodManagement - now using backend API directly
@@ -70,6 +71,7 @@ export default function HubMenu() {
   const [uploadingAddonImages, setUploadingAddonImages] = useState(false)
   const [editingAddon, setEditingAddon] = useState(null) // Store addon being edited
   const addonFileInputRef = useRef(null)
+  const addonCameraInputRef = useRef(null)
 
   // Restaurant info - fetch from backend
   const restaurantName = restaurantData?.name || ""
@@ -2183,32 +2185,56 @@ export default function HubMenu() {
                     </div>
                   )}
 
-                  {/* Add Image Button */}
+                  {/* Add Image - Camera and Gallery options */}
                   <input
                     ref={addonFileInputRef}
                     type="file"
                     accept="image/*"
                     multiple
-                    onChange={handleAddonImageAdd}
-                    className="hidden"
-                    id="addon-image-upload"
-                  />
-                  <label
-                    htmlFor="addon-image-upload"
-                    onClick={async (e) => {
-                      if (hasFlutterCameraBridge()) {
-                        e.preventDefault()
-                        const { success, file } = await openCameraViaFlutter()
-                        if (success && file) {
-                          handleAddonImageAdd({ target: { files: [file] } })
-                        }
-                      }
+                    onChange={(e) => {
+                      handleAddonImageAdd(e)
+                      e.target.value = ""
                     }}
-                    className="flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-50 transition-colors"
-                  >
-                    <Camera className="h-5 w-5 text-gray-500" />
-                    <span className="text-sm font-medium text-gray-700">Add Images</span>
-                  </label>
+                    className="hidden"
+                    id="addon-gallery-upload"
+                  />
+                  <input
+                    ref={addonCameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => {
+                      handleAddonImageAdd(e)
+                      e.target.value = ""
+                    }}
+                    className="hidden"
+                  />
+                  <div className="flex gap-2">
+                    <label
+                      htmlFor="addon-gallery-upload"
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-50 transition-colors"
+                    >
+                      <Upload className="h-5 w-5 text-gray-500" />
+                      <span className="text-sm font-medium text-gray-700">Gallery</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (hasFlutterCameraBridge()) {
+                          const { success, file } = await openCameraViaFlutter()
+                          if (success && file) {
+                            handleAddonImageAdd({ target: { files: [file] } })
+                          }
+                        } else {
+                          addonCameraInputRef.current?.click()
+                        }
+                      }}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-50 transition-colors"
+                    >
+                      <Camera className="h-5 w-5 text-gray-500" />
+                      <span className="text-sm font-medium text-gray-700">Camera</span>
+                    </button>
+                  </div>
                   <p className="text-xs text-gray-500 mt-1">Add multiple images (PNG, JPG, WEBP - max 5MB each)</p>
                 </div>
               </div>

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import TableBooking from "../../dining/models/TableBooking.js";
 import Restaurant from "../../restaurant/models/Restaurant.js";
 import {
@@ -10,6 +11,7 @@ import { asyncHandler } from "../../../shared/middleware/asyncHandler.js";
  * Get dining earnings summary and list (admin)
  * GET /api/admin/dining-earnings
  * Query: restaurantId, startDate, endDate, page, limit
+ * restaurantId can be MongoDB _id or restaurant's custom restaurantId string
  */
 export const getDiningEarnings = asyncHandler(async (req, res) => {
   const { restaurantId, startDate, endDate, page = 1, limit = 20 } = req.query;
@@ -17,8 +19,27 @@ export const getDiningEarnings = asyncHandler(async (req, res) => {
   const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
 
   const match = { paymentStatus: "paid", billStatus: "completed" };
-  if (restaurantId) {
-    match.restaurant = restaurantId;
+  if (restaurantId && restaurantId.trim()) {
+    const id = restaurantId.trim();
+    // If valid MongoDB ObjectId, use directly
+    if (mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === id) {
+      match.restaurant = id;
+    } else {
+      // Otherwise lookup by restaurant's custom restaurantId or name
+      const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const restaurant = await Restaurant.findOne({
+        $or: [
+          { restaurantId: { $regex: new RegExp(`^${escaped}$`, "i") } },
+          { name: { $regex: new RegExp(escaped, "i") } },
+        ],
+      }).select("_id").lean();
+      if (restaurant) {
+        match.restaurant = restaurant._id;
+      } else {
+        // No restaurant found - return empty by matching impossible condition
+        match.restaurant = { $in: [] };
+      }
+    }
   }
   if (startDate || endDate) {
     match.paidAt = {};

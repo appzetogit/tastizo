@@ -567,6 +567,19 @@ export default function Category() {
               <SlidersHorizontal className="h-2.5 w-2.5" />
               <span className="text-[10px] font-bold text-black">Filters</span>
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setActiveFilters(new Set())
+                setSortBy(null)
+                setSelectedCuisine(null)
+                setIsFilterOpen(false)
+              }}
+              className="h-5 px-1.5 rounded-md flex items-center gap-1 whitespace-nowrap shrink-0 transition-all bg-white border border-gray-200 hover:bg-gray-50"
+            >
+              <X className="h-2.5 w-2.5" />
+              <span className="text-[10px] font-bold text-black">Remove All filters</span>
+            </Button>
             {[
               { id: 'delivery-under-30', label: 'Under 30 mins' },
               { id: 'delivery-under-45', label: 'Under 45 mins' },

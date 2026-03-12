@@ -381,8 +381,8 @@ export default function DiningRestaurantDetails() {
                         type="button"
                         onClick={() => {
                             if (restaurantPhone) {
-                                const tel = restaurantPhone.replace(/\s/g, "").replace(/^0/, "+91")
-                                window.location.href = `tel:${tel.startsWith("+") ? tel : `+91${tel}`}`
+                                const digits = restaurantPhone.replace(/\D/g, "").slice(-10)
+                                window.location.href = `tel:${digits}`
                             }
                         }}
                         className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-[#2B9C64] hover:bg-[#2B9C64]/10"

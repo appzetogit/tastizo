@@ -370,14 +370,9 @@ export default function Orders() {
     return restaurantMatch || itemsMatch
   })
 
-  // Handle reorder
+  // Handle reorder - open View Details page of order
   const handleReorder = (order) => {
-    // Navigate to restaurant page or cart
-    if (order.restaurantId) {
-      navigate(`/user/restaurants/${order.restaurantId}`)
-    } else {
-      toast.info('Restaurant information not available')
-    }
+    navigate(`/user/orders/${order.id}/details`)
   }
 
   // Three-dots menu handlers

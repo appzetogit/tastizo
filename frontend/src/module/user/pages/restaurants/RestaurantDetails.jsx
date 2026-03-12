@@ -2140,8 +2140,9 @@ export default function RestaurantDetails() {
                     </button>
                   </div>
 
-                  {/* Collections List */}
-                  <div className="px-4 py-4 space-y-2">
+                  {/* Collections List - scrollable, Create new Collection fixed at bottom */}
+                  <div className="px-4 py-4 flex flex-col max-h-[60vh]">
+                    <div className="space-y-2 overflow-y-auto flex-1 min-h-0">
                     {/* Bookmarks Collection */}
                     <button
                       className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
@@ -2231,6 +2232,8 @@ export default function RestaurantDetails() {
                       </div>
                     ))}
 
+                    </div>
+                    <div className="flex-shrink-0 pt-2 mt-2 border-t border-gray-200 dark:border-gray-700">
                     {/* Create new Collection */}
                     {isAddingNewCollection ? (
                       <div className="p-3 space-y-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
@@ -2287,6 +2290,7 @@ export default function RestaurantDetails() {
                         </div>
                       </button>
                     )}
+                    </div>
                   </div>
 
                   {/* Done Button */}

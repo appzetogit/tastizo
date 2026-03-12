@@ -680,10 +680,8 @@ export default function OrderTracking() {
       toast.error("Restaurant phone number not available");
       return;
     }
-    const tel = restaurantPhone.startsWith("+")
-      ? restaurantPhone
-      : `+91${restaurantPhone.replace(/\D/g, "").slice(-10)}`;
-    window.location.href = `tel:${tel}`;
+    const digits = restaurantPhone.replace(/\D/g, "").slice(-10);
+    window.location.href = `tel:${digits}`;
   };
 
   const handleOpenDeliveryInstructions = () => {
@@ -1404,13 +1402,13 @@ export default function OrderTracking() {
               Cancel Order
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-5 py-6 px-2">
+          <div className="space-y-5 py-6 px-4">
             <div className="space-y-2 w-full">
               <Textarea
                 value={cancellationReason}
                 onChange={(e) => setCancellationReason(e.target.value)}
                 placeholder="e.g., Changed my mind, Wrong address, etc."
-                className="w-full min-h-[100px] resize-none border-2 border-gray-300 rounded-lg px-4 py-3 text-sm focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:border-gray-200"
+                className="w-full min-h-[100px] resize-none border-2 border-gray-300 rounded-lg px-4 py-3 text-sm focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:border-gray-200 text-gray-900 dark:text-gray-100"
                 disabled={isCancelling}
               />
             </div>

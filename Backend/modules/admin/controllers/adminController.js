@@ -32,17 +32,39 @@ const logger = winston.createLogger({
  */
 export const getDashboardStats = asyncHandler(async (req, res) => {
   try {
-    // Calculate date ranges
+    const { period = "overall" } = req.query;
     const now = new Date();
     const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Date range based on period filter
+    let dateFilter = {};
+    if (period === "today") {
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      dateFilter = { $gte: dayStart, $lte: now };
+    } else if (period === "week") {
+      const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      dateFilter = { $gte: weekStart, $lte: now };
+    } else if (period === "month") {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      dateFilter = { $gte: monthStart, $lte: now };
+    } else if (period === "year") {
+      const yearStart = new Date(now.getFullYear(), 0, 1);
+      dateFilter = { $gte: yearStart, $lte: now };
+    }
+
+    // Base match for delivered orders
+    const revenueMatch = {
+      status: "delivered",
+      "pricing.total": { $exists: true },
+    };
+    if (Object.keys(dateFilter).length > 0) {
+      revenueMatch.deliveredAt = dateFilter;
+    }
 
     // Get total revenue (sum of all completed orders)
     const revenueStats = await Order.aggregate([
       {
-        $match: {
-          status: "delivered",
-          "pricing.total": { $exists: true },
-        },
+        $match: revenueMatch,
       },
       {
         $group: {
@@ -68,8 +90,12 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     };
 
     // Get all settlements for delivered orders only (to match with revenue calculation)
-    // First get delivered order IDs
-    const deliveredOrderIds = await Order.find({ status: "delivered" })
+    // First get delivered order IDs (with period filter if applied)
+    const deliveredOrderMatch = { status: "delivered" };
+    if (Object.keys(dateFilter).length > 0) {
+      deliveredOrderMatch.deliveredAt = dateFilter;
+    }
+    const deliveredOrderIds = await Order.find(deliveredOrderMatch)
       .select("_id")
       .lean();
     const deliveredOrderIdArray = deliveredOrderIds.map((o) => o._id);
@@ -128,9 +154,12 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       `💰 Final calculated totals - Commission: ₹${totalCommission}, Platform Fee: ₹${totalPlatformFee}, Delivery Fee: ₹${totalDeliveryFee}, GST: ₹${totalGST}`,
     );
 
-    // Get last 30 days data from OrderSettlement
+    // Get settlements for period (or last 30 days for overall)
+    const settlementsDateRange = Object.keys(dateFilter).length > 0
+      ? dateFilter
+      : { $gte: last30Days, $lte: now };
     const last30DaysSettlements = await OrderSettlement.find({
-      createdAt: { $gte: last30Days, $lte: now },
+      createdAt: settlementsDateRange,
     }).lean();
     const last30DaysCommission = last30DaysSettlements.reduce(
       (sum, s) => sum + (s.adminEarning?.commission || 0),
@@ -149,8 +178,13 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       0,
     );
 
-    // Get order statistics
+    // Get order statistics (with period filter on createdAt)
+    const orderStatsMatch = {};
+    if (Object.keys(dateFilter).length > 0) {
+      orderStatsMatch.createdAt = dateFilter;
+    }
     const orderStats = await Order.aggregate([
+      ...(Object.keys(orderStatsMatch).length > 0 ? [{ $match: orderStatsMatch }] : []),
       {
         $group: {
           _id: "$status",
@@ -164,8 +198,12 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       orderStatusMap[stat._id] = stat.count;
     });
 
-    // Get total orders processed
-    const totalOrders = await Order.countDocuments({ status: "delivered" });
+    // Get total orders processed (with period filter)
+    const totalOrdersMatch = { status: "delivered" };
+    if (Object.keys(dateFilter).length > 0) {
+      totalOrdersMatch.deliveredAt = dateFilter;
+    }
+    const totalOrders = await Order.countDocuments(totalOrdersMatch);
 
     // Get active partners count
     const activeRestaurants = await Restaurant.countDocuments({
@@ -306,9 +344,14 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     });
 
     // Total customers (users with role 'user' or no role specified)
-    const totalCustomers = await User.countDocuments({
+    // When period filter is applied, count customers created in that period
+    const customerMatch = {
       $or: [{ role: "user" }, { role: { $exists: false } }, { role: null }],
-    });
+    };
+    if (Object.keys(dateFilter).length > 0) {
+      customerMatch.createdAt = dateFilter;
+    }
+    const totalCustomers = await User.countDocuments(customerMatch);
 
     // Pending orders (already in orderStatusMap)
     const pendingOrders = orderStatusMap.pending || 0;

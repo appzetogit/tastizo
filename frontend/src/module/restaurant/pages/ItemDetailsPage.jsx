@@ -13,7 +13,8 @@ import {
   ThumbsUp,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  Upload
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 // Removed getAllFoods and saveFood - now using menu API
@@ -30,6 +31,7 @@ export default function ItemDetailsPage() {
   const groupId = location.state?.groupId
   const defaultCategory = location.state?.category || "Varieties"
   const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
 
   // Initialize state with empty values - will be populated from API
   const [itemData, setItemData] = useState(null) // Store the full item data for saving
@@ -950,36 +952,57 @@ export default function ItemDetailsPage() {
             </div>
           )}
 
-          {/* Add image button - max 1 image */}
+          {/* Add image - Camera and Gallery options */}
           <div className="px-4 py-4 bg-white border-t border-gray-100">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleImageAdd}
-              className="hidden"
-              id="image-upload"
-            />
             {images.length < maxImages && (
-              <label
-                htmlFor="image-upload"
-                onClick={async (e) => {
-                  if (hasFlutterCameraBridge()) {
-                    // Prefer native Flutter camera for WebView environments
-                    e.preventDefault();
-                    const { success, file } = await openCameraViaFlutter();
-                    if (success && file) {
-                      await handleImageAdd({ target: { files: [file] } });
+              <div className="flex gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    handleImageAdd(e)
+                    e.target.value = ""
+                  }}
+                  className="hidden"
+                  id="image-gallery-upload"
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => {
+                    handleImageAdd(e)
+                    e.target.value = ""
+                  }}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="image-gallery-upload"
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl text-sm font-semibold cursor-pointer hover:from-gray-800 hover:to-gray-700 transition-all shadow-md hover:shadow-lg active:scale-95"
+                >
+                  <Upload className="w-5 h-5" />
+                  <span>Gallery</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (hasFlutterCameraBridge()) {
+                      const { success, file } = await openCameraViaFlutter()
+                      if (success && file) {
+                        await handleImageAdd({ target: { files: [file] } })
+                      }
+                    } else {
+                      cameraInputRef.current?.click()
                     }
-                  }
-                }}
-                className="flex items-center justify-center gap-2.5 px-6 py-3.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl text-sm font-semibold cursor-pointer hover:from-gray-800 hover:to-gray-700 transition-all shadow-md hover:shadow-lg active:scale-95"
-              >
-                <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
-                  <Plus className="w-4 h-4" />
-                </div>
-                <span>Add Image</span>
-              </label>
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl text-sm font-semibold cursor-pointer hover:from-gray-800 hover:to-gray-700 transition-all shadow-md hover:shadow-lg active:scale-95"
+                >
+                  <Camera className="w-5 h-5" />
+                  <span>Camera</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
