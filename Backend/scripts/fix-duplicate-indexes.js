@@ -23,23 +23,17 @@ if (!MONGODB_URI) {
 
 async function fixDuplicateIndexes() {
   try {
-    console.log('Connecting to MongoDB...');
     await mongoose.connect(MONGODB_URI);
-    console.log('✅ Connected to MongoDB\n');
-
     const db = mongoose.connection.db;
 
     // Collections to check
     const collections = ['users', 'restaurants', 'restaurantcategories'];
 
     for (const collectionName of collections) {
-      console.log(`\n📋 Checking ${collectionName}...`);
       const collection = db.collection(collectionName);
       
       try {
         const indexes = await collection.indexes();
-        console.log(`   Found ${indexes.length} indexes:`);
-        
         // Group indexes by key pattern
         const indexMap = new Map();
         
@@ -54,8 +48,6 @@ async function fixDuplicateIndexes() {
         // Find duplicates
         for (const [keyStr, indexList] of indexMap.entries()) {
           if (indexList.length > 1) {
-            console.log(`   ⚠️  Duplicate indexes found for ${keyStr}:`);
-            
             // Keep the one with more options (unique, sparse, etc.) and drop others
             indexList.sort((a, b) => {
               const aOptions = Object.keys(a).length;
@@ -70,12 +62,9 @@ async function fixDuplicateIndexes() {
               
               try {
                 await collection.dropIndex(indexName);
-                console.log(`   ✅ Dropped duplicate index: ${indexName}`);
               } catch (err) {
                 if (err.code === 27) {
-                  console.log(`   ℹ️  Index ${indexName} does not exist (may have been auto-dropped)`);
                 } else {
-                  console.log(`   ⚠️  Error dropping ${indexName}: ${err.message}`);
                 }
               }
             }
@@ -101,8 +90,6 @@ async function fixDuplicateIndexes() {
                 });
                 
                 if (hasCompound) {
-                  console.log(`   🔍 Found single-field index ${indexName} that might conflict with compound index`);
-                  console.log(`   💡 Consider: This index might be redundant if compound index exists`);
                 }
               }
             } catch (err) {
@@ -112,20 +99,13 @@ async function fixDuplicateIndexes() {
         }
         
       } catch (err) {
-        console.log(`   ⚠️  Error checking ${collectionName}: ${err.message}`);
       }
     }
-
-    console.log('\n✅ Index check completed!');
-    console.log('\n💡 If warnings persist, they may be from Mongoose detecting schema-level duplicates.');
-    console.log('   The code has been fixed - restart your server to see if warnings clear.');
-    
   } catch (error) {
     console.error('❌ Error fixing indexes:', error);
     process.exit(1);
   } finally {
     await mongoose.connection.close();
-    console.log('\n🔌 MongoDB connection closed');
   }
 }
 

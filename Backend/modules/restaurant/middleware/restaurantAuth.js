@@ -74,21 +74,6 @@ export const authenticate = async (req, res, next) => {
     
     // Debug logging for inactive restaurants
     if (!restaurant.isActive) {
-      console.log('🔍 Inactive restaurant route check:', {
-        restaurantId: restaurant._id,
-        restaurantName: restaurant.name,
-        isActive: restaurant.isActive,
-        requestPath,
-        reqPath,
-        baseUrl,
-        originalUrl: req.originalUrl,
-        url: req.url,
-        isOnboardingRoute,
-        isProfileRoute,
-        isMenuRoute,
-        isInventoryRoute,
-        willAllow: isOnboardingRoute || isProfileRoute || isMenuRoute || isInventoryRoute
-      });
     }
     
     // Allow access to onboarding, profile, menu, and inventory routes even if inactive

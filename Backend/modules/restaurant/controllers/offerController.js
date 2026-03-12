@@ -171,16 +171,11 @@ export const deleteOffer = asyncHandler(async (req, res) => {
 export const getCouponsByItemId = asyncHandler(async (req, res) => {
   const restaurantId = req.restaurant._id;
   const { itemId } = req.params;
-
-  console.log(`[COUPONS] Request received for itemId: ${itemId}, restaurantId: ${restaurantId}`);
-
   if (!itemId) {
     return errorResponse(res, 400, 'Item ID is required');
   }
 
   const now = new Date();
-  console.log(`[COUPONS] Current date: ${now.toISOString()}`);
-
   // Debug: Check all offers for this restaurant
   const allRestaurantOffers = await Offer.find({
     restaurant: restaurantId,
@@ -188,12 +183,8 @@ export const getCouponsByItemId = asyncHandler(async (req, res) => {
   })
     .select('items discountType minOrderValue startDate endDate status')
     .lean();
-  
-  console.log(`[COUPONS] Total active offers for restaurant: ${allRestaurantOffers.length}`);
   allRestaurantOffers.forEach(offer => {
-    console.log(`[COUPONS] Offer ${offer._id} has ${offer.items?.length || 0} items`);
     offer.items?.forEach((item, idx) => {
-      console.log(`[COUPONS]   Item ${idx}: itemId=${item.itemId}, couponCode=${item.couponCode}`);
     });
   });
 
@@ -205,9 +196,6 @@ export const getCouponsByItemId = asyncHandler(async (req, res) => {
   })
     .select('items discountType minOrderValue startDate endDate status')
     .lean();
-
-  console.log(`[COUPONS] Found ${allOffers.length} active offers with itemId ${itemId}`);
-
   // Filter by date validity
   const validOffers = allOffers.filter(offer => {
     const startDate = offer.startDate ? new Date(offer.startDate) : null;
@@ -221,22 +209,12 @@ export const getCouponsByItemId = asyncHandler(async (req, res) => {
     const endOfToday = new Date(now);
     endOfToday.setHours(23, 59, 59, 999);
     const endValid = !endDate || endDate >= endOfToday;
-    
-    console.log(`[COUPONS] Offer ${offer._id}:`);
-    console.log(`  startDate: ${startDate?.toISOString()}, now: ${now.toISOString()}, startValid: ${startValid}`);
-    console.log(`  endDate: ${endDate?.toISOString()}, endOfToday: ${endOfToday.toISOString()}, endValid: ${endValid}`);
-    
     return startValid && endValid;
   });
-
-  console.log(`[COUPONS] Found ${validOffers.length} valid offers after date filtering`);
-
   // Extract coupons for this specific item
   const coupons = [];
   validOffers.forEach(offer => {
-    console.log(`[COUPONS] Processing offer ${offer._id} with ${offer.items?.length || 0} items`);
     offer.items.forEach((item, idx) => {
-      console.log(`[COUPONS]   Item ${idx}: itemId="${item.itemId}", searching for="${itemId}", match=${item.itemId === itemId}`);
       if (item.itemId === itemId) {
         const coupon = {
           couponCode: item.couponCode,
@@ -248,15 +226,10 @@ export const getCouponsByItemId = asyncHandler(async (req, res) => {
           startDate: offer.startDate,
           endDate: offer.endDate,
         };
-        console.log(`[COUPONS]   ✅ Adding coupon:`, coupon);
         coupons.push(coupon);
       }
     });
   });
-
-  console.log(`[COUPONS] ✅ Returning ${coupons.length} coupons for itemId ${itemId}`);
-  console.log(`[COUPONS] Coupons array:`, JSON.stringify(coupons, null, 2));
-
   return successResponse(res, 200, 'Coupons retrieved successfully', {
     coupons,
     total: coupons.length,
@@ -266,16 +239,11 @@ export const getCouponsByItemId = asyncHandler(async (req, res) => {
 // Get coupons for a specific item/dish (PUBLIC - for user cart)
 export const getCouponsByItemIdPublic = asyncHandler(async (req, res) => {
   const { itemId, restaurantId } = req.params;
-
-  console.log(`[COUPONS-PUBLIC] Request received for itemId: ${itemId}, restaurantId: ${restaurantId}`);
-
   if (!itemId || !restaurantId) {
     return errorResponse(res, 400, 'Item ID and Restaurant ID are required');
   }
 
   const now = new Date();
-  console.log(`[COUPONS-PUBLIC] Current date: ${now.toISOString()}`);
-
   // Find restaurant by ID, slug, or restaurantId to get the actual MongoDB _id
   let restaurantObjectId = null;
   
@@ -298,9 +266,7 @@ export const getCouponsByItemIdPublic = asyncHandler(async (req, res) => {
 
     if (restaurant) {
       restaurantObjectId = restaurant._id;
-      console.log(`[COUPONS-PUBLIC] Found restaurant with _id: ${restaurantObjectId}`);
     } else {
-      console.log(`[COUPONS-PUBLIC] Restaurant not found for ID: ${restaurantId}`);
       return successResponse(res, 200, 'No coupons found', {
         coupons: [],
         total: 0,
@@ -319,9 +285,6 @@ export const getCouponsByItemIdPublic = asyncHandler(async (req, res) => {
   })
     .select('items discountType minOrderValue startDate endDate status')
     .lean();
-
-  console.log(`[COUPONS-PUBLIC] Found ${allOffers.length} active offers with itemId ${itemId} for restaurant ${restaurantId}`);
-
   // Filter by date validity
   const validOffers = allOffers.filter(offer => {
     const startDate = offer.startDate ? new Date(offer.startDate) : null;
@@ -334,9 +297,6 @@ export const getCouponsByItemIdPublic = asyncHandler(async (req, res) => {
     
     return startValid && endValid;
   });
-
-  console.log(`[COUPONS-PUBLIC] Found ${validOffers.length} valid offers after date filtering`);
-
   // Extract coupons for this specific item
   const coupons = [];
   validOffers.forEach(offer => {
@@ -355,9 +315,6 @@ export const getCouponsByItemIdPublic = asyncHandler(async (req, res) => {
       }
     });
   });
-
-  console.log(`[COUPONS-PUBLIC] Returning ${coupons.length} coupons for itemId ${itemId}`);
-
   return successResponse(res, 200, 'Coupons retrieved successfully', {
     coupons,
     total: coupons.length,
@@ -367,7 +324,6 @@ export const getCouponsByItemIdPublic = asyncHandler(async (req, res) => {
 // Get all active offers with restaurant and dish details (PUBLIC - for user offers page)
 export const getPublicOffers = asyncHandler(async (req, res) => {
   try {
-    console.log('[PUBLIC-OFFERS] Request received');
     const now = new Date();
     
     // Find all active offers
@@ -377,9 +333,6 @@ export const getPublicOffers = asyncHandler(async (req, res) => {
       .populate('restaurant', 'name restaurantId slug profileImage rating estimatedDeliveryTime distance')
       .sort({ createdAt: -1 })
       .lean();
-    
-    console.log(`[PUBLIC-OFFERS] Found ${offers.length} active offers`);
-
     // Filter by date validity and flatten to show dishes with offers
     const offerDishes = [];
     
@@ -450,9 +403,6 @@ export const getPublicOffers = asyncHandler(async (req, res) => {
       }
       groupedByOffer[dish.offer].push(dish);
     });
-
-    console.log(`[PUBLIC-OFFERS] Returning ${offerDishes.length} offer dishes`);
-    
     return successResponse(res, 200, 'Offers retrieved successfully', {
       allOffers: offerDishes,
       groupedByOffer,

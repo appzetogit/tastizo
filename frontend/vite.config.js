@@ -65,5 +65,15 @@ export default defineConfig({
     outDir: "dist",
     sourcemap: false,
     chunkSizeWarningLimit: 1600,
+    minify: "terser",
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
+    esbuild: {
+      drop: ["console", "debugger"],
+    },
   },
 });

@@ -155,22 +155,9 @@ export const createCommissionRule = asyncHandler(async (req, res) => {
     const existingRules = await DeliveryBoyCommission.find({ status: true });
     const newMinDist = parseFloat(minDistance);
     const newMaxDist = maxDistance === null || maxDistance === undefined ? null : parseFloat(maxDistance);
-
-    console.log('Checking for overlaps:', {
-      newRange: { min: newMinDist, max: newMaxDist },
-      existingRulesCount: existingRules.length
-    });
-
     for (const rule of existingRules) {
       const ruleMin = parseFloat(rule.minDistance);
       const ruleMax = rule.maxDistance === null ? null : parseFloat(rule.maxDistance);
-
-      console.log('Comparing with rule:', {
-        name: rule.name,
-        ruleRange: { min: ruleMin, max: ruleMax },
-        newRange: { min: newMinDist, max: newMaxDist }
-      });
-
       // Check for overlap - two ranges overlap if they share any common distance
       // Range A: [newMinDist, newMaxDist] (or [newMinDist, Infinity) if newMaxDist is null)
       // Range B: [ruleMin, ruleMax] (or [ruleMin, Infinity) if ruleMax is null)
@@ -201,13 +188,6 @@ export const createCommissionRule = asyncHandler(async (req, res) => {
         const newRangeStr = newMaxDist === null 
           ? `${newMinDist}km - Unlimited` 
           : `${newMinDist}km - ${newMaxDist}km`;
-        
-        console.log('Overlap detected!', {
-          existingRule: rule.name,
-          existingRange: ruleRangeStr,
-          newRange: newRangeStr
-        });
-        
         return errorResponse(
           res,
           400,
@@ -226,17 +206,10 @@ export const createCommissionRule = asyncHandler(async (req, res) => {
       status: status !== undefined ? status : true,
       createdBy: new mongoose.Types.ObjectId(adminId)
     };
-    
-    console.log('Creating commission with data:', {
-      ...commissionData,
-      createdBy: commissionData.createdBy.toString()
-    });
-    
     const commission = new DeliveryBoyCommission(commissionData);
 
     try {
       await commission.save();
-      console.log('Commission saved successfully:', commission._id);
     } catch (saveError) {
       console.error('Error saving commission to database:', saveError);
       console.error('Save error details:', {

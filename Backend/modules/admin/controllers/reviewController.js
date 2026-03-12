@@ -305,8 +305,6 @@ export const getReviewsByRestaurant = asyncHandler(async (req, res) => {
  */
 export const getDeliverymanReviews = asyncHandler(async (req, res) => {
   try {
-    console.log('📋 [getDeliverymanReviews] Starting...', { query: req.query });
-    
     // Verify Order model is available
     if (!Order) {
       console.error('❌ Order model is not available');
@@ -325,9 +323,6 @@ export const getDeliverymanReviews = asyncHandler(async (req, res) => {
       deliveryPartnerId: { $exists: true, $ne: null },
       'review.rating': { $exists: true, $ne: null }
     };
-    
-    console.log('🔍 Base query:', { status: query.status, hasDeliveryPartner: !!query.deliveryPartnerId, hasReviewRating: !!query['review.rating'] });
-    
     if (deliveryPartnerId) {
       // Handle both string and ObjectId formats
       if (mongoose.Types.ObjectId.isValid(deliveryPartnerId)) {
@@ -335,14 +330,12 @@ export const getDeliverymanReviews = asyncHandler(async (req, res) => {
       } else {
         query.deliveryPartnerId = deliveryPartnerId;
       }
-      console.log('🔍 Filtering by deliveryPartnerId:', deliveryPartnerId);
     }
     
     if (rating) {
       const ratingNum = parseInt(rating);
       if (ratingNum >= 1 && ratingNum <= 5) {
         query['review.rating'] = ratingNum;
-        console.log('🔍 Filtering by rating:', ratingNum);
       }
     }
     
@@ -355,11 +348,7 @@ export const getDeliverymanReviews = asyncHandler(async (req, res) => {
     } else {
       sortOptions['review.submittedAt'] = -1; // Default: newest first
     }
-    
-    console.log('🔍 Sort options:', sortOptions);
-    
     // Fetch reviews with pagination
-    console.log('🔍 Executing Order.find()...');
     const reviews = await Order.find(query)
       .populate('deliveryPartnerId', 'name phone')
       .populate('userId', 'name phone email')
@@ -368,15 +357,9 @@ export const getDeliverymanReviews = asyncHandler(async (req, res) => {
       .skip(skip)
       .limit(limitNum)
       .lean();
-    
-    console.log(`✅ Found ${reviews.length} reviews`);
-    
     // Get total count
     const totalReviews = await Order.countDocuments(query);
-    console.log(`✅ Total reviews count: ${totalReviews}`);
-    
     // Transform data for frontend
-    console.log('🔄 Transforming reviews data...');
     const transformedReviews = reviews.map((review, index) => {
       try {
         const deliveryPartner = review.deliveryPartnerId;
@@ -428,9 +411,6 @@ export const getDeliverymanReviews = asyncHandler(async (req, res) => {
         };
       }
     });
-    
-    console.log(`✅ Returning ${transformedReviews.length} transformed reviews`);
-    
     return successResponse(res, 200, 'Deliveryman reviews fetched successfully', {
       reviews: transformedReviews,
       pagination: {

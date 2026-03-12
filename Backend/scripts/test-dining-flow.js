@@ -27,7 +27,6 @@ const colors = {
 };
 
 function log(msg, color = "reset") {
-  console.log(`${colors[color]}${msg}${colors.reset}`);
 }
 
 async function run() {

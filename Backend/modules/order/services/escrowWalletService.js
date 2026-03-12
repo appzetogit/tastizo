@@ -60,10 +60,6 @@ export const releaseEscrow = async (orderId) => {
 
     // Self-healing: If escrow was missed (pending), attempt to hold it now before releasing
     if (currentSettlement.escrowStatus === "pending") {
-      console.log(
-        `ℹ️ Escrow status is pending for order ${currentSettlement.orderNumber}. Attempting to hold escrow before release (self-healing).`,
-      );
-
       const order = await Order.findById(orderId);
       if (!order) {
         throw new Error("Order not found for self-healing escrow");
@@ -255,9 +251,6 @@ const creditDeliveryWallet = async (
         t.type === "payment",
     );
     if (existingTx) {
-      console.log(
-        `⚠️ Escrow: earning already exists for order ${orderNumber}, skipping duplicate`,
-      );
       return;
     }
 

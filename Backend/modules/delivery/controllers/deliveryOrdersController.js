@@ -162,9 +162,6 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
     // If order is assigned to this delivery partner, allow access
     if (orderDeliveryPartnerId === currentDeliveryId) {
       // Order is assigned, proceed
-      console.log(
-        `✅ Order ${order.orderId} is assigned to current delivery partner ${currentDeliveryId}`,
-      );
     } else if (!orderDeliveryPartnerId) {
       // Order not assigned yet - allow access if:
       // 1. Order is in a valid status for acceptance (preparing/ready), OR
@@ -189,21 +186,8 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
       const wasNotified =
         normalizedPriorityIds.includes(normalizedCurrentId) ||
         normalizedExpandedIds.includes(normalizedCurrentId);
-
-      console.log(`🔍 Checking access for order ${order.orderId}:`, {
-        currentDeliveryId: normalizedCurrentId,
-        orderStatus: order.status,
-        isInValidStatus,
-        wasNotified,
-        priorityIds: normalizedPriorityIds,
-        expandedIds: normalizedExpandedIds,
-      });
-
       // Allow access if order is in valid status OR delivery boy was notified
       if (isInValidStatus || wasNotified) {
-        console.log(
-          `✅ Allowing access to order ${order.orderId} - Status: ${order.status}, Notified: ${wasNotified}`,
-        );
         // Allow access to view order details
       } else {
         console.warn(
@@ -270,12 +254,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
       console.error(`❌ Invalid orderId provided: ${orderId}`);
       return errorResponse(res, 400, "Invalid order ID");
     }
-
-    console.log(
-      `📦 Delivery partner ${delivery._id} attempting to accept order ${orderId}`,
-    );
-    console.log(`📍 Location provided: lat=${currentLat}, lng=${currentLng}`);
-
     // Find order - try both by _id and orderId
     // First check if order exists (without deliveryPartnerId filter)
     let order = await Order.findOne({
@@ -297,10 +275,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     // If order is not assigned, check if this delivery boy was notified (priority-based system)
     // Also allow acceptance if order is in valid status (preparing/ready) - more permissive
     if (!orderDeliveryPartnerId) {
-      console.log(
-        `ℹ️ Order ${order.orderId} is not assigned yet. Checking if this delivery partner was notified...`,
-      );
-
       // Check if this delivery boy was in the priority or expanded notification list
       const assignmentInfo = order.assignmentInfo || {};
       const priorityIds = assignmentInfo.priorityDeliveryPartnerIds || [];
@@ -322,15 +296,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
       const normalizedExpandedIds = expandedIds
         .map(normalizeId)
         .filter(Boolean);
-
-      console.log(`🔍 Checking notification status for order acceptance:`, {
-        currentDeliveryId: normalizedCurrentId,
-        priorityIds: normalizedPriorityIds,
-        expandedIds: normalizedExpandedIds,
-        orderStatus: order.status,
-        assignmentInfo: JSON.stringify(assignmentInfo),
-      });
-
       const wasNotified =
         normalizedPriorityIds.includes(normalizedCurrentId) ||
         normalizedExpandedIds.includes(normalizedCurrentId);
@@ -361,13 +326,7 @@ export const acceptOrder = asyncHandler(async (req, res) => {
 
       // Allow acceptance if delivery boy was notified OR order is in valid status
       if (wasNotified) {
-        console.log(
-          `✅ Delivery partner ${currentDeliveryId} was notified about this order. Assigning order to them...`,
-        );
       } else if (isValidStatus) {
-        console.log(
-          `⚠️ Order ${order.orderId} is not assigned and delivery partner ${currentDeliveryId} was not notified, but order is in valid status (${order.status}). Allowing acceptance and assigning order.`,
-        );
       }
 
       // Proceed with assignment: atomic update to prevent multiple delivery boys accepting the same order
@@ -408,11 +367,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
           "Order was accepted by another delivery partner. Please try another order.",
         );
       }
-
-      console.log(
-        `✅ Order ${order.orderId} atomically assigned to delivery partner ${currentDeliveryId}`,
-      );
-
       // Reload order with populated data
       try {
         order = await Order.findOne({
@@ -450,22 +404,7 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         "Order is assigned to another delivery partner",
       );
     } else {
-      console.log(
-        `✅ Order ${order.orderId} is already assigned to current delivery partner`,
-      );
     }
-
-    console.log(
-      `✅ Order found: ${order.orderId}, Status: ${order.status}, Delivery Partner: ${order.deliveryPartnerId}`,
-    );
-    console.log(`📍 Order details:`, {
-      orderId: order.orderId,
-      status: order.status,
-      restaurantId: order.restaurantId?._id || order.restaurantId,
-      hasRestaurantLocation: !!order.restaurantId?.location?.coordinates,
-      restaurantLocationType: typeof order.restaurantId?.location,
-    });
-
     // Check if order is in valid state to accept
     const validStatuses = ["preparing", "ready"];
     if (!validStatuses.includes(order.status)) {
@@ -489,17 +428,9 @@ export const acceptOrder = asyncHandler(async (req, res) => {
       ) {
         [restaurantLng, restaurantLat] =
           order.restaurantId.location.coordinates;
-        console.log(
-          `📍 Restaurant location from populated order: lat=${restaurantLat}, lng=${restaurantLng}`,
-        );
       } else {
         // Try to fetch restaurant from database
-        console.log(
-          `⚠️ Restaurant location not in populated order, fetching from database...`,
-        );
         const restaurantId = order.restaurantId?._id || order.restaurantId;
-        console.log(`🔍 Fetching restaurant with ID: ${restaurantId}`);
-
         const restaurant = await Restaurant.findById(restaurantId);
         if (
           restaurant &&
@@ -507,9 +438,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
           restaurant.location.coordinates
         ) {
           [restaurantLng, restaurantLat] = restaurant.location.coordinates;
-          console.log(
-            `📍 Restaurant location from database: lat=${restaurantLat}, lng=${restaurantLng}`,
-          );
         } else {
           console.error(
             `❌ Restaurant location not found for restaurant ID: ${restaurantId}`,
@@ -555,15 +483,7 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     // Get delivery boy's current location
     let deliveryLat = currentLat;
     let deliveryLng = currentLng;
-
-    console.log(
-      `📍 Initial delivery location: lat=${deliveryLat}, lng=${deliveryLng}`,
-    );
-
     if (!deliveryLat || !deliveryLng) {
-      console.log(
-        `⚠️ Location not provided in request, fetching from delivery partner profile...`,
-      );
       // Try to get from delivery partner's current location
       try {
         const deliveryPartner = await Delivery.findById(delivery._id)
@@ -573,9 +493,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         if (deliveryPartner?.availability?.currentLocation?.coordinates) {
           [deliveryLng, deliveryLat] =
             deliveryPartner.availability.currentLocation.coordinates;
-          console.log(
-            `📍 Delivery location from profile: lat=${deliveryLat}, lng=${deliveryLng}`,
-          );
         } else {
           console.error(`❌ Delivery partner location not found in profile`);
           return errorResponse(
@@ -623,13 +540,7 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         "Invalid location coordinates. Please ensure location services are enabled.",
       );
     }
-
-    console.log(
-      `✅ Valid coordinates confirmed - Delivery: (${deliveryLat}, ${deliveryLng}), Restaurant: (${restaurantLat}, ${restaurantLng})`,
-    );
-
     // Calculate route from delivery boy to restaurant
-    console.log(`🗺️ Starting route calculation...`);
     let routeData;
     const haversineDistance = (lat1, lng1, lat2, lng2) => {
       const R = 6371;
@@ -646,25 +557,12 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     };
 
     try {
-      console.log(`🗺️ Calling calculateRoute with:`, {
-        from: `(${deliveryLat}, ${deliveryLng})`,
-        to: `(${restaurantLat}, ${restaurantLng})`,
-      });
       routeData = await calculateRoute(
         deliveryLat,
         deliveryLng,
         restaurantLat,
         restaurantLng,
       );
-      console.log(`🗺️ Route calculation result:`, {
-        hasData: !!routeData,
-        hasCoordinates: !!routeData?.coordinates,
-        coordinatesLength: routeData?.coordinates?.length || 0,
-        distance: routeData?.distance,
-        duration: routeData?.duration,
-        method: routeData?.method,
-      });
-
       // Validate route data - ensure all required fields are present and valid
       if (
         !routeData ||
@@ -695,11 +593,7 @@ export const acceptOrder = asyncHandler(async (req, res) => {
           duration: (distance / 30) * 60, // Assume 30 km/h average speed
           method: "haversine_fallback",
         };
-        console.log(`✅ Using fallback route: ${distance.toFixed(2)} km`);
       } else {
-        console.log(
-          `✅ Route calculated successfully: ${routeData.distance.toFixed(2)} km, ${routeData.duration.toFixed(1)} mins`,
-        );
       }
     } catch (routeError) {
       console.error("❌ Error calculating route:", routeError);
@@ -720,9 +614,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         duration: (distance / 30) * 60,
         method: "haversine_fallback",
       };
-      console.log(
-        `✅ Using fallback route after error: ${distance.toFixed(2)} km`,
-      );
     }
 
     // Final validation - ensure routeData is valid before using it
@@ -744,11 +635,7 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         "Failed to calculate route. Please try again.",
       );
     }
-
-    console.log(`✅ Route data validated successfully`);
-
     // Update order status and tracking
-    console.log(`💾 Starting order update...`);
     // Use order._id (MongoDB ObjectId) - ensure it exists
     if (!order._id) {
       console.error(`❌ Order ${order.orderId} does not have _id field`);
@@ -756,8 +643,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     }
 
     const orderMongoId = order._id;
-    console.log(`💾 Order MongoDB ID: ${orderMongoId}`);
-
     // Prepare route data for storage - ensure coordinates are valid
     const routeToPickup = {
       coordinates: routeData.coordinates,
@@ -766,14 +651,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
       calculatedAt: new Date(),
       method: routeData.method || "unknown",
     };
-
-    console.log(`💾 Route data to save:`, {
-      coordinatesCount: routeToPickup.coordinates.length,
-      distance: routeToPickup.distance,
-      duration: routeToPickup.duration,
-      method: routeToPickup.method,
-    });
-
     // Validate route coordinates before saving
     if (
       !Array.isArray(routeToPickup.coordinates) ||
@@ -786,7 +663,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
 
     let updatedOrder;
     try {
-      console.log(`💾 Updating order in database...`);
       updatedOrder = await Order.findByIdAndUpdate(
         orderMongoId,
         {
@@ -809,7 +685,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         );
         return errorResponse(res, 404, "Order not found");
       }
-      console.log(`✅ Order updated successfully: ${updatedOrder.orderId}`);
     } catch (updateError) {
       console.error("❌ Error updating order:", updateError);
       console.error("❌ Update error message:", updateError.message);
@@ -824,14 +699,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         `Failed to update order: ${updateError.message || "Unknown error"}`,
       );
     }
-
-    console.log(
-      `✅ Order ${order.orderId} accepted by delivery partner ${delivery._id}`,
-    );
-    console.log(
-      `📍 Route calculated: ${routeData.distance.toFixed(2)} km, ${routeData.duration.toFixed(1)} mins`,
-    );
-
     // Calculate delivery distance (restaurant to customer) for earnings calculation
     let deliveryDistance = 0;
     if (
@@ -895,10 +762,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
           minDistance: rule.minDistance || 4,
         },
       };
-
-      console.log(
-        `💰 Estimated earnings calculated: ₹${estimatedEarnings.totalEarning} for ${deliveryDistance.toFixed(2)} km`,
-      );
     } catch (earningsError) {
       console.error("❌ Error calculating estimated earnings:", earningsError);
       console.error("❌ Earnings error stack:", earningsError.stack);
@@ -954,9 +817,6 @@ export const acceptOrder = asyncHandler(async (req, res) => {
           mongoId: updatedOrder._id?.toString?.() || String(updatedOrder._id),
           acceptedBy: delivery._id?.toString?.() || String(delivery._id),
         });
-        console.log(
-          `📢 Emitted order_accepted for ${updatedOrder.orderId} to all delivery boys`,
-        );
       }
     } catch (emitErr) {
       console.error("Error emitting order_accepted:", emitErr);
@@ -995,11 +855,6 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
     const delivery = req.delivery;
     const { orderId } = req.params;
     const deliveryId = delivery._id;
-
-    console.log(
-      `📍 confirmReachedPickup called - orderId: ${orderId}, deliveryId: ${deliveryId}`,
-    );
-
     // Find order by _id or orderId field
     let order = null;
 
@@ -1023,11 +878,6 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
       );
       return errorResponse(res, 404, "Order not found or not assigned to you");
     }
-
-    console.log(
-      `✅ Order found: ${order.orderId}, Current phase: ${order.deliveryState?.currentPhase || "none"}, Status: ${order.deliveryState?.status || "none"}, Order status: ${order.status || "none"}`,
-    );
-
     // Initialize deliveryState if it doesn't exist
     if (!order.deliveryState) {
       order.deliveryState = {
@@ -1050,9 +900,6 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
       order.status === "out_for_delivery";
 
     if (isPastPickupPhase) {
-      console.log(
-        `ℹ️ Order ${order.orderId} is already past pickup phase. Current phase: ${order.deliveryState?.currentPhase || "unknown"}, Status: ${order.deliveryState?.status || "unknown"}, Order status: ${order.status || "unknown"}`,
-      );
       return successResponse(res, 200, "Order is already past pickup phase", {
         order,
         message: "Order is already out for delivery",
@@ -1080,9 +927,6 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
       order.deliveryState.currentPhase === "at_pickup" ||
       order.deliveryState.status === "reached_pickup"
     ) {
-      console.log(
-        `ℹ️ Order ${order.orderId} already at pickup. Returning success (idempotent).`,
-      );
       return successResponse(res, 200, "Reached pickup already confirmed", {
         order,
         message: "Order was already marked as reached pickup",
@@ -1102,11 +946,6 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
     order.deliveryState.currentPhase = "at_pickup";
     order.deliveryState.reachedPickupAt = new Date();
     await order.save();
-
-    console.log(
-      `✅ Delivery partner ${delivery._id} reached pickup for order ${order.orderId}`,
-    );
-
     // After 10 seconds, trigger order ID confirmation request
     // Use order._id (MongoDB ObjectId) instead of orderId string
     const orderMongoId = order._id;
@@ -1138,9 +977,6 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
                   orderId: freshOrder.orderId,
                   orderMongoId: freshOrder._id.toString(),
                 });
-              console.log(
-                `📢 Requested order ID confirmation for order ${freshOrder.orderId} to delivery ${deliveryId}`,
-              );
             }
           }
         }
@@ -1256,10 +1092,6 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
 
     if (isAlreadyConfirmed) {
       // Order ID is already confirmed - return success with current order data (idempotent)
-      console.log(
-        `✅ Order ID already confirmed for order ${order.orderId}, returning current state`,
-      );
-
       // Get customer location for route calculation if not already calculated
       const [customerLng, customerLat] = order.address.location.coordinates;
 
@@ -1501,9 +1333,6 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
           // Don't reject, but log warning for monitoring
         }
         updateData.billImageUrl = billImageUrl;
-        console.log(
-          `📸 Bill image URL validated and saved for order ${order.orderId}`,
-        );
       } catch (urlError) {
         console.error(
           `❌ Invalid bill image URL format: ${billImageUrl}`,
@@ -1521,12 +1350,6 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
       .populate("userId", "name phone")
       .populate("restaurantId", "name location address")
       .lean();
-
-    console.log(`✅ Order ID confirmed for order ${order.orderId}`);
-    console.log(
-      `📍 Route to delivery calculated: ${routeData.distance.toFixed(2)} km, ${routeData.duration.toFixed(1)} mins`,
-    );
-
     // Send response first, then handle socket notification asynchronously
     const responseData = {
       order: updatedOrder,
@@ -1566,10 +1389,6 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
               deliveryStartedAt: new Date(),
               estimatedDeliveryTime: routeData.duration || null,
             },
-          );
-
-          console.log(
-            `📢 Notified customer for order ${updatedOrder.orderId} - Delivery partner on the way`,
           );
         } else {
           console.warn(
@@ -1661,11 +1480,6 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
     // Find order by _id or orderId, and ensure it's assigned to this delivery partner
     // Try multiple comparison methods for deliveryPartnerId (ObjectId vs string)
     const deliveryId = delivery._id;
-
-    console.log(
-      `🔍 Searching for order: ${orderId}, Delivery ID: ${deliveryId}`,
-    );
-
     // Try finding order with different deliveryPartnerId comparison methods
     // First try without lean() to get Mongoose document (needed for proper ObjectId comparison)
     let order = await Order.findOne({
@@ -1681,9 +1495,6 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
 
     // If not found, try with string comparison
     if (!order) {
-      console.log(
-        `⚠️ Order not found with ObjectId comparison, trying string comparison...`,
-      );
       order = await Order.findOne({
         $and: [
           {
@@ -1702,11 +1513,6 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
       );
       return errorResponse(res, 404, "Order not found or not assigned to you");
     }
-
-    console.log(
-      `✅ Order found: ${order.orderId || order._id}, Status: ${order.status}, Phase: ${order.deliveryState?.currentPhase || "N/A"}`,
-    );
-
     // Initialize deliveryState if it doesn't exist
     if (!order.deliveryState) {
       order.deliveryState = {
@@ -1800,10 +1606,6 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
 
     const orderIdForLog =
       finalOrder.orderId || finalOrder._id?.toString() || orderId;
-    console.log(
-      `✅ Delivery partner ${delivery._id} reached drop location for order ${orderIdForLog}`,
-    );
-
     return successResponse(res, 200, "Reached drop confirmed", {
       order: finalOrder,
       message: "Reached drop location confirmed",
@@ -1899,10 +1701,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       order.deliveryState?.status === "delivered";
 
     if (isAlreadyDelivered) {
-      console.log(
-        `ℹ️ Order ${order.orderId || order._id} is already delivered/completed. Returning success (idempotent).`,
-      );
-
       const orderIdForLog = order.orderId || order._id?.toString() || orderId;
       const orderMongoIdForAlready = order._id;
 
@@ -1940,9 +1738,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
                 ),
             );
             await wallet.save();
-            console.log(
-              `⚠️ Removed stale ₹0 earning for order ${orderIdForLog}`,
-            );
           }
           // Earning was never added to wallet — add it now so Pocket and Earnings update
           let deliveryDistance = 0;
@@ -2000,10 +1795,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
             paymentCollected: false,
           });
           await wallet.save();
-
-          console.log(
-            `✅ Backfilled earning ₹${totalEarning.toFixed(2)} to wallet for already-delivered order ${orderIdForLog}`,
-          );
           earnings = {
             amount: totalEarning,
             transactionId:
@@ -2087,19 +1878,12 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       order.orderId ||
       orderMongoId?.toString() ||
       orderId;
-    console.log(
-      `✅ Order ${orderIdForLog} marked as delivered by delivery partner ${delivery._id}`,
-    );
-
     // Mark COD payment as collected (admin Payment Status → Collected)
     if (order.payment?.method === "cash" || order.payment?.method === "cod") {
       try {
         await Payment.updateOne(
           { orderId: orderMongoId },
           { $set: { status: "completed", completedAt: new Date() } },
-        );
-        console.log(
-          `✅ COD payment marked as collected for order ${orderIdForLog}`,
         );
       } catch (paymentUpdateError) {
         console.warn(
@@ -2114,9 +1898,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       const { releaseEscrow } =
         await import("../../order/services/escrowWalletService.js");
       await releaseEscrow(orderMongoId);
-      console.log(
-        `✅ Escrow released and funds distributed for order ${orderIdForLog}`,
-      );
     } catch (escrowError) {
       console.error(
         `❌ Error releasing escrow for order ${orderIdForLog}:`,
@@ -2159,11 +1940,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       deliveryDistance = R * c;
     }
-
-    console.log(
-      `📏 Delivery distance: ${deliveryDistance.toFixed(2)} km for order ${orderIdForLog}`,
-    );
-
     // Calculate earnings using admin's commission rules
     let totalEarning = 0;
     let commissionBreakdown = null;
@@ -2174,18 +1950,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
         await DeliveryBoyCommission.calculateCommission(deliveryDistance);
       totalEarning = commissionResult.commission;
       commissionBreakdown = commissionResult.breakdown;
-
-      console.log(
-        `💰 Delivery earnings calculated using commission rules: ₹${totalEarning.toFixed(2)} for order ${orderIdForLog}`,
-      );
-      console.log(`📊 Commission breakdown:`, {
-        rule: commissionResult.rule.name,
-        basePayout: commissionResult.breakdown.basePayout,
-        distance: commissionResult.breakdown.distance,
-        commissionPerKm: commissionResult.breakdown.commissionPerKm,
-        distanceCommission: commissionResult.breakdown.distanceCommission,
-        total: totalEarning,
-      });
     } catch (commissionError) {
       console.error(
         "⚠️ Error calculating commission using rules:",
@@ -2237,9 +2001,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
             ),
         );
         await wallet.save();
-        console.log(
-          `⚠️ Removed stale ₹0 earning for order ${orderIdForLog}, will re-add`,
-        );
       }
 
       if (orderIdStr && existingTransaction && existingTransaction.amount > 0) {
@@ -2274,9 +2035,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
               { $inc: { cashInHand: codAmount } },
             );
             if (updateResult.modifiedCount > 0) {
-              console.log(
-                `✅ Cash collected ₹${codAmount.toFixed(2)} (COD) added to cashInHand for order ${orderIdForLog}`,
-              );
             } else {
               console.warn(
                 `⚠️ Wallet update for cashInHand had no effect (deliveryId: ${delivery._id})`,
@@ -2304,13 +2062,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
             cashInHand: wallet.cashInHand,
           },
         );
-
-        console.log(
-          `✅ Earning ₹${totalEarning.toFixed(2)} added to delivery boy's wallet`,
-        );
-        console.log(
-          `💰 New wallet balance: ₹${wallet.totalBalance.toFixed(2)}, cashInHand: ₹${wallet.cashInHand?.toFixed(2) || "0.00"}`,
-        );
       }
     } catch (walletError) {
       logger.error("❌ Error adding earning to wallet:", walletError);
@@ -2331,9 +2082,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       );
 
       if (earningAddonBonus) {
-        console.log(
-          `🎉 Earning addon bonus awarded: ₹${earningAddonBonus.amount} for offer "${earningAddonBonus.offerTitle}"`,
-        );
         logger.info(`Earning addon bonus awarded to delivery ${delivery._id}`, {
           offerId: earningAddonBonus.offerId,
           amount: earningAddonBonus.amount,
@@ -2386,17 +2134,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
 
         const commissionAmount = commissionResult.commission || 0;
         const restaurantEarning = foodPrice - commissionAmount;
-
-        console.log(
-          `💰 Restaurant commission calculation for order ${orderIdForLog}:`,
-          {
-            foodPrice,
-            commissionPercentage: commissionResult.value,
-            commissionAmount: commissionAmount,
-            restaurantEarning: restaurantEarning,
-          },
-        );
-
         // Update restaurant wallet
         if (restaurant._id) {
           const restaurantWallet =
@@ -2446,13 +2183,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
                 walletBalance: restaurantWallet.totalBalance,
               },
             );
-
-            console.log(
-              `✅ Restaurant earning ₹${restaurantEarning.toFixed(2)} added to wallet`,
-            );
-            console.log(
-              `💰 New restaurant wallet balance: ₹${restaurantWallet.totalBalance.toFixed(2)}`,
-            );
           }
         }
 
@@ -2481,10 +2211,6 @@ export const completeDelivery = asyncHandler(async (req, res) => {
               commissionAmount: commissionAmount,
               orderTotal: orderTotal,
             });
-
-            console.log(
-              `✅ Admin commission ₹${commissionAmount.toFixed(2)} recorded`,
-            );
           } else {
             console.warn(
               `⚠️ Admin commission already recorded for order ${orderIdForLog}`,

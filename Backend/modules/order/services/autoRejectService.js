@@ -58,9 +58,6 @@ export async function processAutoRejectOrders() {
             elapsedSeconds: Math.floor(elapsedMs / 1000)
           });
           processedCount++;
-
-          console.log(`✅ Order ${currentOrder.orderId} automatically rejected (elapsed: ${Math.floor(elapsedMs / 1000)}s >= ${ACCEPT_TIME_LIMIT_SECONDS}s)`);
-
           // Calculate refund amount but don't process automatically
           // Admin will process refund manually via refund button
           try {
@@ -68,7 +65,6 @@ export async function processAutoRejectOrders() {
               currentOrder._id,
               'Order not accepted within time limit. Restaurant did not respond in time.'
             );
-            console.log(`✅ Cancellation refund calculated for order ${currentOrder.orderId} - awaiting admin approval`);
           } catch (refundError) {
             console.error(`❌ Error calculating cancellation refund for order ${currentOrder.orderId}:`, refundError);
             // Don't fail order cancellation if refund calculation fails

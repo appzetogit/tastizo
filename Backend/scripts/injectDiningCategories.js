@@ -14,7 +14,6 @@ dotenv.config({ path: path.join(__dirname, "../.env") });
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
-    console.log("MongoDB Connected for Seeding");
   } catch (err) {
     console.error("MongoDB Connection Error:", err);
     process.exit(1);
@@ -56,12 +55,8 @@ const diningCategories = [
 
 const seedData = async () => {
   try {
-    console.log("Injecting Dining Categories...");
-
     // Clear existing categories to ensure we only have the requested ones
     await DiningCategory.deleteMany({});
-    console.log("Cleared existing dining categories.");
-
     // Insert new data
     await DiningCategory.insertMany(
       diningCategories.map((c, i) => ({
@@ -71,8 +66,6 @@ const seedData = async () => {
         order: i,
       })),
     );
-
-    console.log("✅ Dining Categories Injected Successfully");
     process.exit();
   } catch (error) {
     console.error("Error seeding data:", error);

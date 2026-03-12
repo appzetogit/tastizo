@@ -99,9 +99,6 @@ function redactPII(data) {
 export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
   // CRITICAL: Don't notify if order is cancelled
   if (order.status === "cancelled") {
-    console.log(
-      `⚠️ Order ${order.orderId} is cancelled. Cannot notify delivery partner.`,
-    );
     return { success: false, reason: "Order is cancelled" };
   }
   try {
@@ -162,24 +159,9 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
         `⚠️ Delivery partner ${deliveryPartnerId} (${deliveryPartner.name}) has no valid location.`,
       );
     }
-
-    console.log(`📋 Delivery partner details:`, {
-      id: deliveryPartnerId,
-      name: deliveryPartner.name,
-      isOnline: deliveryPartner.availability?.isOnline,
-      isActive: deliveryPartner.isActive,
-      status: deliveryPartner.status,
-      hasLocation: !!deliveryPartner.availability?.currentLocation?.coordinates,
-    });
-
     // Check if delivery partner is connected to socket BEFORE trying to notify
     const connectionStatus =
       await checkDeliveryPartnerConnection(deliveryPartnerId);
-    console.log(
-      `🔌 Delivery partner socket connection status:`,
-      connectionStatus,
-    );
-
     if (!connectionStatus.connected) {
       console.warn(
         `⚠️ Delivery partner ${deliveryPartnerId} (${deliveryPartner.name}) is NOT connected to socket!`,
@@ -188,9 +170,6 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
         `⚠️ Notification will be sent but may not be received until they reconnect.`,
       );
     } else {
-      console.log(
-        `✅ Delivery partner ${deliveryPartnerId} is connected via socket in room: ${connectionStatus.room}`,
-      );
     }
 
     // Get restaurant details for pickup location
@@ -324,29 +303,17 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
 
     // First, get all connected sockets in delivery namespace for debugging
     const allSockets = await deliveryNamespace.fetchSockets();
-    console.log(`📊 Total connected delivery sockets: ${allSockets.length}`);
-
     // Check each room variation
     for (const room of roomVariations) {
       const sockets = await deliveryNamespace.in(room).fetchSockets();
       if (sockets.length > 0) {
         socketsInRoom = sockets;
         foundRoom = room;
-        console.log(`� Found ${sockets.length} socket(s) in room: ${room}`);
-        console.log(
-          `📢 Socket IDs in room:`,
-          sockets.map((s) => s.id),
-        );
         break;
       }
     }
 
     const primaryRoom = roomVariations[0];
-
-    console.log(
-      `� Attempting to notify delivery partner ${normalizedDeliveryPartnerId} about order ${order.orderId}`,
-    );
-
     // Emit new order notification to specific rooms (Keep PII here as it's targeted)
     let notificationSent = false;
     roomVariations.forEach((room) => {
@@ -357,7 +324,6 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
         message: `New order assigned: ${order.orderId}`,
       });
       notificationSent = true;
-      console.log(`📤 Emitted targeted notification to room: ${room}`);
     });
 
     // Also emit to all sockets in the delivery namespace (FALLBACK MUST BE REDACTED)
@@ -377,16 +343,9 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
       });
       notificationSent = true;
     } else {
-      console.log(
-        `✅ Successfully found connected socket(s) for delivery partner ${normalizedDeliveryPartnerId}`,
-      );
-      console.log(`✅ Targeted notification sent to room: ${foundRoom}`);
     }
 
     if (notificationSent) {
-      console.log(
-        `✅ Notification emitted for order ${order.orderId} to delivery partner ${normalizedDeliveryPartnerId}`,
-      );
     } else {
       console.error(`❌ Failed to send notification`);
     }
@@ -484,14 +443,6 @@ export async function notifyMultipleDeliveryBoys(
 
     // Calculate delivery distance (restaurant to customer) for earnings calculation
     let deliveryDistance = 0;
-
-    console.log(`🔍 Calculating earnings for order ${orderWithUser.orderId}:`, {
-      hasRestaurantLocation: !!restaurantLocation,
-      restaurantCoords: restaurantLocation?.coordinates,
-      hasAddressLocation: !!orderWithUser.address?.location,
-      addressCoords: orderWithUser.address?.location?.coordinates,
-    });
-
     if (
       restaurantLocation?.coordinates &&
       orderWithUser.address?.location?.coordinates
@@ -523,9 +474,6 @@ export async function notifyMultipleDeliveryBoys(
             Math.sin(dLng / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         deliveryDistance = R * c;
-        console.log(
-          `✅ Calculated delivery distance: ${deliveryDistance.toFixed(2)} km`,
-        );
       } else {
         console.warn("⚠️ Invalid coordinates for distance calculation");
       }
@@ -543,28 +491,13 @@ export async function notifyMultipleDeliveryBoys(
         typeof estimatedEarnings === "object"
           ? (estimatedEarnings.totalEarning ?? 0)
           : Number(estimatedEarnings) || 0;
-
-      console.log(`💰 Earnings calculation result:`, {
-        estimatedEarnings,
-        earnedValue,
-        deliveryFeeFromOrder,
-        deliveryDistance,
-      });
-
       // Use deliveryFee as fallback if earnings is 0 or invalid
       if (earnedValue <= 0 && deliveryFeeFromOrder > 0) {
-        console.log(
-          `⚠️ Earnings is 0, using deliveryFee as fallback: ₹${deliveryFeeFromOrder}`,
-        );
         estimatedEarnings =
           typeof estimatedEarnings === "object"
             ? { ...estimatedEarnings, totalEarning: deliveryFeeFromOrder }
             : deliveryFeeFromOrder;
       }
-
-      console.log(
-        `✅ Final estimated earnings for order ${orderWithUser.orderId}: ₹${typeof estimatedEarnings === "object" ? estimatedEarnings.totalEarning : estimatedEarnings} (distance: ${deliveryDistance.toFixed(2)} km)`,
-      );
     } catch (earningsError) {
       console.error(
         "❌ Error calculating estimated earnings in notification:",
@@ -583,9 +516,6 @@ export async function notifyMultipleDeliveryBoys(
               totalEarning: 10,
               breakdown: "Default calculation",
             };
-      console.log(
-        `⚠️ Using fallback earnings: ₹${typeof estimatedEarnings === "object" ? estimatedEarnings.totalEarning : estimatedEarnings}`,
-      );
     }
 
     // Prepare notification payload
@@ -653,11 +583,6 @@ export async function notifyMultipleDeliveryBoys(
 
     // REDACT PII for broad notifications
     const orderNotification = redactPII(orderNotificationRaw);
-
-    console.log(
-      `📤 Redacted notification payload for order ${orderWithUser.orderId}`,
-    );
-
     // Notify each delivery partner
     for (const deliveryPartnerId of deliveryPartnerIds) {
       try {
@@ -687,9 +612,6 @@ export async function notifyMultipleDeliveryBoys(
             });
             notificationSent = true;
             notifiedCount++;
-            console.log(
-              `📤 Notified delivery partner ${normalizedId} in room: ${room} (phase: ${phase})`,
-            );
             break;
           }
         }
@@ -712,10 +634,6 @@ export async function notifyMultipleDeliveryBoys(
         );
       }
     }
-
-    console.log(
-      `✅ Notified ${notifiedCount} delivery partners with redacted PII (phase: ${phase}) for order ${order.orderId}`,
-    );
     return { success: true, notified: notifiedCount };
   } catch (error) {
     console.error("❌ Error notifying multiple delivery boys:", error);
@@ -736,7 +654,6 @@ export async function broadcastNewOrderToAllDeliveryBoys(order, phase = "priorit
       return;
     }
     if (order.status === "cancelled") {
-      console.log(`⚠️ Order ${order.orderId} is cancelled. Skipping broadcast.`);
       return;
     }
 
@@ -888,10 +805,6 @@ export async function broadcastNewOrderToAllDeliveryBoys(order, phase = "priorit
       message: `New order available: ${order.orderId}`,
       phase,
     });
-
-    console.log(
-      `✅ Broadcast new_order_available to all delivery boys for order ${order.orderId} (phase: ${phase})`,
-    );
   } catch (error) {
     console.error("❌ Error broadcasting to all delivery boys:", error);
   }
@@ -963,9 +876,6 @@ export async function notifyDeliveryBoyOrderReady(order, deliveryPartnerId) {
         .to(foundRoom)
         .emit("order_ready", orderReadyNotification);
       notificationSent = true;
-      console.log(
-        `✅ Order ready notification sent to delivery partner ${normalizedDeliveryPartnerId} in room ${foundRoom}`,
-      );
     } else {
       // Fallback: broadcast to all delivery sockets
       console.warn(
@@ -1022,9 +932,6 @@ async function calculateEstimatedEarnings(deliveryDistance) {
 
     // If distance is 0 or not provided, still return base payout
     if (!deliveryDistance || deliveryDistance <= 0) {
-      console.log(
-        `💰 Distance is 0 or missing, returning base payout only: ₹${commissionResult.breakdown.basePayout}`,
-      );
       return {
         basePayout: commissionResult.breakdown.basePayout,
         distance: 0,

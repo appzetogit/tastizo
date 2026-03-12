@@ -185,18 +185,6 @@ deliveryBoyCommissionSchema.statics.calculateCommission = async function(distanc
   // If distance <= minDistance, only base payout is given (distanceCommission = 0)
   
   const commission = basePayout + distanceCommission;
-  
-  console.log(`📊 Commission calculation for ${distance.toFixed(2)} km:`, {
-    rule: applicableRule.name,
-    minDistance: applicableRule.minDistance,
-    maxDistance: applicableRule.maxDistance,
-    basePayout: basePayout,
-    commissionPerKm: applicableRule.commissionPerKm,
-    perKmApplied: distance >= applicableRule.minDistance,
-    distanceCommission: distanceCommission,
-    totalCommission: commission
-  });
-  
   return {
     rule: applicableRule,
     commission: Math.round(commission * 100) / 100, // Round to 2 decimal places

@@ -34,8 +34,6 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
  */
 export async function findNearestDeliveryBoys(restaurantLat, restaurantLng, restaurantId = null, priorityDistance = 5) {
   try {
-    console.log(`🔍 Searching for priority delivery partners within ${priorityDistance}km of restaurant: ${restaurantLat}, ${restaurantLng}`);
-    
     // Use the same logic as findNearestDeliveryBoy but return all within priority distance
     let zone = null;
     let deliveryQuery = {
@@ -57,7 +55,6 @@ export async function findNearestDeliveryBoys(restaurantLat, restaurantLng, rest
         }).lean();
 
         if (zone) {
-          console.log(`✅ Found zone: ${zone.name} for restaurant ${restaurantId}`);
         }
       } catch (zoneError) {
         console.warn(`⚠️ Error finding zone:`, zoneError.message);
@@ -67,9 +64,6 @@ export async function findNearestDeliveryBoys(restaurantLat, restaurantLng, rest
     const deliveryPartners = await Delivery.find(deliveryQuery)
       .select('_id name phone availability.currentLocation availability.lastLocationUpdate status isActive zoneId')
       .lean();
-
-    console.log(`📊 Found ${deliveryPartners?.length || 0} online delivery partners`);
-
     if (!deliveryPartners || deliveryPartners.length === 0) {
       return [];
     }
@@ -119,8 +113,6 @@ export async function findNearestDeliveryBoys(restaurantLat, restaurantLng, rest
       })
       .filter(partner => partner !== null && partner.distance <= priorityDistance)
       .sort((a, b) => a.distance - b.distance);
-
-    console.log(`✅ Found ${deliveryPartnersWithDistance.length} priority delivery partners within ${priorityDistance}km`);
     return deliveryPartnersWithDistance.map(partner => ({
       deliveryPartnerId: partner._id.toString(),
       name: partner.name,
@@ -148,8 +140,6 @@ export async function findNearestDeliveryBoys(restaurantLat, restaurantLng, rest
  */
 export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, restaurantId = null, maxDistance = 50, excludeIds = []) {
   try {
-    console.log(`🔍 Searching for nearest delivery partner near restaurant: ${restaurantLat}, ${restaurantLng} (Restaurant ID: ${restaurantId})`);
-    
     // Step 1: Find zone for restaurant (if restaurantId provided)
     let zone = null;
     let deliveryQuery = {
@@ -172,8 +162,6 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, resta
         }).lean();
 
         if (zone) {
-          console.log(`✅ Found zone: ${zone.name} for restaurant ${restaurantId}`);
-          
           // Option A: Filter by zoneId if Delivery model has zoneId field
           // Uncomment when zoneId is added to Delivery model
           // deliveryQuery.zoneId = zone._id;
@@ -183,10 +171,8 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, resta
           if (zone.boundary && zone.boundary.coordinates) {
             // For now, we'll use distance-based with zone coordinate check
             // In production, you can use $geoWithin for better accuracy
-            console.log(`📍 Zone boundary found, will filter by location after distance calculation`);
           }
         } else {
-          console.log(`⚠️ No zone found for restaurant ${restaurantId}, using distance-based assignment`);
         }
       } catch (zoneError) {
         console.warn(`⚠️ Error finding zone for restaurant ${restaurantId}:`, zoneError.message);
@@ -201,7 +187,6 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, resta
         .map(id => new mongoose.Types.ObjectId(id));
       if (excludeObjectIds.length > 0) {
         deliveryQuery._id = { $nin: excludeObjectIds };
-        console.log(`🚫 Excluding ${excludeObjectIds.length} already notified delivery partners`);
       }
     }
 
@@ -209,21 +194,12 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, resta
     const deliveryPartners = await Delivery.find(deliveryQuery)
       .select('_id name phone availability.currentLocation availability.lastLocationUpdate status isActive zoneId')
       .lean();
-
-    console.log(`📊 Found ${deliveryPartners?.length || 0} online delivery partners in database`);
-
     if (!deliveryPartners || deliveryPartners.length === 0) {
-      console.log('⚠️ No online delivery partners found');
-      console.log('⚠️ Checking all delivery partners to see why...');
-      
       // Debug: Check all delivery partners to see their status
       const allPartners = await Delivery.find({})
         .select('_id name availability.isOnline status isActive availability.currentLocation')
         .lean();
-      
-      console.log(`📊 Total delivery partners in database: ${allPartners.length}`);
       allPartners.forEach(partner => {
-        console.log(`  - ${partner.name} (${partner._id}): online=${partner.availability?.isOnline}, status=${partner.status}, active=${partner.isActive}, hasLocation=${!!partner.availability?.currentLocation?.coordinates}`);
       });
       
       return null;
@@ -248,7 +224,6 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, resta
         if (zone) {
           // Option A: Check zoneId match (when zoneId is added to Delivery model)
           if (partner.zoneId && partner.zoneId.toString() !== zone._id.toString()) {
-            console.log(`⚠️ Delivery partner ${partner._id} not in zone ${zone.name} (partner zone: ${partner.zoneId}, required zone: ${zone._id})`);
             return null; // Skip delivery partners not in the restaurant's zone
           }
 
@@ -272,7 +247,6 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, resta
             }
             
             if (!inside) {
-              console.log(`⚠️ Delivery partner ${partner._id} location (${lat}, ${lng}) not within zone ${zone.name} boundary`);
               return null;
             }
           }
@@ -292,18 +266,11 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, resta
       .sort((a, b) => a.distance - b.distance); // Sort by distance (nearest first)
 
     if (deliveryPartnersWithDistance.length === 0) {
-      console.log(`⚠️ No delivery partners found within ${maxDistance}km`);
       return null;
     }
 
     // Get the nearest delivery partner
     const nearestPartner = deliveryPartnersWithDistance[0];
-    
-    console.log(`✅ Found nearest delivery partner: ${nearestPartner.name} (ID: ${nearestPartner._id})`);
-    console.log(`✅ Distance: ${nearestPartner.distance.toFixed(2)}km away`);
-    console.log(`✅ Location: ${nearestPartner.latitude}, ${nearestPartner.longitude}`);
-    console.log(`✅ Phone: ${nearestPartner.phone}`);
-
     return {
       deliveryPartnerId: nearestPartner._id.toString(),
       name: nearestPartner.name,
@@ -331,7 +298,6 @@ export async function assignOrderToDeliveryBoy(order, restaurantLat, restaurantL
   try {
     // CRITICAL: Don't assign if order is cancelled
     if (order.status === 'cancelled') {
-      console.log(`⚠️ Order ${order.orderId} is cancelled. Cannot assign to delivery partner.`);
       return null;
     }
     
@@ -339,13 +305,11 @@ export async function assignOrderToDeliveryBoy(order, restaurantLat, restaurantL
     if (order.status === 'delivered' || 
         order.deliveryState?.currentPhase === 'completed' ||
         order.deliveryState?.status === 'delivered') {
-      console.log(`⚠️ Order ${order.orderId} is already delivered/completed. Cannot assign.`);
       return null;
     }
     
     // Check if order already has a delivery partner assigned
     if (order.deliveryPartnerId) {
-      console.log(`⚠️ Order ${order.orderId} already has delivery partner assigned`);
       return null;
     }
 
@@ -356,7 +320,6 @@ export async function assignOrderToDeliveryBoy(order, restaurantLat, restaurantL
     const nearestDeliveryBoy = await findNearestDeliveryBoy(restaurantLat, restaurantLng, orderRestaurantId);
 
     if (!nearestDeliveryBoy) {
-      console.log(`⚠️ No delivery boy found for order ${order.orderId}`);
       return null;
     }
 
@@ -383,14 +346,10 @@ export async function assignOrderToDeliveryBoy(order, restaurantLat, restaurantL
     try {
       const etaEventService = (await import('./etaEventService.js')).default;
       await etaEventService.handleRiderAssigned(order._id.toString(), nearestDeliveryBoy.deliveryPartnerId);
-      console.log(`✅ ETA updated after rider assigned to order ${order.orderId}`);
     } catch (etaError) {
       console.error('Error updating ETA after rider assignment:', etaError);
       // Continue even if ETA update fails
     }
-
-    console.log(`✅ Assigned order ${order.orderId} to delivery partner ${nearestDeliveryBoy.name}`);
-
     return {
       success: true,
       deliveryPartnerId: nearestDeliveryBoy.deliveryPartnerId,

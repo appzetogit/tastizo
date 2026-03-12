@@ -38,11 +38,6 @@ export const registerRestaurantFcmToken = asyncHandler(async (req, res) => {
   }
 
   await restaurant.save();
-
-  console.log(
-    `[FCM] Updated ${platform} token for restaurant ${restaurant._id.toString()}`,
-  );
-
   return successResponse(res, 200, "FCM token registered successfully", {
     fcmTokenWeb: restaurant.fcmTokenWeb,
     fcmTokenAndroid: restaurant.fcmTokenAndroid,

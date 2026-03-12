@@ -388,16 +388,6 @@ export const getWallet = asyncHandler(async (req, res) => {
     };
 
     // Log wallet data for debugging
-    console.log("💰 Wallet API Response:", {
-      deliveryId: delivery._id,
-      totalBalance: walletData.totalBalance,
-      pocketBalance: walletData.pocketBalance,
-      cashInHand: walletData.cashInHand,
-      weeklyEarnings: walletData.weeklyEarnings,
-      weeklyOrders: walletData.weeklyOrders,
-      totalTransactions: walletData.totalTransactions,
-    });
-
     return successResponse(res, 200, "Wallet balance retrieved successfully", {
       wallet: walletData,
     });

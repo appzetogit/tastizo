@@ -27,12 +27,8 @@ export const checkAndAwardEarningAddon = async (deliveryId, orderId, orderDelive
     }).lean();
 
     if (!activeOffers || activeOffers.length === 0) {
-      console.log(`ℹ️ No active earning addon offers found for delivery ${deliveryId}`);
       return null;
     }
-
-    console.log(`🔍 Checking ${activeOffers.length} active offers for delivery ${deliveryId} after order ${orderId}`);
-
     // Check each offer to see if delivery boy qualifies
     for (const offer of activeOffers) {
       try {
@@ -44,7 +40,6 @@ export const checkAndAwardEarningAddon = async (deliveryId, orderId, orderDelive
         });
 
         if (existingRedemption) {
-          console.log(`ℹ️ Delivery ${deliveryId} already redeemed offer ${offer._id}, skipping`);
           continue;
         }
 
@@ -65,9 +60,6 @@ export const checkAndAwardEarningAddon = async (deliveryId, orderId, orderDelive
             $lte: endDate
           }
         });
-
-        console.log(`📊 Offer ${offer._id}: Delivery ${deliveryId} has completed ${orderCount} orders (required: ${offer.requiredOrders})`);
-
         // Check if delivery boy has completed the required number of orders
         if (orderCount >= offer.requiredOrders) {
           // Check if bonus was already awarded (check wallet transactions)
@@ -89,7 +81,6 @@ export const checkAndAwardEarningAddon = async (deliveryId, orderId, orderDelive
             });
 
             if (existingBonus) {
-              console.log(`ℹ️ Bonus already awarded for offer ${offer._id} to delivery ${deliveryId}`);
               continue;
             }
           }
@@ -102,14 +93,11 @@ export const checkAndAwardEarningAddon = async (deliveryId, orderId, orderDelive
           });
 
           if (existingPendingHistory) {
-            console.log(`ℹ️ Delivery ${deliveryId} already has pending history for offer ${offer._id}, skipping`);
             continue;
           }
 
           // Delivery boy qualifies for offer - create pending history record
           // Admin will manually credit the amount from history page
-          console.log(`🎉 Delivery ${deliveryId} qualifies for offer ${offer._id}! Creating pending history record for ₹${offer.earningAmount}`);
-
           // Ensure offer._id is ObjectId (handle both string and ObjectId formats)
           let offerId = offer._id;
           if (mongoose.Types.ObjectId.isValid(offer._id)) {
@@ -117,15 +105,6 @@ export const checkAndAwardEarningAddon = async (deliveryId, orderId, orderDelive
               ? new mongoose.Types.ObjectId(offer._id) 
               : offer._id;
           }
-
-          console.log(`📝 Creating pending history record for offer:`, {
-            offerId: offerId,
-            offerIdType: typeof offerId,
-            offerIdString: offerId.toString(),
-            deliveryId: deliveryId,
-            deliveryIdType: typeof deliveryId
-          });
-
           // Create history record with 'pending' status
           // Amount will be credited to wallet only when admin manually credits from history page
           const history = await EarningAddonHistory.create({
@@ -149,49 +128,20 @@ export const checkAndAwardEarningAddon = async (deliveryId, orderId, orderDelive
               completionTime: Math.ceil((now - offerStartDate) / (1000 * 60 * 60 * 24)) // days
             }
           });
-
-          console.log(`📝 Created EarningAddonHistory record:`, {
-            historyId: history._id,
-            earningAddonId: history.earningAddonId?.toString(),
-            earningAddonIdType: typeof history.earningAddonId,
-            deliveryPartnerId: history.deliveryPartnerId?.toString(),
-            status: history.status
-          });
-
           // Verify history record was saved correctly
           const verifyHistory = await EarningAddonHistory.findById(history._id).lean();
-          console.log(`✅ Verified history record saved:`, {
-            found: !!verifyHistory,
-            earningAddonId: verifyHistory?.earningAddonId?.toString(),
-            status: verifyHistory?.status
-          });
-
           // Update offer redemption count
           const updateResult = await EarningAddon.updateOne(
             { _id: offerId },
             { $inc: { currentRedemptions: 1 } }
           );
-
-          console.log(`📊 Updated redemption count for offer ${offerId}:`, {
-            matchedCount: updateResult.matchedCount,
-            modifiedCount: updateResult.modifiedCount,
-            offerTitle: offer.title
-          });
-
           // Verify the count was updated
           const updatedOffer = await EarningAddon.findById(offerId).select('currentRedemptions').lean();
-          console.log(`✅ Verified redemption count after update: ${updatedOffer?.currentRedemptions || 0}`);
-          
           // Also verify by counting history records
           const historyCount = await EarningAddonHistory.countDocuments({
             earningAddonId: offerId,
             status: { $in: ['pending', 'credited'] }
           });
-          console.log(`🔍 History count verification for offer ${offerId}: ${historyCount} records (pending + credited)`);
-
-          console.log(`✅ Earning addon history record created (pending): ₹${offer.earningAmount} for delivery ${deliveryId} for offer "${offer.title}"`);
-          console.log(`📋 Admin needs to manually credit this from Earning Addon History page`);
-
           return {
             success: true,
             offerId: offer._id,

@@ -155,7 +155,6 @@ export async function findNearestRestaurant(deliveryLat, deliveryLng, orderItems
 
     // Step 3: If no restaurants found, return null (strict zone-based assignment)
     if (restaurantsInZones.length === 0) {
-      console.log('⚠️ No restaurants found whose location is within active zones for delivery location:', deliveryLat, deliveryLng);
       return null;
     }
 

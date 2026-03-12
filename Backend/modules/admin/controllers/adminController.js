@@ -145,19 +145,9 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     const allSettlements = await OrderSettlement.find({
       orderId: { $in: deliveredOrderIdArray },
     }).lean();
-
-    console.log(
-      `📊 Dashboard Stats - Total settlements found: ${allSettlements.length}`,
-    );
-
     // Debug: Log first settlement to see actual structure
     if (allSettlements.length > 0) {
       const firstSettlement = allSettlements[0];
-      console.log("🔍 First settlement sample:", {
-        orderNumber: firstSettlement.orderNumber,
-        adminEarning: firstSettlement.adminEarning,
-        userPayment: firstSettlement.userPayment,
-      });
     }
 
     // Calculate totals from all settlements - use adminEarning fields
@@ -180,9 +170,6 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       // Log each settlement for debugging
       if (index < 5) {
         // Log first 5 settlements
-        console.log(
-          `📦 Settlement ${index + 1} (${s.orderNumber}): Commission: ₹${commission}, Platform: ₹${platformFee}, Delivery: ₹${deliveryFee}, GST: ₹${gst}`,
-        );
       }
     });
 
@@ -190,11 +177,6 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     totalPlatformFee = Math.round(totalPlatformFee * 100) / 100;
     totalDeliveryFee = Math.round(totalDeliveryFee * 100) / 100;
     totalGST = Math.round(totalGST * 100) / 100;
-
-    console.log(
-      `💰 Final calculated totals - Commission: ₹${totalCommission}, Platform Fee: ₹${totalPlatformFee}, Delivery Fee: ₹${totalDeliveryFee}, GST: ₹${totalGST}`,
-    );
-
     // Get settlements for period (or last 30 days for overall)
     const settlementsDateRange = Object.keys(dateFilter).length > 0
       ? dateFilter
@@ -1225,13 +1207,6 @@ export const getRestaurants = asyncHandler(async (req, res) => {
     } else {
       query.isActive = true;
     }
-
-    console.log("🔍 Admin Restaurants List Query:", {
-      status,
-      isActive: query.isActive,
-      query: JSON.stringify(query, null, 2),
-    });
-
     // Search filter
     if (search) {
       query.$or = [
@@ -1416,12 +1391,6 @@ export const getRestaurantJoinRequests = asyncHandler(async (req, res) => {
         };
       }
     }
-
-    console.log(
-      "🔍 Restaurant Join Requests Query:",
-      JSON.stringify(query, null, 2),
-    );
-
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -1434,29 +1403,8 @@ export const getRestaurantJoinRequests = asyncHandler(async (req, res) => {
       .lean();
 
     // Debug: Log found restaurants with detailed info
-    console.log(`📊 Found ${restaurants.length} restaurants matching query:`, {
-      status,
-      queryStructure: Object.keys(query).length,
-      restaurantsFound: restaurants.length,
-      sampleRestaurants: restaurants.slice(0, 5).map((r) => ({
-        _id: r._id.toString().substring(0, 10) + "...",
-        name: r.name,
-        isActive: r.isActive,
-        completedSteps: r.onboarding?.completedSteps,
-        hasRejectionReason: !!r.rejectionReason,
-        hasName: !!r.name,
-        hasCuisines: !!r.cuisines && r.cuisines.length > 0,
-        hasOpenDays: !!r.openDays && r.openDays.length > 0,
-        hasEstimatedDeliveryTime: !!r.estimatedDeliveryTime,
-        hasFeaturedDish: !!r.featuredDish,
-      })),
-    });
-
     // Get total count
     const total = await Restaurant.countDocuments(query);
-
-    console.log(`📊 Total count: ${total} restaurants`);
-
     // Also log a sample of ALL inactive restaurants (for debugging)
     if (status === "pending" && restaurants.length === 0) {
       const allInactive = await Restaurant.find({
@@ -1479,55 +1427,6 @@ export const getRestaurantJoinRequests = asyncHandler(async (req, res) => {
           { rejectionReason: null },
         ],
       });
-
-      console.log(
-        "⚠️ No restaurants found with query. Debugging inactive restaurants:",
-        {
-          totalInactive,
-          queryUsed: JSON.stringify(query, null, 2),
-          samples: allInactive.map((r) => ({
-            _id: r._id.toString(),
-            name: r.name,
-            isActive: r.isActive,
-            completedSteps: r.onboarding?.completedSteps,
-            hasAllFields: {
-              hasName: !!r.name && r.name !== "",
-              hasCuisines:
-                !!r.cuisines &&
-                Array.isArray(r.cuisines) &&
-                r.cuisines.length > 0,
-              hasOpenDays:
-                !!r.openDays &&
-                Array.isArray(r.openDays) &&
-                r.openDays.length > 0,
-              hasEstimatedDeliveryTime:
-                !!r.estimatedDeliveryTime && r.estimatedDeliveryTime !== "",
-              hasFeaturedDish: !!r.featuredDish && r.featuredDish !== "",
-            },
-            fieldValues: {
-              name: r.name || "MISSING",
-              cuisinesCount: r.cuisines?.length || 0,
-              openDaysCount: r.openDays?.length || 0,
-              estimatedDeliveryTime: r.estimatedDeliveryTime || "MISSING",
-              featuredDish: r.featuredDish || "MISSING",
-            },
-            shouldMatch:
-              (!!r.name &&
-                r.name !== "" &&
-                !!r.cuisines &&
-                Array.isArray(r.cuisines) &&
-                r.cuisines.length > 0 &&
-                !!r.openDays &&
-                Array.isArray(r.openDays) &&
-                r.openDays.length > 0 &&
-                !!r.estimatedDeliveryTime &&
-                r.estimatedDeliveryTime !== "" &&
-                !!r.featuredDish &&
-                r.featuredDish !== "") ||
-              r.onboarding?.completedSteps === 4,
-          })),
-        },
-      );
     }
 
     // Format response to match frontend expectations
@@ -2997,17 +2896,7 @@ export const getRestaurantAnalytics = asyncHandler(async (req, res) => {
  */
 export const getCustomerWalletReport = asyncHandler(async (req, res) => {
   try {
-    console.log("🔍 Fetching customer wallet report...");
     const { fromDate, toDate, all, customer, search } = req.query;
-
-    console.log("📋 Query params:", {
-      fromDate,
-      toDate,
-      all,
-      customer,
-      search,
-    });
-
     const UserWallet = (await import("../../user/models/UserWallet.js"))
       .default;
     const User = (await import("../../auth/models/User.js")).default;

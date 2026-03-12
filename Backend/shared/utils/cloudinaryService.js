@@ -66,13 +66,6 @@ export function uploadToCloudinary(buffer, options = {}) {
           uploadOptions[key] = options[key];
         }
       });
-
-      console.log('📤 Cloudinary upload options:', {
-        folder: uploadOptions.folder,
-        resource_type: uploadOptions.resource_type,
-        bufferSize: buffer.length
-      });
-
       // Use upload_stream method which is more efficient for buffers
       // Create a readable stream from buffer
       const stream = Readable.from(buffer);
@@ -93,11 +86,6 @@ export function uploadToCloudinary(buffer, options = {}) {
           if (!result) {
             return reject(new Error('Upload failed: No result returned from Cloudinary'));
           }
-          console.log('✅ Cloudinary upload successful:', {
-            publicId: result.public_id,
-            url: result.secure_url,
-            resourceType: result.resource_type
-          });
           resolve(result);
         }
       );

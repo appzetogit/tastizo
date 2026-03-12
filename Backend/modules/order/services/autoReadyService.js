@@ -61,14 +61,10 @@ export async function processAutoReadyOrders() {
           if (updatedOrder) {
             readyOrders.push(updatedOrder);
             processedCount++;
-
-            console.log(`✅ Order ${order.orderId} automatically marked as ready (ETA elapsed: ${elapsedMinutes} mins >= ${estimatedTime} mins)`);
-
             // Notify delivery boy if order is assigned
             if (updatedOrder.deliveryPartnerId) {
               try {
                 await notifyDeliveryBoyOrderReady(updatedOrder, updatedOrder.deliveryPartnerId._id || updatedOrder.deliveryPartnerId);
-                console.log(`📢 Notified delivery boy ${updatedOrder.deliveryPartnerId._id || updatedOrder.deliveryPartnerId} about order ${order.orderId} being ready`);
               } catch (notifError) {
                 console.error(`❌ Error notifying delivery boy about order ${order.orderId}:`, notifError);
               }

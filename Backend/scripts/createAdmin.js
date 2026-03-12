@@ -14,7 +14,6 @@ dotenv.config({ path: path.join(__dirname, "../.env") });
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
-    console.log("✅ MongoDB Connected");
   } catch (err) {
     console.error("❌ MongoDB Connection Error:", err);
     process.exit(1);
@@ -23,8 +22,6 @@ const connectDB = async () => {
 
 const createAdmin = async () => {
   try {
-    console.log("Creating admin user...");
-
     // Admin details
     const adminData = {
       name: "Tastizo Admin",
@@ -42,8 +39,6 @@ const createAdmin = async () => {
     });
 
     if (existingAdmin) {
-      console.log("⚠️  Admin already exists with this email:", adminData.email);
-      console.log("Admin ID:", existingAdmin._id);
       process.exit(0);
     }
 
@@ -53,16 +48,6 @@ const createAdmin = async () => {
     // Remove password from response
     const adminResponse = admin.toObject();
     delete adminResponse.password;
-
-    console.log("✅ Admin created successfully!");
-    console.log("Admin Details:");
-    console.log("- ID:", admin._id);
-    console.log("- Name:", admin.name);
-    console.log("- Email:", admin.email);
-    console.log("- Phone:", admin.phone);
-    console.log("- Role:", admin.role);
-    console.log("- Active:", admin.isActive);
-
     process.exit(0);
   } catch (error) {
     console.error("❌ Error creating admin:", error.message);

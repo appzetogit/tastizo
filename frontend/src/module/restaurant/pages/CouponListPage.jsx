@@ -130,7 +130,7 @@ export default function CouponListPage() {
                                 label: "Edit Coupon", 
                                 action: () => navigate(`/restaurant/coupon/${coupon.id}/edit`) 
                               },
-                              { label: "Delete Coupon", action: () => console.log("Delete:", coupon.id), isDanger: true }
+                              { label: "Delete Coupon", action: () => {}, isDanger: true }
                             ].map((option, idx) => (
                               <motion.button
                                 key={option.label}

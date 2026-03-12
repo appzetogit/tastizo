@@ -17,15 +17,6 @@ export const uploadSingleMedia = async (req, res) => {
     }
 
     const folder = req.body.folder || 'appzeto/uploads';
-
-    console.log('📤 Uploading file to Cloudinary:', {
-      fileName: req.file.originalname,
-      mimeType: req.file.mimetype,
-      size: req.file.size,
-      bufferSize: req.file.buffer.length,
-      folder
-    });
-
     const result = await uploadToCloudinary(req.file.buffer, {
       folder,
       resource_type: 'auto',
@@ -36,13 +27,6 @@ export const uploadSingleMedia = async (req, res) => {
     if (!result || !result.secure_url) {
       throw new Error('Cloudinary upload failed: No secure_url in response');
     }
-
-    console.log('✅ File uploaded successfully:', {
-      url: result.secure_url,
-      publicId: result.public_id,
-      resourceType: result.resource_type
-    });
-
     return successResponse(res, 200, 'File uploaded successfully', {
       url: result.secure_url,
       publicId: result.public_id,

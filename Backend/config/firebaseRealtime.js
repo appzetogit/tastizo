@@ -79,7 +79,6 @@ function getCredentialsSync() {
  */
 export function initializeFirebaseRealtime() {
   if (initialized && db) {
-    console.log("✅ Firebase Realtime Database already initialized");
     return db;
   }
 
@@ -111,14 +110,12 @@ export function initializeFirebaseRealtime() {
     const app = admin.app();
     db = databaseURL ? app.database(databaseURL) : app.database();
     initialized = true;
-    console.log("✅ Firebase Realtime Database initialized");
     return db;
   } catch (error) {
     if (error?.code === "app/duplicate-app") {
       const app = admin.app();
       db = databaseURL ? app.database(databaseURL) : app.database();
       initialized = true;
-      console.log("✅ Firebase Realtime Database initialized (reusing existing app)");
       return db;
     }
     console.error("❌ Firebase Realtime Database init failed:", error.message);

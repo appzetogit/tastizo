@@ -368,9 +368,6 @@ export const registerFcmToken = asyncHandler(async (req, res) => {
   }
 
   await user.save();
-
-  console.log(`[FCM] Updated ${platform} token for user ${userId}`);
-
   return successResponse(res, 200, "FCM token registered successfully", {
     fcmTokenWeb: user.fcmTokenWeb,
     fcmTokenAndroid: user.fcmTokenAndroid,

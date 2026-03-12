@@ -102,8 +102,6 @@ export async function notifyRestaurantNewOrder(order, restaurantId, paymentMetho
       sendCutlery: order.sendCutlery,
       paymentMethod: resolvedPaymentMethod
     };
-    console.log('📢 Restaurant notification payload paymentMethod:', orderNotification.paymentMethod, { override: paymentMethodOverride, orderPaymentMethod: order.payment?.method });
-
     // Get restaurant namespace
     const restaurantNamespace = io.of('/restaurant');
 
@@ -125,22 +123,11 @@ export async function notifyRestaurantNewOrder(order, restaurantId, paymentMetho
       const sockets = await restaurantNamespace.in(room).fetchSockets();
       if (sockets.length > 0) {
         socketsInRoom = sockets;
-        console.log(`📢 Found ${sockets.length} socket(s) in room: ${room}`);
         break;
       }
     }
 
     const primaryRoom = roomVariations[0];
-
-    console.log(`📢 CRITICAL: Attempting to notify restaurant about new order:`);
-    console.log(`📢 Order ID: ${order.orderId}`);
-    console.log(`📢 Order MongoDB ID: ${order._id?.toString()}`);
-    console.log(`📢 Restaurant ID (normalized): ${normalizedRestaurantId}`);
-    console.log(`📢 Restaurant Name: ${order.restaurantName}`);
-    console.log(`📢 Restaurant ID from order: ${order.restaurantId}`);
-    console.log(`📢 Room variations to try:`, roomVariations);
-    console.log(`📢 Connected sockets in primary room ${primaryRoom}: ${socketsInRoom.length}`);
-
     // CRITICAL: Only emit to the specific restaurant room - NEVER broadcast to all restaurants
     // This ensures orders only go to the correct restaurant
     if (socketsInRoom.length > 0) {
@@ -152,9 +139,7 @@ export async function notifyRestaurantNewOrder(order, restaurantId, paymentMetho
           orderId: order.orderId,
           message: `New order received: ${order.orderId}`
         });
-        console.log(`📤 Sent notification to room: ${room}`);
       });
-      console.log(`✅ Notified restaurant ${normalizedRestaurantId} about new order ${order.orderId} (${socketsInRoom.length} socket(s) connected)`);
     } else {
       // No sockets found in restaurant room - log error but DO NOT broadcast to all restaurants
       console.error(`❌ CRITICAL: No sockets found for restaurant ${normalizedRestaurantId} in any room!`);
@@ -166,7 +151,6 @@ export async function notifyRestaurantNewOrder(order, restaurantId, paymentMetho
       
       // Log all connected restaurant sockets for debugging (but don't send to them)
       const allSockets = await restaurantNamespace.fetchSockets();
-      console.log(`📊 Total restaurant sockets connected: ${allSockets.length}`);
       if (allSockets.length > 0) {
         // Get room information for each socket
         const socketRooms = [];
@@ -177,7 +161,6 @@ export async function notifyRestaurantNewOrder(order, restaurantId, paymentMetho
             rooms: rooms.filter(r => r.startsWith('restaurant:'))
           });
         }
-        console.log(`📊 Connected restaurant sockets and their rooms:`, socketRooms);
       }
       
       // Still try to emit to room variations (in case socket connects later)
@@ -189,7 +172,6 @@ export async function notifyRestaurantNewOrder(order, restaurantId, paymentMetho
           orderId: order.orderId,
           message: `New order received: ${order.orderId}`
         });
-        console.log(`📤 Emitted to room ${room} (no sockets found, but room exists for future connections)`);
       });
       
       // Return error instead of success
@@ -239,8 +221,6 @@ export async function notifyRestaurantOrderUpdate(orderId, status) {
       status,
       updatedAt: new Date()
     });
-
-    console.log(`📢 Notified restaurant ${order.restaurantId} about order ${order.orderId} status: ${status}`);
   } catch (error) {
     console.error('Error notifying restaurant about order update:', error);
     throw error;

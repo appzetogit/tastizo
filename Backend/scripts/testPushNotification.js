@@ -21,7 +21,6 @@ async function testPushNotification() {
 
   try {
     // 1. Login as admin
-    console.log("🔐 Logging in as admin...");
     const loginRes = await fetch(`${API_BASE}/admin/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -35,10 +34,7 @@ async function testPushNotification() {
     }
 
     const token = loginData.data.accessToken;
-    console.log("✅ Admin login successful");
-
     // 2. Send push notification
-    console.log("\n📤 Sending push notification...");
     const pushRes = await fetch(`${API_BASE}/admin/push-notification`, {
       method: "POST",
       headers: {
@@ -57,12 +53,7 @@ async function testPushNotification() {
 
     if (pushRes.ok && pushData.success) {
       const { sent, failed, total } = pushData.data || {};
-      console.log("✅ Push notification API responded successfully");
-      console.log(`   Total tokens: ${total}`);
-      console.log(`   Sent: ${sent}`);
-      console.log(`   Failed: ${failed}`);
       if (pushData.data?.errors?.length) {
-        console.log("   Errors:", pushData.data.errors);
       }
     } else {
       console.error("❌ Push notification failed:", pushData.message || pushData);

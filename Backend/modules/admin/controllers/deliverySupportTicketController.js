@@ -7,9 +7,6 @@ import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
  * POST /api/delivery/support-tickets
  */
 export const createSupportTicket = asyncHandler(async (req, res) => {
-  console.log('Creating support ticket, request body:', req.body);
-  console.log('Delivery partner:', req.delivery ? { _id: req.delivery._id, name: req.delivery.name, phone: req.delivery.phone } : 'Not found');
-  
   const { subject, description, category, priority } = req.body;
   const delivery = req.delivery; // From authenticate middleware
 
@@ -51,8 +48,6 @@ export const createSupportTicket = asyncHandler(async (req, res) => {
       priority: normalizedPriority,
       status: 'open'
     });
-
-    console.log('Ticket created successfully:', ticket.ticketId);
     return successResponse(res, 201, 'Support ticket created successfully', ticket);
   } catch (error) {
     console.error('Error creating support ticket:', error);
@@ -71,7 +66,6 @@ export const createSupportTicket = asyncHandler(async (req, res) => {
     
     if (error.code === 11000) {
       // Duplicate key error (likely ticketId) - retry once
-      console.log('Duplicate ticketId detected, retrying...');
       try {
         const ticket = await DeliverySupportTicket.create({
           deliveryId: delivery._id,
@@ -83,7 +77,6 @@ export const createSupportTicket = asyncHandler(async (req, res) => {
           priority: normalizedPriority,
           status: 'open'
         });
-        console.log('Retry successful, ticket created:', ticket.ticketId);
         return successResponse(res, 201, 'Support ticket created successfully', ticket);
       } catch (retryError) {
         console.error('Retry failed:', retryError);

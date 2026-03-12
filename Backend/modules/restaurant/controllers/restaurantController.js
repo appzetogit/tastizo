@@ -289,20 +289,6 @@ export const getRestaurants = async (req, res) => {
     const totalQuery = { ...query };
     delete totalQuery.$or; // Remove $or for count
     const total = await Restaurant.countDocuments(totalQuery);
-
-    console.log(
-      `Fetched ${restaurants.length} restaurants from database with filters:`,
-      {
-        sortBy,
-        cuisine,
-        minRating,
-        maxDeliveryTime,
-        maxDistance,
-        maxPrice,
-        hasOffers,
-      },
-    );
-
     return successResponse(res, 200, "Restaurants retrieved successfully", {
       restaurants,
       total: restaurants.length,
@@ -430,7 +416,6 @@ export const createRestaurantFromOnboarding = async (
           uniqueSlug = `${baseSlug}-${counter}`;
         }
         slug = uniqueSlug;
-        console.log(`Slug already exists, using unique slug: ${slug}`);
       }
     } else {
       slug = existing.slug; // Keep existing slug
@@ -502,17 +487,10 @@ export const createRestaurantFromOnboarding = async (
         }
         existing.slug = uniqueSlug;
         await existing.save();
-        console.log(`Updated slug to unique value: ${uniqueSlug}`);
       } else {
         throw saveError;
       }
     }
-    console.log("✅ Restaurant updated successfully:", {
-      restaurantId: existing.restaurantId,
-      _id: existing._id,
-      name: existing.name,
-      isActive: existing.isActive,
-    });
     return existing;
   } catch (error) {
     console.error("Error creating restaurant from onboarding:", error);
@@ -760,15 +738,6 @@ export const uploadMenuImage = asyncHandler(async (req, res) => {
     if (!restaurant) {
       return errorResponse(res, 404, "Restaurant not found");
     }
-
-    console.log("📤 Uploading menu image to Cloudinary:", {
-      fileName: req.file.originalname,
-      mimeType: req.file.mimetype,
-      size: req.file.size,
-      bufferSize: req.file.buffer.length,
-      restaurantId: restaurantId.toString(),
-    });
-
     // Upload to Cloudinary
     const folder = "appzeto/restaurant/menu";
     const result = await uploadToCloudinary(req.file.buffer, {
@@ -921,12 +890,6 @@ export const deleteRestaurantAccount = asyncHandler(async (req, res) => {
 
     // Delete the restaurant from database
     await Restaurant.findByIdAndDelete(restaurantId);
-
-    console.log(`Restaurant account deleted: ${restaurantId}`, {
-      restaurantId: restaurant.restaurantId,
-      name: restaurant.name,
-    });
-
     return successResponse(res, 200, "Restaurant account deleted successfully");
   } catch (error) {
     console.error("Error deleting restaurant account:", error);

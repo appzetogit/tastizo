@@ -21,10 +21,7 @@ if (!MONGODB_URI) {
 }
 
 async function run() {
-  console.log('🔌 Connecting to MongoDB...');
   await mongoose.connect(MONGODB_URI);
-  console.log('✅ Connected\n');
-
   try {
     const Order = (await import('../modules/order/models/Order.js')).default;
     const DeliveryWallet = (await import('../modules/delivery/models/DeliveryWallet.js')).default;
@@ -37,32 +34,23 @@ async function run() {
     ).lean();
 
     if (!deliveredOrder?.deliveryPartnerId) {
-      console.log('⚠️ No delivered orders with deliveryPartnerId found in DB. Create one order and complete delivery first.');
       return;
     }
 
     const deliveryId = deliveredOrder.deliveryPartnerId;
     const deliveryIdStr = deliveryId?.toString?.() || String(deliveryId);
-    console.log('📦 Found delivered order:', deliveredOrder.orderId || deliveredOrder._id, '| deliveryPartnerId:', deliveryIdStr);
-
     const deliveredCount = await Order.countDocuments({
       deliveryPartnerId: deliveryId,
       status: 'delivered'
     });
-    console.log('📊 Delivered orders for this partner:', deliveredCount);
-
     // 2) Run sync (same as GET /api/delivery/wallet)
-    console.log('\n🔄 Running syncMissingEarningsForDelivery...');
     await syncMissingEarningsForDelivery(deliveryId);
-    console.log('✅ Sync completed\n');
-
     // 3) Fetch wallet and compute weekly stats (same logic as getWallet)
     let wallet = await DeliveryWallet.findOne({ deliveryId }).lean();
     if (!wallet) {
       wallet = await DeliveryWallet.findOne({ deliveryId: deliveryIdStr }).lean();
     }
     if (!wallet) {
-      console.log('⚠️ No wallet found after sync (findOrCreate may use different id type)');
       const created = await DeliveryWallet.findOrCreateByDeliveryId(deliveryId);
       wallet = created.toObject ? created.toObject() : created;
     }
@@ -92,29 +80,15 @@ async function run() {
     const weeklyOrders = inWeek.length;
     const last7Earnings = inLast7.reduce((s, t) => s + (t.amount || 0), 0);
     const last7Orders = inLast7.length;
-
-    console.log('💰 Wallet after sync:');
-    console.log('   totalBalance:', wallet.totalBalance);
-    console.log('   totalEarned:', wallet.totalEarned);
-    console.log('   payment transactions (Completed):', paymentTx.length);
-    console.log('   This week (Sun–now): earnings ₹' + weeklyEarnings.toFixed(2) + ', orders ' + weeklyOrders);
-    console.log('   Last 7 days: earnings ₹' + last7Earnings.toFixed(2) + ', orders ' + last7Orders);
-
     if (deliveredCount > 0 && paymentTx.length === 0) {
-      console.log('\n❌ FAIL: There are delivered orders but no payment transactions (sync may have failed).');
       process.exitCode = 1;
     } else if (deliveredCount > 0 && paymentTx.length === deliveredCount) {
-      console.log('\n✅ PASS: Sync OK. Every delivered order has a Completed payment transaction.');
-      console.log('   Pocket balance (total) will show ₹' + (wallet.totalBalance || 0) + '.');
       if (weeklyOrders === 0 && last7Orders === 0) {
-        console.log('   Weekly/Last7 show 0 because these deliveries are older than current week (expected).');
       }
     } else if (deliveredCount > 0) {
-      console.log('\n⚠️ WARN: Only ' + paymentTx.length + '/' + deliveredCount + ' payment transactions (some orders may have been skipped).');
     }
   } finally {
     await mongoose.connection.close();
-    console.log('\n🔌 Disconnected.');
   }
 }
 

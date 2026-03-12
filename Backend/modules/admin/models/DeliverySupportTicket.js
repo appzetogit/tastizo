@@ -120,7 +120,6 @@ deliverySupportTicketSchema.pre('save', async function(next) {
     }
 
     this.ticketId = ticketId;
-    console.log('Generated ticketId:', ticketId);
   }
   next();
 });

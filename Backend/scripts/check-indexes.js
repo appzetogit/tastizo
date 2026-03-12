@@ -23,21 +23,9 @@ const MONGODB_URI = process.env.MONGODB_URI;
 async function checkIndexes() {
   try {
     await mongoose.connect(MONGODB_URI);
-    console.log('✅ Connected to MongoDB\n');
-
     const User = mongoose.model('User');
     const Restaurant = mongoose.model('Restaurant');
     const RestaurantCategory = mongoose.model('RestaurantCategory');
-
-    console.log('📋 User Schema Indexes:');
-    console.log(JSON.stringify(User.schema.indexes(), null, 2));
-    
-    console.log('\n📋 Restaurant Schema Indexes:');
-    console.log(JSON.stringify(Restaurant.schema.indexes(), null, 2));
-    
-    console.log('\n📋 RestaurantCategory Schema Indexes:');
-    console.log(JSON.stringify(RestaurantCategory.schema.indexes(), null, 2));
-
     await mongoose.connection.close();
   } catch (error) {
     console.error('❌ Error:', error);

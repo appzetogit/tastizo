@@ -72,8 +72,6 @@ class ETAWebSocketService {
           .to(`delivery:${order.deliveryPartnerId}`)
           .emit('ETA_UPDATED', etaUpdate);
       }
-
-      console.log(`📡 ETA update emitted for order ${order.orderId}:`, etaUpdate.eta.formatted);
     } catch (error) {
       console.error('Error emitting ETA update:', error);
     }
@@ -107,8 +105,6 @@ class ETAWebSocketService {
       if (order.userId) {
         io.to(`user:${order.userId}`).emit('RIDER_ASSIGNED', eventData);
       }
-
-      console.log(`📡 Rider assigned event emitted for order ${order.orderId}`);
     } catch (error) {
       console.error('Error emitting rider assigned event:', error);
     }
@@ -137,8 +133,6 @@ class ETAWebSocketService {
       if (order.userId) {
         io.to(`user:${order.userId}`).emit('PICKED_UP', eventData);
       }
-
-      console.log(`📡 Picked up event emitted for order ${order.orderId}`);
     } catch (error) {
       console.error('Error emitting picked up event:', error);
     }
@@ -169,8 +163,6 @@ class ETAWebSocketService {
       if (order.userId) {
         io.to(`user:${order.userId}`).emit('NEARBY', eventData);
       }
-
-      console.log(`📡 Nearby event emitted for order ${order.orderId}, distance: ${distanceToDrop}km`);
     } catch (error) {
       console.error('Error emitting nearby event:', error);
     }

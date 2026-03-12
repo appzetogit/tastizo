@@ -431,11 +431,6 @@ export const registerFcmToken = asyncHandler(async (req, res) => {
   }
 
   await delivery.save();
-
-  console.log(
-    `[FCM] Updated ${platform} token for delivery partner ${deliveryId}`,
-  );
-
   return successResponse(res, 200, "FCM token registered successfully", {
     fcmTokenWeb: delivery.fcmTokenWeb,
     fcmTokenAndroid: delivery.fcmTokenAndroid,

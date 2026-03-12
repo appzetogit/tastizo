@@ -41,7 +41,6 @@ const colors = {
 };
 
 function log(message, color = 'reset') {
-  console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
 function logStep(step, message) {

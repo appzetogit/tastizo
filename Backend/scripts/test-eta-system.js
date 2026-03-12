@@ -45,7 +45,6 @@ const colors = {
 };
 
 function log(message, color = 'reset') {
-  console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
 function logStep(step, message) {
@@ -148,8 +147,6 @@ async function testInitialETA() {
 
     logSuccess(`Initial ETA calculated: ${etaResult.minETA}-${etaResult.maxETA} mins`);
     logInfo(`Breakdown:`, 'yellow');
-    console.log(JSON.stringify(etaResult.breakdown, null, 2));
-
     return etaResult;
   } catch (error) {
     logError(`Initial ETA calculation failed: ${error.message}`);
@@ -474,7 +471,6 @@ async function testGetETAHistory() {
     if (etaLogs.length > 0) {
       logInfo('Recent ETA changes:');
       etaLogs.forEach((log, index) => {
-        console.log(`  ${index + 1}. ${log.reason}: ${log.previousETA.min}-${log.previousETA.max} → ${log.newETA.min}-${log.newETA.max} mins`);
       });
     }
 
@@ -507,7 +503,6 @@ async function testGetOrderEvents() {
     if (events.length > 0) {
       logInfo('Recent events:');
       events.forEach((event, index) => {
-        console.log(`  ${index + 1}. ${event.eventType} at ${event.timestamp.toISOString()}`);
       });
     }
 

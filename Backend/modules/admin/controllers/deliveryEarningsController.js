@@ -32,17 +32,6 @@ export const getDeliveryEarnings = asyncHandler(async (req, res) => {
       fromDate,
       toDate
     } = req.query;
-
-    console.log('📊 Admin fetching delivery earnings with params:', {
-      deliveryPartnerId,
-      period,
-      page,
-      limit,
-      search,
-      fromDate,
-      toDate
-    });
-
     // Build query for delivery partners
     const deliveryQuery = {};
     if (deliveryPartnerId) {
@@ -61,9 +50,6 @@ export const getDeliveryEarnings = asyncHandler(async (req, res) => {
     const deliveries = await Delivery.find(deliveryQuery)
       .select('_id name phone email deliveryId status')
       .lean();
-
-    console.log(`👥 Found ${deliveries.length} delivery partners`);
-
     const deliveryIds = deliveries.map(d => d._id);
     
     if (deliveryIds.length === 0) {
@@ -136,9 +122,6 @@ export const getDeliveryEarnings = asyncHandler(async (req, res) => {
     const wallets = await DeliveryWallet.find({
       deliveryId: { $in: deliveryIds }
     }).lean();
-
-    console.log(`📊 Found ${wallets.length} wallets for ${deliveryIds.length} delivery partners`);
-
     // Get all earnings transactions
     let allEarnings = [];
     
@@ -162,9 +145,6 @@ export const getDeliveryEarnings = asyncHandler(async (req, res) => {
         t.type === 'payment' && 
         t.status === 'Completed'
       );
-
-      console.log(`💰 Found ${transactions.length} completed payment transactions for ${delivery.name}`);
-
       // Filter by date range
       if (startDate) {
         const beforeFilter = transactions.length;
@@ -172,11 +152,9 @@ export const getDeliveryEarnings = asyncHandler(async (req, res) => {
           const transactionDate = t.createdAt || t.processedAt || new Date();
           return transactionDate >= startDate && transactionDate <= endDate;
         });
-        console.log(`📅 After date filter: ${transactions.length} transactions (was ${beforeFilter})`);
       }
 
       if (transactions.length === 0) {
-        console.log(`⚠️ No transactions after filtering for ${delivery.name}`);
         continue;
       }
 
@@ -201,8 +179,6 @@ export const getDeliveryEarnings = asyncHandler(async (req, res) => {
           })
             .select('orderId status createdAt deliveredAt pricing.total pricing.deliveryFee restaurantName address')
             .lean();
-          
-          console.log(`📦 Found ${orders.length} orders for ${orderIds.length} order IDs`);
         } catch (orderError) {
           console.error(`❌ Error fetching orders:`, orderError);
         }
@@ -240,8 +216,6 @@ export const getDeliveryEarnings = asyncHandler(async (req, res) => {
           customerAddress: order?.address?.formattedAddress || 'N/A'
         });
       }
-
-      console.log(`✅ Added ${transactions.length} earnings entries for ${delivery.name}`);
     }
 
     // Sort by date (newest first)
@@ -255,15 +229,9 @@ export const getDeliveryEarnings = asyncHandler(async (req, res) => {
     const totalEarnings = allEarnings.reduce((sum, e) => sum + (e.amount || 0), 0);
     const totalOrders = allEarnings.length;
     const uniqueDeliveryPartners = new Set(allEarnings.map(e => e.deliveryPartnerId?.toString()).filter(Boolean)).size;
-
-    console.log(`✅ Summary: Total earnings: ₹${totalEarnings}, Total orders: ${totalOrders}, Unique delivery partners: ${uniqueDeliveryPartners}`);
-
     // Pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const paginatedEarnings = allEarnings.slice(skip, skip + parseInt(limit));
-
-    console.log(`📄 Returning page ${page} with ${paginatedEarnings.length} earnings (total: ${allEarnings.length})`);
-
     return successResponse(res, 200, 'Delivery earnings retrieved successfully', {
       earnings: paginatedEarnings,
       summary: {

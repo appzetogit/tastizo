@@ -19,7 +19,6 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 const connectDB = async () => {
     try {
         await mongoose.connect(process.env.MONGODB_URI);
-        console.log('MongoDB Connected for Seeding');
     } catch (err) {
         console.error('MongoDB Connection Error:', err);
         process.exit(1);
@@ -204,17 +203,12 @@ const popularRestaurants = [
 
 const seedData = async () => {
     try {
-        console.log('Seeding Dining Data...');
-
         // Clear existing data
         await DiningCategory.deleteMany({});
         await DiningLimelight.deleteMany({});
         await DiningBankOffer.deleteMany({});
         await DiningMustTry.deleteMany({});
         await DiningRestaurant.deleteMany({});
-
-        console.log('Cleared existing dining data.');
-
         // Insert new data
         await DiningCategory.insertMany(diningCategories.map((c, i) => ({ ...c, order: i })));
         await DiningLimelight.insertMany(limelightRestaurants.map((l, i) => ({ ...l, order: i })));
@@ -224,8 +218,6 @@ const seedData = async () => {
             ...r,
             slug: r.name.toLowerCase().replace(/\s+/g, '-')
         })));
-
-        console.log('✅ Dining Data Seeded Successfully');
         process.exit();
     } catch (error) {
         console.error('Error seeding data:', error);

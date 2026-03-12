@@ -858,7 +858,7 @@ export default function OrdersMain() {
     if (showNewOrderPopup && !isMuted) {
       if (audioRef.current) {
         audioRef.current.loop = true
-        audioRef.current.play().catch(err => console.log("Audio play failed:", err))
+        audioRef.current.play().catch(() => {})
       }
     } else if (audioRef.current) {
       audioRef.current.pause()
@@ -1009,7 +1009,7 @@ export default function OrdersMain() {
       if (!isMuted) {
         audioRef.current.pause()
       } else {
-        audioRef.current.play().catch(err => console.log("Audio play failed:", err))
+        audioRef.current.play().catch(() => {})
       }
     }
   }

@@ -426,10 +426,8 @@ export const getDeliveryPartners = asyncHandler(async (req, res) => {
     
     // Log for debugging
     if (includeAvailability === 'true' || includeAvailability === true) {
-      console.log(`📦 Fetching ${deliveries.length} delivery partners with availability data`);
       deliveries.forEach((d, idx) => {
         const hasLocation = d.availability?.currentLocation?.coordinates;
-        console.log(`  ${idx + 1}. ${d.name}: online=${d.availability?.isOnline}, hasLocation=${!!hasLocation}`);
       });
     }
 

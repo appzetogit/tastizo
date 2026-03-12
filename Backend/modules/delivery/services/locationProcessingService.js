@@ -208,7 +208,6 @@ export async function generateRoutePolyline(start, waypoint, end) {
     // Check cache first
     const cached = directionsCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < DIRECTIONS_CACHE_TTL_MS) {
-      console.log('✅ Using cached route polyline');
       return cached.route;
     }
     

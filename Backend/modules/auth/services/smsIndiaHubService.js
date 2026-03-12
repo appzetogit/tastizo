@@ -37,7 +37,6 @@ class SMSIndiaHubService {
           "   Please check SMSINDIAHUB_API_KEY and SMSINDIAHUB_SENDER_ID in .env file",
         );
       } else {
-        console.log("✅ SMSIndia Hub credentials loaded successfully");
       }
     }
   }
@@ -251,19 +250,12 @@ class SMSIndiaHubService {
           throw err;
         }
       }
-
-      console.log("📱 SMSIndia Hub Response Status:", response.status);
-      console.log("📱 SMSIndia Hub Response Data:", response.data);
-
       // SMSIndia Hub can return JSON or plain text response
       let responseData = response.data;
       const responseText =
         typeof responseData === "string"
           ? responseData
           : JSON.stringify(responseData);
-
-      console.log("📱 SMSIndia Hub Response Text:", responseText);
-
       // Try to parse as JSON first (SMSIndia Hub sometimes returns JSON)
       let parsedResponse = null;
       if (typeof responseData === "string") {
@@ -282,7 +274,6 @@ class SMSIndiaHubService {
           parsedResponse.ErrorCode === "000" &&
           parsedResponse.ErrorMessage === "Done"
         ) {
-          console.log("✅ SMS sent successfully - JSON success response");
           const messageId =
             parsedResponse.MessageData && parsedResponse.MessageData[0]
               ? parsedResponse.MessageData[0].MessageId
@@ -321,9 +312,6 @@ class SMSIndiaHubService {
         responseText.includes("sent") ||
         responseText.includes("accepted")
       ) {
-        console.log(
-          "✅ SMS sent successfully - success indicator found in text",
-        );
         return {
           success: true,
           messageId: `sms_${Date.now()}`,
