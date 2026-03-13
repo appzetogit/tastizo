@@ -46,6 +46,11 @@ export default function DesktopNavbar() {
   }, [location.pathname])
 
   useEffect(() => {
+    if (isUnder250) {
+      setIsVisible(true)
+      return
+    }
+
     const handleScroll = () => {
       const currentScrollY = window.scrollY
       const scrollDifference = Math.abs(currentScrollY - lastScrollY.current)
@@ -76,7 +81,7 @@ export default function DesktopNavbar() {
 
     window.addEventListener("scroll", handleScroll, { passive: true })
     return () => window.removeEventListener("scroll", handleScroll)
-  }, [location.pathname])
+  }, [location.pathname, isUnder250])
 
   return (
     <nav
