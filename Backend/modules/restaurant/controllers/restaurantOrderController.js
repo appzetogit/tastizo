@@ -7,6 +7,7 @@ import { notifyRestaurantOrderUpdate } from '../../order/services/restaurantNoti
 import { assignOrderToDeliveryBoy, findNearestDeliveryBoys, findNearestDeliveryBoy } from '../../order/services/deliveryAssignmentService.js';
 import { notifyDeliveryBoyNewOrder, notifyMultipleDeliveryBoys, broadcastNewOrderToAllDeliveryBoys } from '../../order/services/deliveryNotificationService.js';
 import mongoose from 'mongoose';
+import { removeActiveOrder } from '../../../services/firebaseRealtimeService.js';
 
 /**
  * Get all orders for restaurant
@@ -360,6 +361,13 @@ export const rejectOrder = asyncHandler(async (req, res) => {
     order.cancelledBy = 'restaurant';
     order.cancelledAt = new Date();
     await order.save();
+
+    // Clean up Firebase active order entry
+    try {
+      await removeActiveOrder(order.orderId);
+    } catch (fbErr) {
+      console.warn("Firebase removeActiveOrder on restaurant reject failed:", fbErr.message);
+    }
 
     // Calculate refund amount but don't process automatically
     // Admin will process refund manually via refund button

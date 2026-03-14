@@ -18,6 +18,7 @@ import { processCancellationRefund } from "../services/cancellationRefundService
 import etaCalculationService from "../services/etaCalculationService.js";
 import etaWebSocketService from "../services/etaWebSocketService.js";
 import OrderEvent from "../models/OrderEvent.js";
+import { removeActiveOrder } from "../../../services/firebaseRealtimeService.js";
 import UserWallet from "../../user/models/UserWallet.js";
 
 const logger = winston.createLogger({
@@ -1243,6 +1244,13 @@ export const cancelOrder = async (req, res) => {
     order.cancelledBy = "user";
     order.cancelledAt = new Date();
     await order.save();
+
+    // Clean up Firebase active order entry
+    try {
+      await removeActiveOrder(order.orderId);
+    } catch (fbErr) {
+      console.warn("Firebase removeActiveOrder on cancel failed:", fbErr.message);
+    }
 
     // Calculate refund amount only for online payments (Razorpay) and wallet
     // COD orders don't need refund since payment hasn't been made

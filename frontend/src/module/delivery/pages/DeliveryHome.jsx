@@ -418,9 +418,9 @@ export default function DeliveryHome() {
   const smoothedLocationRef = useRef(null) // Current smoothed location
   const markerAnimationRef = useRef(null) // Track ongoing marker animation
   const zonesPolygonsRef = useRef([]) // Store zone polygons
-  // Google Maps Directions API refs
-  const directionsServiceRef = useRef(null) // Directions Service instance
-  const directionsRendererRef = useRef(null) // Directions Renderer instance
+  // Legacy refs kept for compatibility (DirectionsRenderer is no longer used)
+  const directionsServiceRef = useRef(null)
+  const directionsRendererRef = useRef(null)
   const directionsMapInstanceRef = useRef(null) // Directions map instance
   const restaurantMarkerRef = useRef(null) // Restaurant marker on directions map
   const directionsBikeMarkerRef = useRef(null) // Bike marker on directions map
@@ -2645,86 +2645,31 @@ export default function DeliveryHome() {
               console.log('✅ Showing route on main map from live location to restaurant');
               console.log('📍 Flow: Order Accepted → Route to Restaurant → 500m Detection → Reached Pickup → Order ID → Route to Customer → 500m Detection → Reached Drop → Delivered → Review → Payment');
               
-              // Show route on main map using DirectionsRenderer or polyline
+              // Show route on main map using polyline from directions result (OSRM)
               if (window.deliveryMapInstance && restaurantInfo) {
-                // Use DirectionsRenderer on main map if we have directions result
-                // Use directionsResponse state (which was set above) instead of local variable
                 const directionsResult = directionsResultForMap || (directionsResponse && directionsResponse.routes && directionsResponse.routes.length > 0 ? directionsResponse : null);
                 
                 if (directionsResult && directionsResult.routes && directionsResult.routes.length > 0) {
-                  console.log('🗺️ Setting up DirectionsRenderer on main map with route:', directionsResult);
-                  
-                  // Initialize DirectionsRenderer for main map if not exists
-                  // Don't create DirectionsRenderer - it adds dots
-                  // We'll extract route path and use custom polyline instead
-                  if (!directionsRendererRef.current) {
-                    // Create DirectionsRenderer but don't set it on map (only for extracting route data)
-                    directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
-                      suppressMarkers: true,
-                      suppressInfoWindows: false,
-                      polylineOptions: {
-                        strokeColor: '#4285F4',
-                        strokeWeight: 0,
-                        strokeOpacity: 0,
-                        zIndex: -1,
-                        icons: []
-                      },
-                      preserveViewport: true
-                    });
-                    // Explicitly don't set map - we use custom polyline instead
-                    console.log('✅ DirectionsRenderer created (not on map - using custom polyline)');
-                  }
-                  
-                  // Extract route path directly from directionsResult (don't use DirectionsRenderer - it adds dots)
                   try {
-                    // Validate directionsResult is a valid DirectionsResult object
-                    if (!directionsResult || typeof directionsResult !== 'object' || !directionsResult.routes || !Array.isArray(directionsResult.routes) || directionsResult.routes.length === 0) {
-                      console.error('❌ Invalid directionsResult:', directionsResult);
-                      return;
+                    // Clean up old polyline
+                    if (routePolylineRef.current) {
+                      routePolylineRef.current.setMap(null);
+                      routePolylineRef.current = null;
                     }
 
-                    // Validate it's a Google Maps DirectionsResult (has request and legs)
-                    if (!directionsResult.request || !directionsResult.routes[0]?.legs || !Array.isArray(directionsResult.routes[0].legs)) {
-                      console.error('❌ directionsResult is not a valid Google Maps DirectionsResult');
-                      return;
-                    }
-
-                    console.log('📍 Route details:', {
-                      routes: directionsResult.routes?.length || 0,
-                      legs: directionsResult.routes?.[0]?.legs?.length || 0,
-                      distance: directionsResult.routes?.[0]?.legs?.[0]?.distance?.text,
-                      duration: directionsResult.routes?.[0]?.legs?.[0]?.duration?.text
-                    });
-                    
-                    // Don't create main route polyline - only live tracking polyline will be shown
-                    // Remove old custom polyline if exists (cleanup)
-                    try {
-                      if (routePolylineRef.current) {
-                        routePolylineRef.current.setMap(null);
-                        routePolylineRef.current = null;
-                      }
-                      
-                      // Completely remove DirectionsRenderer from map to prevent any dots/icons
-                      if (directionsRendererRef.current) {
-                        directionsRendererRef.current.setMap(null);
-                      }
-                    } catch (e) {
-                      console.warn('⚠️ Error cleaning up polyline:', e);
-                    }
-                    
-                    // Fit bounds to show entire route - but preserve zoom if user has zoomed in
-                    const bounds = directionsResult.routes[0].bounds;
-                    if (bounds) {
+                    // Fit bounds from overview_path
+                    const overviewPath = directionsResult.routes[0]?.overview_path;
+                    if (overviewPath && overviewPath.length > 0 && window.google?.maps) {
+                      const routeBounds = new window.google.maps.LatLngBounds();
+                      overviewPath.forEach(p => routeBounds.extend(p));
                       const currentZoom = window.deliveryMapInstance.getZoom();
-                      window.deliveryMapInstance.fitBounds(bounds, { padding: 100 });
-                      // Restore zoom if user had zoomed in more than fitBounds would set
+                      window.deliveryMapInstance.fitBounds(routeBounds, { padding: 100 });
                       setTimeout(() => {
                         const newZoom = window.deliveryMapInstance.getZoom();
                         if (currentZoom > newZoom && currentZoom >= 18) {
                           window.deliveryMapInstance.setZoom(currentZoom);
                         }
                       }, 100);
-                      console.log('✅ Map bounds fitted to route');
                     }
                     
                     console.log('✅ Route displayed on main map using custom polyline');
@@ -3653,34 +3598,21 @@ export default function DeliveryHome() {
 
                     // Show route polyline on main Feed map
                     if (window.deliveryMapInstance && window.google?.maps) {
-                      if (!directionsRendererRef.current) {
-                        directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
-                          suppressMarkers: true,
-                          polylineOptions: { strokeColor: '#4285F4', strokeWeight: 0, strokeOpacity: 0, icons: [], zIndex: -1 },
-                          preserveViewport: true
-                        })
-                      }
-                      // Don't create main route polyline - only live tracking polyline will be shown
-                      // Remove old custom polyline if exists (cleanup)
                       try {
                         if (routePolylineRef.current) {
                           routePolylineRef.current.setMap(null);
                           routePolylineRef.current = null;
                         }
-                        
-                        // Remove DirectionsRenderer from map
-                        if (directionsRendererRef.current) {
-                          directionsRendererRef.current.setMap(null);
-                        }
                       } catch (e) {
                         console.warn('⚠️ Error cleaning up polyline:', e);
                       }
-                      
-                      const bounds = directionsResult.routes?.[0]?.bounds
-                      if (bounds) {
+
+                      const overviewPath = directionsResult.routes?.[0]?.overview_path;
+                      if (overviewPath && overviewPath.length > 0) {
+                        const routeBounds = new window.google.maps.LatLngBounds();
+                        overviewPath.forEach(p => routeBounds.extend(p));
                         const currentZoomBeforeFit = window.deliveryMapInstance.getZoom();
-                        window.deliveryMapInstance.fitBounds(bounds, { padding: 100 });
-                        // Preserve zoom if user had zoomed in
+                        window.deliveryMapInstance.fitBounds(routeBounds, { padding: 100 });
                         setTimeout(() => {
                           const newZoom = window.deliveryMapInstance.getZoom();
                           if (currentZoomBeforeFit > newZoom && currentZoomBeforeFit >= 18) {
@@ -5585,84 +5517,47 @@ export default function DeliveryHome() {
     }
   }, [selectedRestaurant?.lat, selectedRestaurant?.lng, selectedRestaurant?.name])
 
-  // Calculate route using Google Maps Directions API (Zomato-style road-based routing)
-  // Optimized for TWO_WHEELER mode with DRIVING fallback
-  // NOTE: Must be defined BEFORE the useEffect that uses it (Rules of Hooks)
+  // Calculate route using free OSRM API (no Google Directions cost)
+  // Returns a result shaped like Google DirectionsResult for compatibility
   const calculateRouteWithDirectionsAPI = useCallback(async (origin, destination) => {
-    if (!window.google || !window.google.maps || !window.google.maps.DirectionsService) {
-      console.warn('⚠️ Google Maps Directions API not available');
-      return null;
-    }
-
     try {
-      // Initialize Directions Service if not already created
-      if (!directionsServiceRef.current) {
-        directionsServiceRef.current = new window.google.maps.DirectionsService();
+      const startLng = origin[1];
+      const startLat = origin[0];
+      const endLng = destination.lng;
+      const endLat = destination.lat;
+      const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+
+      if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+        console.warn('⚠️ OSRM route failed, using straight line');
+        return null;
       }
 
-      // Try TWO_WHEELER first (optimized for bike/delivery), fallback to DRIVING
-      const tryRoute = (travelMode, modeName) => {
-        return new Promise((resolve, reject) => {
-          directionsServiceRef.current.route(
-            {
-              origin: { lat: origin[0], lng: origin[1] },
-              destination: { lat: destination.lat, lng: destination.lng },
-              travelMode: travelMode,
-              provideRouteAlternatives: false, // Save API cost - don't get alternatives
-              avoidHighways: false,
-              avoidTolls: false,
-              optimizeWaypoints: false
-            },
-            (result, status) => {
-              if (status === window.google.maps.DirectionsStatus.OK) {
-                console.log(`✅ Directions API route calculated successfully (${modeName})`);
-                console.log('📍 Route details:', {
-                  distance: result.routes[0].legs[0].distance?.text,
-                  duration: result.routes[0].legs[0].duration?.text,
-                  steps: result.routes[0].legs[0].steps?.length,
-                  travelMode: modeName
-                });
-                setDirectionsResponse(result);
-                directionsResponseRef.current = result; // Store in ref for callbacks
-                resolve(result);
-              } else {
-                // Handle specific error cases - suppress console errors for REQUEST_DENIED
-                if (status === 'REQUEST_DENIED') {
-                  // Don't log as error - this is expected when billing is not enabled
-                  // Just reject silently to trigger fallback
-                  reject(new Error(`Directions API not available: ${status}`));
-                } else if (status === 'OVER_QUERY_LIMIT') {
-                  console.warn(`⚠️ Directions API quota exceeded (${modeName})`);
-                  reject(new Error(`Directions request failed: ${status}`));
-                } else {
-                  console.warn(`⚠️ Directions API failed with ${modeName}: ${status}`);
-                  reject(new Error(`Directions request failed: ${status}`));
-                }
-              }
-            }
-          );
-        });
+      const osrmRoute = data.routes[0];
+      const coords = osrmRoute.geometry.coordinates; // [lng, lat] pairs
+      const overviewPath = coords.map(c => ({ lat: c[1], lng: c[0] }));
+      const distanceKm = (osrmRoute.distance / 1000).toFixed(1);
+      const durationMin = Math.ceil(osrmRoute.duration / 60);
+
+      // Build a compatible result shape so existing polyline-drawing code works
+      const result = {
+        routes: [{
+          overview_path: overviewPath,
+          legs: [{
+            distance: { text: `${distanceKm} km`, value: osrmRoute.distance },
+            duration: { text: `${durationMin} min`, value: osrmRoute.duration },
+            steps: []
+          }]
+        }]
       };
 
-      // Try TWO_WHEELER first (if available in region)
-      try {
-        if (window.google.maps.TravelMode.TWO_WHEELER) {
-          return await tryRoute(window.google.maps.TravelMode.TWO_WHEELER, 'TWO_WHEELER');
-        }
-      } catch (twoWheelerError) {
-        console.log('⚠️ TWO_WHEELER mode not available, trying DRIVING...');
-      }
-
-      // Fallback to DRIVING mode
-      return await tryRoute(window.google.maps.TravelMode.DRIVING, 'DRIVING');
+      setDirectionsResponse(result);
+      directionsResponseRef.current = result;
+      return result;
     } catch (error) {
-      // Handle REQUEST_DENIED and other errors gracefully
-      if (error.message?.includes('REQUEST_DENIED') || error.message?.includes('not available')) {
-        console.warn('⚠️ Google Maps Directions API not available (billing/API key issue). Will use fallback route.');
-      } else {
-        console.error('❌ Error calculating route with Directions API:', error);
-      }
-      return null; // Return null to trigger fallback
+      console.warn('⚠️ OSRM route calculation failed:', error.message);
+      return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -5910,33 +5805,7 @@ export default function DeliveryHome() {
 
         directionsMapInstanceRef.current = map;
 
-        // Initialize Directions Service
-        if (!directionsServiceRef.current) {
-          directionsServiceRef.current = new window.google.maps.DirectionsService();
-        }
-
-        // Initialize Directions Renderer
-        if (!directionsRendererRef.current) {
-          // Don't create DirectionsRenderer with map - it adds dots
-          // We'll extract route path and use custom polyline instead
-          directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
-            suppressMarkers: true,
-            polylineOptions: {
-              strokeColor: '#4285F4',
-              strokeWeight: 0,
-              strokeOpacity: 0,
-              zIndex: -1,
-              icons: []
-            },
-            preserveViewport: true
-          });
-          // Explicitly don't set map - we use custom polyline instead
-        } else {
-          // Don't set map - we use custom polyline instead
-          // directionsRendererRef.current.setMap(map);
-        }
-
-        // Calculate route using Directions API
+        // Calculate route using OSRM (free)
         const routeResult = await calculateRouteWithDirectionsAPI(currentLocation, destinationLocation);
         
         if (routeResult) {
@@ -5957,9 +5826,11 @@ export default function DeliveryHome() {
           }
           
           // Fit bounds to show entire route
-          const bounds = routeResult.routes[0].bounds;
-          if (bounds) {
-            map.fitBounds(bounds, { padding: 50 });
+          const overviewPath = routeResult.routes?.[0]?.overview_path;
+          if (overviewPath && overviewPath.length > 0 && window.google?.maps) {
+            const routeBounds = new window.google.maps.LatLngBounds();
+            overviewPath.forEach(p => routeBounds.extend(p));
+            map.fitBounds(routeBounds, { padding: 50 });
           }
 
           // Add custom Destination Marker (Restaurant or Customer)
@@ -6160,31 +6031,18 @@ export default function DeliveryHome() {
   }, [showDirectionsMap, riderLocation, selectedRestaurant?.id, calculateDistanceInMeters])
 
   // Handle route polyline visibility and updates
-  // Always use custom polyline (DirectionsRenderer is never active - it adds dots)
   useEffect(() => {
-    // DirectionsRenderer is never used - we always use custom polyline
-    // Remove DirectionsRenderer if it somehow got attached
-    if (directionsRendererRef.current && directionsRendererRef.current.getMap()) {
-      directionsRendererRef.current.setMap(null);
-    }
-    
-    // Only show fallback polyline if DirectionsRenderer is NOT active
     if (routePolyline && routePolyline.length > 0 && window.deliveryMapInstance) {
       updateRoutePolyline();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routePolyline?.length, directionsResponse])
 
-  // Handle directionsResponse updates - Show route on main map when directions are calculated
+  // Handle directionsResponse updates - draw route polyline on main map
   useEffect(() => {
-    // Only show route if there's an active order (selectedRestaurant)
     if (!selectedRestaurant) {
-      // Clear route if no active order
       if (routePolylineRef.current) {
         routePolylineRef.current.setMap(null);
-      }
-      if (directionsRendererRef.current) {
-        directionsRendererRef.current.setMap(null);
       }
       return;
     }
@@ -6193,135 +6051,32 @@ export default function DeliveryHome() {
       return;
     }
 
-    if (!window.deliveryMapInstance || !window.google || !window.google.maps) {
-      console.warn('⚠️ Map not ready for directions display');
-      return;
-    }
+    if (!window.deliveryMapInstance || !window.google?.maps) return;
 
-    console.log('🗺️ Showing directions route on main map:', directionsResponse);
+    const route = directionsResponse.routes[0];
+    const overviewPath = route?.overview_path;
+    if (!overviewPath || overviewPath.length === 0) return;
 
-    // Clear any existing fallback polyline to avoid conflicts
+    // Clean up old polyline
     if (routePolylineRef.current) {
       routePolylineRef.current.setMap(null);
+      routePolylineRef.current = null;
     }
 
-    // Initialize DirectionsRenderer for main map if not exists
-    if (!directionsRendererRef.current) {
-      console.log('📦 Creating DirectionsRenderer for main map');
-      // Don't create DirectionsRenderer with map - it adds dots
-      // We'll extract route path and use custom polyline instead
-      directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
-        suppressMarkers: true,
-        suppressInfoWindows: false,
-        polylineOptions: {
-          strokeColor: '#4285F4',
-          strokeWeight: 0,
-          strokeOpacity: 0,
-          zIndex: -1,
-          icons: []
-        },
-        markerOptions: {
-          visible: false
-        },
-        preserveViewport: true
-      });
-      // Explicitly don't set map - we use custom polyline instead
-      console.log('✅ DirectionsRenderer created with bright blue polyline (markers suppressed)');
-      
-      // Ensure it's visible by explicitly setting map
-      directionsRendererRef.current.setMap(window.deliveryMapInstance);
-    } else {
-      // Ensure renderer is attached to main map
-      directionsRendererRef.current.setMap(window.deliveryMapInstance);
-      // Update polyline options to ensure visibility and suppress markers
-      directionsRendererRef.current.setOptions({
-        suppressMarkers: true, // Hide default markers including car icon
-        suppressInfoWindows: false,
-        polylineOptions: {
-          strokeColor: '#4285F4', // Bright blue like Zomato
-          strokeWeight: 0, // Completely hide DirectionsRenderer polyline (has dots)
-          strokeOpacity: 0, // Hide completely
-          zIndex: -1, // Put behind everything
-          icons: [] // No custom icons
-        },
-        markerOptions: {
-          visible: false // Explicitly hide all markers
-        },
-        preserveViewport: true
-      });
-      console.log('✅ DirectionsRenderer re-attached to main map with updated styling (markers suppressed)');
-    }
-
-    // Set directions response to renderer
+    // Fit bounds from overview_path
     try {
-      // Validate directionsResponse is a valid DirectionsResult object
-      if (!directionsResponse || typeof directionsResponse !== 'object' || !directionsResponse.routes || !Array.isArray(directionsResponse.routes) || directionsResponse.routes.length === 0) {
-        console.error('❌ Invalid directionsResponse:', directionsResponse);
-        return;
-      }
-
-      // Validate it's a Google Maps DirectionsResult (has status property)
-      if (!directionsResponse.request || !directionsResponse.routes[0]?.legs) {
-        console.error('❌ directionsResponse is not a valid Google Maps DirectionsResult');
-        return;
-      }
-
-      // Clear any existing polyline first to ensure clean render
-      if (routePolylineRef.current) {
-        routePolylineRef.current.setMap(null);
-      }
-
-      // Extract route path and create custom clean polyline without dots
-      // Don't use DirectionsRenderer on map - it adds dots/icons
-      try {
-        const route = directionsResponse.routes[0];
-        if (route && route.overview_path) {
-          // Don't create main route polyline - only live tracking polyline will be shown
-          // Remove old custom polyline if exists (cleanup)
-          if (routePolylineRef.current) {
-            routePolylineRef.current.setMap(null);
-            routePolylineRef.current = null;
-          }
-          
-          console.log('📍 Route details:', {
-            routes: directionsResponse.routes?.length || 0,
-            legs: directionsResponse.routes?.[0]?.legs?.length || 0,
-            distance: directionsResponse.routes?.[0]?.legs?.[0]?.distance?.text,
-            duration: directionsResponse.routes?.[0]?.legs?.[0]?.duration?.text
-          });
-          
-          // Completely remove DirectionsRenderer from map to prevent any dots/icons
-          if (directionsRendererRef.current) {
-            directionsRendererRef.current.setMap(null);
-          }
+      const routeBounds = new window.google.maps.LatLngBounds();
+      overviewPath.forEach(p => routeBounds.extend(p));
+      const currentZoomBeforeFit = window.deliveryMapInstance.getZoom();
+      window.deliveryMapInstance.fitBounds(routeBounds, { padding: 100 });
+      setTimeout(() => {
+        const newZoom = window.deliveryMapInstance.getZoom();
+        if (currentZoomBeforeFit > newZoom && currentZoomBeforeFit >= 18) {
+          window.deliveryMapInstance.setZoom(currentZoomBeforeFit);
         }
-      } catch (e) {
-        console.warn('⚠️ Could not create custom polyline:', e);
-      }
-
-      // Fit bounds to show entire route - but preserve zoom if user has zoomed in
-      const bounds = directionsResponse.routes[0].bounds;
-      if (bounds) {
-        const currentZoomBeforeFit = window.deliveryMapInstance.getZoom();
-        window.deliveryMapInstance.fitBounds(bounds, { padding: 100 });
-        // Preserve zoom if user had zoomed in more than fitBounds would set
-        setTimeout(() => {
-          const newZoom = window.deliveryMapInstance.getZoom();
-          if (currentZoomBeforeFit > newZoom && currentZoomBeforeFit >= 18) {
-            window.deliveryMapInstance.setZoom(currentZoomBeforeFit);
-          }
-        }, 100);
-        console.log('✅ Map bounds fitted to route');
-      }
-
-      // Ensure DirectionsRenderer is removed from map (we use custom polyline instead)
-      if (directionsRendererRef.current) {
-        directionsRendererRef.current.setMap(null);
-      }
-    } catch (error) {
-      console.error('❌ Error setting directions on renderer:', error);
-      console.error('❌ directionsResponse type:', typeof directionsResponse);
-      console.error('❌ directionsResponse:', directionsResponse);
+      }, 100);
+    } catch (e) {
+      console.warn('⚠️ Error fitting route bounds:', e);
     }
   }, [directionsResponse, selectedRestaurant])
 
@@ -7286,11 +7041,12 @@ export default function DeliveryHome() {
               }
               
               // Fit map bounds to show entire route
-              const bounds = directionsResult.routes[0].bounds;
-              if (bounds) {
+              const overviewPath = directionsResult.routes?.[0]?.overview_path;
+              if (overviewPath && overviewPath.length > 0 && window.google?.maps) {
+                const routeBounds = new window.google.maps.LatLngBounds();
+                overviewPath.forEach(p => routeBounds.extend(p));
                 const currentZoomBeforeFit = window.deliveryMapInstance.getZoom();
-                window.deliveryMapInstance.fitBounds(bounds, { padding: 100 });
-                // Preserve zoom if user had zoomed in
+                window.deliveryMapInstance.fitBounds(routeBounds, { padding: 100 });
                 setTimeout(() => {
                   const newZoom = window.deliveryMapInstance.getZoom();
                   if (currentZoomBeforeFit > newZoom && currentZoomBeforeFit >= 18) {

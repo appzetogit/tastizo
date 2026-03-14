@@ -472,8 +472,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
         googleMapRef.current = map
 
-        autocompleteServiceRef.current = new google.maps.places.AutocompleteService()
-        placesServiceRef.current = new google.maps.places.PlacesService(map)
+        // AutocompleteService + PlacesService removed — using free Photon API instead
 
         // Create Green Marker (draggable for address selection)
         const greenMarker = new google.maps.Marker({
@@ -728,30 +727,36 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       return
     }
     if (placePredictionsDebounceRef.current) clearTimeout(placePredictionsDebounceRef.current)
-    placePredictionsDebounceRef.current = setTimeout(() => {
-      const service = autocompleteServiceRef.current
-      if (!service) {
-        setPlaceSuggestions([])
-        setPlaceSuggestionsLoading(false)
-        return
-      }
+    placePredictionsDebounceRef.current = setTimeout(async () => {
       setPlaceSuggestionsLoading(true)
-      service.getPlacePredictions(
-        {
-          input: query,
-          componentRestrictions: { country: 'in' }
-        },
-        (predictions, status) => {
-          setPlaceSuggestionsLoading(false)
-          if (status !== 'OK' || !predictions) {
-            setPlaceSuggestions([])
-            return
-          }
+      try {
+        // Free Photon API (OpenStreetMap) — zero Google Maps cost
+        const userLat = location?.latitude || mapPosition?.[0] || 22.7196
+        const userLng = location?.longitude || mapPosition?.[1] || 75.8577
+        const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&lat=${userLat}&lon=${userLng}&limit=4&lang=en`
+        const resp = await fetch(url)
+        const data = await resp.json()
+        if (data.features && data.features.length > 0) {
           setPlaceSuggestions(
-            predictions.slice(0, 4).map((p) => ({ place_id: p.place_id, description: p.description }))
+            data.features.slice(0, 4).map((f) => ({
+              place_id: `photon_${f.properties.osm_id || Math.random()}`,
+              description: [
+                f.properties.name,
+                f.properties.street,
+                f.properties.city || f.properties.town || f.properties.village,
+                f.properties.state,
+              ].filter(Boolean).join(', '),
+              lat: f.geometry.coordinates[1],
+              lng: f.geometry.coordinates[0],
+            }))
           )
+        } else {
+          setPlaceSuggestions([])
         }
-      )
+      } catch {
+        setPlaceSuggestions([])
+      }
+      setPlaceSuggestionsLoading(false)
     }, 300)
     return () => {
       if (placePredictionsDebounceRef.current) clearTimeout(placePredictionsDebounceRef.current)
@@ -1905,29 +1910,20 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     }, 300) // 300ms debounce delay
   }
 
-  const handleSelectPlaceSuggestion = (placeId, description) => {
+  const handleSelectPlaceSuggestion = (placeId, description, lat, lng) => {
     setPlaceSuggestions([])
     setSearchValue(description || '')
-    const service = placesServiceRef.current
-    if (!service) return
-    service.getDetails(
-      { placeId, fields: ['geometry', 'formatted_address'] },
-      (place, status) => {
-        if (status !== 'OK' || !place?.geometry?.location) return
-        const lat = place.geometry.location.lat()
-        const lng = place.geometry.location.lng()
-        const fullAddress = (place.formatted_address || description || '').trim()
-        setSelectedPlaceAddress(fullAddress)
-        setMapPosition([lat, lng])
-        if (greenMarkerRef.current) greenMarkerRef.current.setPosition({ lat, lng })
-        if (googleMapRef.current) {
-          googleMapRef.current.panTo({ lat, lng })
-          googleMapRef.current.setZoom(17)
-        }
-        setSearchValue(fullAddress || description || '')
-        handleMapMoveEnd(lat, lng)
+    if (lat && lng) {
+      setSelectedPlaceAddress(description || '')
+      setMapPosition([lat, lng])
+      if (greenMarkerRef.current) greenMarkerRef.current.setPosition({ lat, lng })
+      if (googleMapRef.current) {
+        googleMapRef.current.panTo({ lat, lng })
+        googleMapRef.current.setZoom(17)
       }
-    )
+      setSearchValue(description || '')
+      handleMapMoveEnd(lat, lng)
+    }
   }
 
   const handleUseCurrentLocationForAddress = async () => {
@@ -2429,7 +2425,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                     <button
                       key={suggestion.place_id}
                       type="button"
-                      onClick={() => handleSelectPlaceSuggestion(suggestion.place_id, suggestion.description)}
+                      onClick={() => handleSelectPlaceSuggestion(suggestion.place_id, suggestion.description, suggestion.lat, suggestion.lng)}
                       className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-[#2a2a2a] border-b border-gray-100 dark:border-gray-800 last:border-b-0 transition-colors"
                     >
                       <MapPin className="h-4 w-4 text-green-600 flex-shrink-0" />

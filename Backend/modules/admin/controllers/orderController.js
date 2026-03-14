@@ -1135,7 +1135,7 @@ export const getTransactionReport = asyncHandler(async (req, res) => {
       0,
     );
 
-    // Get admin earning from AdminCommission
+    // Try AdminCommission first, fallback to calculating from orders
     const adminCommissionQuery = {
       status: "completed",
       ...summaryDateQuery,
@@ -1143,25 +1143,56 @@ export const getTransactionReport = asyncHandler(async (req, res) => {
     };
     const adminCommissions =
       await AdminCommission.find(adminCommissionQuery).lean();
-    const adminEarning = adminCommissions.reduce(
+
+    let adminEarning = adminCommissions.reduce(
       (sum, comm) => sum + (comm.commissionAmount || 0),
       0,
     );
-
-    // Calculate restaurant earning (order total - admin commission - delivery commission)
-    // For simplicity, we'll use restaurantEarning from AdminCommission if available
-    const restaurantEarning = adminCommissions.reduce(
+    let restaurantEarning = adminCommissions.reduce(
       (sum, comm) => sum + (comm.restaurantEarning || 0),
       0,
     );
 
-    // Calculate deliveryman earning (from delivery commissions)
-    // This would need to be calculated from delivery wallet transactions or order assignment info
-    // For now, we'll estimate based on delivery fee or use a placeholder
+    // Fallback: calculate from orders directly if AdminCommission has no data
+    if (adminEarning === 0 && restaurantEarning === 0 && completedOrders.length > 0) {
+      // Try to load settlement data for platformFee
+      let settlementMap = new Map();
+      try {
+        const Settlement = (await import("../models/Settlement.js")).default;
+        const orderIds = completedOrders.map((o) => o._id);
+        const settlements = await Settlement.find({ orderId: { $in: orderIds } })
+          .select("orderId userPayment.platformFee")
+          .lean();
+        for (const s of settlements) {
+          if (s.userPayment?.platformFee !== undefined) {
+            settlementMap.set(s.orderId.toString(), s.userPayment.platformFee);
+          }
+        }
+      } catch (_) {
+        // Settlement model may not exist, skip
+      }
+
+      for (const order of completedOrders) {
+        const subtotal = order.pricing?.subtotal || 0;
+        const discount = order.pricing?.discount || 0;
+        const deliveryFee = order.pricing?.deliveryFee || 0;
+        const tax = order.pricing?.tax || 0;
+
+        let platformFee = order.pricing?.platformFee;
+        if (platformFee === undefined || platformFee === null) {
+          platformFee = settlementMap.get(order._id.toString());
+        }
+        if (platformFee === undefined || platformFee === null) {
+          platformFee = 0;
+        }
+
+        adminEarning += platformFee + tax;
+        restaurantEarning += Math.max(0, subtotal - discount - platformFee);
+      }
+    }
+
     const deliverymanEarning = completedOrders.reduce((sum, order) => {
-      // Delivery commission is typically calculated from distance
-      // For now, we'll use a simple estimate or fetch from delivery wallet
-      return sum + (order.pricing?.deliveryFee || 0) * 0.8; // Estimate 80% of delivery fee goes to deliveryman
+      return sum + (order.pricing?.deliveryFee || 0);
     }, 0);
 
     // Transform orders to match frontend format

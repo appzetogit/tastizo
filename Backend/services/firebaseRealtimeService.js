@@ -113,7 +113,23 @@ export async function updateDeliveryBoyLocation(boyId, lat, lng, orderId = null)
 }
 
 /**
- * Remove order from active_orders when delivered/cancelled (optional).
+ * Update status (and optionally polyline/distance/duration) on an active order.
+ */
+export async function updateActiveOrderStatus(orderId, fields) {
+  if (!isFirebaseRealtimeAvailable()) return;
+  try {
+    const db = getDb();
+    await db.ref("active_orders").child(orderId).update({
+      ...fields,
+      last_updated: Date.now(),
+    });
+  } catch (err) {
+    console.warn("Firebase updateActiveOrderStatus failed:", err.message);
+  }
+}
+
+/**
+ * Remove order from active_orders when delivered/cancelled.
  */
 export async function removeActiveOrder(orderId) {
   if (!isFirebaseRealtimeAvailable()) return;

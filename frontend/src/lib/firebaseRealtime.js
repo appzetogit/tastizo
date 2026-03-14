@@ -58,6 +58,12 @@ export function subscribeToActiveOrderLocation(orderId, callback) {
       callback({
         lat,
         lng,
+        polyline: data.polyline || null,
+        status: data.status || null,
+        restaurantLat: data.restaurant_lat,
+        restaurantLng: data.restaurant_lng,
+        customerLat: data.customer_lat,
+        customerLng: data.customer_lng,
         updatedAt: data.last_updated || Date.now(),
         raw: data,
       })

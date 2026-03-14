@@ -15,6 +15,9 @@ import {
 import { updateDeliveryBoyLocation } from "../../../services/firebaseRealtimeService.js";
 import Order from '../../order/models/Order.js';
 
+const lastFirebaseWrite = new Map();
+const FIREBASE_WRITE_INTERVAL = 10000; // 10 seconds
+
 /**
  * Receive GPS update from delivery app
  * POST /api/delivery/location/update
@@ -108,15 +111,20 @@ export const receiveLocationUpdate = asyncHandler(async (req, res) => {
       });
     }
 
-    // Sync live location to Firebase Realtime Database for this delivery boy and order
+    // Sync live location to Firebase (throttled to reduce write costs)
     try {
       if (deliveryBoyId) {
-        await updateDeliveryBoyLocation(
-          deliveryBoyId.toString(),
-          processedLocation.lat,
-          processedLocation.lng,
-          orderId,
-        );
+        const now = Date.now();
+        const lastWrite = lastFirebaseWrite.get(orderId) || 0;
+        if (now - lastWrite >= FIREBASE_WRITE_INTERVAL) {
+          await updateDeliveryBoyLocation(
+            deliveryBoyId.toString(),
+            processedLocation.lat,
+            processedLocation.lng,
+            orderId,
+          );
+          lastFirebaseWrite.set(orderId, now);
+        }
       }
     } catch (firebaseErr) {
       console.warn(

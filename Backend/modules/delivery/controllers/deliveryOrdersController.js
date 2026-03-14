@@ -16,6 +16,8 @@ import { calculateRoute } from "../../order/services/routeCalculationService.js"
 import {
   upsertActiveOrder,
   updateDeliveryBoyLocation,
+  updateActiveOrderStatus,
+  removeActiveOrder,
 } from "../../../services/firebaseRealtimeService.js";
 import { encodePolyline } from "../../../shared/utils/polylineEncoder.js";
 import mongoose from "mongoose";
@@ -822,6 +824,28 @@ export const acceptOrder = asyncHandler(async (req, res) => {
       console.error("Error emitting order_accepted:", emitErr);
     }
 
+    // Store pickup polyline in Firebase so frontend can render route without Google Directions API
+    try {
+      const custCoords = updatedOrder.address?.location?.coordinates;
+      const [custLng, custLat] = custCoords || [0, 0];
+      await upsertActiveOrder({
+        orderId: updatedOrder.orderId,
+        boy_id: delivery._id.toString(),
+        boy_lat: deliveryLat,
+        boy_lng: deliveryLng,
+        restaurant_lat: restaurantLat,
+        restaurant_lng: restaurantLng,
+        customer_lat: custLat,
+        customer_lng: custLng,
+        polyline: encodePolyline(routeData.coordinates),
+        distance: routeData.distance,
+        duration: routeData.duration,
+        status: "accepted",
+      });
+    } catch (firebaseErr) {
+      console.warn("Firebase upsertActiveOrder in acceptOrder failed:", firebaseErr.message);
+    }
+
     return successResponse(res, 200, "Order accepted successfully", {
       order: orderWithPayment,
       route: {
@@ -946,6 +970,14 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
     order.deliveryState.currentPhase = "at_pickup";
     order.deliveryState.reachedPickupAt = new Date();
     await order.save();
+
+    // Sync phase to Firebase
+    try {
+      await updateActiveOrderStatus(order.orderId, { status: "at_pickup" });
+    } catch (fbErr) {
+      console.warn("Firebase updateActiveOrderStatus (at_pickup) failed:", fbErr.message);
+    }
+
     // After 10 seconds, trigger order ID confirmation request
     // Use order._id (MongoDB ObjectId) instead of orderId string
     const orderMongoId = order._id;
@@ -1178,7 +1210,7 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
             polyline,
             distance: routeData.distance,
             duration: routeData.duration,
-            status: "assigned",
+            status: "en_route_to_delivery",
           });
 
           await updateDeliveryBoyLocation(
@@ -1431,7 +1463,7 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
             polyline,
             distance: routeData.distance,
             duration: routeData.duration,
-            status: "assigned",
+            status: "en_route_to_delivery",
           });
 
           await updateDeliveryBoyLocation(
@@ -2239,6 +2271,14 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       );
       // Don't fail the delivery completion if restaurant wallet update fails
       // But log it for investigation
+    }
+
+    // Clean up Firebase active order entry
+    try {
+      const fbOrderId = updatedOrder.orderId || order.orderId || orderId;
+      await removeActiveOrder(fbOrderId);
+    } catch (fbErr) {
+      console.warn("Firebase removeActiveOrder failed:", fbErr.message);
     }
 
     // Send response first, then handle notifications asynchronously

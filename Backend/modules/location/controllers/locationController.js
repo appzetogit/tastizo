@@ -34,8 +34,8 @@ const buildMinimalGeocodeData = (latNum, lngNum) => {
 };
 
 /**
- * Reverse geocode coordinates to address using Google Maps Geocoding API
- * (OLA Maps and BigDataCloud have been completely removed)
+ * Reverse geocode coordinates to address using free Nominatim (OpenStreetMap) API.
+ * Zero Google Maps API cost.
  */
 export const reverseGeocode = async (req, res) => {
   try {
@@ -58,34 +58,21 @@ export const reverseGeocode = async (req, res) => {
       });
     }
 
-    const googleApiKey = process.env.GOOGLE_MAPS_API_KEY;
-
-    // If Google key is not configured, return minimal coordinates-only data
-    if (!googleApiKey) {
-      logger.warn(
-        "GOOGLE_MAPS_API_KEY not configured. Returning coordinates-only reverse geocode response.",
-      );
-      const minimalData = buildMinimalGeocodeData(latNum, lngNum);
-      return res.json({
-        success: true,
-        data: minimalData,
-        source: "coordinates_only",
-      });
-    }
-
     let data;
     try {
       const response = await axios.get(
-        "https://maps.googleapis.com/maps/api/geocode/json",
+        "https://nominatim.openstreetmap.org/reverse",
         {
           params: {
-            latlng: `${latNum},${lngNum}`,
-            key: googleApiKey,
-            language: "en",
-            region: "in",
-            // Prioritise exact locations (building, street address, POI etc.)
-            result_type:
-              "premise|street_address|establishment|point_of_interest|route|sublocality",
+            format: "json",
+            lat: latNum,
+            lon: lngNum,
+            addressdetails: 1,
+            "accept-language": "en",
+            zoom: 18,
+          },
+          headers: {
+            "User-Agent": "Tastizo-App/1.0",
           },
           timeout: 10000,
         },
@@ -93,13 +80,11 @@ export const reverseGeocode = async (req, res) => {
 
       data = response.data;
     } catch (apiError) {
-      logger.error("Google Maps reverse geocode request failed", {
+      logger.error("Nominatim reverse geocode request failed", {
         error: apiError.message,
         status: apiError.response?.status,
-        data: apiError.response?.data,
       });
 
-      // Network / HTTP level error – fall back to minimal data
       const minimalData = buildMinimalGeocodeData(latNum, lngNum);
       return res.json({
         success: true,
@@ -108,15 +93,9 @@ export const reverseGeocode = async (req, res) => {
       });
     }
 
-    if (
-      !data ||
-      data.status !== "OK" ||
-      !Array.isArray(data.results) ||
-      data.results.length === 0
-    ) {
-      logger.warn("Google Maps reverse geocode returned no usable results", {
-        status: data?.status,
-        error_message: data?.error_message,
+    if (!data || data.error) {
+      logger.warn("Nominatim reverse geocode returned no usable results", {
+        error: data?.error,
       });
       const minimalData = buildMinimalGeocodeData(latNum, lngNum);
       return res.json({
@@ -126,39 +105,33 @@ export const reverseGeocode = async (req, res) => {
       });
     }
 
-    const firstResult = data.results[0];
-    const components = firstResult.address_components || [];
+    const addr = data.address || {};
 
-    let city = "";
-    let state = "";
-    let country = "";
-    let area = "";
+    const city =
+      addr.city ||
+      addr.town ||
+      addr.village ||
+      addr.municipality ||
+      addr.county ||
+      "";
+    const state = addr.state || "";
+    const country = addr.country || "";
+    const area =
+      addr.suburb ||
+      addr.neighbourhood ||
+      addr.quarter ||
+      addr.hamlet ||
+      addr.residential ||
+      "";
+    const road = addr.road || "";
+    const building = addr.building || addr.amenity || addr.shop || "";
+    const postcode = addr.postcode || "";
 
-    components.forEach((comp) => {
-      const types = comp.types || [];
-      if (types.includes("locality")) {
-        city = comp.long_name || comp.short_name || city;
-      } else if (types.includes("administrative_area_level_2") && !city) {
-        city = comp.long_name || comp.short_name || city;
-      } else if (types.includes("administrative_area_level_1")) {
-        state = comp.long_name || comp.short_name || state;
-      } else if (types.includes("country")) {
-        country = comp.long_name || comp.short_name || country;
-      } else if (
-        types.includes("sublocality") ||
-        types.includes("sublocality_level_1") ||
-        types.includes("neighborhood")
-      ) {
-        if (!area) {
-          area = comp.long_name || comp.short_name || area;
-        }
-      }
-    });
+    let formattedAddress = data.display_name || "";
 
-    let formattedAddress = firstResult.formatted_address || "";
-
-    // If area is still empty, try to extract it from formatted_address
-    if (!area && formattedAddress) {
+    // If area is empty, try to extract from display_name
+    let derivedArea = area;
+    if (!derivedArea && formattedAddress) {
       const parts = formattedAddress
         .split(",")
         .map((p) => p.trim())
@@ -166,19 +139,15 @@ export const reverseGeocode = async (req, res) => {
 
       if (parts.length >= 3) {
         const potentialArea = parts[0];
-        const cityPart = parts[1] || city;
-        const statePart = parts[2] || state;
-
         if (
           potentialArea &&
-          potentialArea.toLowerCase() !== (cityPart || "").toLowerCase() &&
-          potentialArea.toLowerCase() !== (statePart || "").toLowerCase() &&
+          potentialArea.toLowerCase() !== city.toLowerCase() &&
+          potentialArea.toLowerCase() !== state.toLowerCase() &&
           !potentialArea.toLowerCase().includes("district") &&
-          !potentialArea.toLowerCase().includes("city") &&
           potentialArea.length > 2 &&
           potentialArea.length < 80
         ) {
-          area = potentialArea;
+          derivedArea = potentialArea;
         }
       }
     }
@@ -189,12 +158,15 @@ export const reverseGeocode = async (req, res) => {
           formatted_address:
             formattedAddress || `${latNum.toFixed(6)}, ${lngNum.toFixed(6)}`,
           address_components: {
-            city: city || "",
-            state: state || "",
-            country: country || "",
-            area: area || "",
+            city: city,
+            state: state,
+            country: country,
+            area: derivedArea,
+            road: road,
+            building: building,
+            postcode: postcode,
           },
-          geometry: firstResult.geometry || {
+          geometry: {
             location: {
               lat: latNum,
               lng: lngNum,
@@ -207,7 +179,7 @@ export const reverseGeocode = async (req, res) => {
     return res.json({
       success: true,
       data: processedData,
-      source: "google",
+      source: "nominatim",
     });
   } catch (error) {
     logger.error("Reverse geocode error", {
@@ -224,7 +196,8 @@ export const reverseGeocode = async (req, res) => {
 };
 
 /**
- * Get nearby locations/places using Google Places Nearby Search API
+ * Get nearby locations/places using free Nominatim search API.
+ * Zero Google Maps API cost.
  * GET /location/nearby?lat=...&lng=...&radius=...
  */
 export const getNearbyLocations = async (req, res) => {
@@ -240,7 +213,6 @@ export const getNearbyLocations = async (req, res) => {
 
     const latNum = parseFloat(lat);
     const lngNum = parseFloat(lng);
-    const radiusNum = parseFloat(radius);
 
     if (Number.isNaN(latNum) || Number.isNaN(lngNum)) {
       return res.status(400).json({
@@ -249,89 +221,63 @@ export const getNearbyLocations = async (req, res) => {
       });
     }
 
-    const googleApiKey = process.env.GOOGLE_MAPS_API_KEY;
+    // Use Nominatim search with viewbox for nearby results
+    const radiusNum = parseFloat(radius) || 500;
+    const degreeOffset = radiusNum / 111000; // rough meter-to-degree
+    const viewbox = [
+      lngNum - degreeOffset,
+      latNum - degreeOffset,
+      lngNum + degreeOffset,
+      latNum + degreeOffset,
+    ].join(",");
 
-    if (!googleApiKey) {
-      logger.warn(
-        "GOOGLE_MAPS_API_KEY not configured. Returning empty nearby locations.",
-      );
-      return res.json({
-        success: true,
-        data: {
-          locations: [],
-          source: "none",
-        },
-      });
-    }
-
-    let response;
+    let results = [];
     try {
-      response = await axios.get(
-        "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
+      const response = await axios.get(
+        "https://nominatim.openstreetmap.org/search",
         {
           params: {
-            location: `${latNum},${lngNum}`,
-            radius: radiusNum,
-            key: googleApiKey,
-            language: "en",
-            // Optional free-text filter
-            keyword: query || undefined,
+            format: "json",
+            q: query || "*",
+            viewbox: viewbox,
+            bounded: 1,
+            addressdetails: 1,
+            limit: 10,
+            "accept-language": "en",
+          },
+          headers: {
+            "User-Agent": "Tastizo-App/1.0",
           },
           timeout: 8000,
         },
       );
+      results = response.data || [];
     } catch (apiError) {
-      logger.error("Google Places nearby search failed", {
+      logger.error("Nominatim nearby search failed", {
         error: apiError.message,
-        status: apiError.response?.status,
-        data: apiError.response?.data,
       });
-
       return res.json({
         success: true,
-        data: {
-          locations: [],
-          source: "none",
-        },
+        data: { locations: [], source: "none" },
       });
     }
 
-    const payload = response.data;
-
-    if (
-      !payload ||
-      payload.status !== "OK" ||
-      !Array.isArray(payload.results)
-    ) {
-      logger.warn("Google Places nearby search returned no usable results", {
-        status: payload?.status,
-        error_message: payload?.error_message,
-      });
-
+    if (!Array.isArray(results) || results.length === 0) {
       return res.json({
         success: true,
-        data: {
-          locations: [],
-          source: "none",
-        },
+        data: { locations: [], source: "nominatim" },
       });
     }
 
-    const nearbyPlaces = payload.results.slice(0, 10).map((place, index) => {
-      const placeLat = place.geometry?.location?.lat;
-      const placeLng = place.geometry?.location?.lng;
-      const distance = placeLat
-        ? calculateDistance(latNum, lngNum, placeLat, placeLng)
-        : 0;
+    const nearbyPlaces = results.map((place, index) => {
+      const placeLat = parseFloat(place.lat);
+      const placeLng = parseFloat(place.lon);
+      const distance = calculateDistance(latNum, lngNum, placeLat, placeLng);
 
       return {
-        id: place.place_id || place.id || `place_${index}`,
-        name: place.name || "",
-        address:
-          place.vicinity ||
-          place.formatted_address ||
-          place.plus_code?.compound_code ||
-          "",
+        id: place.place_id ? String(place.place_id) : `place_${index}`,
+        name: place.display_name ? place.display_name.split(",")[0] : "",
+        address: place.display_name || "",
         distance:
           distance < 1000
             ? `${Math.round(distance)} m`
@@ -348,7 +294,7 @@ export const getNearbyLocations = async (req, res) => {
       success: true,
       data: {
         locations: nearbyPlaces,
-        source: "google",
+        source: "nominatim",
       },
     });
   } catch (error) {
@@ -370,16 +316,16 @@ export const getNearbyLocations = async (req, res) => {
  * Returns distance in meters
  */
 function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371e3; // Earth's radius in meters
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+  const R = 6371e3;
+  const p1 = (lat1 * Math.PI) / 180;
+  const p2 = (lat2 * Math.PI) / 180;
+  const dp = ((lat2 - lat1) * Math.PI) / 180;
+  const dl = ((lon2 - lon1) * Math.PI) / 180;
 
   const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    Math.sin(dp / 2) * Math.sin(dp / 2) +
+    Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-  return R * c; // Distance in meters
+  return R * c;
 }

@@ -63,8 +63,7 @@ export default function GoogleMapsTracking({
 }) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
   const mapRef = useRef(null)
-  const directionsServiceRef = useRef(null)
-  const directionsRendererRef = useRef(null)
+  const directionsRendererRef = useRef(null) // Now stores a google.maps.Polyline instead of DirectionsRenderer
   const lastRouteCalcRef = useRef({ time: 0, origin: { lat: 0, lng: 0 } })
   const hasInitialBoundsFitted = useRef(false)
   const [userHasInteracted, setUserHasInteracted] = useState(false)
@@ -259,155 +258,89 @@ export default function GoogleMapsTracking({
     };
   }, [limitZoomIfNeeded])
 
-  // Calculate and display route using Google Directions Service
-  const calculateAndDisplayRoute = useCallback((origin, destination, waypoints = []) => {
-    if (!isLoaded || !mapRef.current || !window.google?.maps) {
-      console.log('⚠️ Cannot calculate route: map not loaded or not ready')
-      return
-    }
+  // Calculate route using free OSRM API and draw custom polyline (no Google Directions cost)
+  const calculateAndDisplayRoute = useCallback(async (origin, destination, waypoints = []) => {
+    if (!isLoaded || !mapRef.current || !window.google?.maps) return;
 
-    // Validate origin and destination
-    if (!origin || !destination || !origin.lat || !origin.lng || !destination.lat || !destination.lng) {
-      console.log('⚠️ Cannot calculate route: invalid origin or destination', { origin, destination })
-      return
-    }
+    if (!origin || !destination || !origin.lat || !origin.lng || !destination.lat || !destination.lng) return;
 
-    // Optimization: Throttle route calculation (min 5 seconds between calls)
-    // unless origin has moved significantly (> 50m)
-    const now = Date.now()
-    const lastCalc = lastRouteCalcRef.current
-    const timeDiff = now - lastCalc.time
-    if (timeDiff < 5000) {
-      // Check if origin moved significantly
-      const latDiff = Math.abs(origin.lat - lastCalc.origin.lat)
-      const lngDiff = Math.abs(origin.lng - lastCalc.origin.lng)
-      // Rough approximation: 0.0005 degrees is ~50m
-      if (latDiff < 0.0005 && lngDiff < 0.0005) {
-        return // Skip calculation
+    // Throttle: min 5s between calls unless origin moved > 50m
+    const now = Date.now();
+    const lastCalc = lastRouteCalcRef.current;
+    if (now - lastCalc.time < 5000) {
+      const latDiff = Math.abs(origin.lat - lastCalc.origin.lat);
+      const lngDiff = Math.abs(origin.lng - lastCalc.origin.lng);
+      if (latDiff < 0.0005 && lngDiff < 0.0005) return;
+    }
+    lastRouteCalcRef.current = { time: now, origin: { ...origin } };
+
+    try {
+      // Build OSRM coordinates string (lng,lat pairs separated by ;)
+      let coords = `${origin.lng},${origin.lat}`;
+      waypoints.forEach(wp => { coords += `;${wp.lng},${wp.lat}`; });
+      coords += `;${destination.lng},${destination.lat}`;
+
+      const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+
+      if (data.code !== 'Ok' || !data.routes?.[0]) {
+        setRouteError('Route unavailable. Showing straight line.');
+        setRouteInfo(null);
+        return;
       }
-    }
-    lastRouteCalcRef.current = { time: now, origin: { ...origin } }
 
-    // Initialize DirectionsService if not already initialized
-    if (!directionsServiceRef.current) {
-      directionsServiceRef.current = new window.google.maps.DirectionsService()
-    }
+      setRouteError(null);
+      const osrmRoute = data.routes[0];
+      const totalDistance = osrmRoute.distance; // meters
+      let totalDurationSeconds = osrmRoute.duration + 120; // +2min buffer
 
-    // Initialize or reuse DirectionsRenderer
-    if (!directionsRendererRef.current) {
-      directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
+      const formatDuration = (seconds) => {
+        if (seconds < 60) return `${Math.ceil(seconds)} sec`;
+        const mins = Math.ceil(seconds / 60);
+        if (mins < 60) return `${mins} mins`;
+        const hours = Math.floor(mins / 60);
+        return `${hours}h ${mins % 60}m`;
+      };
+      const formatDistance = (meters) => meters < 1000 ? `${meters}m` : `${(meters / 1000).toFixed(1)} km`;
+
+      setRouteInfo({
+        distance: formatDistance(totalDistance),
+        duration: formatDuration(totalDurationSeconds),
+        durationValue: totalDurationSeconds,
+        distanceValue: totalDistance,
+      });
+
+      // Draw polyline on map
+      const pathCoords = osrmRoute.geometry.coordinates.map(c => ({ lat: c[1], lng: c[0] }));
+
+      // Remove old polyline
+      if (directionsRendererRef.current) {
+        directionsRendererRef.current.setMap(null);
+        directionsRendererRef.current = null;
+      }
+
+      directionsRendererRef.current = new window.google.maps.Polyline({
+        path: pathCoords,
+        geodesic: true,
+        strokeColor: '#3b82f6',
+        strokeWeight: 6,
+        strokeOpacity: 1.0,
         map: mapRef.current,
-        suppressMarkers: true, // We'll use custom markers
-        preserveViewport: true, // Preserve viewport - we'll center manually
-                      polylineOptions: {
-                        strokeColor: '#3b82f6', // Bright blue like Zomato/Swiggy
-                        strokeWeight: 6,
-                        strokeOpacity: 1.0, // Fully visible - plain solid line
-                        icons: [], // No icons/dots - plain solid line only
-                      },
-      })
-    } else {
-      // Ensure preserveViewport is true so route updates don't change viewport
-      directionsRendererRef.current.setOptions({ preserveViewport: true })
+        zIndex: 2
+      });
+    } catch (error) {
+      console.warn('OSRM route calculation failed:', error.message);
+      setRouteError('Route unavailable. Showing straight line.');
+      setRouteInfo(null);
     }
-
-    // Prepare waypoints
-    const googleWaypoints = waypoints.map(wp => ({
-      location: new window.google.maps.LatLng(wp.lat, wp.lng),
-      stopover: true
-    }));
-
-    // Calculate route with DRIVING mode
-    directionsServiceRef.current.route(
-      {
-        origin: origin,
-        destination: destination,
-        waypoints: googleWaypoints,
-        travelMode: window.google.maps.TravelMode.DRIVING, // DRIVING mode as requested
-        drivingOptions: {
-          departureTime: new Date(),
-          trafficModel: 'bestguess'
-        },
-        optimizeWaypoints: true,
-      },
-      (result, status) => {
-        if (status === 'OK' && result.routes && result.routes[0]) {
-          setRouteError(null)
-          // Extract route information
-          const route = result.routes[0]
-          if (route.legs && route.legs.length > 0) {
-            let totalDistance = 0
-            let totalDurationSeconds = 0
-            route.legs.forEach((leg) => {
-              totalDistance += leg.distance?.value || 0
-              totalDurationSeconds += leg.duration?.value || 0
-            })
-
-            // Add 2-minute buffer (120 seconds) as requested
-            totalDurationSeconds += 120
-
-            const formatDuration = (seconds) => {
-              if (seconds < 60) return `${Math.ceil(seconds)} sec`
-              const mins = Math.ceil(seconds / 60)
-              if (mins < 60) return `${mins} mins`
-              const hours = Math.floor(mins / 60)
-              const remainingMins = mins % 60
-              return `${hours}h ${remainingMins}m`
-            }
-
-            const formatDistance = (meters) => {
-              if (meters < 1000) return `${meters}m`
-              return `${(meters / 1000).toFixed(1)} km`
-            }
-
-            setRouteInfo({
-              distance: formatDistance(totalDistance),
-              duration: formatDuration(totalDurationSeconds),
-              durationValue: totalDurationSeconds,
-              distanceValue: totalDistance,
-            })
-          }
-          directionsRendererRef.current.setDirections(result);
-          
-          // Force remove any default icons/dots from polyline after directions are set
-          // Try multiple times to ensure icons are removed
-          [100, 300, 500, 700].forEach(delay => {
-            setTimeout(() => {
-              if (directionsRendererRef.current) {
-                directionsRendererRef.current.setOptions({
-                  polylineOptions: {
-                    strokeColor: '#3b82f6',
-                    strokeWeight: 6,
-                    strokeOpacity: 1.0,
-                    icons: [] // Explicitly remove all icons/dots - plain solid line only
-                  }
-                });
-              }
-            }, delay);
-          });
-        } else {
-          console.error('❌ Directions request failed:', status, { origin, destination })
-          setRouteInfo(null)
-          // Fallback to straight line if route fails
-          if (status === 'ZERO_RESULTS') {
-            setRouteError('No road route found. Showing straight line.')
-          } else if (status === 'OVER_QUERY_LIMIT') {
-            setRouteError('Map service busy. Showing straight line.')
-          } else {
-            setRouteError('Navigation error. Showing straight line.')
-          }
-        }
-      }
-    )
   }, [isLoaded])
 
   // Handle route calculation when routeOrigin and routeDestination are provided
   useEffect(() => {
     if (showRoute && routeOrigin && routeDestination && isLoaded && mapRef.current) {
-      // Recalculate route when origin, destination or waypoints change
       calculateAndDisplayRoute(routeOrigin, routeDestination, routeWaypoints)
     } else if (!showRoute && directionsRendererRef.current) {
-      // Clear route if showRoute is false
       directionsRendererRef.current.setMap(null)
       directionsRendererRef.current = null
       setRouteInfo(null)

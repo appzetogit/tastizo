@@ -52,29 +52,35 @@ export default function AddZone() {
     }
   }, [formData.country])
 
-  // Initialize Places Autocomplete when map is loaded
-  useEffect(() => {
-    if (!mapLoading && mapInstanceRef.current && autocompleteInputRef.current && window.google?.maps?.places && !autocompleteRef.current) {
-      const autocomplete = new window.google.maps.places.Autocomplete(autocompleteInputRef.current, {
-        types: ['geocode', 'establishment'],
-        componentRestrictions: { country: 'in' } // Restrict to India
-      })
-      
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace()
-        if (place.geometry && place.geometry.location && mapInstanceRef.current) {
-          const location = place.geometry.location
-          mapInstanceRef.current.setCenter(location)
-          mapInstanceRef.current.setZoom(15) // Zoom in when location is selected
-          
-          // Set the search input value
-          setLocationSearch(place.formatted_address || place.name || "")
-        }
-      })
-      
-      autocompleteRef.current = autocomplete
+  // Photon-based location search (free, zero Google Maps cost)
+  const [searchSuggestions, setSearchSuggestions] = useState([])
+  const searchDebounceRef = useRef(null)
+
+  const handleSearchInput = (value) => {
+    setLocationSearch(value)
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    if (!value || value.trim().length < 2) { setSearchSuggestions([]); return }
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const resp = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(value.trim())}&limit=5&lang=en`)
+        const data = await resp.json()
+        setSearchSuggestions((data.features || []).map(f => ({
+          name: [f.properties.name, f.properties.city || f.properties.town, f.properties.state].filter(Boolean).join(', '),
+          lat: f.geometry.coordinates[1],
+          lng: f.geometry.coordinates[0],
+        })))
+      } catch { setSearchSuggestions([]) }
+    }, 300)
+  }
+
+  const handleSelectSuggestion = (suggestion) => {
+    setSearchSuggestions([])
+    setLocationSearch(suggestion.name)
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setCenter({ lat: suggestion.lat, lng: suggestion.lng })
+      mapInstanceRef.current.setZoom(15)
     }
-  }, [mapLoading])
+  }
 
   // Draw existing polygon when in edit mode and coordinates are loaded
   useEffect(() => {
@@ -817,9 +823,18 @@ export default function AddZone() {
                     type="text"
                     placeholder="Search location on map..."
                     value={locationSearch}
-                    onChange={(e) => setLocationSearch(e.target.value)}
+                    onChange={(e) => handleSearchInput(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+                  {searchSuggestions.length > 0 && (
+                    <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {searchSuggestions.map((s, i) => (
+                        <button key={i} type="button" onClick={() => handleSelectSuggestion(s)} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-b-0 text-sm">
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {coordinates.length > 0 && (
                   <p className="text-xs text-slate-600 mt-2">

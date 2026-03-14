@@ -27,41 +27,38 @@ export default function ZoneSetup() {
     loadGoogleMaps()
   }, [])
 
-  // Initialize Places Autocomplete when map is loaded
-  useEffect(() => {
-    if (!mapLoading && mapInstanceRef.current && autocompleteInputRef.current && window.google?.maps?.places && !autocompleteRef.current) {
-      const autocomplete = new window.google.maps.places.Autocomplete(autocompleteInputRef.current, {
-        types: ['geocode', 'establishment'],
-        componentRestrictions: { country: 'in' } // Restrict to India
-      })
-      
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace()
-        if (place.geometry && place.geometry.location && mapInstanceRef.current) {
-          const location = place.geometry.location
-          const lat = location.lat()
-          const lng = location.lng()
-          
-          // Center map on selected location
-          mapInstanceRef.current.setCenter(location)
-          mapInstanceRef.current.setZoom(17) // Zoom in when location is selected
-          
-          // Set the search input value
-          const address = place.formatted_address || place.name || ""
-          setLocationSearch(address)
-          setSelectedAddress(address)
-          
-          // Update marker position
-          updateMarker(lat, lng, address)
-          
-          // Set selected location
-          setSelectedLocation({ lat, lng, address })
-        }
-      })
-      
-      autocompleteRef.current = autocomplete
+  // Photon-based location search (free, zero Google Maps cost)
+  const [searchSuggestions, setSearchSuggestions] = useState([])
+  const searchDebounceRef = useRef(null)
+
+  const handleSearchInput = (value) => {
+    setLocationSearch(value)
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    if (!value || value.trim().length < 2) { setSearchSuggestions([]); return }
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const resp = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(value.trim())}&limit=5&lang=en`)
+        const data = await resp.json()
+        setSearchSuggestions((data.features || []).map(f => ({
+          name: [f.properties.name, f.properties.city || f.properties.town, f.properties.state].filter(Boolean).join(', '),
+          lat: f.geometry.coordinates[1],
+          lng: f.geometry.coordinates[0],
+        })))
+      } catch { setSearchSuggestions([]) }
+    }, 300)
+  }
+
+  const handleSelectSuggestion = (suggestion) => {
+    setSearchSuggestions([])
+    setLocationSearch(suggestion.name)
+    setSelectedAddress(suggestion.name)
+    setSelectedLocation({ lat: suggestion.lat, lng: suggestion.lng, address: suggestion.name })
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setCenter({ lat: suggestion.lat, lng: suggestion.lng })
+      mapInstanceRef.current.setZoom(17)
     }
-  }, [mapLoading])
+    updateMarker(suggestion.lat, suggestion.lng, suggestion.name)
+  }
 
   // Load existing restaurant location when data is fetched
   useEffect(() => {
@@ -220,29 +217,20 @@ export default function ZoneSetup() {
       mapInstanceRef.current = map
       console.log("✅ Map initialized successfully")
 
-      // Add click listener to place marker
-      map.addListener('click', (event) => {
+      // Add click listener to place marker — uses free Nominatim reverse geocode
+      map.addListener('click', async (event) => {
         const lat = event.latLng.lat()
         const lng = event.latLng.lng()
-        
-        // Reverse geocode to get address
-        const geocoder = new google.maps.Geocoder()
-        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-          if (status === 'OK' && results && results.length > 0) {
-            const address = results[0].formatted_address
-            setLocationSearch(address)
-            setSelectedAddress(address)
-            setSelectedLocation({ lat, lng, address })
-            updateMarker(lat, lng, address)
-          } else {
-            // If geocoding fails, still allow pinning
-            const address = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
-            setLocationSearch(address)
-            setSelectedAddress(address)
-            setSelectedLocation({ lat, lng, address })
-            updateMarker(lat, lng, address)
-          }
-        })
+        let address = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+        try {
+          const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=en&zoom=18`, { headers: { 'User-Agent': 'Tastizo-App/1.0' } })
+          const data = await resp.json()
+          if (data?.display_name) address = data.display_name
+        } catch { /* use coordinate fallback */ }
+        setLocationSearch(address)
+        setSelectedAddress(address)
+        setSelectedLocation({ lat, lng, address })
+        updateMarker(lat, lng, address)
       })
 
       setMapLoading(false)
@@ -285,26 +273,19 @@ export default function ZoneSetup() {
       infoWindow.open(mapInstanceRef.current, marker)
     })
 
-    // Update location when marker is dragged
-    marker.addListener('dragend', (event) => {
+    // Update location when marker is dragged — uses free Nominatim reverse geocode
+    marker.addListener('dragend', async (event) => {
       const newLat = event.latLng.lat()
       const newLng = event.latLng.lng()
-      
-      // Reverse geocode new position
-      const geocoder = new window.google.maps.Geocoder()
-      geocoder.geocode({ location: { lat: newLat, lng: newLng } }, (results, status) => {
-        if (status === 'OK' && results && results.length > 0) {
-          const newAddress = results[0].formatted_address
-          setLocationSearch(newAddress)
-          setSelectedAddress(newAddress)
-          setSelectedLocation({ lat: newLat, lng: newLng, address: newAddress })
-        } else {
-          const newAddress = `${newLat.toFixed(6)}, ${newLng.toFixed(6)}`
-          setLocationSearch(newAddress)
-          setSelectedAddress(newAddress)
-          setSelectedLocation({ lat: newLat, lng: newLng, address: newAddress })
-        }
-      })
+      let newAddress = `${newLat.toFixed(6)}, ${newLng.toFixed(6)}`
+      try {
+        const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${newLat}&lon=${newLng}&addressdetails=1&accept-language=en&zoom=18`, { headers: { 'User-Agent': 'Tastizo-App/1.0' } })
+        const data = await resp.json()
+        if (data?.display_name) newAddress = data.display_name
+      } catch { /* use coordinate fallback */ }
+      setLocationSearch(newAddress)
+      setSelectedAddress(newAddress)
+      setSelectedLocation({ lat: newLat, lng: newLng, address: newAddress })
     })
 
     markerRef.current = marker
@@ -405,10 +386,19 @@ export default function ZoneSetup() {
                 ref={autocompleteInputRef}
                 type="text"
                 value={locationSearch}
-                onChange={(e) => setLocationSearch(e.target.value)}
+                onChange={(e) => handleSearchInput(e.target.value)}
                 placeholder="Search for your restaurant location..."
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
               />
+              {searchSuggestions.length > 0 && (
+                <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {searchSuggestions.map((s, i) => (
+                    <button key={i} type="button" onClick={() => handleSelectSuggestion(s)} className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 text-sm">
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <button
               onClick={handleSaveLocation}
