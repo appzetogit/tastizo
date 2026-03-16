@@ -158,7 +158,7 @@ export async function getCloudinaryCredentials() {
 }
 
 /**
- * Get Firebase credentials
+ * Get Firebase credentials (from DB env vars)
  * @returns {Promise<Object>} Firebase credentials object
  */
 export async function getFirebaseCredentials() {
@@ -172,6 +172,10 @@ export async function getFirebaseCredentials() {
     projectId: await getEnvVar("FIREBASE_PROJECT_ID"),
     clientEmail: await getEnvVar("FIREBASE_CLIENT_EMAIL"),
     privateKey: await getEnvVar("FIREBASE_PRIVATE_KEY"),
+    databaseURL:
+      (await getEnvVar("FIREBASE_DATABASE_URL")) ||
+      process.env.FIREBASE_DATABASE_URL ||
+      "https://tastizoo-default-rtdb.asia-southeast1.firebasedatabase.app",
   };
 }
 

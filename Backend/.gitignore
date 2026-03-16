@@ -2,6 +2,7 @@ node_modules/
 .env
 .DS_Store
 config/serviceAccountKey.json
+scripts/seedFirebaseEnv.js
 dist/
 build/
 coverage/

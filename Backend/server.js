@@ -100,22 +100,7 @@ if (missingEnvVars.length > 0) {
   process.exit(1);
 }
 
-// Initialize Firebase Realtime Database BEFORE creating Express app, routes, or Socket.IO
-// This ensures getDb() can be used safely in any module (controllers, services, sockets).
-try {
-  const firebaseDb = initializeFirebaseRealtime();
-  if (!firebaseDb) {
-    console.warn(
-      "⚠️ Firebase Realtime Database initialization returned null. " +
-        "Live tracking features depending on Firebase will be disabled.",
-    );
-  }
-} catch (err) {
-  console.error(
-    "❌ Firebase Realtime Database initialization threw an error:",
-    err.message,
-  );
-}
+// Firebase Realtime init moved to connectDB().then() - requires DB for env vars
 
 // Initialize Express app
 const app = express();
@@ -292,7 +277,23 @@ app.set("io", io);
 import { initializeCloudinary } from "./config/cloudinary.js";
 
 // Connect to databases
-connectDB().then(() => {
+connectDB().then(async () => {
+  // Initialize Firebase Realtime (loads credentials from DB env vars)
+  try {
+    const firebaseDb = await initializeFirebaseRealtime();
+    if (!firebaseDb) {
+      console.warn(
+        "⚠️ Firebase Realtime Database initialization returned null. " +
+          "Add FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY in Admin → Environment Variables.",
+      );
+    }
+  } catch (err) {
+    console.error(
+      "❌ Firebase Realtime Database initialization threw an error:",
+      err.message,
+    );
+  }
+
   // Initialize Cloudinary after DB connection
   initializeCloudinary().catch((err) =>
     console.error("Failed to initialize Cloudinary:", err),

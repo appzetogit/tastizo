@@ -83,6 +83,11 @@ const environmentVariableSchema = new mongoose.Schema(
       default: '',
       trim: true
     },
+    FIREBASE_DATABASE_URL: {
+      type: String,
+      default: '',
+      trim: true
+    },
     
     // SMTP
     SMTP_HOST: {

@@ -5,6 +5,7 @@ import { Toaster } from 'sonner'
 import './index.css'
 import App from './App.jsx'
 import OfflineBanner from './components/OfflineBanner.jsx'
+import MobileSplashScreen from './components/MobileSplashScreen.jsx'
 import { getGoogleMapsApiKey } from './lib/utils/googleMapsApiKey.js'
 import { loadBusinessSettings } from './lib/utils/businessSettings.js'
 
@@ -235,6 +236,7 @@ createRoot(rootElement).render(
       <App />
       <Toaster position="top-center" richColors offset="80px" />
       <OfflineBanner />
+      <MobileSplashScreen />
     </BrowserRouter>
   </StrictMode>,
 )
