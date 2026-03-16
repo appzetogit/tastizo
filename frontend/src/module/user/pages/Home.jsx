@@ -1233,14 +1233,7 @@ export default function Home() {
       {/* Unified Navbar & Hero Section - rounded bottom on mobile for green area */}
       <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] md:pt-16 rounded-b-2xl md:rounded-b-none">
         {/* Hero Banner Carousel Background */}
-        {loadingBanners ? (
-          <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
-            <div className="text-white text-center">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
-              <p className="text-sm">Loading banners...</p>
-            </div>
-          </div>
-        ) : heroBannerImages.length > 0 ? (
+        {heroBannerImages.length > 0 ? (
           <div
             className="absolute top-0 left-0 right-0 bottom-0 z-0 cursor-grab active:cursor-grabbing overflow-hidden"
             onTouchStart={handleTouchStart}

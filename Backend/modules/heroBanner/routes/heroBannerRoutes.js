@@ -126,9 +126,7 @@ router.post(
 );
 router.delete('/under-250/:id', authenticateAdmin, deleteUnder250Banner);
 router.patch('/under-250/:id/order', authenticateAdmin, updateUnder250BannerOrder);
-
-
-
+router.patch('/under-250/:id/status', authenticateAdmin, toggleUnder250BannerStatus);
 
 // Admin routes - Dining Banners
 router.get('/dining', authenticateAdmin, getAllDiningBanners);

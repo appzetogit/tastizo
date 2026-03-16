@@ -41,6 +41,8 @@ export default function Under250() {
   const [under250Restaurants, setUnder250Restaurants] = useState([])
   const [loadingRestaurants, setLoadingRestaurants] = useState(true)
   const [showAllCategoriesModal, setShowAllCategoriesModal] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 12
 
   const sortOptions = [
     { id: null, label: 'Relevance' },
@@ -107,7 +109,7 @@ export default function Under250() {
       })
     })
 
-    let filtered = [...allDishes]
+    let filtered = allDishes.filter((dish) => dish.price > 0)
 
     // Apply "Under 30 mins" filter based on restaurant delivery time
     if (under30MinsFilter) {
@@ -147,6 +149,17 @@ export default function Under250() {
 
     return filtered
   }, [under250Restaurants, selectedSort, under30MinsFilter])
+
+  const totalPages = Math.ceil(sortedAndFilteredDishes.length / ITEMS_PER_PAGE)
+  const paginatedDishes = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    return sortedAndFilteredDishes.slice(start, start + ITEMS_PER_PAGE)
+  }, [sortedAndFilteredDishes, currentPage, ITEMS_PER_PAGE])
+
+  // Reset to page 1 when filters/sort change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedSort, under30MinsFilter, activeCategory])
 
   // Fetch under 250 banners from API
   useEffect(() => {
@@ -564,7 +577,7 @@ export default function Under250() {
         ) : (
           <section className="pt-3 sm:pt-4 md:pt-5 lg:pt-6">
             <div className="grid gap-3 sm:gap-4 md:gap-5 lg:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {sortedAndFilteredDishes.map((item, itemIndex) => {
+              {paginatedDishes.map((item, itemIndex) => {
                 const quantity = quantities[item.id] || 0
                 const isBookmarked = bookmarkedItems.has(item.id)
                 return (
@@ -600,9 +613,11 @@ export default function Under250() {
 
                         {/* Price + time pill */}
                         <div className="flex items-center gap-3 mt-1 text-xs sm:text-sm">
-                          <p className="font-semibold text-gray-900 dark:text-white">
-                            ₹{Math.round(item.price)}
-                          </p>
+                          {item.price > 0 && (
+                            <p className="font-semibold text-gray-900 dark:text-white">
+                              ₹{Math.round(item.price)}
+                            </p>
+                          )}
                           <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
                             <Clock className="h-3 w-3" strokeWidth={1.5} />
                             <span className="text-[11px] sm:text-xs font-medium">
@@ -678,7 +693,7 @@ export default function Under250() {
                           <motion.div
                             initial={{ opacity: 0, scale: 0.85 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-[#111] font-bold px-4 py-1.5 rounded-lg flex items-center gap-2 text-green-600"
+                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-[#111] font-bold px-4 py-1.5 rounded-lg flex items-center gap-2 text-green-600 border-2 border-green-600 dark:border-green-500"
                           >
                             <button
                               onClick={(e) => {
@@ -720,9 +735,9 @@ export default function Under250() {
                               }
                             }}
                             disabled={shouldShowGrayscale}
-                            className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-[#111] font-bold px-6 py-1.5 rounded-lg flex items-center gap-1 ${shouldShowGrayscale
-                              ? 'text-gray-400 cursor-not-allowed opacity-50'
-                              : 'text-green-600 hover:bg-green-50'
+                            className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-[#111] font-bold px-6 py-1.5 rounded-lg flex items-center gap-1 border-2 ${shouldShowGrayscale
+                              ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50 dark:border-gray-600'
+                              : 'border-green-600 dark:border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30'
                               }`}
                           >
                             ADD <Plus size={14} className="stroke-[3px]" />
@@ -734,6 +749,75 @@ export default function Under250() {
                 )
               })}
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex flex-col items-center gap-3 pt-6 pb-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, sortedAndFilteredDishes.length)} of {sortedAndFilteredDishes.length} dishes
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 1}
+                    onClick={() => {
+                      setCurrentPage((p) => p - 1)
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
+                    className="h-9 px-3 rounded-lg text-sm font-medium disabled:opacity-40"
+                  >
+                    Previous
+                  </Button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((page) => {
+                      if (totalPages <= 5) return true
+                      if (page === 1 || page === totalPages) return true
+                      return Math.abs(page - currentPage) <= 1
+                    })
+                    .reduce((acc, page, idx, arr) => {
+                      if (idx > 0 && page - arr[idx - 1] > 1) {
+                        acc.push('ellipsis-' + page)
+                      }
+                      acc.push(page)
+                      return acc
+                    }, [])
+                    .map((item) => {
+                      if (typeof item === 'string') {
+                        return (
+                          <span key={item} className="px-1 text-gray-400">…</span>
+                        )
+                      }
+                      return (
+                        <Button
+                          key={item}
+                          variant={currentPage === item ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            setCurrentPage(item)
+                            window.scrollTo({ top: 0, behavior: 'smooth' })
+                          }}
+                          className={`h-9 w-9 rounded-lg text-sm font-medium ${currentPage === item ? 'bg-green-600 text-white hover:bg-green-700' : ''}`}
+                        >
+                          {item}
+                        </Button>
+                      )
+                    })}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === totalPages}
+                    onClick={() => {
+                      setCurrentPage((p) => p + 1)
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
+                    className="h-9 px-3 rounded-lg text-sm font-medium disabled:opacity-40"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </section>
         )}
       </div>

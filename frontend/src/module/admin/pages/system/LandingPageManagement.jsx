@@ -725,11 +725,15 @@ export default function LandingPageManagement() {
   const handleUnder250BannerFileSelect = (e) => {
     const files = Array.from(e.target?.files || e.files || [])
     if (files.length === 0) return
-    if (files.length > 5) {
-      setError('You can upload a maximum of 5 images at once')
+    if (under250Banners.length >= 1) {
+      setError('Only 1 banner allowed for 250 Banner. Delete the existing banner to upload a new one.')
       return
     }
-    uploadUnder250Banners(files)
+    if (files.length > 1) {
+      setError('Only 1 banner allowed. Please select a single image.')
+      return
+    }
+    uploadUnder250Banners(files.slice(0, 1))
   }
 
   const uploadUnder250Banners = async (files) => {
@@ -850,11 +854,15 @@ export default function LandingPageManagement() {
   const handleDiningBannerFileSelect = (e) => {
     const files = Array.from(e.target?.files || e.files || [])
     if (files.length === 0) return
-    if (files.length > 5) {
-      setError('You can upload a maximum of 5 images at once')
+    if (diningBanners.length >= 1) {
+      setError('Only 1 banner allowed for Dining. Delete the existing banner to upload a new one.')
       return
     }
-    uploadDiningBanners(files)
+    if (files.length > 1) {
+      setError('Only 1 banner allowed. Please select a single image.')
+      return
+    }
+    uploadDiningBanners(files.slice(0, 1))
   }
 
   const uploadDiningBanners = async (files) => {
@@ -1434,27 +1442,27 @@ export default function LandingPageManagement() {
           <>
             {/* Upload Section */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-              <h2 className="text-lg font-bold text-slate-900 mb-4">Upload New Banner(s)</h2>
+              <h2 className="text-lg font-bold text-slate-900 mb-4">Upload New Banner (1 only)</h2>
               <div
-                className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center bg-blue-50/30 cursor-pointer transition-colors hover:border-blue-400 hover:bg-blue-50/50"
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${under250Banners.length >= 1 ? 'border-slate-200 bg-slate-50 cursor-not-allowed opacity-70' : 'border-blue-300 bg-blue-50/30 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50'}`}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (under250Banners.length >= 1) return; }}
                 onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 onDrop={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
+                  if (under250Banners.length >= 1) return
                   const files = Array.from(e.dataTransfer.files)
-                  if (files.length > 0) handleUnder250BannerFileSelect({ files })
+                  if (files.length > 0) handleUnder250BannerFileSelect({ files: files.slice(0, 1) })
                 }}
-                onClick={() => under250BannersFileInputRef.current?.click()}
+                onClick={() => { if (under250Banners.length < 1) under250BannersFileInputRef.current?.click(); }}
               >
                 <input
                   ref={under250BannersFileInputRef}
                   type="file"
                   accept="image/*"
-                  multiple
                   onChange={handleUnder250BannerFileSelect}
                   className="hidden"
-                  disabled={under250BannersUploading}
+                  disabled={under250BannersUploading || under250Banners.length >= 1}
                 />
                 {under250BannersUploading ? (
                   <div className="flex flex-col items-center gap-3">
@@ -1486,7 +1494,8 @@ export default function LandingPageManagement() {
                       </button>
                       <span className="text-slate-600"> or drag and drop</span>
                     </div>
-                    <p className="text-xs text-slate-500">PNG, JPG, WEBP up to 5MB each (Max 5 images at once)</p>
+                    <p className="text-xs text-slate-500">PNG, JPG, WEBP up to 5MB. Only 1 banner allowed for 250 Banner.</p>
+                    {under250Banners.length >= 1 && <p className="text-xs text-amber-600 font-medium">Delete the current banner to upload a new one.</p>}
                   </div>
                 )}
               </div>
@@ -1494,7 +1503,7 @@ export default function LandingPageManagement() {
 
             {/* Banners List */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <h2 className="text-lg font-bold text-slate-900 mb-4">Banner List ({under250Banners.length})</h2>
+              <h2 className="text-lg font-bold text-slate-900 mb-4">Banner (max 1)</h2>
               {under250BannersLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
@@ -1521,14 +1530,16 @@ export default function LandingPageManagement() {
                       </div>
                       <div className="p-4 bg-white">
                         <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleUnder250BannerOrderChange(banner._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowUp className="w-4 h-4 text-slate-600" />
-                            </button>
-                            <button onClick={() => handleUnder250BannerOrderChange(banner._id, 'down')} disabled={index === under250Banners.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowDown className="w-4 h-4 text-slate-600" />
-                            </button>
-                          </div>
+                          {under250Banners.length > 1 && (
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleUnder250BannerOrderChange(banner._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
+                                <ArrowUp className="w-4 h-4 text-slate-600" />
+                              </button>
+                              <button onClick={() => handleUnder250BannerOrderChange(banner._id, 'down')} disabled={index === under250Banners.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
+                                <ArrowDown className="w-4 h-4 text-slate-600" />
+                              </button>
+                            </div>
+                          )}
                           <button onClick={() => handleToggleUnder250BannerStatus(banner._id, banner.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
                             {banner.isActive ? 'Deactivate' : 'Activate'}
                           </button>
@@ -1550,27 +1561,27 @@ export default function LandingPageManagement() {
           <>
             {/* Upload Section */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-              <h2 className="text-lg font-bold text-slate-900 mb-4">Upload New Dining Banner(s)</h2>
+              <h2 className="text-lg font-bold text-slate-900 mb-4">Upload New Dining Banner (1 only)</h2>
               <div
-                className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center bg-blue-50/30 cursor-pointer transition-colors hover:border-blue-400 hover:bg-blue-50/50"
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${diningBanners.length >= 1 ? 'border-slate-200 bg-slate-50 cursor-not-allowed opacity-70' : 'border-blue-300 bg-blue-50/30 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50'}`}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (diningBanners.length >= 1) return; }}
                 onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 onDrop={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
+                  if (diningBanners.length >= 1) return
                   const files = Array.from(e.dataTransfer.files)
-                  if (files.length > 0) handleDiningBannerFileSelect({ files })
+                  if (files.length > 0) handleDiningBannerFileSelect({ files: files.slice(0, 1) })
                 }}
-                onClick={() => diningBannersFileInputRef.current?.click()}
+                onClick={() => { if (diningBanners.length < 1) diningBannersFileInputRef.current?.click(); }}
               >
                 <input
                   ref={diningBannersFileInputRef}
                   type="file"
                   accept="image/*"
-                  multiple
                   onChange={handleDiningBannerFileSelect}
                   className="hidden"
-                  disabled={diningBannersUploading}
+                  disabled={diningBannersUploading || diningBanners.length >= 1}
                 />
                 {diningBannersUploading ? (
                   <div className="flex flex-col items-center gap-3">
@@ -1602,7 +1613,8 @@ export default function LandingPageManagement() {
                       </button>
                       <span className="text-slate-600"> or drag and drop</span>
                     </div>
-                    <p className="text-xs text-slate-500">PNG, JPG, WEBP up to 5MB each (Max 5 images at once)</p>
+                    <p className="text-xs text-slate-500">PNG, JPG, WEBP up to 5MB. Only 1 banner allowed for Dining.</p>
+                    {diningBanners.length >= 1 && <p className="text-xs text-amber-600 font-medium">Delete the current banner to upload a new one.</p>}
                   </div>
                 )}
               </div>
@@ -1610,7 +1622,7 @@ export default function LandingPageManagement() {
 
             {/* Banners List */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <h2 className="text-lg font-bold text-slate-900 mb-4">Banner List ({diningBanners.length})</h2>
+              <h2 className="text-lg font-bold text-slate-900 mb-4">Banner (max 1)</h2>
               {diningBannersLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
@@ -1637,14 +1649,16 @@ export default function LandingPageManagement() {
                       </div>
                       <div className="p-4 bg-white">
                         <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleDiningBannerOrderChange(banner._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowUp className="w-4 h-4 text-slate-600" />
-                            </button>
-                            <button onClick={() => handleDiningBannerOrderChange(banner._id, 'down')} disabled={index === diningBanners.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowDown className="w-4 h-4 text-slate-600" />
-                            </button>
-                          </div>
+                          {diningBanners.length > 1 && (
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleDiningBannerOrderChange(banner._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
+                                <ArrowUp className="w-4 h-4 text-slate-600" />
+                              </button>
+                              <button onClick={() => handleDiningBannerOrderChange(banner._id, 'down')} disabled={index === diningBanners.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
+                                <ArrowDown className="w-4 h-4 text-slate-600" />
+                              </button>
+                            </div>
+                          )}
                           <button onClick={() => handleToggleDiningBannerStatus(banner._id, banner.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
                             {banner.isActive ? 'Deactivate' : 'Activate'}
                           </button>

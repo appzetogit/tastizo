@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from "react"
-import { BarChart3, ChevronDown, Info, Settings, FileText, FileSpreadsheet, Code, Loader2 } from "lucide-react"
+import { useState, useMemo, useEffect, useCallback } from "react"
+import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Info, Settings, FileText, FileSpreadsheet, Code, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { exportTransactionReportToCSV, exportTransactionReportToExcel, exportTransactionReportToPDF, exportTransactionReportToJSON } from "../../components/reports/reportsExportUtils"
@@ -36,6 +36,10 @@ export default function TransactionReport() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [zones, setZones] = useState([])
   const [restaurants, setRestaurants] = useState([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const [perPage, setPerPage] = useState(25)
 
   // Fetch zones and restaurants for filters
   useEffect(() => {
@@ -59,37 +63,47 @@ export default function TransactionReport() {
     fetchFilterData()
   }, [])
 
+  // Build date range params from time filter
+  const getDateRange = useCallback(() => {
+    let fromDate = null
+    let toDate = null
+    const now = new Date()
+    
+    if (filters.time === "Today") {
+      fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+    } else if (filters.time === "This Week") {
+      const dayOfWeek = now.getDay()
+      const diff = now.getDate() - dayOfWeek
+      fromDate = new Date(now.getFullYear(), now.getMonth(), diff)
+      toDate = new Date(now.getFullYear(), now.getMonth(), diff + 6, 23, 59, 59)
+    } else if (filters.time === "This Month") {
+      fromDate = new Date(now.getFullYear(), now.getMonth(), 1)
+      toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+    }
+    return { fromDate, toDate }
+  }, [filters.time])
+
+  // Reset to page 1 when filters or search change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, filters])
+
   // Fetch transaction report data
   useEffect(() => {
     const fetchTransactionReport = async () => {
       try {
         setLoading(true)
-        
-        // Build date range based on time filter
-        let fromDate = null
-        let toDate = null
-        const now = new Date()
-        
-        if (filters.time === "Today") {
-          fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-          toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
-        } else if (filters.time === "This Week") {
-          const dayOfWeek = now.getDay()
-          const diff = now.getDate() - dayOfWeek
-          fromDate = new Date(now.getFullYear(), now.getMonth(), diff)
-          toDate = new Date(now.getFullYear(), now.getMonth(), diff + 6, 23, 59, 59)
-        } else if (filters.time === "This Month") {
-          fromDate = new Date(now.getFullYear(), now.getMonth(), 1)
-          toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
-        }
+        const { fromDate, toDate } = getDateRange()
 
         const params = {
+          page: currentPage,
+          limit: perPage,
           search: searchQuery || undefined,
           zone: filters.zone !== "All Zones" ? filters.zone : undefined,
           restaurant: filters.restaurant !== "All restaurants" ? filters.restaurant : undefined,
           fromDate: fromDate ? fromDate.toISOString() : undefined,
           toDate: toDate ? toDate.toISOString() : undefined,
-          limit: 1000
         }
 
         const response = await adminAPI.getTransactionReport(params)
@@ -103,6 +117,10 @@ export default function TransactionReport() {
             restaurantEarning: 0,
             deliverymanEarning: 0
           })
+          if (response.data.data.pagination) {
+            setTotalPages(response.data.data.pagination.pages || 1)
+            setTotalItems(response.data.data.pagination.total || 0)
+          }
         } else {
           setTransactions([])
           if (response?.data?.message) {
@@ -110,7 +128,6 @@ export default function TransactionReport() {
           }
         }
       } catch (error) {
-        console.error("Error fetching transaction report:", error)
         toast.error("Failed to fetch transaction report")
         setTransactions([])
       } finally {
@@ -119,7 +136,7 @@ export default function TransactionReport() {
     }
 
     fetchTransactionReport()
-  }, [searchQuery, filters])
+  }, [currentPage, perPage, searchQuery, filters, getDateRange])
 
   const filteredTransactions = useMemo(() => {
     return transactions // Backend already filters, so just return transactions
@@ -357,7 +374,7 @@ export default function TransactionReport() {
         {/* Order Transactions Section */}
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-            <h2 className="text-base font-bold text-slate-900">Order Transactions {filteredTransactions.length}</h2>
+            <h2 className="text-base font-bold text-slate-900">Order Transactions <span className="text-slate-500 font-medium text-sm">({totalItems})</span></h2>
 
             <div className="flex items-center gap-2">
               <div className="relative flex-1 sm:flex-initial min-w-[180px]">
@@ -445,7 +462,7 @@ export default function TransactionReport() {
                       className="hover:bg-slate-50 transition-colors"
                     >
                       <td className="px-1.5 py-1">
-                        <span className="text-[10px] font-medium text-slate-700">{index + 1}</span>
+                        <span className="text-[10px] font-medium text-slate-700">{(currentPage - 1) * perPage + index + 1}</span>
                       </td>
                       <td className="px-1.5 py-1">
                         <span className="text-[10px] text-slate-700">{transaction.orderId}</span>
@@ -497,6 +514,86 @@ export default function TransactionReport() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {totalPages > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-3 border-t border-slate-200">
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <span>Rows per page:</span>
+                <select
+                  value={perPage}
+                  onChange={(e) => {
+                    setPerPage(Number(e.target.value))
+                    setCurrentPage(1)
+                  }}
+                  className="px-2 py-1 border border-slate-300 rounded-md bg-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  {[10, 25, 50, 100].map(size => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+                <span className="ml-2">
+                  Showing {totalItems === 0 ? 0 : (currentPage - 1) * perPage + 1}–{Math.min(currentPage * perPage, totalItems)} of {totalItems}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronsLeft className="w-3.5 h-3.5 text-slate-700" />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 text-slate-700" />
+                </button>
+
+                {(() => {
+                  const pages = []
+                  let start = Math.max(1, currentPage - 2)
+                  let end = Math.min(totalPages, start + 4)
+                  if (end - start < 4) start = Math.max(1, end - 4)
+
+                  for (let i = start; i <= end; i++) {
+                    pages.push(
+                      <button
+                        key={i}
+                        onClick={() => setCurrentPage(i)}
+                        className={`min-w-[28px] h-7 px-1 rounded-md text-xs font-medium transition-colors ${
+                          currentPage === i
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        {i}
+                      </button>
+                    )
+                  }
+                  return pages
+                })()}
+
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronsRight className="w-3.5 h-3.5 text-slate-700" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
