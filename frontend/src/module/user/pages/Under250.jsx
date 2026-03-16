@@ -693,7 +693,7 @@ export default function Under250() {
                           <motion.div
                             initial={{ opacity: 0, scale: 0.85 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-[#111] font-bold px-4 py-1.5 rounded-lg flex items-center gap-2 text-green-600 border-2 border-green-600 dark:border-green-500"
+                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-[#111] font-bold px-4 py-1.5 rounded-lg flex items-center gap-2 text-green-600 border border-green-500/80 dark:border-green-400/80"
                           >
                             <button
                               onClick={(e) => {
@@ -735,9 +735,9 @@ export default function Under250() {
                               }
                             }}
                             disabled={shouldShowGrayscale}
-                            className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-[#111] font-bold px-6 py-1.5 rounded-lg flex items-center gap-1 border-2 ${shouldShowGrayscale
+                            className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-[#111] font-bold px-6 py-1.5 rounded-lg flex items-center gap-1 border ${shouldShowGrayscale
                               ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50 dark:border-gray-600'
-                              : 'border-green-600 dark:border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30'
+                              : 'border-green-500/80 dark:border-green-400/80 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30'
                               }`}
                           >
                             ADD <Plus size={14} className="stroke-[3px]" />

@@ -149,7 +149,7 @@ export default function DesktopNavbar() {
               {/* Divider */}
               <div className="h-6 w-px bg-gray-300 dark:bg-gray-700" />
 
-              {/* Under 250 Tab */}
+              {/* Under 200 Tab */}
               <Link
                 to="/under-250"
                 className={`px-6 py-2.5 text-sm font-medium transition-all duration-200 relative ${isUnder250
@@ -157,7 +157,7 @@ export default function DesktopNavbar() {
                   : "text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-500"
                   }`}
               >
-                <span className="relative z-10">Under 250</span>
+                <span className="relative z-10">Under 200</span>
                 {isUnder250 && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-600 dark:bg-green-500 rounded-t-full" />
                 )}

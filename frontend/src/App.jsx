@@ -1,8 +1,8 @@
-import { Routes, Route, Navigate, useLocation } from "react-router-dom"
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import AuthRedirect from "@/components/AuthRedirect"
 
-import { Suspense, lazy } from "react"
+import { Suspense, lazy, useEffect, useRef } from "react"
 import Loader from "@/components/Loader"
 
 // Lazy Loading Components
@@ -131,10 +131,69 @@ function UserPathRedirect() {
   return <Navigate to={to} replace />
 }
 
+// Persist and restore last visited route across refreshes
+function RoutePersistence({ children }) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const hasRestoredRef = useRef(false)
+
+  // On initial load, if user hits bare domain "/", restore lastRoute if available
+  useEffect(() => {
+    if (hasRestoredRef.current) return
+    hasRestoredRef.current = true
+
+    try {
+      const saved = window.localStorage?.getItem("lastRoute")
+      const currentPath =
+        window.location.pathname +
+        window.location.search +
+        window.location.hash
+
+      // Only redirect when landing on a generic root and we have a meaningful saved route
+      if (
+        saved &&
+        typeof saved === "string" &&
+        saved !== "/" &&
+        (currentPath === "/" || currentPath === "" || currentPath === "/user")
+      ) {
+        navigate(saved, { replace: true })
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [navigate])
+
+  // On every route change, remember the current location (for all modules)
+  useEffect(() => {
+    try {
+      const path = location.pathname + location.search + location.hash
+
+      // Ignore pure auth/login routes so we don't always bounce back to them
+      const ignoredPrefixes = [
+        "/user/auth/",
+        "/admin/auth/",
+        "/delivery/auth/",
+        "/restaurant/auth/",
+      ]
+      const shouldIgnore = ignoredPrefixes.some((p) =>
+        location.pathname.startsWith(p),
+      )
+      if (!shouldIgnore) {
+        window.localStorage?.setItem("lastRoute", path)
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [location])
+
+  return children
+}
+
 export default function App() {
   return (
     <Suspense fallback={<Loader />}>
-      <Routes>
+      <RoutePersistence>
+        <Routes>
         <Route path="/user" element={<Navigate to="/" replace />} />
         <Route path="/user/*" element={<UserPathRedirect />} />
         {/* Removed /routes route - Home should be accessed through UserRouter */}
@@ -844,7 +903,8 @@ export default function App() {
           path="/*"
           element={<UserRouter />}
         />
-      </Routes>
+        </Routes>
+      </RoutePersistence>
     </Suspense>
   )
 }
