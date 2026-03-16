@@ -28,6 +28,7 @@ export default function SystemAddons() {
     FIREBASE_PROJECT_ID: "",
     FIREBASE_CLIENT_EMAIL: "",
     FIREBASE_PRIVATE_KEY: "",
+    FIREBASE_DATABASE_URL: "",
     FIREBASE_VAPID_KEY: "",
     
     // SMTP
@@ -218,6 +219,13 @@ export default function SystemAddons() {
               <InputField label="Measurement ID" fieldKey="MEASUREMENT_ID" />
               <InputField label="Firebase Project ID" fieldKey="FIREBASE_PROJECT_ID" />
               <InputField label="Firebase Client Email" fieldKey="FIREBASE_CLIENT_EMAIL" type="email" />
+              <div className="md:col-span-2">
+                <InputField 
+                  label="Firebase Realtime Database URL (for live location tracking)" 
+                  fieldKey="FIREBASE_DATABASE_URL" 
+                  placeholder="https://your-project-default-rtdb.region.firebasedatabase.app"
+                />
+              </div>
               <div className="md:col-span-2">
                 <InputField 
                   label="Firebase VAPID Key (Web Push)" 
