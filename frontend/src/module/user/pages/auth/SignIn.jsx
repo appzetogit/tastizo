@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select"
 import { authAPI } from "@/lib/api"
 import { firebaseAuth, googleProvider, ensureFirebaseInitialized } from "@/lib/firebase"
+import { performGoogleSignIn } from "@/lib/utils/googleSignIn"
 import { setAuthData } from "@/lib/utils/auth"
 import { registerFcmTokenForLoggedInUser } from "@/lib/notifications/fcmWeb"
 import loginBanner from "@/assets/loginbanner.jpg"
@@ -406,22 +407,15 @@ export default function SignIn() {
         throw new Error("Firebase Auth is not initialized. Please check your Firebase configuration.")
       }
 
-      const { signInWithPopup } = await import("firebase/auth")
+      // Flutter WebView: uses native Google picker; Browser: uses popup
+      const user = await performGoogleSignIn(firebaseAuth, googleProvider)
 
-      // Log current origin for debugging
-      console.log("🚀 Starting Google sign-in popup...")
-
-      // Use popup for better UX and error handling
-      const result = await signInWithPopup(firebaseAuth, googleProvider)
-
-      console.log("✅ Popup sign-in successful:", {
-        user: result?.user?.email,
-        operationType: result.operationType
-      })
-
-      if (result && result.user) {
-        // Process signed-in user
-        await processSignedInUser(result.user, "popup-result")
+      if (user) {
+        await processSignedInUser(user, "popup-result")
+      } else {
+        // User cancelled (e.g. in Flutter native picker)
+        setIsLoading(false)
+        redirectHandledRef.current = false
       }
     } catch (error) {
       console.error("❌ Google sign-in redirect error:", error)

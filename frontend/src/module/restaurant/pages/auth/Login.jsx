@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { restaurantAPI } from "@/lib/api"
 import { firebaseAuth, googleProvider, ensureFirebaseInitialized } from "@/lib/firebase"
+import { performGoogleSignIn } from "@/lib/utils/googleSignIn"
 import { useCompanyName } from "@/lib/hooks/useCompanyName"
 
 // Common country codes
@@ -339,18 +340,23 @@ export default function RestaurantLogin() {
     try {
       // Ensure Firebase Auth + Google provider are initialized
       await ensureFirebaseInitialized()
-      const { signInWithPopup } = await import("firebase/auth")
       if (!firebaseAuth || !googleProvider) {
         throw new Error("Firebase is not configured correctly for Google login")
       }
 
-      const result = await signInWithPopup(firebaseAuth, googleProvider)
-      if (result?.user) {
-        await processSignedInUser(result.user, "popup-result")
+      // Flutter WebView: uses native Google picker; Browser: uses popup
+      const user = await performGoogleSignIn(firebaseAuth, googleProvider)
+      if (user) {
+        await processSignedInUser(user, "popup-result")
+      } else {
+        // User cancelled (e.g. in Flutter native picker)
+        setIsSending(false)
+        redirectHandledRef.current = false
       }
     } catch (error) {
       console.error("Firebase Google login error:", error)
       setIsSending(false)
+      redirectHandledRef.current = false
       if (error?.code !== "auth/popup-closed-by-user") {
         setApiError(error?.message || "Google sign-in failed")
       }
