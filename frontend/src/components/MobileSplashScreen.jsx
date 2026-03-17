@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useLocation } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { TbLocation } from "react-icons/tb"
@@ -6,9 +6,11 @@ import { ChevronDown } from "lucide-react"
 import tastizoLogo from "@/assets/tastizologo.png"
 import { locationAPI } from "@/lib/api"
 import { useLocationIconTransition } from "@/context/LocationIconTransitionContext"
+import { isModuleAuthenticated } from "@/lib/utils/auth"
 
 const MOBILE_BREAKPOINT = 768
-const SPLASH_DURATION_MS = 2500
+const SPLASH_DURATION_LOGGED_OUT_MS = 2000
+const SPLASH_MIN_DISPLAY_LOGGED_IN_MS = 1500
 const FADE_OUT_DURATION_MS = 400
 
 // Only show splash on user-facing routes (not admin, restaurant, delivery)
@@ -62,6 +64,8 @@ export default function MobileSplashScreen() {
   const [isVisible, setIsVisible] = useState(true)
   const [splashLocation, setSplashLocation] = useState(null)
   const [locationLoading, setLocationLoading] = useState(true)
+  const showStartedAt = useRef(null)
+  const isLoggedIn = isModuleAuthenticated("user")
 
   useEffect(() => {
     const checkMobile = () => {
@@ -73,21 +77,37 @@ export default function MobileSplashScreen() {
     return () => window.removeEventListener("resize", checkMobile)
   }, [])
 
+  // Logged out: simple splash, fixed duration
   useEffect(() => {
-    if (!isMobile || !isUserRoute(location.pathname)) return
+    if (!isMobile || !isUserRoute(location.pathname) || isLoggedIn) return
 
-    const hideTimer = setTimeout(() => {
-      if (captureSplashIconAndStartExit) {
-        captureSplashIconAndStartExit()
-      }
-      setIsVisible(false)
-    }, SPLASH_DURATION_MS)
-
+    const hideTimer = setTimeout(() => setIsVisible(false), SPLASH_DURATION_LOGGED_OUT_MS)
     return () => clearTimeout(hideTimer)
-  }, [isMobile, location.pathname, captureSplashIconAndStartExit])
+  }, [isMobile, location.pathname, isLoggedIn])
 
+  // Logged in: splash with location, hide after location fetch + min display time
   useEffect(() => {
-    if (!isMobile || !isUserRoute(location.pathname)) return
+    if (!isMobile || !isUserRoute(location.pathname) || !isLoggedIn) return
+
+    if (showStartedAt.current === null) {
+      showStartedAt.current = Date.now()
+    }
+
+    if (!locationLoading) {
+      const elapsed = Date.now() - showStartedAt.current
+      const remaining = Math.max(0, SPLASH_MIN_DISPLAY_LOGGED_IN_MS - elapsed)
+      const id = setTimeout(() => {
+        if (captureSplashIconAndStartExit) captureSplashIconAndStartExit()
+        setIsVisible(false)
+      }, remaining)
+      return () => clearTimeout(id)
+    }
+  }, [isMobile, location.pathname, isLoggedIn, locationLoading, captureSplashIconAndStartExit])
+
+  // Fetch location only when logged in
+  useEffect(() => {
+    if (!isMobile || !isUserRoute(location.pathname) || !isLoggedIn) return
+
     setLocationLoading(true)
     fetchSplashLocation()
       .then((loc) => {
@@ -97,13 +117,16 @@ export default function MobileSplashScreen() {
       .finally(() => {
         setLocationLoading(false)
       })
-  }, [isMobile, location.pathname, setPhaseSplash])
+  }, [isMobile, location.pathname, isLoggedIn, setPhaseSplash])
 
   if (!isMobile || !isUserRoute(location.pathname)) return null
 
   const handleSplashExit = () => {
     window.dispatchEvent(new CustomEvent("splashEnded"))
   }
+
+  // Logged out: simple splash (logo only). Logged in: splash with location.
+  const showLocationSplash = isLoggedIn
 
   return (
     <AnimatePresence onExitComplete={handleSplashExit}>
@@ -129,84 +152,86 @@ export default function MobileSplashScreen() {
               },
             }}
           >
-            {/* Location above logo - animated transition */}
-            <motion.div
-              className="flex flex-col items-center gap-2 text-center max-w-[90vw] min-h-[4rem]"
-              initial={{ opacity: 0, y: -8 }}
-              animate={{
-                opacity: 1,
-                y: 0,
-                transition: { delay: 0.1, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-              }}
-            >
-              <AnimatePresence mode="wait">
-                {locationLoading ? (
-                  <motion.span
-                    key="detecting"
-                    className="text-white/90 text-sm"
-                    initial={{ opacity: 0.6, scale: 0.95 }}
-                    animate={{
-                      opacity: 1,
-                      scale: 1,
-                      transition: { duration: 0.3 },
-                    }}
-                    exit={{
-                      opacity: 0,
-                      scale: 0.9,
-                      y: -8,
-                      transition: { duration: 0.25, ease: "easeIn" },
-                    }}
-                  >
-                    Detecting location...
-                  </motion.span>
-                ) : splashLocation ? (
-                  <motion.div
-                    key="location"
-                    className="flex flex-col items-center gap-2"
-                    initial={{ opacity: 0, scale: 0.9, y: 12 }}
-                    animate={{
-                      opacity: 1,
-                      scale: 1,
-                      y: 0,
-                      transition: {
-                        duration: 0.4,
-                        ease: [0.25, 0.46, 0.45, 0.94],
-                        staggerChildren: 0.08,
-                      },
-                    }}
-                  >
+            {/* Location block - only for logged-in users */}
+            {showLocationSplash && (
+              <motion.div
+                className="flex flex-col items-center gap-2 text-center max-w-[90vw] min-h-[4rem]"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{
+                  opacity: 1,
+                  y: 0,
+                  transition: { delay: 0.1, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
+                }}
+              >
+                <AnimatePresence mode="wait">
+                  {locationLoading ? (
+                    <motion.span
+                      key="detecting"
+                      className="text-white/90 text-sm"
+                      initial={{ opacity: 0.6, scale: 0.95 }}
+                      animate={{
+                        opacity: 1,
+                        scale: 1,
+                        transition: { duration: 0.3 },
+                      }}
+                      exit={{
+                        opacity: 0,
+                        scale: 0.9,
+                        y: -8,
+                        transition: { duration: 0.25, ease: "easeIn" },
+                      }}
+                    >
+                      Detecting location...
+                    </motion.span>
+                  ) : splashLocation ? (
                     <motion.div
-                      ref={registerSplashIconRef}
-                      className="flex items-center justify-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5"
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.05, duration: 0.3 }}
+                      key="location"
+                      className="flex flex-col items-center gap-2"
+                      initial={{ opacity: 0, scale: 0.9, y: 12 }}
+                      animate={{
+                        opacity: 1,
+                        scale: 1,
+                        y: 0,
+                        transition: {
+                          duration: 0.4,
+                          ease: [0.25, 0.46, 0.45, 0.94],
+                          staggerChildren: 0.08,
+                        },
+                      }}
                     >
-                      <TbLocation className="h-4 w-4 text-white flex-shrink-0" />
+                      <motion.div
+                        ref={registerSplashIconRef}
+                        className="flex items-center justify-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5"
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.05, duration: 0.3 }}
+                      >
+                        <TbLocation className="h-4 w-4 text-white flex-shrink-0" />
+                      </motion.div>
+                      <motion.div
+                        className="flex items-center justify-center gap-2"
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1, duration: 0.3 }}
+                      >
+                        <p className="text-white font-semibold text-base leading-tight">
+                          {splashLocation.shortAddr}
+                        </p>
+                        <ChevronDown className="h-4 w-4 text-white flex-shrink-0" />
+                      </motion.div>
+                      <motion.p
+                        className="text-white/85 text-xs leading-snug line-clamp-2 max-h-10"
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1, duration: 0.3 }}
+                      >
+                        {splashLocation.fullAddr}
+                      </motion.p>
                     </motion.div>
-                    <motion.div
-                      className="flex items-center justify-center gap-2"
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.1, duration: 0.3 }}
-                    >
-                      <p className="text-white font-semibold text-base leading-tight">
-                        {splashLocation.shortAddr}
-                      </p>
-                      <ChevronDown className="h-4 w-4 text-white flex-shrink-0" />
-                    </motion.div>
-                    <motion.p
-                      className="text-white/85 text-xs leading-snug line-clamp-2 max-h-10"
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.1, duration: 0.3 }}
-                    >
-                      {splashLocation.fullAddr}
-                    </motion.p>
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
-            </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </motion.div>
+            )}
 
             <motion.img
               src={tastizoLogo}
@@ -217,7 +242,7 @@ export default function MobileSplashScreen() {
                 opacity: 1,
                 y: 0,
                 transition: {
-                  delay: 0.15,
+                  delay: showLocationSplash ? 0.15 : 0.1,
                   duration: 0.5,
                   ease: [0.25, 0.46, 0.45, 0.94],
                 },

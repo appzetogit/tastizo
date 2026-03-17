@@ -859,13 +859,12 @@ export default function PageNavbar({
                       initial={showLocationIcon ? false : { opacity: 0 }}
                       animate={{ opacity: showLocationIcon ? 1 : 0 }}
                       transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-                      className="flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 rounded-md flex items-center justify-center"
+                      className="flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center"
                       style={{
-                        backgroundColor: "#2B9C64",
                         visibility: showLocationIcon ? "visible" : "hidden",
                       }}
                     >
-                      {showLocationIcon && <TbLocation className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white" />}
+                      {showLocationIcon && <TbLocation className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${textColorClass} ${textColor === "white" ? "drop-shadow-lg" : ""}`} />}
                     </motion.div>
                   )}
                   <span className={`text-md sm:text-lg font-bold ${textColorClass} whitespace-nowrap ${textColor === "white" ? "drop-shadow-lg" : ""}`}>
