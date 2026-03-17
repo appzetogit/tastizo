@@ -5,6 +5,7 @@ import { TbLocation } from "react-icons/tb"
 import { ChevronDown } from "lucide-react"
 import tastizoLogo from "@/assets/tastizologo.png"
 import { locationAPI } from "@/lib/api"
+import { useLocationIconTransition } from "@/context/LocationIconTransitionContext"
 
 const MOBILE_BREAKPOINT = 768
 const SPLASH_DURATION_MS = 2500
@@ -56,6 +57,7 @@ async function fetchSplashLocation() {
 
 export default function MobileSplashScreen() {
   const location = useLocation()
+  const { registerSplashIconRef, captureSplashIconAndStartExit, setPhaseSplash } = useLocationIconTransition() || {}
   const [isMobile, setIsMobile] = useState(false)
   const [isVisible, setIsVisible] = useState(true)
   const [splashLocation, setSplashLocation] = useState(null)
@@ -75,11 +77,14 @@ export default function MobileSplashScreen() {
     if (!isMobile || !isUserRoute(location.pathname)) return
 
     const hideTimer = setTimeout(() => {
+      if (captureSplashIconAndStartExit) {
+        captureSplashIconAndStartExit()
+      }
       setIsVisible(false)
     }, SPLASH_DURATION_MS)
 
     return () => clearTimeout(hideTimer)
-  }, [isMobile, location.pathname])
+  }, [isMobile, location.pathname, captureSplashIconAndStartExit])
 
   useEffect(() => {
     if (!isMobile || !isUserRoute(location.pathname)) return
@@ -87,16 +92,21 @@ export default function MobileSplashScreen() {
     fetchSplashLocation()
       .then((loc) => {
         setSplashLocation(loc)
+        if (loc && setPhaseSplash) setPhaseSplash()
       })
       .finally(() => {
         setLocationLoading(false)
       })
-  }, [isMobile, location.pathname])
+  }, [isMobile, location.pathname, setPhaseSplash])
 
   if (!isMobile || !isUserRoute(location.pathname)) return null
 
+  const handleSplashExit = () => {
+    window.dispatchEvent(new CustomEvent("splashEnded"))
+  }
+
   return (
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={handleSplashExit}>
       {isVisible && (
         <motion.div
           className="fixed inset-0 z-[9999] flex items-center justify-center md:hidden"
@@ -166,6 +176,7 @@ export default function MobileSplashScreen() {
                     }}
                   >
                     <motion.div
+                      ref={registerSplashIconRef}
                       className="flex items-center justify-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5"
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}

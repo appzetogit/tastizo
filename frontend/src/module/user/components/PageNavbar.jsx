@@ -1,10 +1,13 @@
 import { Link } from "react-router-dom"
 import { useState, useEffect } from "react"
+import { motion } from "framer-motion"
 import { ChevronDown, ShoppingCart, Wallet } from "lucide-react"
+import { TbLocation } from "react-icons/tb"
 import { Button } from "@/components/ui/button"
 import { useLocation } from "../hooks/useLocation"
 import { useCart } from "../context/CartContext"
 import { useLocationSelector } from "./UserLayout"
+import { useLocationIconTransition } from "@/context/LocationIconTransitionContext"
 import { FaLocationDot } from "react-icons/fa6"
 import { getCachedSettings, loadBusinessSettings } from "@/lib/utils/businessSettings"
 import { DEFAULT_LOGO_PLACEHOLDER } from "@/lib/constants/defaultLogo"
@@ -21,6 +24,35 @@ export default function PageNavbar({
   const cartCount = getCartCount()
   const [logoUrl, setLogoUrl] = useState(null)
   const [companyName, setCompanyName] = useState(null)
+  const [showLocationIcon, setShowLocationIcon] = useState(false)
+  const transitionCtx = useLocationIconTransition()
+
+  // Show location icon: after transition completes, or when splash ends without transition (no location)
+  useEffect(() => {
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 768
+    if (!isMobile) {
+      setShowLocationIcon(true)
+      return
+    }
+    const onSplashEnded = () => {
+      if (transitionCtx?.phase === "idle" || transitionCtx?.phase === "splash") {
+        setShowLocationIcon(true)
+      }
+    }
+    window.addEventListener("splashEnded", onSplashEnded)
+    const fallback = setTimeout(() => setShowLocationIcon(true), 3000)
+    return () => {
+      window.removeEventListener("splashEnded", onSplashEnded)
+      clearTimeout(fallback)
+    }
+  }, [transitionCtx?.phase])
+
+  // Show icon when transition completes
+  useEffect(() => {
+    if (transitionCtx?.phase === "done") {
+      setShowLocationIcon(true)
+    }
+  }, [transitionCtx?.phase])
 
   // Auto-trigger location fetch if we have placeholder values (only once on mount)
   useEffect(() => {
@@ -821,7 +853,21 @@ export default function PageNavbar({
             ) : (
               <div className="flex flex-col items-start min-w-0">
                 <div className="flex items-center gap-1.5">
-
+                  {(showLocationIcon || transitionCtx?.phase === "transitioning") && (
+                    <motion.div
+                      ref={transitionCtx?.registerNavbarIconRef}
+                      initial={showLocationIcon ? false : { opacity: 0 }}
+                      animate={{ opacity: showLocationIcon ? 1 : 0 }}
+                      transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                      className="flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 rounded-md flex items-center justify-center"
+                      style={{
+                        backgroundColor: "#2B9C64",
+                        visibility: showLocationIcon ? "visible" : "hidden",
+                      }}
+                    >
+                      {showLocationIcon && <TbLocation className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white" />}
+                    </motion.div>
+                  )}
                   <span className={`text-md sm:text-lg font-bold ${textColorClass} whitespace-nowrap ${textColor === "white" ? "drop-shadow-lg" : ""}`}>
                     {mainLocationName}
                   </span>

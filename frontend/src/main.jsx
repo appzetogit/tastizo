@@ -6,6 +6,9 @@ import './index.css'
 import App from './App.jsx'
 import OfflineBanner from './components/OfflineBanner.jsx'
 import MobileSplashScreen from './components/MobileSplashScreen.jsx'
+import LocationIconTransition from './components/LocationIconTransition.jsx'
+import { LocationIconTransitionProvider } from './context/LocationIconTransitionContext.jsx'
+import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 import { getGoogleMapsApiKey } from './lib/utils/googleMapsApiKey.js'
 import { loadBusinessSettings } from './lib/utils/businessSettings.js'
 
@@ -233,10 +236,15 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
-      <Toaster position="top-center" richColors offset="80px" />
-      <OfflineBanner />
-      <MobileSplashScreen />
+      <LocationIconTransitionProvider>
+        <App />
+        <Toaster position="top-center" richColors offset="80px" />
+        <OfflineBanner />
+        <MobileSplashScreen />
+        <ErrorBoundary fallback={null}>
+          <LocationIconTransition />
+        </ErrorBoundary>
+      </LocationIconTransitionProvider>
     </BrowserRouter>
   </StrictMode>,
 )
