@@ -276,12 +276,14 @@ app.set("io", io);
 // Connect to databases
 import { initializeCloudinary } from "./config/cloudinary.js";
 
-// Connect to databases
+// Connect to databases, then Firebase, then start server (order matters)
 connectDB().then(async () => {
   // Initialize Firebase Realtime (loads credentials from DB env vars)
   try {
     const firebaseDb = await initializeFirebaseRealtime();
-    if (!firebaseDb) {
+    if (firebaseDb) {
+      console.log("✅ Firebase Realtime Database initialized");
+    } else {
       console.warn(
         "⚠️ Firebase Realtime Database initialization returned null. " +
           "Add FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY in Admin → Environment Variables.",
@@ -298,6 +300,13 @@ connectDB().then(async () => {
   initializeCloudinary().catch((err) =>
     console.error("Failed to initialize Cloudinary:", err),
   );
+
+  // Start server ONLY after DB + Firebase are ready (prevents "Firebase not initialized" errors)
+  const PORT = process.env.PORT || 5000;
+  httpServer.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    setTimeout(() => initializeScheduledTasks(), 5000);
+  });
 });
 
 // Redis connection is optional - only connects if REDIS_ENABLED=true
@@ -589,16 +598,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// Start server
-const PORT = process.env.PORT || 5000;
-
-httpServer.listen(PORT, () => {
-  // Initialize scheduled tasks after DB connection is established
-  // Wait a bit for DB to connect, then start cron jobs
-  setTimeout(() => {
-    initializeScheduledTasks();
-  }, 5000);
-});
+// Server starts inside connectDB().then() after Firebase init (see above)
 
 // Initialize scheduled tasks
 function initializeScheduledTasks() {

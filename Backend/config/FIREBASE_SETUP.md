@@ -35,9 +35,34 @@ Add these in **Admin Panel** → **System Addons** → **Firebase Configuration*
 5. In your app: **Admin** → **System Addons** → fill all Firebase fields → **Save**.
 6. Restart the backend server.
 
+## Firebase Realtime Database Structure
+
+```
+active_orders/
+  <orderId>/
+    boy_id, boy_lat, boy_lng, restaurant_lat, restaurant_lng
+    customer_lat, customer_lng, polyline, distance, duration
+    status, created_at, last_updated
+
+delivery_boys/
+  <boyId>/
+    lat, lng, status (online/offline), last_updated
+
+route_cache/
+  <cacheKey>/   (e.g. "22_7118_75_9_22_7111_75_9002")
+    polyline, distance, duration, cached_at, expires_at
+```
+
+- **active_orders**: Live order tracking. Polyline fetched once via Directions API, then stored. User app reads from Firebase (no repeated API calls).
+- **delivery_boys**: Delivery partner online/offline status and current location. Used for "nearest boy" assignment (Haversine, no Distance Matrix).
+- **route_cache**: Cached polylines to avoid repeated Directions API calls for same origin/destination.
+
 ## Verify
 
 After restart, you should see in backend logs:
 - `✅ Firebase Realtime Database initialized` (or a warning if credentials are missing)
+- `🚀 Server running on port 5000`
+
+**Important**: The server starts only after MongoDB + Firebase init complete. This prevents "Firebase Realtime Database not initialized" errors when requests arrive before Firebase is ready.
 
 Live delivery tracking will work once these are set.
