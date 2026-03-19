@@ -9,6 +9,7 @@ import {
 } from "../../../shared/utils/response.js";
 import { asyncHandler } from "../../../shared/middleware/asyncHandler.js";
 import { sendPushNotification } from "../../../shared/services/fcmPushService.js";
+import PushNotification from "../models/PushNotification.js";
 
 /**
  * Send push notification to Customers, Delivery Man, or Restaurant
@@ -39,10 +40,41 @@ export const sendPushNotificationAdmin = asyncHandler(async (req, res) => {
     image,
   });
 
+  // Save notification in DB so admin can resend later from list
+  let savedNotification = null;
+  try {
+    savedNotification = await PushNotification.create({
+      title,
+      description,
+      target: sendTo,
+      zone: zone || "All",
+      image: image || "",
+      status: true,
+    });
+  } catch (dbErr) {
+    // Non-fatal: push can still succeed even if DB save fails
+    console.warn("Failed to save push notification record:", dbErr.message);
+  }
+
   return successResponse(res, 200, "Push notification sent", {
     sent: result.sent,
     failed: result.failed,
     total: result.total,
     errors: result.errors,
+    notification: savedNotification,
+  });
+});
+
+/**
+ * Get all push notifications sent by admin
+ * GET /api/admin/push-notifications
+ */
+export const getPushNotificationsAdmin = asyncHandler(async (req, res) => {
+  const notifications = await PushNotification.find({})
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return successResponse(res, 200, "Push notifications fetched", {
+    notifications,
   });
 });

@@ -1123,6 +1123,11 @@ export const adminAPI = {
     return apiClient.post(API_ENDPOINTS.ADMIN.PUSH_NOTIFICATION, data);
   },
 
+  // Get all saved push notifications (for resend)
+  getPushNotifications: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.PUSH_NOTIFICATIONS, { params });
+  },
+
   // Get users
   getUsers: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.USERS, { params });

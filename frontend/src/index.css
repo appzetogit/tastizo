@@ -131,6 +131,13 @@
   }
   body {
     @apply bg-background text-foreground m-0 min-h-screen;
+    scrollbar-width: none; /* Firefox - hide scrollbar track */
+  }
+
+  body::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none; /* Chrome/Safari/Edge */
   }
 }
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import { Search, Download, Bell, Edit, Trash2, Upload, Settings, Image as ImageIcon } from "lucide-react"
 import {
   Dialog,
@@ -7,17 +7,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { adminAPI } from "../../../lib/api/index.js"
-import { pushNotificationsDummy } from "../data/pushNotificationsDummy"
-// Using placeholders for notification images
-const notificationImage1 = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=400&fit=crop"
-const notificationImage2 = "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=800&h=400&fit=crop"
-const notificationImage3 = "https://images.unsplash.com/photo-1556910096-6f5e72db6803?w=800&h=400&fit=crop"
-
-const notificationImages = {
-  15: notificationImage1,
-  17: notificationImage2,
-  18: notificationImage3,
-}
 
 export default function PushNotification() {
   const [formData, setFormData] = useState({
@@ -28,10 +17,24 @@ export default function PushNotification() {
     bannerImage: null,
   })
   const [searchQuery, setSearchQuery] = useState("")
-  const [notifications, setNotifications] = useState(pushNotificationsDummy)
+  const [notifications, setNotifications] = useState([])
   const [editingNotification, setEditingNotification] = useState(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const fileInputRef = useRef(null)
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await adminAPI.getPushNotifications()
+      const list = res?.data?.data?.notifications
+      if (Array.isArray(list)) setNotifications(list)
+    } catch (err) {
+      console.error("Failed to fetch push notifications:", err)
+    }
+  }
+
+  useEffect(() => {
+    fetchNotifications()
+  }, [])
 
   const filteredNotifications = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -61,6 +64,7 @@ export default function PushNotification() {
         description: formData.description.trim(),
         sendTo: formData.sendTo,
         zone: formData.zone,
+        ...(formData.bannerImage ? { image: formData.bannerImage } : {}),
       })
       if (res?.data?.success) {
         const { sent, failed, total } = res.data.data || {}
@@ -69,6 +73,7 @@ export default function PushNotification() {
           : `Notification sent: ${sent} delivered${failed ? `, ${failed} failed` : ""} (${total} total)` 
         alert(msg)
         handleReset()
+        await fetchNotifications()
       } else {
         alert(res?.data?.message || "Failed to send notification.")
       }
@@ -106,13 +111,14 @@ export default function PushNotification() {
       zone: notification.zone || "All",
       sendTo: notification.target || "Customer",
       description: notification.description || "",
+      bannerImage: notification.image || null,
     })
   }
 
   const handleExportNotifications = () => {
     const headers = ["SI", "Title", "Description", "Zone", "Target", "Status"]
-    const rows = filteredNotifications.map(n => [
-      n.sl,
+    const rows = filteredNotifications.map((n, idx) => [
+      idx + 1,
       n.title,
       n.description,
       n.zone,
@@ -129,15 +135,43 @@ export default function PushNotification() {
     URL.revokeObjectURL(url)
   }
 
-  const handleToggleStatus = (sl) => {
+  const handleToggleStatus = (id) => {
     setNotifications(notifications.map(notification =>
-      notification.sl === sl ? { ...notification, status: !notification.status } : notification
+      (notification._id || notification.id) === id ? { ...notification, status: !notification.status } : notification
     ))
   }
 
-  const handleDelete = (sl) => {
+  const handleDelete = (id) => {
     if (window.confirm("Are you sure you want to delete this notification?")) {
-      setNotifications(notifications.filter(notification => notification.sl !== sl))
+      setNotifications(notifications.filter(notification => (notification._id || notification.id) !== id))
+    }
+  }
+
+  const handleResendNotification = async (notification) => {
+    try {
+      const res = await adminAPI.sendPushNotification({
+        title: notification.title || "",
+        description: notification.description || "",
+        sendTo: notification.target || "Customer",
+        zone: notification.zone || "All",
+        ...(notification.image ? { image: notification.image } : {}),
+      })
+
+      if (res?.data?.success) {
+        const { sent, failed, total } = res.data.data || {}
+        const msg =
+          total === 0
+            ? "No devices with FCM tokens found. Users need to enable notifications."
+            : `Notification sent: ${sent} delivered${failed ? `, ${failed} failed` : ""} (${total} total)`
+        alert(msg)
+        await fetchNotifications()
+      } else {
+        alert(res?.data?.message || "Failed to resend notification.")
+      }
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message || err?.message || "Failed to resend notification."
+      alert(msg)
     }
   }
 
@@ -313,13 +347,13 @@ export default function PushNotification() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-100">
-                {filteredNotifications.map((notification) => (
+                {filteredNotifications.map((notification, idx) => (
                   <tr
-                    key={notification.sl}
+                    key={notification._id || notification.id || idx}
                     className="hover:bg-slate-50 transition-colors"
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-medium text-slate-700">{notification.sl}</span>
+                      <span className="text-sm font-medium text-slate-700">{idx + 1}</span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm font-medium text-slate-900">{notification.title}</span>
@@ -331,7 +365,7 @@ export default function PushNotification() {
                       {notification.image ? (
                         <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-100">
                           <img
-                            src={notificationImages[notification.sl] || notificationImage1}
+                            src={notification.image}
                             alt={notification.title}
                             className="w-full h-full object-cover"
                             onError={(e) => {
@@ -353,7 +387,7 @@ export default function PushNotification() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
-                        onClick={() => handleToggleStatus(notification.sl)}
+                        onClick={() => handleToggleStatus(notification._id || notification.id)}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
                           notification.status ? "bg-blue-600" : "bg-slate-300"
                         }`}
@@ -368,6 +402,13 @@ export default function PushNotification() {
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
+                          onClick={() => handleResendNotification(notification)}
+                          className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition-colors"
+                          title="Send Again"
+                        >
+                          <Bell className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => handleEditNotification(notification)}
                           className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition-colors"
                           title="Edit"
@@ -375,7 +416,7 @@ export default function PushNotification() {
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(notification.sl)}
+                          onClick={() => handleDelete(notification._id || notification.id)}
                           className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
                           title="Delete"
                         >
@@ -385,6 +426,13 @@ export default function PushNotification() {
                     </td>
                   </tr>
                 ))}
+                {filteredNotifications.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-8 text-center text-sm text-slate-500">
+                      No notifications found.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

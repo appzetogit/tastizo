@@ -412,6 +412,7 @@ export const API_ENDPOINTS = {
     ZONE_BY_ID: "/admin/zones/:id",
     ZONE_STATUS: "/admin/zones/:id/status",
     PUSH_NOTIFICATION: "/admin/push-notification",
+    PUSH_NOTIFICATIONS: "/admin/push-notifications",
   },
   // Order endpoints
   ORDER: {

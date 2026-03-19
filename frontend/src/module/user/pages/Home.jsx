@@ -1119,7 +1119,7 @@ export default function Home() {
   )
 
   return (
-    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a] pb-28 md:pb-24">
+    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a] pb-28 md:pb-24 overflow-x-hidden">
       {/* Unified Background for Entire Page - Vibrant Food Theme */}
       <div className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none overflow-hidden z-0">
         {/* Main Background */}
@@ -1231,7 +1231,7 @@ export default function Home() {
       </div>
 
       {/* Unified Navbar & Hero Section - rounded bottom on mobile for green area */}
-      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] md:pt-16 rounded-b-2xl md:rounded-b-none">
+      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] pt-3 sm:pt-5 md:pt-16 rounded-b-2xl md:rounded-b-none">
         {/* Hero Banner Carousel Background */}
         {heroBannerImages.length > 0 ? (
           <div
