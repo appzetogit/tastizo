@@ -1,4 +1,4 @@
-import { getDatabase, onValue, ref as dbRef } from "firebase/database"
+import { get, getDatabase, onValue, ref as dbRef } from "firebase/database"
 import { ensureFirebaseInitialized, getFirebaseDatabaseURL } from "./firebase"
 
 let dbInstance = null
@@ -73,6 +73,44 @@ export function subscribeToActiveOrderLocation(orderId, callback) {
   return () => {
     cancelled = true
     if (unsub) unsub()
+  }
+}
+
+/**
+ * Fetch user location once from Firebase Realtime Database users/<userId>.
+ * Used for fast splash-screen location without triggering geolocation/reverse-geocode.
+ *
+ * Returns null if not available.
+ */
+export async function getUserLocationOnce(userId) {
+  if (!userId) return null
+  const db = await getRealtimeDb()
+  if (!db) return null
+
+  try {
+    const snap = await get(dbRef(db, `users/${userId}`))
+    if (!snap.exists()) return null
+    const data = snap.val() || {}
+
+    const lat = typeof data.lat === "string" ? parseFloat(data.lat) : data.lat
+    const lng = typeof data.lng === "string" ? parseFloat(data.lng) : data.lng
+    if (typeof lat !== "number" || typeof lng !== "number" || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return null
+    }
+
+    return {
+      lat,
+      lng,
+      area: data.area || "",
+      city: data.city || "",
+      state: data.state || "",
+      address: data.address || "",
+      formattedAddress: data.formatted_address || data.formattedAddress || data.formatted_address || "",
+      updatedAt: data.last_updated || Date.now(),
+      raw: data,
+    }
+  } catch {
+    return null
   }
 }
 

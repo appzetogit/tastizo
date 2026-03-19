@@ -11,6 +11,34 @@ const logger = winston.createLogger({
   ],
 });
 
+// In-memory cache + throttle to avoid Nominatim 429s (prod safe)
+// Keyed by rounded lat/lng so small GPS jitter doesn't spam the provider.
+const reverseGeocodeCache = new Map(); // key -> { expiresAt, payload }
+const REVERSE_GEOCODE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const reverseGeocodeLastCallByIp = new Map(); // ip -> ts
+const REVERSE_GEOCODE_MIN_INTERVAL_MS = 1200; // ~1 req/sec per IP
+const reverseGeocodeLastGoodByIp = new Map(); // ip -> { ts, payload, lat, lng }
+
+// Keep cache keys accurate (~11m); stability is handled by a movement threshold (200m).
+const roundCoord = (n) => Math.round(n * 10000) / 10000;
+const cacheKeyFor = (latNum, lngNum) => `${roundCoord(latNum)},${roundCoord(lngNum)}`;
+
+const AREA_STABILITY_DISTANCE_M = 200;
+
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 const buildMinimalGeocodeData = (latNum, lngNum) => {
   return {
     results: [
@@ -33,13 +61,65 @@ const buildMinimalGeocodeData = (latNum, lngNum) => {
   };
 };
 
+const buildProcessedPayload = ({ latNum, lngNum, formattedAddress, address_components, source }) => {
+  return {
+    success: true,
+    data: {
+      results: [
+        {
+          formatted_address: formattedAddress || `${latNum.toFixed(6)}, ${lngNum.toFixed(6)}`,
+          address_components: address_components || {},
+          geometry: { location: { lat: latNum, lng: lngNum } },
+        },
+      ],
+    },
+    source,
+  };
+};
+
+async function reverseGeocodeWithBigDataCloud(latNum, lngNum) {
+  const response = await axios.get("https://api.bigdatacloud.net/data/reverse-geocode-client", {
+    params: {
+      latitude: latNum,
+      longitude: lngNum,
+      localityLanguage: "en",
+    },
+    timeout: 8000,
+  });
+
+  const d = response.data || {};
+  const city = d.city || d.locality || d.principalSubdivision || "";
+  const state = d.principalSubdivision || "";
+  const country = d.countryName || "";
+  // BigDataCloud tends to be less precise than Nominatim; prefer locality/subLocality-like fields when available
+  const area =
+    d.localityInfo?.administrative?.find((x) => (x?.adminLevel ?? 999) >= 7)?.name ||
+    d.locality ||
+    d.city ||
+    "";
+  const road = d.localityInfo?.informative?.find((x) => x?.description?.toLowerCase?.().includes("road"))?.name || "";
+
+  const formattedAddress =
+    d.localityInfo?.administrative?.map((x) => x?.name).filter(Boolean).slice(0, 4).join(", ") ||
+    [d.locality, d.city, d.principalSubdivision, d.countryName].filter(Boolean).join(", ") ||
+    `${latNum.toFixed(6)}, ${lngNum.toFixed(6)}`;
+
+  return buildProcessedPayload({
+    latNum,
+    lngNum,
+    formattedAddress,
+    address_components: { city, state, country, area, road, building: "", postcode: d.postcode || "" },
+    source: "bigdatacloud",
+  });
+}
+
 /**
  * Reverse geocode coordinates to address using free Nominatim (OpenStreetMap) API.
  * Zero Google Maps API cost.
  */
 export const reverseGeocode = async (req, res) => {
   try {
-    const { lat, lng } = req.query;
+    const { lat, lng, force } = req.query;
 
     if (!lat || !lng) {
       return res.status(400).json({
@@ -57,6 +137,44 @@ export const reverseGeocode = async (req, res) => {
         message: "Invalid latitude or longitude",
       });
     }
+
+    const forceFresh = String(force).toLowerCase() === "true" || String(force) === "1";
+
+    // Throttle per IP to prevent provider rate limits (skip when user explicitly forces refresh)
+    const ip = (req.headers["x-forwarded-for"] || req.ip || "").toString().split(",")[0].trim();
+    const now = Date.now();
+    const lastCall = reverseGeocodeLastCallByIp.get(ip) || 0;
+    const lastGood = ip ? reverseGeocodeLastGoodByIp.get(ip) : null;
+
+    // If user didn't move much, keep last exact location (stable within ~200m)
+    if (!forceFresh && lastGood?.payload && typeof lastGood.lat === "number" && typeof lastGood.lng === "number") {
+      const dist = haversineMeters(latNum, lngNum, lastGood.lat, lastGood.lng);
+      if (dist < AREA_STABILITY_DISTANCE_M) {
+        return res.json({ ...lastGood.payload, source: "stable_last_good" });
+      }
+    }
+
+    const key = cacheKeyFor(latNum, lngNum);
+    const cached = reverseGeocodeCache.get(key);
+    if (cached && cached.expiresAt > now) {
+      // Serve from cache immediately
+      return res.json(cached.payload);
+    }
+
+    if (!forceFresh && ip && now - lastCall < REVERSE_GEOCODE_MIN_INTERVAL_MS) {
+      // Too frequent: return last good result for this IP (stable UI), otherwise minimal.
+      const lastGoodThrottled = reverseGeocodeLastGoodByIp.get(ip);
+      if (lastGoodThrottled?.payload) {
+        return res.json({ ...lastGoodThrottled.payload, source: "throttled_last_good" });
+      }
+      const minimalData = buildMinimalGeocodeData(latNum, lngNum);
+      return res.json({
+        success: true,
+        data: minimalData,
+        source: "throttled_coordinates_only",
+      });
+    }
+    if (ip) reverseGeocodeLastCallByIp.set(ip, now);
 
     let data;
     try {
@@ -85,12 +203,22 @@ export const reverseGeocode = async (req, res) => {
         status: apiError.response?.status,
       });
 
-      const minimalData = buildMinimalGeocodeData(latNum, lngNum);
-      return res.json({
-        success: true,
-        data: minimalData,
-        source: "coordinates_only",
-      });
+      // Fallback to BigDataCloud when Nominatim rate-limits or fails
+      try {
+        const fallbackPayload = await reverseGeocodeWithBigDataCloud(latNum, lngNum);
+        reverseGeocodeCache.set(key, { expiresAt: now + REVERSE_GEOCODE_CACHE_TTL_MS, payload: fallbackPayload });
+        return res.json(fallbackPayload);
+      } catch (fallbackErr) {
+        logger.warn("BigDataCloud reverse geocode fallback failed", {
+          error: fallbackErr.message,
+        });
+        const minimalData = buildMinimalGeocodeData(latNum, lngNum);
+        return res.json({
+          success: true,
+          data: minimalData,
+          source: "coordinates_only",
+        });
+      }
     }
 
     if (!data || data.error) {
@@ -116,41 +244,80 @@ export const reverseGeocode = async (req, res) => {
       "";
     const state = addr.state || "";
     const country = addr.country || "";
+    // Prefer the smallest available locality label.
+    // Nominatim may return these depending on the region:
+    // neighbourhood/surburb/residential/city_district, etc.
     const area =
-      addr.suburb ||
       addr.neighbourhood ||
-      addr.quarter ||
-      addr.hamlet ||
+      addr.suburb ||
       addr.residential ||
+      addr.quarter ||
+      addr.city_district ||
+      addr.borough ||
+      addr.hamlet ||
+      addr.municipality ||
       "";
     const road = addr.road || "";
+    const houseNumber = addr.house_number || "";
     const building = addr.building || addr.amenity || addr.shop || "";
     const postcode = addr.postcode || "";
 
     let formattedAddress = data.display_name || "";
 
-    // If area is empty, try to extract from display_name
+    // Try to extract a more exact area from display_name when needed.
+    // This helps when Nominatim returns generic area like "Indore City".
     let derivedArea = area;
-    if (!derivedArea && formattedAddress) {
+    if (formattedAddress) {
       const parts = formattedAddress
         .split(",")
         .map((p) => p.trim())
         .filter((p) => p.length > 0);
 
-      if (parts.length >= 3) {
-        const potentialArea = parts[0];
-        if (
-          potentialArea &&
-          potentialArea.toLowerCase() !== city.toLowerCase() &&
-          potentialArea.toLowerCase() !== state.toLowerCase() &&
-          !potentialArea.toLowerCase().includes("district") &&
-          potentialArea.length > 2 &&
-          potentialArea.length < 80
-        ) {
-          derivedArea = potentialArea;
+      const lcCity = (city || "").toLowerCase();
+      const lcState = (state || "").toLowerCase();
+      const lcCountry = (country || "").toLowerCase();
+
+      const isSkippable = (p) => {
+        const v = (p || "").toLowerCase();
+        if (!v) return true;
+        if (lcCity && (v === lcCity || v.includes(lcCity))) return true;
+        if (lcState && (v === lcState || v.includes(lcState))) return true;
+        if (lcCountry && (v === lcCountry || v.includes(lcCountry))) return true;
+        if (v.includes("district") || v.includes("division") || v.includes("tehsil") || v.includes("taluk")) return true;
+        if (/^\d{5,6}$/.test(v.replace(/\s/g, ""))) return true; // postcode-ish
+        return false;
+      };
+
+      const isGeneric = (s) => {
+        const v = (s || "").trim().toLowerCase();
+        if (!v) return true;
+        if (lcCity && (v === lcCity || v === `${lcCity} city` || v === `${lcCity} district`)) return true;
+        return false;
+      };
+
+      // If we have no area OR area looks generic, try to pick a better one from the first few parts.
+      if ((!derivedArea || isGeneric(derivedArea)) && parts.length >= 2) {
+        const candidate = parts.find((p) => !isSkippable(p));
+        if (candidate && candidate.length > 2 && candidate.length < 80) {
+          derivedArea = candidate;
         }
       }
     }
+
+    // Prefer the most "exact" local label for UI:
+    // building/POI > house+road > road > neighbourhood/suburb/city_district > city
+    // Also avoid returning overly-generic "Indore City" style labels when we have something better.
+    const isGenericCityLabel = (s) => {
+      const v = (s || "").trim().toLowerCase();
+      if (!v) return true;
+      const c = (city || "").trim().toLowerCase();
+      if (!c) return false;
+      return v === c || v === `${c} city` || v === `${c} district`;
+    };
+
+    const houseRoad = [houseNumber, road].filter(Boolean).join(" ").trim()
+    const exactAreaCandidate = derivedArea && !isGenericCityLabel(derivedArea) ? derivedArea : "";
+    const exactArea = building || houseRoad || road || exactAreaCandidate || derivedArea || city || "";
 
     const processedData = {
       results: [
@@ -161,8 +328,9 @@ export const reverseGeocode = async (req, res) => {
             city: city,
             state: state,
             country: country,
-            area: derivedArea,
+            area: exactArea,
             road: road,
+            house_number: houseNumber,
             building: building,
             postcode: postcode,
           },
@@ -176,11 +344,10 @@ export const reverseGeocode = async (req, res) => {
       ],
     };
 
-    return res.json({
-      success: true,
-      data: processedData,
-      source: "nominatim",
-    });
+    const payload = { success: true, data: processedData, source: "nominatim" };
+    reverseGeocodeCache.set(key, { expiresAt: now + REVERSE_GEOCODE_CACHE_TTL_MS, payload });
+    if (ip) reverseGeocodeLastGoodByIp.set(ip, { ts: now, payload, lat: latNum, lng: lngNum });
+    return res.json(payload);
   } catch (error) {
     logger.error("Reverse geocode error", {
       error: error.message,

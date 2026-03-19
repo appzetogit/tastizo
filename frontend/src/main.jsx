@@ -18,9 +18,33 @@ loadBusinessSettings().catch(() => {
   // Silently fail - settings will load when admin is authenticated
 })
 
+// Initialize push messaging in a non-blocking way.
+setTimeout(() => {
+  import("./lib/notifications/fcmWeb.js")
+    .then(({ initializePushNotifications }) => initializePushNotifications())
+    .catch(() => {
+      // Ignore push init failures to avoid blocking app startup
+    })
+}, 0)
+
 // Global flag to track Google Maps loading state
 window.__googleMapsLoading = window.__googleMapsLoading || false;
 window.__googleMapsLoaded = window.__googleMapsLoaded || false;
+window.__googleMapsAuthFailed = window.__googleMapsAuthFailed || false;
+
+// Google Maps calls this global on auth/key/billing/referrer failures.
+// We use it to gracefully degrade (show UI without map) instead of breaking the screen.
+window.gm_authFailure = () => {
+  window.__googleMapsAuthFailed = true;
+  window.__googleMapsLoaded = false;
+  window.__googleMapsLoading = false;
+  try {
+    window.dispatchEvent(new CustomEvent("googleMapsAuthFailure"));
+  } catch {
+    // ignore
+  }
+  console.error("❌ Google Maps auth failure (key/restrictions/billing).");
+};
 
 // Load Google Maps API dynamically from backend database
 // Only load if not already loaded to prevent multiple loads

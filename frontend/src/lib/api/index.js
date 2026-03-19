@@ -278,9 +278,9 @@ export const userAPI = {
 // Export location API helper functions
 export const locationAPI = {
   // Reverse geocode coordinates to address
-  reverseGeocode: (lat, lng) => {
+  reverseGeocode: (lat, lng, options = {}) => {
     return apiClient.get(API_ENDPOINTS.LOCATION.REVERSE_GEOCODE, {
-      params: { lat, lng },
+      params: { lat, lng, ...(options || {}) },
     });
   },
   // Get nearby locations

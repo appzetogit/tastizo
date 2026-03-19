@@ -6,7 +6,8 @@ import { ChevronDown } from "lucide-react"
 import tastizoLogo from "@/assets/tastizologo.png"
 import { locationAPI } from "@/lib/api"
 import { useLocationIconTransition } from "@/context/LocationIconTransitionContext"
-import { isModuleAuthenticated } from "@/lib/utils/auth"
+import { getModuleToken, getUserIdFromToken, isModuleAuthenticated } from "@/lib/utils/auth"
+import { getUserLocationOnce } from "@/lib/firebaseRealtime"
 
 const MOBILE_BREAKPOINT = 768
 const SPLASH_DURATION_LOGGED_OUT_MS = 2000
@@ -55,6 +56,14 @@ async function fetchSplashLocation() {
       { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
     )
   })
+}
+
+function formatSplashLocationFromFirebase(userLoc) {
+  if (!userLoc) return null
+  const formatted = userLoc.formattedAddress || userLoc.address || ""
+  const shortAddr =
+    userLoc.area || userLoc.city || formatted.split(",")[0]?.trim() || "Current Location"
+  return { shortAddr, fullAddr: formatted || shortAddr }
 }
 
 export default function MobileSplashScreen() {
@@ -109,14 +118,32 @@ export default function MobileSplashScreen() {
     if (!isMobile || !isUserRoute(location.pathname) || !isLoggedIn) return
 
     setLocationLoading(true)
-    fetchSplashLocation()
-      .then((loc) => {
+    ;(async () => {
+      // 1) Try Firebase (fast, no GPS prompt, no API calls)
+      try {
+        const token = getModuleToken("user")
+        const userId = getUserIdFromToken(token)
+        const fbLoc = await getUserLocationOnce(userId)
+        const formattedFb = formatSplashLocationFromFirebase(fbLoc)
+        if (formattedFb) {
+          setSplashLocation(formattedFb)
+          if (setPhaseSplash) setPhaseSplash()
+          setLocationLoading(false)
+          return
+        }
+      } catch {
+        // ignore, fall through to GPS
+      }
+
+      // 2) Fallback to GPS + backend reverse geocode
+      try {
+        const loc = await fetchSplashLocation()
         setSplashLocation(loc)
         if (loc && setPhaseSplash) setPhaseSplash()
-      })
-      .finally(() => {
+      } finally {
         setLocationLoading(false)
-      })
+      }
+    })()
   }, [isMobile, location.pathname, isLoggedIn, setPhaseSplash])
 
   if (!isMobile || !isUserRoute(location.pathname)) return null

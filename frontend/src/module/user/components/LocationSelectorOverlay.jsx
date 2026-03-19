@@ -79,6 +79,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const [currentAddress, setCurrentAddress] = useState("")
   const [selectedPlaceAddress, setSelectedPlaceAddress] = useState("") // Full address from dropdown selection (shown in Delivery details)
   const [GOOGLE_MAPS_API_KEY, setGOOGLE_MAPS_API_KEY] = useState(null)
+  const [googleMapsAuthFailed, setGoogleMapsAuthFailed] = useState(false)
 
   // Decide where to send user after closing this overlay.
   // If a page (like Cart) stored a custom return path in localStorage,
@@ -124,6 +125,17 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         setGOOGLE_MAPS_API_KEY(key)
       })
     })
+  }, [])
+
+  // Detect Google Maps auth failures (invalid key, billing disabled, referrer restrictions)
+  useEffect(() => {
+    const sync = () => {
+      setGoogleMapsAuthFailed(!!window.__googleMapsAuthFailed)
+    }
+    sync()
+    const onFail = () => sync()
+    window.addEventListener("googleMapsAuthFailure", onFail)
+    return () => window.removeEventListener("googleMapsAuthFailure", onFail)
   }, [])
   const reverseGeocodeTimeoutRef = useRef(null) // Debounce timeout for reverse geocoding
   const lastReverseGeocodeCoordsRef = useRef(null) // Track last coordinates to avoid duplicate calls
@@ -1675,7 +1687,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         // Use backend reverse geocoding (Node) instead of calling
         // Google Geocoding / Places APIs directly from the frontend.
         try {
-          const response = await locationAPI.reverseGeocode(roundedLat, roundedLng)
+          const response = await locationAPI.reverseGeocode(roundedLat, roundedLng, { force: true })
           const backendData = response?.data?.data
           const result = backendData?.results?.[0] || backendData?.result?.[0] || null
 
@@ -1792,7 +1804,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             console.warn("⚠️ Google Maps API error, trying backend fallback:", googleError.message)
             // Fallback to backend API
             try {
-              const response = await locationAPI.reverseGeocode(roundedLat, roundedLng)
+              const response = await locationAPI.reverseGeocode(roundedLat, roundedLng, { force: true })
               const backendData = response?.data?.data
               const result = backendData?.results?.[0] || backendData?.result?.[0] || null
 
@@ -1809,7 +1821,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           }
         } else {
           // No Google API key, use backend
-          const response = await locationAPI.reverseGeocode(roundedLat, roundedLng)
+          const response = await locationAPI.reverseGeocode(roundedLat, roundedLng, { force: true })
           const backendData = response?.data?.data
           const result = backendData?.results?.[0] || backendData?.result?.[0] || null
 
@@ -1936,28 +1948,29 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
       toast.loading("Getting your fresh location...", { id: "current-location" })
 
-      // Use Promise.race to get location within 2 seconds
-      const locationPromise = requestLocation(true, true) // forceFresh = true, updateDB = true
+      // Request fresh GPS location (can take a few seconds on real devices)
+      // Use a longer timeout to avoid false failures.
+      const locationPromise = requestLocation() // from useLocation hook
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Location timeout")), 2000)
+        setTimeout(() => reject(new Error("Location timeout")), 12000)
       )
 
       let locationData
       try {
         locationData = await Promise.race([locationPromise, timeoutPromise])
       } catch (raceError) {
-        // If timeout, try to use cached location immediately
+        // If timeout/failure, try to use cached location immediately
         const stored = localStorage.getItem("userLocation")
         if (stored) {
           try {
             const cachedLocation = JSON.parse(stored)
             if (cachedLocation?.latitude && cachedLocation?.longitude) {
-              console.log("📍 Using cached location (2s timeout):", cachedLocation)
+              console.log("📍 Using cached location (timeout):", cachedLocation)
               locationData = cachedLocation
             } else {
               throw new Error("Invalid cached location")
             }
-          } catch (cacheErr) {
+          } catch {
             toast.error("Could not get location. Please try again.", { id: "current-location" })
             return
           }
@@ -1987,8 +2000,8 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       console.log("📍 Location timestamp:", locationData.timestamp || new Date().toISOString())
       setMapPosition([lat, lng])
 
-      // Update Google Maps to new location
-      if (googleMapRef.current && window.google && window.google.maps) {
+      // Update Google Maps to new location (if available)
+      if (!googleMapsAuthFailed && googleMapRef.current && window.google && window.google.maps) {
         try {
           console.log("🗺️ Updating Google Map to:", { lat, lng })
 
@@ -2077,6 +2090,11 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           await handleMapMoveEnd(lat, lng)
           toast.success("Location updated!", { id: "current-location" })
         }, 200)
+      }
+
+      // If map is unavailable (key blocked), still fetch address and fill form.
+      if (googleMapsAuthFailed || !window.google || !window.google.maps) {
+        await handleMapMoveEnd(lat, lng)
       }
     } catch (error) {
       console.error("❌ Error getting current location:", error)
@@ -2438,7 +2456,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* Map Section - Google Maps */}
+        {/* Map Section - Google Maps (graceful fallback if blocked) */}
         <div className="flex-shrink-0 relative" style={{ height: '40vh', minHeight: '300px' }}>
           {/* Google Maps Container */}
           <div
@@ -2465,13 +2483,29 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             </div>
           )}
 
+          {/* Google Maps Auth Failure */}
+          {googleMapsAuthFailed && !mapLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-900 z-20">
+              <div className="text-center p-4 max-w-[85%]">
+                <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                  Map unavailable
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Google Maps is blocked (API key / billing / domain restriction). You can still use
+                  “Use current location” and save the address.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* API Key Missing Error */}
-          {!GOOGLE_MAPS_API_KEY && !mapLoading && (
+          {!GOOGLE_MAPS_API_KEY && !mapLoading && !googleMapsAuthFailed && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-900 z-20">
               <div className="text-center p-4">
                 <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-2" />
                 <p className="text-sm text-gray-600 dark:text-gray-400">Google Maps API key not found</p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Please set VITE_GOOGLE_MAPS_API_KEY in .env file</p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Please set Google Maps key in Admin → Environment Variables</p>
               </div>
             </div>
           )}

@@ -129,7 +129,7 @@ export function useLocation() {
   const reverseGeocodeWithGoogleMaps = async (latitude, longitude) => {
     try {
       // Use backend reverse geocode API (free Nominatim, zero Google Maps cost)
-      const res = await locationAPI.reverseGeocode(latitude, longitude);
+      const res = await locationAPI.reverseGeocode(latitude, longitude, { force: true });
       const backendData = res?.data?.data || {};
       let result = null;
       if (backendData.results && Array.isArray(backendData.results) && backendData.results.length > 0) {
@@ -184,52 +184,10 @@ export function useLocation() {
         placeTypes: []
       };
     } catch (backendError) {
-      console.warn("Backend reverse geocode failed, trying direct Nominatim:", backendError.message);
-
-      // Direct Nominatim fallback (still free)
-      try {
-        const resp = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1&accept-language=en&zoom=18`,
-          { headers: { "User-Agent": "Tastizo-App/1.0" } }
-        );
-        const data = await resp.json();
-        if (!data || data.error) throw new Error("Nominatim returned no results");
-
-        const addr = data.address || {};
-        const nCity = addr.city || addr.town || addr.village || addr.municipality || "";
-        const nState = addr.state || "";
-        const nArea = addr.suburb || addr.neighbourhood || addr.quarter || "";
-        const nRoad = addr.road || "";
-        const nBuilding = addr.building || addr.amenity || addr.shop || "";
-        const nMainTitle = nBuilding || nArea || nCity || "Location Found";
-        const nFormatted = data.display_name || `${latitude}, ${longitude}`;
-
-        return {
-          city: nCity,
-          state: nState,
-          area: nArea || nCity || "Location Found",
-          address: nFormatted.split(",").slice(0, 3).map(p => p.trim()).join(", "),
-          formattedAddress: nFormatted,
-          street: nRoad,
-          streetNumber: "",
-          postalCode: addr.postcode || "",
-          mainTitle: nMainTitle !== "Location Found" ? nMainTitle : null,
-          pointOfInterest: nBuilding || null,
-          premise: null,
-          placeId: null,
-          placeName: nBuilding || null,
-          phone: null,
-          website: null,
-          rating: null,
-          openingHours: null,
-          photos: null,
-          hasPlaceDetails: false,
-          placeTypes: []
-        };
-      } catch (nominatimError) {
-        console.error("Direct Nominatim fallback also failed:", nominatimError.message);
-        return reverseGeocodeDirect(latitude, longitude);
-      }
+      // Do NOT call Nominatim directly from frontend (causes 429 + leaks provider usage).
+      // Backend has caching + fallback providers and must be the only place doing reverse geocode.
+      console.warn("Backend reverse geocode failed, using coordinates-only fallback:", backendError.message);
+      return reverseGeocodeDirect(latitude, longitude);
     }
   };
 

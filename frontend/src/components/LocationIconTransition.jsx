@@ -4,7 +4,8 @@ import { TbLocation } from "react-icons/tb"
 import { useLocationIconTransition } from "@/context/LocationIconTransitionContext"
 
 const MOBILE_BREAKPOINT = 768
-const DURATION_MS = 500
+const DURATION_MS = 950
+const WAVE_AMPLITUDE_PX = -100 // strong wave, opposite direction
 
 export default function LocationIconTransition() {
   const ctx = useLocationIconTransition()
@@ -12,8 +13,10 @@ export default function LocationIconTransition() {
   const { phase, splashIconRect, navbarIconRef, setPhaseDone } = ctx
   const [targetRect, setTargetRect] = useState(null)
   const [isMobile, setIsMobile] = useState(false)
-  const [translate, setTranslate] = useState({ x: 0, y: 0 })
   const hasAnimated = useRef(false)
+  const deltaRef = useRef(null)
+  const elRef = useRef(null)
+  const animRef = useRef(null)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
@@ -42,25 +45,72 @@ export default function LocationIconTransition() {
     }
   }, [phase, navbarIconRef, setPhaseDone])
 
-  // Use native CSS transition - runs on compositor, avoids JS animation loop
   useEffect(() => {
     if (!targetRect || !splashIconRect || hasAnimated.current) return
     hasAnimated.current = true
     const deltaX = targetRect.left - splashIconRect.left
     const deltaY = targetRect.top - splashIconRect.top
-    // Force reflow so initial position is painted before we animate
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setTranslate({ x: deltaX, y: deltaY })
-      })
+    deltaRef.current = { x: deltaX, y: deltaY }
+
+    const el = elRef.current
+    if (!el || typeof el.animate !== "function") {
+      // Fallback: no WAAPI support, just jump (very rare on modern browsers)
+      el && (el.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`)
+      setPhaseDone()
+      return
+    }
+
+    // Compositor-driven keyframe animation (smooth, avoids per-frame JS)
+    const len = Math.hypot(deltaX, deltaY) || 1
+    const nx = -deltaY / len
+    const ny = deltaX / len
+
+    const k = (t, w) => ({
+      transform: `translate3d(${deltaX * t + nx * w}px, ${deltaY * t + ny * w}px, 0)`,
     })
+
+    // Multi-keyframe "wave" that dies out before the end to avoid flicker
+    const keyframes = [
+      k(0, 0),
+      k(0.25, WAVE_AMPLITUDE_PX),
+      k(0.5, WAVE_AMPLITUDE_PX * -0.6),
+      k(0.75, WAVE_AMPLITUDE_PX * 0.35),
+      k(0.9, 0),
+      k(1, 0),
+    ]
+
+    animRef.current = el.animate(keyframes, {
+      duration: DURATION_MS,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)", // smooth, slightly ease-out
+      fill: "forwards",
+    })
+
+    animRef.current.onfinish = () => {
+      // Ensure final transform is exact
+      el.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`
+      requestAnimationFrame(() => setPhaseDone())
+    }
+
+    return () => {
+      try {
+        animRef.current?.cancel?.()
+      } catch {
+        // ignore
+      }
+      animRef.current = null
+    }
   }, [targetRect, splashIconRect])
 
   useEffect(() => {
-    if (translate.x === 0 && translate.y === 0) return
-    const id = setTimeout(() => setPhaseDone(), DURATION_MS)
-    return () => clearTimeout(id)
-  }, [translate, setPhaseDone])
+    return () => {
+      try {
+        animRef.current?.cancel?.()
+      } catch {
+        // ignore
+      }
+      animRef.current = null
+    }
+  }, [])
 
   if (!isMobile || phase === "idle" || phase === "splash" || phase === "done") return null
   if (phase === "transitioning" && !splashIconRect) return null
@@ -75,14 +125,16 @@ export default function LocationIconTransition() {
         height: Math.max(splashIconRect.height, 24),
         zIndex: 10000,
         pointerEvents: "none",
-        transform: `translate3d(${translate.x}px, ${translate.y}px, 0)`,
-        transition: `transform ${DURATION_MS}ms cubic-bezier(0.25, 0.46, 0.45, 0.94)`,
+        transform: "translate3d(0px, 0px, 0)",
         willChange: "transform",
+        backfaceVisibility: "hidden",
+        transformOrigin: "0 0",
       }
     : {}
 
   return createPortal(
     <div
+      ref={elRef}
       className="flex items-center justify-center rounded-lg"
       style={baseStyle}
     >

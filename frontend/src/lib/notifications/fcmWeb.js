@@ -1,9 +1,10 @@
-import { getMessaging, getToken, isSupported } from "firebase/messaging";
+import { getMessaging, getToken, isSupported, onMessage } from "firebase/messaging";
 import { ensureFirebaseInitialized, getFirebaseVapidKey } from "@/lib/firebase";
 import { authAPI, restaurantAPI } from "@/lib/api";
 
 const FCM_SW_PATH = "/firebase-messaging-sw.js";
 const FCM_SW_SCOPE = "/firebase-cloud-messaging-push-scope/";
+let foregroundHandlerInitialized = false;
 
 // Internal helper to get a browser FCM token (shared by user + restaurant)
 async function getBrowserFcmToken() {
@@ -64,6 +65,45 @@ async function getBrowserFcmToken() {
   }
 
   return token;
+}
+
+export async function initializePushNotifications() {
+  try {
+    const app = await ensureFirebaseInitialized();
+    if (!app) return;
+
+    const supported = await isSupported();
+    if (!supported) return;
+
+    const messaging = getMessaging(app);
+    if (foregroundHandlerInitialized) return;
+
+    onMessage(messaging, (payload) => {
+      if (typeof Notification === "undefined") return;
+      if (Notification.permission !== "granted") return;
+
+      const title = payload.notification?.title || payload.data?.title || "Tastizo";
+      const body = payload.notification?.body || payload.data?.body || "";
+      const icon = payload.notification?.icon || payload.data?.icon || "/favicon.ico";
+      const tag = payload.data?.tag || payload.data?.orderId || title;
+
+      try {
+        new Notification(title, {
+          body,
+          icon,
+          tag,
+          data: payload.data || {},
+        });
+      } catch (error) {
+        console.warn("[FCM] Foreground notification failed:", error?.message || error);
+      }
+    });
+
+    foregroundHandlerInitialized = true;
+    console.log("[FCM] Foreground notification handler initialized");
+  } catch (error) {
+    console.warn("[FCM] Failed to initialize push notifications:", error?.message || error);
+  }
 }
 
 export async function registerFcmTokenForLoggedInUser() {
