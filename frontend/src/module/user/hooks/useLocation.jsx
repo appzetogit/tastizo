@@ -143,33 +143,64 @@ export function useLocation() {
       }
 
       const addrComp = result.address_components || {};
-      const formattedAddress = result.formatted_address || `${latitude}, ${longitude}`;
+      // Backend returns more precise components (colony/road/building/house_number) inside address_components.
+      // Prefer building/house+road/road/area to avoid generic "Indore City" style labels.
       const city = addrComp.city || "";
       const state = addrComp.state || "";
       const area = addrComp.area || "";
       const road = addrComp.road || "";
+      const houseNumber = addrComp.house_number || "";
       const building = addrComp.building || "";
+      const postcode = addrComp.postcode || "";
+
+      // Extra locality-like fields to get colony/area/gali precision
+      const neighbourhood = addrComp.neighbourhood || "";
+      const suburb = addrComp.suburb || "";
+      const residential = addrComp.residential || "";
+      const quarter = addrComp.quarter || "";
+      const cityDistrict = addrComp.city_district || "";
+
+      const houseRoad = [houseNumber, road].filter(Boolean).join(" ").trim();
+      const localityPrimary =
+        building || houseRoad || road || area || city || "Location Found";
+
+      // Pick a second locality label if available (helps show colony/gali level)
+      const secondaryCandidate = [quarter, neighbourhood, suburb, residential, cityDistrict]
+        .map((p) => (p || "").trim())
+        .filter(Boolean)
+        .find((p) => {
+          const c = (city || "").trim().toLowerCase();
+          return (
+            p.toLowerCase() !== c &&
+            p.toLowerCase() !== localityPrimary.toLowerCase()
+          );
+        });
+
+      const formattedParts = [
+        localityPrimary,
+        secondaryCandidate,
+        city,
+        state,
+      ].filter((p) => p && String(p).trim().length > 0);
+      if (postcode) formattedParts.push(postcode);
+
+      const formattedAddressExact =
+        formattedParts.join(", ") ||
+        result.formatted_address ||
+        `${latitude}, ${longitude}`;
 
       let mainTitle = building || area || city || "Location Found";
-      let displayAddress = formattedAddress;
-
-      // Build short display from formatted_address (take first meaningful parts)
-      const parts = formattedAddress.split(",").map(p => p.trim()).filter(p => p.length > 0);
-      if (parts.length >= 3) {
-        // Show first 2-3 parts as display
-        const displayParts = parts.slice(0, Math.min(3, parts.length - 2));
-        displayAddress = displayParts.join(", ");
-      }
+      let displayAddress = localityPrimary;
 
       return {
         city: city,
         state: state,
         area: area || city || "Location Found",
         address: displayAddress,
-        formattedAddress: formattedAddress,
+        formattedAddress: formattedAddressExact,
         street: road,
         streetNumber: "",
-        postalCode: addrComp.postcode || "",
+        postalCode: postcode,
         mainTitle: mainTitle !== "Location Found" ? mainTitle : null,
         pointOfInterest: building || null,
         premise: null,

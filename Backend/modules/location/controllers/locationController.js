@@ -156,8 +156,9 @@ export const reverseGeocode = async (req, res) => {
 
     const key = cacheKeyFor(latNum, lngNum);
     const cached = reverseGeocodeCache.get(key);
-    if (cached && cached.expiresAt > now) {
-      // Serve from cache immediately
+    // If user explicitly forces refresh, bypass cache so we can return
+    // the most recent precise locality (important for "exact location" UX).
+    if (!forceFresh && cached && cached.expiresAt > now) {
       return res.json(cached.payload);
     }
 
@@ -247,15 +248,24 @@ export const reverseGeocode = async (req, res) => {
     // Prefer the smallest available locality label.
     // Nominatim may return these depending on the region:
     // neighbourhood/surburb/residential/city_district, etc.
+    const neighbourhood = addr.neighbourhood || "";
+    const suburb = addr.suburb || "";
+    const residential = addr.residential || "";
+    const quarter = addr.quarter || "";
+    const city_district = addr.city_district || "";
+    const borough = addr.borough || "";
+    const hamlet = addr.hamlet || "";
+    const municipality = addr.municipality || "";
+
     const area =
-      addr.neighbourhood ||
-      addr.suburb ||
-      addr.residential ||
-      addr.quarter ||
-      addr.city_district ||
-      addr.borough ||
-      addr.hamlet ||
-      addr.municipality ||
+      neighbourhood ||
+      suburb ||
+      residential ||
+      quarter ||
+      city_district ||
+      borough ||
+      hamlet ||
+      municipality ||
       "";
     const road = addr.road || "";
     const houseNumber = addr.house_number || "";
@@ -329,6 +339,13 @@ export const reverseGeocode = async (req, res) => {
             state: state,
             country: country,
             area: exactArea,
+            neighbourhood: neighbourhood,
+            suburb: suburb,
+            residential: residential,
+            quarter: quarter,
+            city_district: city_district,
+            borough: borough,
+            hamlet: hamlet,
             road: road,
             house_number: houseNumber,
             building: building,

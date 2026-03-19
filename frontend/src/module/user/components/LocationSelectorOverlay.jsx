@@ -1692,11 +1692,48 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           const result = backendData?.results?.[0] || backendData?.result?.[0] || null
 
           if (result) {
-            formattedAddress = result.formatted_address || result.formattedAddress || ""
             const addressComponents = result.address_components || {}
             city = addressComponents.city || ""
             state = addressComponents.state || ""
             area = addressComponents.area || ""
+
+            const road = addressComponents.road || ""
+            const houseNumber = addressComponents.house_number || ""
+            const building = addressComponents.building || ""
+            const postcode = addressComponents.postcode || ""
+
+            const neighbourhood = addressComponents.neighbourhood || ""
+            const suburb = addressComponents.suburb || ""
+            const residential = addressComponents.residential || ""
+            const quarter = addressComponents.quarter || ""
+            const cityDistrict = addressComponents.city_district || ""
+
+            street = road || ""
+            streetNumber = houseNumber || ""
+            pointOfInterest = building || ""
+
+            const houseRoad = [houseNumber, road].filter(Boolean).join(" ").trim()
+            const localityPrimary =
+              building || houseRoad || road || area || city || "Location Found"
+
+            const secondaryCandidate = [quarter, neighbourhood, suburb, residential, cityDistrict]
+              .map((p) => (p || "").trim())
+              .filter(Boolean)
+              .find((p) => {
+                const c = (city || "").trim().toLowerCase()
+                return p.toLowerCase() !== c && p.toLowerCase() !== localityPrimary.toLowerCase()
+              })
+
+            formattedAddress = [
+              // Exact local label (building > house+road > road > area)
+              localityPrimary,
+              secondaryCandidate,
+              city,
+              state,
+              postcode ? String(postcode) : "",
+            ]
+              .filter((p) => p && String(p).trim().length > 0)
+              .join(", ") || ""
           }
         } catch (backendError) {
           console.error("❌ Backend reverse geocode failed:", backendError)
