@@ -842,7 +842,15 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       // The getLocation function already has a 15-second timeout, so we match it
       const locationPromise = requestLocation()
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Location request is taking longer than expected. Please check your GPS settings.")), 15000)
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Location request is taking longer than expected. Please check your GPS settings."
+              ),
+            ),
+          25000,
+        )
       )
 
       let locationData
@@ -1989,7 +1997,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       // Use a longer timeout to avoid false failures.
       const locationPromise = requestLocation() // from useLocation hook
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Location timeout")), 12000)
+        setTimeout(() => reject(new Error("Location timeout")), 25000),
       )
 
       let locationData

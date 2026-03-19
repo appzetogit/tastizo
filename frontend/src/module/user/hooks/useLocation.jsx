@@ -983,9 +983,9 @@ export function useLocation() {
     // If forceFresh is true, don't use cached location (maximumAge: 0)
     // Otherwise, allow cached location for faster response
     return getPositionWithRetry({
-      enableHighAccuracy: true,  // Use GPS for exact location (highest accuracy)
-      timeout: 15000,            // 15 seconds timeout (gives GPS more time to get accurate fix)
-      maximumAge: forceFresh ? 0 : 60000  // If forceFresh, get fresh location. Otherwise allow 1 minute cache
+      enableHighAccuracy: true, // Use GPS for exact location (highest accuracy)
+      timeout: forceFresh ? 25000 : 15000, // Longer timeout for fresh GPS
+      maximumAge: forceFresh ? 0 : 60000, // If forceFresh, get fresh location. Otherwise allow 1 minute cache
     })
   }
 
@@ -1550,14 +1550,13 @@ export function useLocation() {
   }, [])
 
   const requestLocation = async () => {
-    console.log("ðŸ“ðŸ“ðŸ“ User requested location update - clearing cache and fetching fresh")
+    console.log("ðŸ“ðŸ“ðŸ“ User requested location update - fetching fresh GPS (keeping cache fallback)")
     setLoading(true)
     setError(null)
 
     try {
-      // Clear cached location to force fresh fetch
-      localStorage.removeItem("userLocation")
-      console.log("ðŸ—‘ï¸ Cleared cached location from localStorage")
+      // Keep cached location for fallback if GPS times out.
+      // We still force fresh GPS+reverse-geocode by passing forceFresh=true to getLocation().
 
       // Show loading, so pass showLoading = true
       // forceFresh = true, updateDB = true, showLoading = true
