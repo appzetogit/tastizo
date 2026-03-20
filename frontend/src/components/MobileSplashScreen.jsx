@@ -118,21 +118,16 @@ export default function MobileSplashScreen() {
     if (!isMobile || !isUserRoute(location.pathname) || !isLoggedIn) return
 
     setLocationLoading(true)
-    let cancelled = false
-    // Watchdog: if Firebase/GPS promise hangs, don't keep the UI stuck on "Detecting location..."
-    const watchdogId = setTimeout(() => {
-      if (cancelled) return
-      setLocationLoading(false)
-    }, 12000)
-
     ;(async () => {
       // 1) Try Firebase (fast, no GPS prompt, no API calls)
       try {
         const token = getModuleToken("user")
         const userId = getUserIdFromToken(token)
+        // Firebase can sometimes hang on slow/unreliable networks.
+        // If it doesn't resolve quickly, we must fall back to GPS so splash doesn't get stuck.
         const fbLoc = await Promise.race([
-          getUserLocationOnce(userId).catch(() => null),
-          new Promise((resolve) => setTimeout(() => resolve(null), 5000)),
+          getUserLocationOnce(userId),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Firebase location timeout")), 4000)),
         ])
         const formattedFb = formatSplashLocationFromFirebase(fbLoc)
         if (formattedFb) {
@@ -151,14 +146,9 @@ export default function MobileSplashScreen() {
         setSplashLocation(loc)
         if (loc && setPhaseSplash) setPhaseSplash()
       } finally {
-        if (!cancelled) setLocationLoading(false)
+        setLocationLoading(false)
       }
     })()
-
-    return () => {
-      cancelled = true
-      clearTimeout(watchdogId)
-    }
   }, [isMobile, location.pathname, isLoggedIn, setPhaseSplash])
 
   if (!isMobile || !isUserRoute(location.pathname)) return null
