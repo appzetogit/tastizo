@@ -168,9 +168,8 @@ export default function UserLayout() {
                 {/* <Navbar /> */}
                 {showBottomNav && <DesktopNavbar />}
                 <LocationPrompt />
-                {/* DesktopNavbar is fixed `top-0` (h-16). Add padding so content doesn't stick to the top.
-                    Also add small top padding on mobile so sticky headers don't feel cramped. */}
-                <main className={isAuthRoute ? "min-h-screen" : "pt-4 md:pt-16"}>
+                {/* DesktopNavbar is `fixed top-0` (md+). Add top padding so content never hides under it. */}
+                <main className={isAuthRoute ? "min-h-screen" : "md:pt-16"}>
                   <Outlet />
                 </main>
                 {showBottomNav && <BottomNavigation />}
