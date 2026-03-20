@@ -27,21 +27,41 @@ export default function LocationIconTransition() {
 
   useEffect(() => {
     if (phase !== "transitioning") return
-    const el = navbarIconRef?.current
-    if (!el) {
-      const t = setTimeout(() => setPhaseDone(), 100)
-      return () => clearTimeout(t)
+    let cancelled = false
+    const start = Date.now()
+    const MAX_WAIT_MS = 800
+
+    const tryResolveTarget = () => {
+      if (cancelled) return
+      const el = navbarIconRef?.current
+      if (el) {
+        try {
+          const rect = el.getBoundingClientRect()
+          setTargetRect({
+            top: rect.top,
+            left: rect.left,
+            width: Math.max(rect.width, 24),
+            height: Math.max(rect.height, 24),
+          })
+        } catch {
+          setPhaseDone()
+        }
+        return
+      }
+
+      if (Date.now() - start > MAX_WAIT_MS) {
+        setPhaseDone()
+        return
+      }
+
+      // Wait until navbar icon is mounted (ref is set).
+      setTimeout(tryResolveTarget, 50)
     }
-    try {
-      const rect = el.getBoundingClientRect()
-      setTargetRect({
-        top: rect.top,
-        left: rect.left,
-        width: Math.max(rect.width, 24),
-        height: Math.max(rect.height, 24),
-      })
-    } catch {
-      setPhaseDone()
+
+    tryResolveTarget()
+
+    return () => {
+      cancelled = true
     }
   }, [phase, navbarIconRef, setPhaseDone])
 
