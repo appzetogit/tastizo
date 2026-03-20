@@ -243,3 +243,10 @@
 .touch-pan-x {
   touch-action: pan-x;
 }
+
+/* Mobile spacing: add a small top padding on all pages/modules */
+@media (max-width: 767px) {
+  #root {
+    padding-top: 0.5rem; /* tailwind pt-2 */
+  }
+}
