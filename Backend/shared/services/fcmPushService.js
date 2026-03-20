@@ -43,7 +43,9 @@ async function getFcmTokens(sendTo, zone) {
       .lean();
     deliveries.forEach(addTokens);
   } else if (sendTo === "Restaurant") {
-    const query = { status: "approved" };
+    // Restaurant approval is stored as isActive (see admin approveRestaurant),
+    // not status: "approved". Match active restaurants only.
+    const query = { isActive: true };
     const restaurants = await Restaurant.find(query)
       .select("fcmTokenWeb fcmTokenAndroid fcmTokenIos")
       .lean();

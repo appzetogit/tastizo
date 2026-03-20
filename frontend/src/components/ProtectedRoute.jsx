@@ -1,5 +1,18 @@
+import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { isModuleAuthenticated } from "@/lib/utils/auth";
+import { registerFcmTokenForRestaurant } from "@/lib/notifications/fcmWeb";
+
+/**
+ * Registers web FCM token for restaurant dashboard on any protected restaurant route.
+ * Without this, admin "Send to Restaurant" often finds zero tokens (only a few pages used useRestaurantNotifications before).
+ */
+function RestaurantFcmBootstrap() {
+  useEffect(() => {
+    registerFcmTokenForRestaurant().catch(() => {});
+  }, []);
+  return null;
+}
 
 /**
  * Role-based Protected Route Component
@@ -34,6 +47,11 @@ export default function ProtectedRoute({ children, requiredRole, loginPath }) {
     return <Navigate to={redirectPath} replace />;
   }
 
-  return children;
+  return (
+    <>
+      {requiredRole === "restaurant" ? <RestaurantFcmBootstrap /> : null}
+      {children}
+    </>
+  );
 }
 
