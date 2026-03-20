@@ -140,7 +140,7 @@ export const reverseGeocode = async (req, res) => {
 
     const forceFresh = String(force).toLowerCase() === "true" || String(force) === "1";
 
-    // Throttle per IP to prevent provider rate limits (skip when user explicitly forces refresh)
+    //  IP to prevent provider rate limits (skip when user explicitly forces refresh)
     const ip = (req.headers["x-forwarded-for"] || req.ip || "").toString().split(",")[0].trim();
     const now = Date.now();
     const lastCall = reverseGeocodeLastCallByIp.get(ip) || 0;
