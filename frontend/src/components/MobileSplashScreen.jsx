@@ -117,7 +117,26 @@ export default function MobileSplashScreen() {
   useEffect(() => {
     if (!isMobile || !isUserRoute(location.pathname) || !isLoggedIn) return
 
+    let cancelled = false
+    const FALLBACK_LOC = { shortAddr: "Current Location", fullAddr: "" }
+
     setLocationLoading(true)
+
+    // Hard safety timeout so splash never stays stuck on "Detecting location..."
+    const safetyId = setTimeout(() => {
+      if (cancelled) return
+      setSplashLocation(FALLBACK_LOC)
+      if (setPhaseSplash) setPhaseSplash()
+      setLocationLoading(false)
+    }, 12000)
+
+    const finish = (loc) => {
+      if (cancelled) return
+      setSplashLocation(loc || FALLBACK_LOC)
+      if (setPhaseSplash) setPhaseSplash()
+      setLocationLoading(false)
+    }
+
     ;(async () => {
       // 1) Try Firebase (fast, no GPS prompt, no API calls)
       try {
@@ -131,9 +150,8 @@ export default function MobileSplashScreen() {
         ])
         const formattedFb = formatSplashLocationFromFirebase(fbLoc)
         if (formattedFb) {
-          setSplashLocation(formattedFb)
-          if (setPhaseSplash) setPhaseSplash()
-          setLocationLoading(false)
+          clearTimeout(safetyId)
+          finish(formattedFb)
           return
         }
       } catch {
@@ -143,12 +161,18 @@ export default function MobileSplashScreen() {
       // 2) Fallback to GPS + backend reverse geocode
       try {
         const loc = await fetchSplashLocation()
-        setSplashLocation(loc)
-        if (loc && setPhaseSplash) setPhaseSplash()
-      } finally {
-        setLocationLoading(false)
+        clearTimeout(safetyId)
+        finish(loc)
+      } catch {
+        clearTimeout(safetyId)
+        finish(null)
       }
     })()
+
+    return () => {
+      cancelled = true
+      clearTimeout(safetyId)
+    }
   }, [isMobile, location.pathname, isLoggedIn, setPhaseSplash])
 
   if (!isMobile || !isUserRoute(location.pathname)) return null
@@ -215,7 +239,7 @@ export default function MobileSplashScreen() {
                     >
                       Detecting location...
                     </motion.span>
-                  ) : splashLocation ? (
+                  ) : (
                     <motion.div
                       key="location"
                       className="flex flex-col items-center gap-2"
@@ -247,7 +271,7 @@ export default function MobileSplashScreen() {
                         transition={{ delay: 0.1, duration: 0.3 }}
                       >
                         <p className="text-white font-semibold text-base leading-tight">
-                          {splashLocation.shortAddr}
+                          {splashLocation?.shortAddr || "Current Location"}
                         </p>
                         <ChevronDown className="h-4 w-4 text-white flex-shrink-0" />
                       </motion.div>
@@ -257,10 +281,10 @@ export default function MobileSplashScreen() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.1, duration: 0.3 }}
                       >
-                        {splashLocation.fullAddr}
+                        {splashLocation?.fullAddr || ""}
                       </motion.p>
                     </motion.div>
-                  ) : null}
+                  )}
                 </AnimatePresence>
               </motion.div>
             )}
