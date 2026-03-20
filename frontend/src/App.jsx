@@ -143,7 +143,7 @@ function RoutePersistence({ children }) {
     hasRestoredRef.current = true
 
     try {
-      const saved = window.localStorage?.getItem("lastRoute")
+      const saved = window.sessionStorage?.getItem("lastRoute")
       const currentPath =
         window.location.pathname +
         window.location.search +
@@ -179,7 +179,7 @@ function RoutePersistence({ children }) {
         location.pathname.startsWith(p),
       )
       if (!shouldIgnore) {
-        window.localStorage?.setItem("lastRoute", path)
+        window.sessionStorage?.setItem("lastRoute", path)
       }
     } catch {
       // Ignore storage errors
