@@ -156,21 +156,7 @@ function RoutePersistence({ children }) {
         saved !== "/" &&
         (currentPath === "/" || currentPath === "" || currentPath === "/user")
       ) {
-        // IMPORTANT:
-        // If the previous browser session visited restaurant/admin/delivery routes,
-        // we MUST NOT restore them when a user lands on the user home (`/`).
-        // This was causing "user open website -> redirected to restaurant admin".
-        const isUserHome =
-          currentPath === "/" || currentPath === "" || currentPath === "/user"
-
-        const isSavedInUserScope =
-          saved.startsWith("/usermain") ||
-          saved.startsWith("/user") ||
-          saved === "/"
-
-        if (isUserHome && isSavedInUserScope) {
-          navigate(saved, { replace: true })
-        }
+        navigate(saved, { replace: true })
       }
     } catch {
       // Ignore storage errors
