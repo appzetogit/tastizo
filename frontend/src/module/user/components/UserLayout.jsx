@@ -168,7 +168,8 @@ export default function UserLayout() {
                 {/* <Navbar /> */}
                 {showBottomNav && <DesktopNavbar />}
                 <LocationPrompt />
-                <main className={isAuthRoute ? "min-h-screen" : ""}>
+                {/* DesktopNavbar is fixed `top-0` (h-16). Add padding so content doesn't stick to the top. */}
+                <main className={isAuthRoute ? "min-h-screen" : "md:pt-16"}>
                   <Outlet />
                 </main>
                 {showBottomNav && <BottomNavigation />}
