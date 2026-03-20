@@ -65,16 +65,14 @@ export function useLocation() {
       }
 
       // Prepare complete location data for database storage
-      const mostPreciseAddress = locationData.formattedAddress || locationData.address || ""
-
       const locationPayload = {
         latitude: locationData.latitude,
         longitude: locationData.longitude,
-        address: mostPreciseAddress,
+        address: locationData.address || "",
         city: locationData.city || "",
         state: locationData.state || "",
         area: locationData.area || "",
-        formattedAddress: mostPreciseAddress,
+        formattedAddress: locationData.formattedAddress || locationData.address || "",
       }
 
       // Add optional fields if available
@@ -154,7 +152,6 @@ export function useLocation() {
       const houseNumber = addrComp.house_number || "";
       const building = addrComp.building || "";
       const postcode = addrComp.postcode || "";
-      const exactAddressFromBackend = addrComp.exact_address || "";
 
       // Extra locality-like fields to get colony/area/gali precision
       const neighbourhood = addrComp.neighbourhood || "";
@@ -165,7 +162,7 @@ export function useLocation() {
 
       const houseRoad = [houseNumber, road].filter(Boolean).join(" ").trim();
       const localityPrimary =
-        building || houseRoad || road || area || city || "";
+        building || houseRoad || road || area || city || "Location Found";
 
       // Pick a second locality label if available (helps show colony/gali level)
       const secondaryCandidate = [quarter, neighbourhood, suburb, residential, cityDistrict]
@@ -188,24 +185,23 @@ export function useLocation() {
       if (postcode) formattedParts.push(postcode);
 
       const formattedAddressExact =
-        exactAddressFromBackend ||
         formattedParts.join(", ") ||
         result.formatted_address ||
         `${latitude}, ${longitude}`;
 
-      let mainTitle = building || area || city || "";
+      let mainTitle = building || area || city || "Location Found";
       let displayAddress = localityPrimary;
 
       return {
         city: city,
         state: state,
-        area: area || city || "",
-        address: formattedAddressExact || displayAddress || "Select location",
+        area: area || city || "Location Found",
+        address: displayAddress,
         formattedAddress: formattedAddressExact,
         street: road,
         streetNumber: "",
         postalCode: postcode,
-        mainTitle: mainTitle || null,
+        mainTitle: mainTitle !== "Location Found" ? mainTitle : null,
         pointOfInterest: building || null,
         premise: null,
         placeId: null,
@@ -906,9 +902,8 @@ export function useLocation() {
             }
           },
           async (err) => {
-            // If timeout and we haven't retried yet, try with lower accuracy only for non-forced fetches.
-            // For explicit "Use current location" (forceFresh=true), do not downgrade to network location.
-            if (!forceFresh && err.code === 3 && retryCount === 0 && options.enableHighAccuracy) {
+            // If timeout and we haven't retried yet, try with lower accuracy
+            if (err.code === 3 && retryCount === 0 && options.enableHighAccuracy) {
               console.warn("â±ï¸ High accuracy timeout, retrying with lower accuracy...")
               // Retry with lower accuracy - faster response (uses network-based location)
               getPositionWithRetry({
@@ -925,21 +920,6 @@ export function useLocation() {
             } else {
               console.error("âŒ Geolocation error:", err.code, err.message)
             }
-            // For explicit fresh GPS requests, do not silently fallback to cached/DB location.
-            // Returning stale fallback often causes city-level/non-exact addresses.
-            if (forceFresh) {
-              const msg =
-                err.code === 1
-                  ? "Location permission denied"
-                  : err.code === 2
-                    ? "Location unavailable"
-                    : err.code === 3
-                      ? "High accuracy GPS timeout"
-                      : (err.message || "Failed to get fresh location")
-              reject(new Error(msg))
-              return
-            }
-
             // Try multiple fallback strategies
             try {
               // Strategy 1: Use DB location if available
