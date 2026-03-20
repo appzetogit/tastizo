@@ -1231,7 +1231,7 @@ export default function Home() {
       </div>
 
       {/* Unified Navbar & Hero Section - rounded bottom on mobile for green area */}
-      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] pt-3 sm:pt-5 md:pt-16 rounded-b-2xl md:rounded-b-none">
+      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] pt-3 sm:pt-5 rounded-b-2xl md:rounded-b-none">
         {/* Hero Banner Carousel Background */}
         {heroBannerImages.length > 0 ? (
           <div

@@ -209,7 +209,7 @@ export default function Dining() {
     <AnimatedPage className="bg-white dark:bg-[#0a0a0a]" style={{ minHeight: '100vh', paddingBottom: '80px', overflow: 'visible' }}>
       {/* Unified Navbar & Hero Section */}
       <div
-        className="relative w-full overflow-hidden min-h-[36vh] sm:min-h-[40vh] lg:min-h-[50vh] md:pt-16 cursor-pointer rounded-b-2xl md:rounded-b-none"
+        className="relative w-full overflow-hidden min-h-[36vh] sm:min-h-[40vh] lg:min-h-[50vh] cursor-pointer rounded-b-2xl md:rounded-b-none"
         onClick={() => navigate('/user/dining/restaurants')}
       >
         {/* Background with dining banner */}

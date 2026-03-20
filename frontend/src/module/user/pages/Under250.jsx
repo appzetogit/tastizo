@@ -415,9 +415,9 @@ export default function Under250() {
 
   return (
 
-    <div className={`relative min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
+      <div className={`relative min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Banner Section with Navbar */}
-      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] md:pt-16">
+        <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh]">
         {/* Banner Image */}
         {bannerImage && (
           <div className="absolute top-0 left-0 right-0 bottom-0 z-0">

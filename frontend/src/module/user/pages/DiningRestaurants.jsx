@@ -202,7 +202,7 @@ export default function DiningRestaurants() {
   return (
     <AnimatedPage className="bg-white" style={{ minHeight: '100vh', paddingBottom: '80px', overflow: 'visible' }}>
       {/* Banner Section with Back Button and Location */}
-      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] md:pt-16">
+      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh]">
         {/* Background with dining banner */}
         <div className="absolute top-0 left-0 right-0 bottom-0 z-0">
           <img
