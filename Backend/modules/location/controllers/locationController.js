@@ -39,6 +39,76 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
   return R * c;
 }
 
+// Find nearest town/city around given coordinates using Nominatim search
+// Used only as a fallback when Nominatim reverse-geocode returns missing/generic "city".
+const findNearestTown = async (latNum, lngNum) => {
+  const radiusMeters = 15000; // 15km search radius
+  const degreeOffset = radiusMeters / 111000; // approx meter-to-degree
+
+  const viewbox = [
+    lngNum - degreeOffset,
+    latNum - degreeOffset,
+    lngNum + degreeOffset,
+    latNum + degreeOffset,
+  ].join(",");
+
+  let results = [];
+  try {
+    const resp = await axios.get("https://nominatim.openstreetmap.org/search", {
+      params: {
+        format: "json",
+        q: "*",
+        viewbox,
+        bounded: 1,
+        addressdetails: 1,
+        limit: 10,
+        "accept-language": "en",
+      },
+      headers: {
+        "User-Agent": "Tastizo-App/1.0",
+      },
+      timeout: 8000,
+    });
+    results = Array.isArray(resp.data) ? resp.data : [];
+  } catch (err) {
+    logger.warn("Nearest town lookup failed", { error: err.message });
+    return null;
+  }
+
+  const candidates = results.filter((place) => {
+    const cls = place.class || "";
+    const type = place.type || "";
+    return cls === "place" && (type === "town" || type === "city");
+  });
+
+  if (!candidates.length) return null;
+
+  let best = null;
+  let bestDist = Infinity;
+
+  for (const place of candidates) {
+    const placeLat = parseFloat(place.lat);
+    const placeLng = parseFloat(place.lon);
+    if (Number.isNaN(placeLat) || Number.isNaN(placeLng)) continue;
+
+    const dist = haversineMeters(latNum, lngNum, placeLat, placeLng);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = place;
+    }
+  }
+
+  if (!best) return null;
+
+  const a = best.address || {};
+  const townName =
+    a.city ||
+    a.town ||
+    (best.display_name ? String(best.display_name).split(",")[0].trim() : "");
+
+  return townName || null;
+};
+
 const buildMinimalGeocodeData = (latNum, lngNum) => {
   return {
     results: [
@@ -236,7 +306,7 @@ export const reverseGeocode = async (req, res) => {
 
     const addr = data.address || {};
 
-    const city =
+    let city =
       addr.city ||
       addr.town ||
       addr.village ||
@@ -269,8 +339,35 @@ export const reverseGeocode = async (req, res) => {
       "";
     const road = addr.road || "";
     const houseNumber = addr.house_number || "";
-    const building = addr.building || addr.amenity || addr.shop || "";
+    const building =
+      addr.building ||
+      addr.house ||
+      addr.amenity ||
+      addr.shop ||
+      addr.office ||
+      addr.attraction ||
+      addr.leisure ||
+      "";
     const postcode = addr.postcode || "";
+
+    // If city looks missing/generic, try to enhance it using nearest town/city lookup.
+    // This helps when reverse-geocode returns only a village/locality name.
+    let nearestTownName = null;
+    try {
+      const shouldLookupNearestTown =
+        !city || (area && city && area && city.toLowerCase() === area.toLowerCase());
+
+      if (shouldLookupNearestTown) {
+        nearestTownName = await findNearestTown(latNum, lngNum);
+        if (nearestTownName) {
+          city = nearestTownName;
+        }
+      }
+    } catch (lookupError) {
+      logger.warn("Nearest town enhancement failed", {
+        error: lookupError.message,
+      });
+    }
 
     let formattedAddress = data.display_name || "";
 
@@ -329,16 +426,58 @@ export const reverseGeocode = async (req, res) => {
     const exactAreaCandidate = derivedArea && !isGenericCityLabel(derivedArea) ? derivedArea : "";
     const exactArea = building || houseRoad || road || exactAreaCandidate || derivedArea || city || "";
 
+    const exactAddressParts = [
+      building,
+      [houseNumber, road].filter(Boolean).join(" ").trim(),
+      exactAreaCandidate || derivedArea || "",
+      city,
+      state,
+      postcode,
+      country,
+    ]
+      .map((p) => (p || "").toString().trim())
+      .filter(Boolean);
+
+    const exactAddress = exactAddressParts.join(", ");
+
+    // Prefer Nominatim's richer display_name when our "exact" composition ends up generic
+    // (e.g., only city/locality returned without road/house/POI).
+    const providerFormattedAddress = formattedAddress || "";
+    const providerParts = providerFormattedAddress
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    const exactPartsCount = exactAddressParts.length;
+    const providerPartsCount = providerParts.length;
+
+    const exactLooksGeneric =
+      (!building && !houseNumber && !road) &&
+      (!exactAreaCandidate || exactAreaCandidate === city) &&
+      (!exactArea || exactArea === city) &&
+      exactPartsCount <= 4;
+
+    let finalExactAddress = exactAddress;
+    if (
+      providerPartsCount >= 4 &&
+      (exactLooksGeneric || providerPartsCount > exactPartsCount || exactPartsCount < 4)
+    ) {
+      finalExactAddress = providerFormattedAddress;
+    }
+
     const processedData = {
       results: [
         {
           formatted_address:
-            formattedAddress || `${latNum.toFixed(6)}, ${lngNum.toFixed(6)}`,
+            finalExactAddress ||
+            formattedAddress ||
+            `${latNum.toFixed(6)}, ${lngNum.toFixed(6)}`,
           address_components: {
             city: city,
             state: state,
             country: country,
             area: exactArea,
+            nearestTown: nearestTownName || "",
             neighbourhood: neighbourhood,
             suburb: suburb,
             residential: residential,
@@ -350,6 +489,7 @@ export const reverseGeocode = async (req, res) => {
             house_number: houseNumber,
             building: building,
             postcode: postcode,
+            exact_address: finalExactAddress,
           },
           geometry: {
             location: {

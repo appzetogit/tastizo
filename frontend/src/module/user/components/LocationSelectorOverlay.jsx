@@ -835,7 +835,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       })
 
       // Request location - this will automatically prompt for permission if needed
-      // Clear any cached location first to ensure fresh coordinates
+      // We require a fresh GPS fix here (not stale cached fallback) for exact delivery address.
       console.log("🔄 Requesting fresh location (clearing cache and forcing fresh GPS)...")
 
       // Increase timeout to 15 seconds to allow GPS to get accurate fix
@@ -864,58 +864,22 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       } catch (raceError) {
         console.warn("⚠️ Location request failed or timed out:", raceError.message)
 
-        // If timeout or error, try to use cached location as fallback
-        const stored = localStorage.getItem("userLocation")
-        if (stored) {
-          try {
-            const cachedLocation = JSON.parse(stored)
-            if (cachedLocation?.latitude && cachedLocation?.longitude) {
-              console.log("📍 Using cached location as fallback:", cachedLocation)
-              locationData = cachedLocation
-
-              // Show info toast that we're using cached location
-              toast.info("Using your last known location", {
-                id: "location-request",
-                duration: 2000,
-              })
-            } else {
-              throw new Error("Invalid cached location")
-            }
-          } catch (cacheErr) {
-            console.error("❌ Failed to parse cached location:", cacheErr)
-            // Determine specific error message
-            let errorMessage = "Could not get location. Please try again."
-            if (raceError.message.includes("permission") || raceError.message.includes("denied")) {
-              errorMessage = "Location permission denied. Please enable location access in your browser settings."
-            } else if (raceError.message.includes("timeout") || raceError.message.includes("longer")) {
-              errorMessage = "Location request timed out. Please check your GPS settings and try again."
-            } else if (raceError.message.includes("unavailable")) {
-              errorMessage = "Location information is unavailable. Please check your device settings."
-            }
-
-            toast.error(errorMessage, {
-              id: "location-request",
-              duration: 5000,
-            })
-            return
-          }
-        } else {
-          // No cached location available
-          let errorMessage = "Could not get location. Please try again."
-          if (raceError.message.includes("permission") || raceError.message.includes("denied")) {
-            errorMessage = "Location permission denied. Please enable location access in your browser settings."
-          } else if (raceError.message.includes("timeout") || raceError.message.includes("longer")) {
-            errorMessage = "Location request timed out. Please check your GPS settings and try again."
-          } else if (raceError.message.includes("unavailable")) {
-            errorMessage = "Location information is unavailable. Please check your device settings."
-          }
-
-          toast.error(errorMessage, {
-            id: "location-request",
-            duration: 5000,
-          })
-          return
+        // Do NOT fallback to cached location here; that causes city-level/stale addresses.
+        // Force user/device to provide a fresh GPS fix.
+        let errorMessage = "Could not get your exact current location. Please try again."
+        if (raceError.message.includes("permission") || raceError.message.includes("denied")) {
+          errorMessage = "Location permission denied. Please enable location access in your browser settings."
+        } else if (raceError.message.includes("timeout") || raceError.message.includes("longer")) {
+          errorMessage = "Exact GPS fix timed out. Turn on device GPS/High accuracy mode and try again."
+        } else if (raceError.message.includes("unavailable")) {
+          errorMessage = "Location information is unavailable. Please check your device location settings."
         }
+
+        toast.error(errorMessage, {
+          id: "location-request",
+          duration: 5000,
+        })
+        return
       }
 
       // Validate location data
@@ -927,6 +891,40 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       if (!locationData.latitude || !locationData.longitude) {
         toast.error("Invalid location data received. Please try again.", { id: "location-request" })
         return
+      }
+
+      // Always refresh address from backend reverse geocode for exact delivery location.
+      // This prevents stale city-only text when requestLocation falls back to cached data.
+      try {
+        const reverseRes = await locationAPI.reverseGeocode(locationData.latitude, locationData.longitude, { force: true })
+        const reverseData = reverseRes?.data?.data
+        const reverseResult = reverseData?.results?.[0] || reverseData?.result?.[0] || null
+        const comp = reverseResult?.address_components || {}
+        if (reverseResult) {
+          const preciseFormatted =
+            comp.exact_address ||
+            reverseResult.formatted_address ||
+            locationData.formattedAddress ||
+            ""
+          const preciseAddress =
+            comp.exact_address ||
+            locationData.address ||
+            preciseFormatted
+
+          locationData = {
+            ...locationData,
+            address: preciseAddress,
+            formattedAddress: preciseFormatted || locationData.formattedAddress,
+            city: comp.city || locationData.city || "",
+            state: comp.state || locationData.state || "",
+            area: comp.area || locationData.area || "",
+            street: comp.road || locationData.street || "",
+            streetNumber: comp.house_number || locationData.streetNumber || "",
+            postalCode: comp.postcode || locationData.postalCode || "",
+          }
+        }
+      } catch (reverseErr) {
+        console.warn("⚠️ Forced reverse geocode failed in current location flow:", reverseErr?.message || reverseErr)
       }
 
       console.log("✅ Fresh location received:", {
@@ -963,14 +961,15 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       // Save location to backend with ALL fields
       if (locationData?.latitude && locationData?.longitude) {
         try {
+          const preciseAddress = locationData.formattedAddress || locationData.address || ""
           await userAPI.updateLocation({
             latitude: locationData.latitude,
             longitude: locationData.longitude,
-            address: locationData.address || locationData.formattedAddress || "",
+            address: preciseAddress,
             city: locationData.city || "",
             state: locationData.state || "",
             area: locationData.area || "",
-            formattedAddress: locationData.formattedAddress || locationData.address || "",
+            formattedAddress: preciseAddress,
             accuracy: locationData.accuracy,
             postalCode: locationData.postalCode,
             street: locationData.street,
@@ -1709,6 +1708,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             const houseNumber = addressComponents.house_number || ""
             const building = addressComponents.building || ""
             const postcode = addressComponents.postcode || ""
+            const exactAddressFromBackend = addressComponents.exact_address || ""
 
             const neighbourhood = addressComponents.neighbourhood || ""
             const suburb = addressComponents.suburb || ""
@@ -1722,7 +1722,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
             const houseRoad = [houseNumber, road].filter(Boolean).join(" ").trim()
             const localityPrimary =
-              building || houseRoad || road || area || city || "Location Found"
+              building || houseRoad || road || area || city || ""
 
             const secondaryCandidate = [quarter, neighbourhood, suburb, residential, cityDistrict]
               .map((p) => (p || "").trim())
@@ -1732,16 +1732,19 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                 return p.toLowerCase() !== c && p.toLowerCase() !== localityPrimary.toLowerCase()
               })
 
-            formattedAddress = [
-              // Exact local label (building > house+road > road > area)
-              localityPrimary,
-              secondaryCandidate,
-              city,
-              state,
-              postcode ? String(postcode) : "",
-            ]
-              .filter((p) => p && String(p).trim().length > 0)
-              .join(", ") || ""
+            formattedAddress =
+              exactAddressFromBackend ||
+              [
+                // Exact local label (building > house+road > road > area)
+                localityPrimary,
+                secondaryCandidate,
+                city,
+                state,
+                postcode ? String(postcode) : "",
+              ]
+                .filter((p) => p && String(p).trim().length > 0)
+                .join(", ") ||
+              ""
           }
         } catch (backendError) {
           console.error("❌ Backend reverse geocode failed:", backendError)
