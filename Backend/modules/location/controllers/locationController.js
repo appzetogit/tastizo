@@ -257,6 +257,8 @@ export const reverseGeocode = async (req, res) => {
             lat: latNum,
             lon: lngNum,
             addressdetails: 1,
+            namedetails: 1,
+            extratags: 1,
             "accept-language": "en",
             zoom: 18,
           },
@@ -463,6 +465,36 @@ export const reverseGeocode = async (req, res) => {
       (exactLooksGeneric || providerPartsCount > exactPartsCount || exactPartsCount < 4)
     ) {
       finalExactAddress = providerFormattedAddress;
+    }
+
+    // When user explicitly forces a fresh reverse-geocode (e.g., "Use current location"),
+    // prefer Nominatim's full `display_name` because it often contains the most detailed POI/road ordering.
+    if (forceFresh && providerFormattedAddress) {
+      finalExactAddress = providerFormattedAddress;
+    }
+
+    // If even Nominatim's display_name is still very generic (few comma-parts),
+    // try BigDataCloud to enrich the administrative locality chain.
+    if (forceFresh && providerPartsCount <= 4) {
+      try {
+        const bigPayload = await reverseGeocodeWithBigDataCloud(latNum, lngNum);
+        const bigResult = bigPayload?.data?.results?.[0];
+        const bigFormatted = bigResult?.formatted_address || "";
+        const bigPartsCount = bigFormatted
+          ? bigFormatted
+              .split(",")
+              .map((p) => p.trim())
+              .filter(Boolean).length
+          : 0;
+
+        if (bigFormatted && bigPartsCount > providerPartsCount) {
+          finalExactAddress = bigFormatted;
+        }
+      } catch (bigErr) {
+        logger.warn("BigDataCloud enrichment failed (keeping Nominatim)", {
+          error: bigErr.message,
+        });
+      }
     }
 
     const processedData = {
