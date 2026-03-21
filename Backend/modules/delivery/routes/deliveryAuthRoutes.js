@@ -39,6 +39,22 @@ const verifyOTPSchema = Joi.object({
   name: Joi.string().allow(null, "").optional(),
 });
 
+const fcmRegisterSchema = Joi.object({
+  platform: Joi.string().valid("web", "app", "android", "ios").required(),
+  fcmToken: Joi.string().optional(),
+  token: Joi.string().optional(),
+  deviceType: Joi.string().valid("android", "ios").optional(),
+  appType: Joi.string().valid("android", "ios").optional(),
+  os: Joi.string().valid("android", "ios").optional(),
+}).or("fcmToken", "token");
+
+const fcmDeleteSchema = Joi.object({
+  platform: Joi.string().valid("web", "app", "android", "ios").required(),
+  deviceType: Joi.string().valid("android", "ios").optional(),
+  appType: Joi.string().valid("android", "ios").optional(),
+  os: Joi.string().valid("android", "ios").optional(),
+});
+
 // Public routes
 router.post("/send-otp", validate(sendOTPSchema), sendOTP);
 router.post("/verify-otp", validate(verifyOTPSchema), verifyOTP);
@@ -47,7 +63,7 @@ router.post("/refresh-token", refreshToken);
 // Protected routes (require authentication)
 router.post("/logout", authenticate, logout);
 router.get("/me", authenticate, getCurrentDelivery);
-router.post("/fcm-token", authenticate, registerFcmToken);
-router.delete("/fcm-token", authenticate, removeFcmToken);
+router.post("/fcm-token", authenticate, validate(fcmRegisterSchema), registerFcmToken);
+router.delete("/fcm-token", authenticate, validate(fcmDeleteSchema), removeFcmToken);
 
 export default router;

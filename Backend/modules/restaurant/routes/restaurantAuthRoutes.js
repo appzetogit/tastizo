@@ -72,6 +72,22 @@ const firebaseGoogleLoginSchema = Joi.object({
   idToken: Joi.string().required()
 });
 
+const fcmRegisterSchema = Joi.object({
+  platform: Joi.string().valid("web", "app", "android", "ios").required(),
+  fcmToken: Joi.string().optional(),
+  token: Joi.string().optional(),
+  deviceType: Joi.string().valid("android", "ios").optional(),
+  appType: Joi.string().valid("android", "ios").optional(),
+  os: Joi.string().valid("android", "ios").optional(),
+}).or("fcmToken", "token");
+
+const fcmDeleteSchema = Joi.object({
+  platform: Joi.string().valid("web", "app", "android", "ios").required(),
+  deviceType: Joi.string().valid("android", "ios").optional(),
+  appType: Joi.string().valid("android", "ios").optional(),
+  os: Joi.string().valid("android", "ios").optional(),
+});
+
 // Public routes
 router.post("/send-otp", validate(sendOTPSchema), sendOTP);
 router.post("/verify-otp", validate(verifyOTPSchema), verifyOTP);
@@ -92,11 +108,13 @@ router.post("/reverify", authenticate, reverifyRestaurant);
 router.post(
   "/fcm-token",
   authenticate,
+  validate(fcmRegisterSchema),
   registerRestaurantFcmToken,
 );
 router.delete(
   "/fcm-token",
   authenticate,
+  validate(fcmDeleteSchema),
   removeRestaurantFcmToken,
 );
 

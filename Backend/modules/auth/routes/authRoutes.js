@@ -72,12 +72,19 @@ const resetPasswordSchema = Joi.object({
 });
 
 const fcmRegisterSchema = Joi.object({
-  platform: Joi.string().valid('web', 'android', 'ios').required(),
-  fcmToken: Joi.string().required(),
-});
+  platform: Joi.string().valid('web', 'app', 'android', 'ios').required(),
+  fcmToken: Joi.string().optional(),
+  token: Joi.string().optional(),
+  deviceType: Joi.string().valid('android', 'ios').optional(),
+  appType: Joi.string().valid('android', 'ios').optional(),
+  os: Joi.string().valid('android', 'ios').optional(),
+}).or('fcmToken', 'token');
 
 const fcmDeleteSchema = Joi.object({
-  platform: Joi.string().valid('web', 'android', 'ios').required(),
+  platform: Joi.string().valid('web', 'app', 'android', 'ios').required(),
+  deviceType: Joi.string().valid('android', 'ios').optional(),
+  appType: Joi.string().valid('android', 'ios').optional(),
+  os: Joi.string().valid('android', 'ios').optional(),
 });
 
 // Public routes

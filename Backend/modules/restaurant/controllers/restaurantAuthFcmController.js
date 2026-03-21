@@ -9,18 +9,27 @@ import Restaurant from "../models/Restaurant.js";
  */
 export const registerRestaurantFcmToken = asyncHandler(async (req, res) => {
   const restaurantId = req.restaurant?._id;
-  const { platform, fcmToken } = req.body;
+  const {
+    platform,
+    fcmToken,
+    token,
+    deviceType,
+    appType,
+    os,
+  } = req.body;
+  const resolvedToken = fcmToken || token;
+  const resolvedDeviceType = (deviceType || appType || os || "android").toLowerCase();
 
-  if (!platform || !fcmToken) {
-    return errorResponse(res, 400, "platform and fcmToken are required");
+  if (!platform || !resolvedToken) {
+    return errorResponse(res, 400, "platform and token are required");
   }
 
-  const validPlatforms = ["web", "android", "ios"];
+  const validPlatforms = ["web", "app", "android", "ios"];
   if (!validPlatforms.includes(platform)) {
     return errorResponse(
       res,
       400,
-      "Invalid platform. Allowed values: web, android, ios",
+      "Invalid platform. Allowed values: web, app, android, ios",
     );
   }
 
@@ -30,11 +39,17 @@ export const registerRestaurantFcmToken = asyncHandler(async (req, res) => {
   }
 
   if (platform === "web") {
-    restaurant.fcmTokenWeb = fcmToken;
+    restaurant.fcmTokenWeb = resolvedToken;
   } else if (platform === "android") {
-    restaurant.fcmTokenAndroid = fcmToken;
+    restaurant.fcmTokenAndroid = resolvedToken;
   } else if (platform === "ios") {
-    restaurant.fcmTokenIos = fcmToken;
+    restaurant.fcmTokenIos = resolvedToken;
+  } else if (platform === "app") {
+    if (resolvedDeviceType === "ios") {
+      restaurant.fcmTokenIos = resolvedToken;
+    } else {
+      restaurant.fcmTokenAndroid = resolvedToken;
+    }
   }
 
   await restaurant.save();
@@ -52,18 +67,19 @@ export const registerRestaurantFcmToken = asyncHandler(async (req, res) => {
  */
 export const removeRestaurantFcmToken = asyncHandler(async (req, res) => {
   const restaurantId = req.restaurant?._id;
-  const { platform } = req.body;
+  const { platform, deviceType, appType, os } = req.body;
+  const resolvedDeviceType = (deviceType || appType || os || "android").toLowerCase();
 
   if (!platform) {
     return errorResponse(res, 400, "platform is required");
   }
 
-  const validPlatforms = ["web", "android", "ios"];
+  const validPlatforms = ["web", "app", "android", "ios"];
   if (!validPlatforms.includes(platform)) {
     return errorResponse(
       res,
       400,
-      "Invalid platform. Allowed values: web, android, ios",
+      "Invalid platform. Allowed values: web, app, android, ios",
     );
   }
 
@@ -78,6 +94,12 @@ export const removeRestaurantFcmToken = asyncHandler(async (req, res) => {
     restaurant.fcmTokenAndroid = null;
   } else if (platform === "ios") {
     restaurant.fcmTokenIos = null;
+  } else if (platform === "app") {
+    if (resolvedDeviceType === "ios") {
+      restaurant.fcmTokenIos = null;
+    } else {
+      restaurant.fcmTokenAndroid = null;
+    }
   }
 
   await restaurant.save();
