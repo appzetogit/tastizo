@@ -23,12 +23,13 @@ export const getHeroBanners = async (req, res) => {
     const banners = await HeroBanner.find({ isActive: true })
       .populate("linkedRestaurants", "name slug restaurantId profileImage")
       .sort({ order: 1, createdAt: -1 })
-      .select("imageUrl order linkedRestaurants")
+      .select("imageUrl desktopImageUrl order linkedRestaurants")
       .lean();
 
     return successResponse(res, 200, "Hero banners retrieved successfully", {
       banners: banners.map((b) => ({
         imageUrl: b.imageUrl,
+        desktopImageUrl: b.desktopImageUrl || null,
         linkedRestaurants: b.linkedRestaurants || [],
       })),
     });
@@ -225,6 +226,14 @@ export const deleteHeroBanner = async (req, res) => {
       // Continue with database deletion even if Cloudinary deletion fails
     }
 
+    if (banner.desktopCloudinaryPublicId) {
+      try {
+        await cloudinary.uploader.destroy(banner.desktopCloudinaryPublicId);
+      } catch (cloudinaryError) {
+        console.error("Error deleting desktop asset from Cloudinary:", cloudinaryError);
+      }
+    }
+
     // Delete from database
     await HeroBanner.findByIdAndDelete(id);
 
@@ -232,6 +241,97 @@ export const deleteHeroBanner = async (req, res) => {
   } catch (error) {
     console.error("Error deleting hero banner:", error);
     return errorResponse(res, 500, "Failed to delete hero banner");
+  }
+};
+
+/**
+ * Upload or replace desktop hero image for an existing banner
+ */
+export const uploadHeroBannerDesktop = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!req.file) {
+      return errorResponse(res, 400, "No image file provided");
+    }
+
+    const banner = await HeroBanner.findById(id);
+    if (!banner) {
+      return errorResponse(res, 404, "Hero banner not found");
+    }
+
+    const folder = "appzeto/hero-banners/desktop";
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder,
+      resource_type: "image",
+    });
+
+    if (banner.desktopCloudinaryPublicId) {
+      try {
+        await cloudinary.uploader.destroy(banner.desktopCloudinaryPublicId);
+      } catch (cloudinaryError) {
+        console.error("Error removing previous desktop asset:", cloudinaryError);
+      }
+    }
+
+    banner.desktopImageUrl = result.secure_url;
+    banner.desktopCloudinaryPublicId = result.public_id;
+    banner.updatedAt = new Date();
+    await banner.save();
+
+    await banner.populate(
+      "linkedRestaurants",
+      "name slug restaurantId profileImage",
+    );
+
+    return successResponse(res, 200, "Desktop hero banner updated successfully", {
+      banner,
+    });
+  } catch (error) {
+    console.error("Error uploading desktop hero banner:", error);
+    return errorResponse(res, 500, "Failed to upload desktop hero banner");
+  }
+};
+
+/**
+ * Remove desktop hero image only (mobile banner unchanged)
+ */
+export const deleteHeroBannerDesktop = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const banner = await HeroBanner.findById(id);
+    if (!banner) {
+      return errorResponse(res, 404, "Hero banner not found");
+    }
+
+    if (banner.desktopCloudinaryPublicId) {
+      try {
+        await cloudinary.uploader.destroy(banner.desktopCloudinaryPublicId);
+      } catch (cloudinaryError) {
+        console.error("Error deleting desktop asset from Cloudinary:", cloudinaryError);
+      }
+    }
+
+    const updated = await HeroBanner.findByIdAndUpdate(
+      id,
+      {
+        $unset: { desktopImageUrl: "", desktopCloudinaryPublicId: "" },
+        $set: { updatedAt: new Date() },
+      },
+      { new: true },
+    );
+
+    await updated.populate(
+      "linkedRestaurants",
+      "name slug restaurantId profileImage",
+    );
+
+    return successResponse(res, 200, "Desktop hero banner removed successfully", {
+      banner: updated,
+    });
+  } catch (error) {
+    console.error("Error removing desktop hero banner:", error);
+    return errorResponse(res, 500, "Failed to remove desktop hero banner");
   }
 };
 

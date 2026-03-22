@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useLocation as useRouterLocation } from "react-router-dom"
 import { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import { Star, Clock, MapPin, ArrowDownUp, Timer, ArrowRight, ChevronDown, Bookmark, Share2, Plus, Minus, X, UtensilsCrossed } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import AnimatedPage from "../components/AnimatedPage"
 import { Button } from "@/components/ui/button"
 import { useLocationSelector } from "../components/UserLayout"
+import { pickNavbarLocationLines } from "@/lib/userLocationDisplay"
 import { useLocation } from "../hooks/useLocation"
 import { useZone } from "../hooks/useZone"
 import { useCart } from "../context/CartContext"
@@ -19,7 +20,10 @@ import { restaurantAPI } from "@/lib/api"
 import { isModuleAuthenticated } from "@/lib/utils/auth"
 
 export default function Under250() {
-  const { location } = useLocation()
+  const routerLocation = useRouterLocation()
+  const { location, loading: geoLoading } = useLocation()
+  const { openLocationSelector } = useLocationSelector()
+  const { main: desktopLocMain, sub: desktopLocSub } = pickNavbarLocationLines(location)
   const { zoneId, zoneStatus, isInService, isOutOfService } = useZone(location)
   const navigate = useNavigate()
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart, openVariantPicker } = useCart()
@@ -288,7 +292,7 @@ export default function Under250() {
     // Check authentication
     if (!isModuleAuthenticated('user')) {
       toast.error("Please login to add items to cart")
-      navigate('/user/auth/sign-in', { state: { from: location.pathname } })
+      navigate('/user/auth/sign-in', { state: { from: routerLocation.pathname } })
       return
     }
 
@@ -449,10 +453,10 @@ export default function Under250() {
 
     <div className={`relative min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Banner Section with Navbar */}
-      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:pt-0">
-        {/* Banner Image */}
+      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[min(48vh,520px)] pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:pt-0 lg:rounded-b-none">
+        {/* Banner — phones / tablets only */}
         {bannerImage && (
-          <div className="absolute top-0 left-0 right-0 bottom-0 z-0">
+          <div className="absolute top-0 left-0 right-0 bottom-0 z-0 lg:hidden">
             <OptimizedImage
               src={bannerImage}
               alt="Under 250 Banner"
@@ -464,12 +468,51 @@ export default function Under250() {
           </div>
         )}
         {!bannerImage && !loadingBanner && (
-          <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900 dark:to-blue-900" />
+          <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900 dark:to-blue-900 lg:hidden" />
         )}
+
+        {/* Desktop: brand hero */}
+        <div
+          className="pointer-events-none hidden lg:block absolute inset-0 z-0 bg-gradient-to-br from-[#2B9C64] via-[#259052] to-[#1a5c38]"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none hidden lg:block absolute -right-20 top-10 h-[320px] w-[320px] rounded-full bg-white/[0.07] blur-3xl"
+          aria-hidden
+        />
 
         {/* Navbar (without profile avatar on this page) */}
         <div className="relative z-20 pt-2 sm:pt-3 lg:pt-4">
           <PageNavbar textColor="white" zIndex={20} showProfile={false} />
+        </div>
+
+        {/* Desktop headline + location */}
+        <div className="relative z-20 hidden lg:block px-8 xl:px-12 pb-10 pt-4 max-w-5xl xl:max-w-6xl mx-auto">
+          <h1 className="text-center text-white text-4xl xl:text-[2.5rem] font-extrabold leading-tight">
+            Meals under ₹250
+            <span className="block mt-2 text-xl xl:text-2xl font-bold text-white/95">
+              Budget-friendly dishes from restaurants near you
+            </span>
+          </h1>
+          <div className="mt-8 flex justify-center">
+            <button
+              type="button"
+              onClick={() => openLocationSelector()}
+              className="flex items-center gap-3 rounded-2xl bg-white/95 shadow-lg px-5 py-3 max-w-md w-full hover:bg-white transition-colors"
+            >
+              <MapPin className="h-5 w-5 text-[#2B9C64] shrink-0" strokeWidth={2.5} />
+              <div className="min-w-0 flex-1 text-left">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Delivering to</span>
+                <p className="font-bold text-gray-900 truncate">
+                  {geoLoading ? "Locating…" : desktopLocMain || "Set delivery location"}
+                </p>
+                {desktopLocSub ? (
+                  <p className="text-xs text-gray-500 truncate">{desktopLocSub}</p>
+                ) : null}
+              </div>
+              <ChevronDown className="h-5 w-5 text-gray-400 shrink-0" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -565,7 +608,7 @@ export default function Under250() {
           </section>
 
           <section className="py-2 sm:py-2 md:py-2.5 border-t dark:border-gray-800/50">
-            <div className="flex items-center gap-2 md:gap-3">
+            <div className="flex items-center gap-2 md:gap-3 lg:justify-center">
               <Button
                 variant="outline"
                 onClick={() => setShowSortPopup(true)}
@@ -607,8 +650,8 @@ export default function Under250() {
             </div>
           </div>
         ) : (
-          <section className="pt-3 sm:pt-4 md:pt-5 lg:pt-6">
-            <div className="space-y-0 bg-white dark:bg-[#1a1a1a] rounded-none sm:rounded-2xl overflow-hidden sm:border sm:border-gray-100 sm:dark:border-gray-800">
+          <section className="pt-3 sm:pt-4 md:pt-5 lg:pt-6 lg:max-w-7xl lg:mx-auto">
+            <div className="space-y-0 bg-white dark:bg-[#1a1a1a] rounded-none sm:rounded-2xl overflow-hidden sm:border sm:border-gray-100 sm:dark:border-gray-800 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-5 lg:bg-transparent lg:border-0 lg:rounded-none lg:overflow-visible dark:lg:bg-transparent">
               {paginatedDishes.map((item, itemIndex) => {
                 const quantity = quantities[item.id] || 0
                 const isBookmarked = bookmarkedItems.has(item.id)
@@ -621,10 +664,10 @@ export default function Under250() {
                 return (
                   <div
                     key={item.id}
-                    className="flex gap-4 p-4 border-b border-gray-100 dark:border-gray-800 last:border-none relative cursor-pointer"
+                    className="flex gap-4 p-4 border-b border-gray-100 dark:border-gray-800 last:border-none relative cursor-pointer lg:flex-col-reverse lg:gap-0 lg:p-0 lg:border lg:border-gray-200 lg:dark:border-gray-800 lg:rounded-2xl lg:shadow-sm lg:hover:shadow-md lg:bg-white lg:dark:bg-[#1a1a1a] lg:overflow-hidden lg:last:border"
                     onClick={() => handleItemClick(item, { name: item.restaurantName || "Under 250" })}
                   >
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 lg:p-4 lg:pt-3">
                       <div className="flex items-center gap-2 mb-1">
                         {isVeg ? (
                           <div className="w-4 h-4 border-2 border-green-600 flex items-center justify-center rounded-sm flex-shrink-0">
@@ -706,12 +749,12 @@ export default function Under250() {
                       </div>
                     </div>
 
-                    <div className="relative w-32 h-32 flex-shrink-0">
+                    <div className="relative w-32 h-32 flex-shrink-0 lg:w-full lg:h-48 lg:rounded-t-2xl lg:rounded-b-none overflow-hidden">
                       {item.image ? (
                         <OptimizedImage
                           src={item.image}
                           alt={item.name}
-                          className="w-full h-full rounded-2xl shadow-sm"
+                          className="w-full h-full rounded-2xl shadow-sm lg:rounded-none lg:rounded-t-2xl"
                           objectFit="cover"
                           sizes="128px"
                           placeholder="blur"
@@ -719,7 +762,7 @@ export default function Under250() {
                           observerRootMargin="200px"
                         />
                       ) : (
-                        <div className="w-full h-full bg-gray-200 dark:bg-gray-700 rounded-2xl flex items-center justify-center shadow-sm">
+                        <div className="w-full h-full bg-gray-200 dark:bg-gray-700 rounded-2xl lg:rounded-none lg:rounded-t-2xl flex items-center justify-center shadow-sm">
                           <span className="text-xs text-gray-400">No image</span>
                         </div>
                       )}

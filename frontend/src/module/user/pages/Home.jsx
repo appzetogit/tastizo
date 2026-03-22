@@ -216,6 +216,16 @@ export default function Home() {
   const [isSwitchingOffVegMode, setIsSwitchingOffVegMode] = useState(false)
   const [popupPosition, setPopupPosition] = useState({ top: 0, right: 0 })
   const vegModeToggleRef = useRef(null)
+  /** Desktop hero veg switch lives outside the mobile-only block; needs its own ref for popup anchor */
+  const vegModeDesktopToggleRef = useRef(null)
+
+  const getVegModeToggleRect = () => {
+    const el = vegModeDesktopToggleRef.current || vegModeToggleRef.current
+    if (!el) return null
+    const rect = el.getBoundingClientRect()
+    if (rect.width < 2 || rect.height < 2) return null
+    return rect
+  }
   /** False after unmount so we skip setState, but API results still write to session cache */
   const homeMountRef = useRef(true)
   useEffect(() => {
@@ -227,6 +237,15 @@ export default function Home() {
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0)
   const [heroBannerImages, setHeroBannerImages] = useState([])
   const [heroBannersData, setHeroBannersData] = useState([]) // Store full banner data with linked restaurants
+  /** Large screens: only show uploaded desktop assets, never mobile (phone) banner art */
+  const showDesktopHeroCarousel = useMemo(
+    () =>
+      heroBannerImages.length > 0 &&
+      heroBannersData.some(
+        (b) => b && typeof b === "object" && Boolean(b.desktopImageUrl),
+      ),
+    [heroBannerImages.length, heroBannersData],
+  )
   const [loadingBanners, setLoadingBanners] = useState(true)
   const [landingCategories, setLandingCategories] = useState([])
   const [landingExploreMore, setLandingExploreMore] = useState([])
@@ -263,13 +282,14 @@ export default function Home() {
 
     if (newValue && !prevVegMode) {
       // Veg mode was just turned ON
-      // Calculate popup position relative to toggle
-      if (vegModeToggleRef.current) {
-        const rect = vegModeToggleRef.current.getBoundingClientRect()
+      const rect = getVegModeToggleRect()
+      if (rect) {
         setPopupPosition({
           top: rect.bottom + 10,
           right: window.innerWidth - rect.right
         })
+      } else {
+        setPopupPosition({ top: 120, right: 24 })
       }
       setShowVegModePopup(true)
       // Don't update context yet - wait for user to apply or cancel
@@ -290,8 +310,8 @@ export default function Home() {
     if (!showVegModePopup) return
 
     const updatePosition = () => {
-      if (vegModeToggleRef.current) {
-        const rect = vegModeToggleRef.current.getBoundingClientRect()
+      const rect = getVegModeToggleRect()
+      if (rect) {
         setPopupPosition({
           top: rect.bottom + 10,
           right: window.innerWidth - rect.right
@@ -311,6 +331,8 @@ export default function Home() {
   // Hero + categories + landing in parallel. Cache is written even if this effect cleaned up
   // (Strict Mode / fast navigate) so revisiting Home does not repeat the same API calls.
   useEffect(() => {
+    let cancelled = false
+
     const disc = getHomeDiscoveryCache()
     const sharedCats = sessionRouteGet(SESSION_KEYS.categoriesPublic)
 
@@ -329,10 +351,33 @@ export default function Home() {
       setLoadingBanners(false)
       setLoadingRealCategories(false)
       setLoadingLandingConfig(false)
-      return
+      // Hero is still refetched: admin may add desktop images after first visit; cache would hide them.
+      ;(async () => {
+        try {
+          const response = await api.get("/hero-banners/public")
+          if (cancelled || !homeMountRef.current) return
+          if (response.data?.success && response.data.data?.banners) {
+            const banners = response.data.data.banners
+            const heroBannerImagesNext = banners
+              .map((b) => (typeof b === "string" ? b : b.imageUrl))
+              .filter(Boolean)
+            patchHomeDiscoveryCache({
+              heroLoaded: true,
+              heroBannersData: banners,
+              heroBannerImages: heroBannerImagesNext,
+            })
+            setHeroBannersData(banners)
+            setHeroBannerImages(heroBannerImagesNext)
+          }
+        } catch (e) {
+          console.error("Error refreshing hero banners:", e)
+        }
+      })()
+      return () => {
+        cancelled = true
+      }
     }
 
-    let cancelled = false
     setLoadingBanners(true)
     setLoadingRealCategories(true)
     setLoadingLandingConfig(true)
@@ -1324,7 +1369,7 @@ export default function Home() {
 
       {/* Unified Navbar & Hero Section - rounded bottom on mobile for green area */}
       <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[min(58vh,640px)] pt-[max(0.75rem,env(safe-area-inset-top,0px))] sm:pt-5 md:pt-0 rounded-b-2xl md:rounded-b-none lg:rounded-b-none">
-        {/* Hero Banner Carousel Background — hidden on large screens (desktop uses brand hero below) */}
+        {/* Mobile/tablet: phone banners. Desktop: separate block — desktop uploads only, never mobile art */}
         {heroBannerImages.length > 0 ? (
           <div
             className="absolute top-0 left-0 right-0 bottom-0 z-0 cursor-grab active:cursor-grabbing overflow-hidden lg:hidden"
@@ -1392,19 +1437,101 @@ export default function Home() {
           <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-white lg:hidden" />
         )}
 
-        {/* Desktop only: Swiggy-style full-width brand hero (Tastizo green, not orange) */}
-        <div
-          className="pointer-events-none hidden lg:block absolute inset-0 z-0 bg-gradient-to-br from-[#2B9C64] via-[#259052] to-[#1a5c38]"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none hidden lg:block absolute -right-32 top-16 h-[420px] w-[420px] rounded-full bg-white/[0.07] blur-3xl"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none hidden lg:block absolute -left-20 bottom-0 h-[280px] w-[280px] rounded-full bg-white/[0.06] blur-2xl"
-          aria-hidden
-        />
+        {showDesktopHeroCarousel && (
+          <div
+            className="absolute top-0 left-0 right-0 bottom-0 z-0 cursor-grab active:cursor-grabbing overflow-hidden hidden lg:block"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+            <motion.div
+              className="flex h-full transform-gpu"
+              animate={{
+                x: `-${currentBannerIndex * 100}vw`,
+              }}
+              transition={
+                prefersReducedMotion
+                  ? { type: "tween", duration: 0.2, ease: "linear" }
+                  : {
+                      type: "tween",
+                      duration: 1.05,
+                      ease: [0.16, 1, 0.3, 1],
+                    }
+              }
+              style={{
+                width: `${heroBannerImages.length * 100}vw`,
+                willChange: "transform",
+              }}
+            >
+              {heroBannerImages.map((_, index) => {
+                const bannerData = heroBannersData[index]
+                const desktopSrc =
+                  bannerData && typeof bannerData === "object"
+                    ? bannerData.desktopImageUrl
+                    : null
+                const linkedRestaurants = bannerData?.linkedRestaurants || []
+                const hasLinkedRestaurants = linkedRestaurants.length > 0
+
+                return (
+                  <div
+                    key={`desktop-${index}`}
+                    className="h-full flex-shrink-0 lg:px-6"
+                    style={{ width: "100vw", cursor: hasLinkedRestaurants ? "pointer" : "default" }}
+                    onClick={() => {
+                      if (hasLinkedRestaurants) {
+                        const firstRestaurant = linkedRestaurants[0]
+                        const restaurantSlug =
+                          firstRestaurant.slug ||
+                          firstRestaurant.restaurantId ||
+                          firstRestaurant._id
+                        navigate(`/restaurants/${restaurantSlug}`)
+                      }
+                    }}
+                  >
+                    {desktopSrc ? (
+                      <OptimizedImage
+                        src={desktopSrc}
+                        alt={`Hero Banner ${index + 1} (desktop)`}
+                        className="w-full h-full lg:rounded-3xl shadow-md"
+                        priority={index === 0}
+                        sizes="100vw"
+                        objectFit="cover"
+                        placeholder="blur"
+                      />
+                    ) : (
+                      <div
+                        className="w-full h-full lg:rounded-3xl bg-gradient-to-br from-[#2B9C64] via-[#259052] to-[#1a5c38]"
+                        aria-hidden
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </motion.div>
+          </div>
+        )}
+
+        {/* Desktop: green brand hero when no desktop-wide banners (never use phone/mobile art here) */}
+        {!showDesktopHeroCarousel && (
+          <>
+            <div
+              className="pointer-events-none hidden lg:block absolute inset-0 z-0 bg-gradient-to-br from-[#2B9C64] via-[#259052] to-[#1a5c38]"
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none hidden lg:block absolute -right-32 top-16 h-[420px] w-[420px] rounded-full bg-white/[0.07] blur-3xl"
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none hidden lg:block absolute -left-20 bottom-0 h-[280px] w-[280px] rounded-full bg-white/[0.06] blur-2xl"
+              aria-hidden
+            />
+          </>
+        )}
 
         {/* Navbar */}
         <motion.div
@@ -1585,7 +1712,10 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="flex flex-col items-center justify-center gap-1 flex-shrink-0 w-[88px]">
+              <div
+                ref={vegModeDesktopToggleRef}
+                className="flex flex-col items-center justify-center gap-1 flex-shrink-0 w-[88px] relative"
+              >
                 <span className="text-white text-xs font-black leading-none">VEG</span>
                 <span className="text-white text-[10px] font-black leading-none">MODE</span>
                 <Switch
@@ -2545,43 +2675,42 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* Veg Mode Popup */}
-      <AnimatePresence>
-        {showVegModePopup && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              onClick={() => {
-                setShowVegModePopup(false)
-                // Revert veg mode to OFF if popup is closed without applying
-                setVegModeContext(false)
-                setPrevVegMode(false)
-              }}
-              className="fixed inset-0 bg-black/30 z-[9998] backdrop-blur-sm"
-            />
+      {/* Veg Mode Popup — portal to body so fixed + z-index work on desktop (escapes overflow/transform ancestors) */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {showVegModePopup && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  onClick={() => {
+                    setShowVegModePopup(false)
+                    setVegModeContext(false)
+                    setPrevVegMode(false)
+                  }}
+                  className="fixed inset-0 bg-black/30 z-[10050] backdrop-blur-sm"
+                />
 
-            {/* Popup */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: -10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: -10 }}
-              transition={{
-                type: "spring",
-                damping: 25,
-                stiffness: 300,
-                mass: 0.8
-              }}
-              className="fixed z-[9999] bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl p-4 w-[calc(100%-2rem)] max-w-xs"
-              style={{
-                top: `${popupPosition.top}px`,
-                right: `${popupPosition.right}px`,
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                  transition={{
+                    type: "spring",
+                    damping: 25,
+                    stiffness: 300,
+                    mass: 0.8
+                  }}
+                  className="fixed z-[10051] bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl p-4 w-[calc(100%-2rem)] max-w-xs"
+                  style={{
+                    top: `${popupPosition.top}px`,
+                    right: `${popupPosition.right}px`,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
               {/* Pointer Triangle */}
               <div
                 className="absolute -top-2 right-5 w-3 h-3 bg-white dark:bg-[#1a1a1a] transform rotate-45"
@@ -2672,9 +2801,11 @@ export default function Home() {
                 Apply
               </button>
             </motion.div>
-          </>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
 
       {/* Switch Off Veg Mode Popup */}
       <AnimatePresence>
