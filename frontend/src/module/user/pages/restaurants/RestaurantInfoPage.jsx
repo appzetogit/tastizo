@@ -205,7 +205,7 @@ export default function RestaurantInfoPage() {
     <AnimatedPage>
       <div className="min-h-screen bg-background pb-8">
         {/* Header - back, bookmark, share all working */}
-        <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-background border-b border-border">
+        <div className="sticky top-0 z-10 flex items-center justify-between px-4 pb-3 pt-[max(0.75rem,calc(0.75rem+env(safe-area-inset-top,0px)))] bg-background border-b border-border">
           <Button
             variant="ghost"
             size="icon"

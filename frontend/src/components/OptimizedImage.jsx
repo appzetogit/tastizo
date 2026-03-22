@@ -1,37 +1,43 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
 
-// Build optimized URL - Cloudinary uses path transforms, others use query params
-const buildOptimizedUrl = (imageSrc, width, useWebP = false) => {
-  if (imageSrc.includes('res.cloudinary.com')) {
-    const transform = `w_${width},q_75${useWebP ? ',f_webp' : ''}`
-    // Insert transform after /upload/ and before version (v123) or path
-    return imageSrc.replace(/\/upload\/(?:[^/]*\/)?(v\d+\/)/, `/upload/${transform}/$1`)
-  }
-  const sep = imageSrc.includes('?') ? '&' : '?'
-  return `${imageSrc}${sep}w=${width}&q=75${useWebP ? '&format=webp' : ''}`
+const isCloudinary = (imageSrc) =>
+  typeof imageSrc === 'string' && imageSrc.includes('res.cloudinary.com')
+
+/** Signed or tokenized URLs break if we append resize/query params */
+const mustUseOriginalUrl = (imageSrc) => {
+  if (!imageSrc || typeof imageSrc !== 'string') return true
+  return /[?&](X-Amz-|Signature|sig=|token=|Policy=)/i.test(imageSrc) || /AWSAccessKeyId/i.test(imageSrc)
 }
 
-/**
- * OptimizedImage Component
- * 
- * Features:
- * - Lazy loading with Intersection Observer
- * - Responsive srcset for different screen sizes
- * - WebP format support with fallback
- * - Blur placeholder (LQIP) for smooth loading
- * - Preloading for critical images
- * - Proper decoding and fetchpriority
- * - Error handling with fallback
- */
+// Cloudinary path transforms only (safe). Do not append ?w= to arbitrary hosts — breaks S3, APIs, etc.
+const buildOptimizedUrl = (imageSrc, width, useWebP = false) => {
+  if (!isCloudinary(imageSrc)) return imageSrc
+  const transform = `w_${width},q_75${useWebP ? ',f_webp' : ''}`
+  const replaced = imageSrc.replace(
+    /\/upload\/(?:[^/]*\/)?(v\d+\/)/,
+    `/upload/${transform}/$1`
+  )
+  return replaced !== imageSrc ? replaced : imageSrc
+}
+
+const supportsResponsiveVariants = (imageSrc) => {
+  if (!imageSrc || typeof imageSrc !== 'string' || imageSrc === '') return false
+  if (imageSrc.startsWith('data:') || imageSrc.startsWith('/')) return false
+  if (!/^https?:\/\//.test(imageSrc)) return false
+  if (mustUseOriginalUrl(imageSrc)) return false
+  return isCloudinary(imageSrc)
+}
+
 const OptimizedImage = React.memo(({
   src,
   alt,
   className = '',
-  priority = false, // For above-the-fold images
+  priority = false,
   sizes = '100vw',
   objectFit = 'cover',
   placeholder = 'blur',
+  observerRootMargin = '120px',
   blurDataURL,
   onLoad,
   onError,
@@ -39,34 +45,35 @@ const OptimizedImage = React.memo(({
 }) => {
   const [isLoaded, setIsLoaded] = useState(false)
   const [hasError, setHasError] = useState(false)
-  const [isInView, setIsInView] = useState(priority) // Start visible if priority
+  const [plainFallback, setPlainFallback] = useState(false)
+  const [isInView, setIsInView] = useState(priority)
   const imgRef = useRef(null)
   const observerRef = useRef(null)
 
-  // Check if image URL supports optimization (external URLs)
-  const supportsOptimization = (imageSrc) => {
-    if (!imageSrc || typeof imageSrc !== 'string' || imageSrc === '') return false
-    if (imageSrc.startsWith('data:') || imageSrc.startsWith('/')) return false
-    return /^https?:\/\//.test(imageSrc)
-  }
+  useEffect(() => {
+    setPlainFallback(false)
+    setHasError(false)
+    setIsLoaded(false)
+    if (priority) setIsInView(true)
+  }, [src, priority])
 
-  // Sizes array: include smaller widths for thumbnails (64-96px display = 128-200w)
   const sizesArr = useMemo(() => {
     const isSmall = /6[4-9]px|7[0-9]px|8[0-9]px|9[0-6]px/.test(sizes)
     return isSmall ? [128, 200, 400, 600, 800] : [200, 400, 600, 800, 1200, 1600]
   }, [sizes])
 
+  const useVariants = supportsResponsiveVariants(src) && !plainFallback
+
   const srcSet = useMemo(() => {
-    if (!supportsOptimization(src)) return undefined
-    return sizesArr.map(size => `${buildOptimizedUrl(src, size, false)} ${size}w`).join(', ')
-  }, [src, sizesArr])
+    if (!useVariants) return undefined
+    return sizesArr.map((size) => `${buildOptimizedUrl(src, size, false)} ${size}w`).join(', ')
+  }, [src, sizesArr, useVariants])
 
   const webPSrcSet = useMemo(() => {
-    if (!supportsOptimization(src)) return undefined
-    return sizesArr.map(size => `${buildOptimizedUrl(src, size, true)} ${size}w`).join(', ')
-  }, [src, sizesArr])
+    if (!useVariants) return undefined
+    return sizesArr.map((size) => `${buildOptimizedUrl(src, size, true)} ${size}w`).join(', ')
+  }, [src, sizesArr, useVariants])
 
-  // Intersection Observer for lazy loading
   useEffect(() => {
     if (priority || isInView) return
 
@@ -85,8 +92,8 @@ const OptimizedImage = React.memo(({
         })
       },
       {
-        rootMargin: '50px', // Start loading 50px before entering viewport
-        threshold: 0.01
+        rootMargin: observerRootMargin,
+        threshold: 0,
       }
     )
 
@@ -97,37 +104,48 @@ const OptimizedImage = React.memo(({
         observerRef.current.unobserve(node)
       }
     }
-  }, [priority, isInView])
+  }, [priority, isInView, observerRootMargin])
 
-  // Preload critical images with optimized URL
   useEffect(() => {
-    if (priority && src && !src.startsWith('data:') && supportsOptimization(src)) {
-      const preloadSrc = buildOptimizedUrl(src, 400, true)
-      const link = document.createElement('link')
-      link.rel = 'preload'
-      link.as = 'image'
-      link.href = preloadSrc
-      link.fetchPriority = 'high'
-      link.crossOrigin = 'anonymous'
-      document.head.appendChild(link)
-      return () => document.head.removeChild(link)
+    if (!priority || !src || src.startsWith('data:')) return
+    if (!/^https?:\/\//.test(src)) return
+    const href = isCloudinary(src) ? buildOptimizedUrl(src, 400, true) : src
+    const link = document.createElement('link')
+    link.rel = 'preload'
+    link.as = 'image'
+    link.href = href
+    link.fetchPriority = 'high'
+    document.head.appendChild(link)
+    return () => {
+      link.remove()
     }
   }, [priority, src])
 
-  const handleLoad = (e) => {
-    setIsLoaded(true)
-    if (onLoad) onLoad(e)
-  }
+  const handleLoad = useCallback(
+    (e) => {
+      setIsLoaded(true)
+      onLoad?.(e)
+    },
+    [onLoad]
+  )
 
-  const handleError = (e) => {
-    setHasError(true)
-    if (onError) onError(e)
-  }
+  const handleError = useCallback(
+    (e) => {
+      if (!plainFallback && useVariants) {
+        setPlainFallback(true)
+        setIsLoaded(false)
+        return
+      }
+      setHasError(true)
+      onError?.(e)
+    },
+    [plainFallback, useVariants, onError]
+  )
 
-  // Default blur placeholder (tiny gray square)
-  const defaultBlurDataURL = blurDataURL || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2U1ZTdlYiIvPjwvc3ZnPg=='
+  const defaultBlurDataURL =
+    blurDataURL ||
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2U1ZTdlYiIvPjwvc3ZnPg=='
 
-  // Don't render if src is empty or null
   if (!src || src === '') {
     return (
       <div className={`relative overflow-hidden ${className}`}>
@@ -138,11 +156,14 @@ const OptimizedImage = React.memo(({
     )
   }
 
-  const imageSrc = hasError ? 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23e5e7eb" width="400" height="300"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle"%3EImage not found%3C/text%3E%3C/svg%3E' : src
+  const imageSrc = hasError
+    ? 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23e5e7eb" width="400" height="300"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle"%3EImage not found%3C/text%3E%3C/svg%3E'
+    : src
+
+  const imgClass = `w-full h-full ${objectFit === 'cover' ? 'object-cover' : objectFit === 'contain' ? 'object-contain' : ''} ${priority || isLoaded ? 'opacity-100' : 'opacity-0'} ${!priority && 'transition-opacity duration-300'}`
 
   return (
     <div className={`relative overflow-hidden ${className}`} ref={imgRef}>
-      {/* Blur Placeholder */}
       {placeholder === 'blur' && !isLoaded && (
         <motion.div
           className="absolute inset-0"
@@ -159,44 +180,45 @@ const OptimizedImage = React.memo(({
         />
       )}
 
-      {/* Loading Skeleton */}
       {!isLoaded && !hasError && (
         <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 dark:from-gray-700 dark:via-gray-600 dark:to-gray-700 animate-pulse" />
       )}
 
-      {/* Actual Image */}
-      {isInView && (
-        <picture className="absolute inset-0 w-full h-full">
-          {/* WebP source for modern browsers */}
-          {webPSrcSet && (
-            <source
-              srcSet={webPSrcSet}
+      {isInView &&
+        (webPSrcSet ? (
+          <picture className="absolute inset-0 w-full h-full" key={plainFallback ? 'p1' : 'p0'}>
+            <source srcSet={webPSrcSet} sizes={sizes} type="image/webp" />
+            <motion.img
+              src={imageSrc}
+              srcSet={srcSet}
               sizes={sizes}
-              type="image/webp"
+              alt={alt}
+              className={imgClass}
+              loading="eager"
+              decoding="async"
+              fetchPriority={priority ? 'high' : 'auto'}
+              onLoad={handleLoad}
+              onError={handleError}
+              {...props}
             />
-          )}
-
-          {/* Fallback to original format */}
+          </picture>
+        ) : (
           <motion.img
+            key={plainFallback ? 'plain' : 'raw'}
             src={imageSrc}
-            srcSet={srcSet}
-            sizes={supportsOptimization(imageSrc) ? sizes : undefined}
             alt={alt}
-            className={`w-full h-full ${objectFit === 'cover' ? 'object-cover' : objectFit === 'contain' ? 'object-contain' : ''} ${priority || isLoaded ? 'opacity-100' : 'opacity-0'} ${!priority && 'transition-opacity duration-300'}`}
-            loading={priority ? 'eager' : 'lazy'}
+            className={`absolute inset-0 ${imgClass}`}
+            loading="eager"
             decoding="async"
             fetchPriority={priority ? 'high' : 'auto'}
-            crossOrigin="anonymous"
             onLoad={handleLoad}
             onError={handleError}
             {...props}
           />
-        </picture>
-      )}
+        ))}
 
-      {/* Error State */}
       {hasError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800">
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800 z-[1]">
           <span className="text-xs text-gray-400 dark:text-gray-600">Image unavailable</span>
         </div>
       )}

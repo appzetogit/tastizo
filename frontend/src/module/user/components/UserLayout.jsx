@@ -1,5 +1,8 @@
 import { Outlet, useLocation } from "react-router-dom"
-import { useEffect, useState, createContext, useContext, lazy, Suspense } from "react"
+import { useEffect, useState, useRef, createContext, useContext, lazy, Suspense } from "react"
+import Lenis from "lenis"
+import "lenis/dist/lenis.css"
+import { clearAllUserNavSessionCache } from "@/lib/cache/userNavSessionCache"
 import { ProfileProvider } from "../context/ProfileContext"
 import LocationPrompt from "./LocationPrompt"
 import { CartProvider } from "../context/CartContext"
@@ -112,10 +115,41 @@ function LocationSelectorProvider({ children }) {
 
 export default function UserLayout() {
   const location = useLocation()
+  const lenisRef = useRef(null)
 
   useEffect(() => {
-    // Reset scroll to top whenever location changes (pathname, search, or hash)
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return
+    }
+    const isTouchPrimary =
+      window.matchMedia("(hover: none) and (pointer: coarse)").matches
+    if (isTouchPrimary) {
+      return
+    }
+
+    const lenis = new Lenis({
+      autoRaf: true,
+      lerp: 0.2,
+      smoothWheel: true,
+      syncTouch: false,
+      touchMultiplier: 1,
+      wheelMultiplier: 1,
+      anchors: true,
+      overscroll: true,
+    })
+    lenisRef.current = lenis
+    return () => {
+      lenis.destroy()
+      lenisRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (lenisRef.current) {
+      lenisRef.current.scrollTo(0, { immediate: true })
+    } else {
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" })
+    }
   }, [location.pathname, location.search, location.hash])
 
   // Register FCM token when user is logged in: on mount and whenever auth changes to logged-in
@@ -138,6 +172,12 @@ export default function UserLayout() {
     }
   }, [])
 
+  useEffect(() => {
+    const onLogout = () => clearAllUserNavSessionCache()
+    window.addEventListener("userLogout", onLogout)
+    return () => window.removeEventListener("userLogout", onLogout)
+  }, [])
+
   // Note: Authentication checks and redirects are handled by ProtectedRoute components
   // UserLayout should not interfere with authentication redirects
 
@@ -158,6 +198,12 @@ export default function UserLayout() {
     location.pathname === "/auth/callback" ||
     location.pathname.startsWith("/auth/")
 
+  // Desktop: clear fixed DesktopNavbar (h-16 + small gap). No mobile top padding on <main> — it created a
+  // gray/white strip above full-bleed heroes; safe-area + spacing live on each hero / AnimatedPage instead.
+  const mainClassName = isAuthRoute
+    ? "min-h-screen"
+    : [showBottomNav && "md:pt-[4.5rem]"].filter(Boolean).join(" ")
+
   return (
     <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] transition-colors duration-200">
       <CartProvider>
@@ -168,7 +214,7 @@ export default function UserLayout() {
                 {/* <Navbar /> */}
                 {showBottomNav && <DesktopNavbar />}
                 <LocationPrompt />
-                <main className={isAuthRoute ? "min-h-screen" : showBottomNav ? "md:pt-16" : ""}>
+                <main className={mainClassName}>
                   <Outlet />
                 </main>
                 {showBottomNav && <BottomNavigation />}

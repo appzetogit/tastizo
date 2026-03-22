@@ -6,6 +6,7 @@ import { useLocation as useLocationHook } from "../hooks/useLocation"
 import { useCart } from "../context/CartContext"
 import { useLocationSelector } from "./UserLayout"
 import { FaLocationDot } from "react-icons/fa6"
+import { pickNavbarLocationLines } from "@/lib/userLocationDisplay"
 
 export default function DesktopNavbar() {
   const location = useLocation()
@@ -16,17 +17,7 @@ export default function DesktopNavbar() {
   const [isVisible, setIsVisible] = useState(true)
   const lastScrollY = useRef(0)
 
-  // Show area if available, otherwise show city
-  // Priority: area > city > "Select"
-  const areaName = userLocation?.area && userLocation?.area.trim() ? userLocation.area.trim() : null
-  const cityName = userLocation?.city || null
-  const stateName = userLocation?.state || null
-  // Main location name: Show area if available, otherwise show city, otherwise "Select"
-  const mainLocationName = areaName || cityName || "Select"
-  // Secondary location: Show only city when area is available (as per design image)
-  const secondaryLocation = areaName
-    ? (cityName || "")  // Show only city when area is available
-    : (cityName && stateName ? `${cityName}, ${stateName}` : cityName || stateName || "")
+  const { main: mainLocationName, sub: secondaryLocation } = pickNavbarLocationLines(userLocation)
 
   const handleLocationClick = () => {
     // Open location selector overlay

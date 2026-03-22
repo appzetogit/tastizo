@@ -983,14 +983,14 @@ export default function RestaurantDetails() {
         }`}
     >
       {loadingRestaurant ? (
-        <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-[#0a0a0a]">
+        <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-[#0a0a0a] pt-[env(safe-area-inset-top,0px)]">
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-8 w-8 text-green-600 animate-spin" />
             <span className="text-sm text-gray-600 dark:text-gray-400">Loading restaurant...</span>
           </div>
         </div>
       ) : (restaurantError && !restaurant) || !restaurant ? (
-        <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-[#0a0a0a] px-4">
+        <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-[#0a0a0a] px-4 pt-[env(safe-area-inset-top,0px)]">
           <div className="flex flex-col items-center gap-4 text-center">
             <AlertCircle className={`h-12 w-12 ${restaurantError?.includes('Backend') ? 'text-orange-500' : 'text-red-500'}`} />
             <div>
@@ -1008,7 +1008,7 @@ export default function RestaurantDetails() {
         <>
 
       {/* Header - Back, Search, Menu (like reference image) */}
-      <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-3 md:pt-4 lg:pt-5 pb-2 md:pb-3 bg-white dark:bg-[#1a1a1a]">
+      <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 max-md:pt-[max(1.25rem,calc(1.25rem+env(safe-area-inset-top,0px)))] md:pt-6 lg:pt-7 pb-2 md:pb-3 bg-white dark:bg-[#1a1a1a]">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           {/* Back Button */}
           <Button

@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from "react"
 import { locationAPI, userAPI } from "@/lib/api"
+import {
+  hasDetailedAddress,
+  isAcceptableGeocodeResult,
+  isUnpersistableLocation,
+} from "@/lib/userLocationDisplay"
 
 export function useLocation() {
   const IS_DEV = import.meta.env.MODE === "development"
@@ -11,15 +16,15 @@ export function useLocation() {
   const watchIdRef = useRef(null)
   const updateTimerRef = useRef(null)
   const prevLocationCoordsRef = useRef({ latitude: null, longitude: null })
+  const locationRef = useRef(null)
+  useEffect(() => {
+    locationRef.current = location
+  }, [location])
 
   // Broadcast location so other useLocation instances (e.g. top nav) update instantly
   const dispatchLocationUpdated = (locationData) => {
     if (!locationData || typeof window === "undefined") return
-    const isPlaceholder =
-      locationData?.city === "Current Location" ||
-      locationData?.formattedAddress === "Select location" ||
-      locationData?.address === "Select location"
-    if (isPlaceholder) return
+    if (isUnpersistableLocation(locationData)) return
     try {
       const payload = {
         latitude: locationData.latitude,
@@ -40,20 +45,13 @@ export function useLocation() {
   /* ===================== DB UPDATE (LIVE LOCATION TRACKING) ===================== */
   const updateLocationInDB = async (locationData) => {
     try {
-      // Check if location has placeholder values - don't save placeholders
-      const hasPlaceholder =
-        locationData?.city === "Current Location" ||
-        locationData?.address === "Select location" ||
-        locationData?.formattedAddress === "Select location" ||
-        (!locationData?.city && !locationData?.address && !locationData?.formattedAddress);
-
-      if (hasPlaceholder) {
-        console.log("âš ï¸ Skipping DB update - location contains placeholder values:", {
+      if (isUnpersistableLocation(locationData)) {
+        console.log("Skipping DB update - incomplete location payload:", {
           city: locationData?.city,
           address: locationData?.address,
-          formattedAddress: locationData?.formattedAddress
-        });
-        return;
+          formattedAddress: locationData?.formattedAddress,
+        })
+        return
       }
 
       // Check if user is authenticated before trying to update DB
@@ -142,66 +140,89 @@ export function useLocation() {
         throw new Error("Backend reverse geocode returned no results");
       }
 
-      const addrComp = result.address_components || {};
-      // Backend returns more precise components (colony/road/building/house_number) inside address_components.
-      // Prefer building/house+road/road/area to avoid generic "Indore City" style labels.
-      const city = addrComp.city || "";
-      const state = addrComp.state || "";
-      const area = addrComp.area || "";
-      const road = addrComp.road || "";
-      const houseNumber = addrComp.house_number || "";
-      const building = addrComp.building || "";
-      const postcode = addrComp.postcode || "";
+      const addrComp = result.address_components || {}
+      const city = (addrComp.city || "").trim()
+      const state = (addrComp.state || "").trim()
+      const areaCompound = (addrComp.area || "").trim()
+      const road = addrComp.road || ""
+      const houseNumber = addrComp.house_number || ""
+      const building = addrComp.building || ""
+      const postcode = addrComp.postcode || ""
 
-      // Extra locality-like fields to get colony/area/gali precision
-      const neighbourhood = addrComp.neighbourhood || "";
-      const suburb = addrComp.suburb || "";
-      const residential = addrComp.residential || "";
-      const quarter = addrComp.quarter || "";
-      const cityDistrict = addrComp.city_district || "";
+      const neighbourhood = addrComp.neighbourhood || ""
+      const suburb = addrComp.suburb || ""
+      const residential = addrComp.residential || ""
+      const quarter = addrComp.quarter || ""
+      const cityDistrict = addrComp.city_district || ""
 
-      const houseRoad = [houseNumber, road].filter(Boolean).join(" ").trim();
+      const cityLc = city.toLowerCase()
+      const isGenericCityLabel = (s) => {
+        const v = (s || "").trim().toLowerCase()
+        if (!v || !cityLc) return false
+        return v === cityLc || v === `${cityLc} city` || v === `${cityLc} district`
+      }
+
+      const granular =
+        [neighbourhood, suburb, quarter, residential, cityDistrict].find((x) => (x || "").trim()) || ""
+
+      const sublocalForArea =
+        granular || (!isGenericCityLabel(areaCompound) ? areaCompound : "")
+
+      const houseRoad = [houseNumber, road].filter(Boolean).join(" ").trim()
       const localityPrimary =
-        building || houseRoad || road || area || city || "Location Found";
+        building ||
+        houseRoad ||
+        road ||
+        sublocalForArea ||
+        (!isGenericCityLabel(areaCompound) ? areaCompound : "") ||
+        city ||
+        "Location Found"
 
-      // Pick a second locality label if available (helps show colony/gali level)
       const secondaryCandidate = [quarter, neighbourhood, suburb, residential, cityDistrict]
         .map((p) => (p || "").trim())
         .filter(Boolean)
         .find((p) => {
-          const c = (city || "").trim().toLowerCase();
           return (
-            p.toLowerCase() !== c &&
+            p.toLowerCase() !== cityLc &&
             p.toLowerCase() !== localityPrimary.toLowerCase()
-          );
-        });
+          )
+        })
 
       const formattedParts = [
         localityPrimary,
         secondaryCandidate,
         city,
         state,
-      ].filter((p) => p && String(p).trim().length > 0);
-      if (postcode) formattedParts.push(postcode);
+      ].filter((p) => p && String(p).trim().length > 0)
+      if (postcode) formattedParts.push(postcode)
 
-      const formattedAddressExact =
-        formattedParts.join(", ") ||
-        result.formatted_address ||
-        `${latitude}, ${longitude}`;
+      const apiFormatted = (result.formatted_address || "").trim().replace(/,\s*India\s*$/i, "")
+      const built = formattedParts.join(", ")
+      let formattedAddressExact = built
+      if (apiFormatted && apiFormatted.split(",").length >= 3) {
+        formattedAddressExact = apiFormatted
+      } else if (!formattedAddressExact) {
+        formattedAddressExact = apiFormatted || `${latitude}, ${longitude}`
+      }
 
-      let mainTitle = building || area || city || "Location Found";
-      let displayAddress = localityPrimary;
+      const displayAddress = localityPrimary
+      const mainTitle =
+        building ||
+        granular ||
+        (!isGenericCityLabel(areaCompound) ? areaCompound : "") ||
+        (localityPrimary && localityPrimary !== city ? localityPrimary : null) ||
+        null
 
       return {
-        city: city,
-        state: state,
-        area: area || city || "Location Found",
+        city,
+        state,
+        area: sublocalForArea,
         address: displayAddress,
         formattedAddress: formattedAddressExact,
         street: road,
-        streetNumber: "",
+        streetNumber: houseNumber || "",
         postalCode: postcode,
-        mainTitle: mainTitle !== "Location Found" ? mainTitle : null,
+        mainTitle: mainTitle || null,
         pointOfInterest: building || null,
         premise: null,
         placeId: null,
@@ -802,15 +823,8 @@ export function useLocation() {
                 formattedAddress: completeFormattedAddress || addr.formattedAddress || displayAddress // Complete detailed address
               }
 
-              // Check if location has placeholder values - don't save placeholders
-              const hasPlaceholder =
-                finalLoc.city === "Current Location" ||
-                finalLoc.address === "Select location" ||
-                finalLoc.formattedAddress === "Select location" ||
-                (!finalLoc.city && !finalLoc.address && !finalLoc.formattedAddress && !finalLoc.area);
-
-              if (hasPlaceholder) {
-                console.warn("âš ï¸ Skipping save - location contains placeholder values:", finalLoc)
+              if (isUnpersistableLocation(finalLoc)) {
+                console.warn("Skipping save - incomplete location:", finalLoc)
                 // Don't save placeholder values to localStorage or DB
                 // Just set in state for display but don't persist
                 const coordOnlyLoc = {
@@ -952,26 +966,68 @@ export function useLocation() {
                 if (showLoading) setLoading(false)
                 resolve(fallback)
               } else {
-                // No fallback available - set a default location so UI doesn't hang
-                console.warn("âš ï¸ No fallback location available, setting default")
-                const defaultLocation = {
-                  city: "Select location",
-                  address: "Select location",
-                  formattedAddress: "Select location"
+                // Last resort: previous session from localStorage (keep navbar stable)
+                let storedFallback = null
+                try {
+                  const s = localStorage.getItem("userLocation")
+                  if (s) storedFallback = JSON.parse(s)
+                } catch {
+                  /* ignore */
                 }
-                setLocation(defaultLocation)
-                setError(err.code === 3 ? "Location request timed out. Please try again." : err.message)
-                setPermissionGranted(false)
-                if (showLoading) setLoading(false)
-                resolve(defaultLocation) // Always resolve with something
+                const storedOk =
+                  storedFallback &&
+                  (storedFallback.latitude != null ||
+                    (storedFallback.city &&
+                      storedFallback.city !== "Select location" &&
+                      storedFallback.city !== "Current Location"))
+                if (storedOk) {
+                  console.log("âœ… Using previous stored location after GPS failure")
+                  setLocation(storedFallback)
+                  if (err.code !== 3) setError(err.message)
+                  setPermissionGranted(true)
+                  if (showLoading) setLoading(false)
+                  resolve(storedFallback)
+                } else {
+                  console.warn("âš ï¸ No fallback location available, setting default")
+                  const defaultLocation = {
+                    city: "Select location",
+                    address: "Select location",
+                    formattedAddress: "Select location"
+                  }
+                  setLocation(defaultLocation)
+                  setError(err.code === 3 ? "Location request timed out. Please try again." : err.message)
+                  setPermissionGranted(false)
+                  if (showLoading) setLoading(false)
+                  resolve(defaultLocation)
+                }
               }
             } catch (fallbackErr) {
               console.warn("âš ï¸ Fallback retrieval failed:", fallbackErr)
-              setLocation(null)
+              let prev = null
+              try {
+                const s = localStorage.getItem("userLocation")
+                if (s) prev = JSON.parse(s)
+              } catch {
+                /* ignore */
+              }
+              if (
+                prev &&
+                (prev.latitude != null ||
+                  (prev.city &&
+                    prev.city !== "Select location" &&
+                    prev.city !== "Current Location"))
+              ) {
+                setLocation(prev)
+                setPermissionGranted(true)
+                if (showLoading) setLoading(false)
+                resolve(prev)
+              } else {
+                setLocation(null)
+                setPermissionGranted(false)
+                if (showLoading) setLoading(false)
+                resolve(null)
+              }
               setError(err.code === 3 ? "Location request timed out. Please try again." : err.message)
-              setPermissionGranted(false)
-              if (showLoading) setLoading(false)
-              resolve(null)
             }
           },
           options
@@ -1135,7 +1191,8 @@ export function useLocation() {
             }
 
             // STABILITY: Only update if location changed significantly (>10m) OR address improved
-            const currentLoc = location
+            // Use ref — watch callback must not close over stale `location` from an old render.
+            const currentLoc = locationRef.current
             if (currentLoc && currentLoc.latitude && currentLoc.longitude) {
               // Calculate distance in meters (Haversine formula simplified for small distances)
               const latDiff = latitude - currentLoc.latitude
@@ -1163,16 +1220,9 @@ export function useLocation() {
               loc.address = loc.area || loc.city || "Select location";
             }
 
-            // Check if location has placeholder values - don't save placeholders
-            const hasPlaceholder =
-              loc.city === "Current Location" ||
-              loc.address === "Select location" ||
-              loc.formattedAddress === "Select location" ||
-              (!loc.city && !loc.address && !loc.formattedAddress && !loc.area);
-
-            if (hasPlaceholder) {
-              console.warn("âš ï¸ Skipping live location update - contains placeholder values:", loc)
-              return // Don't update location or save to DB
+            if (isUnpersistableLocation(loc)) {
+              console.warn("Skipping live location update - incomplete payload:", loc)
+              return
             }
 
             // Check if coordinates have changed significantly (threshold: ~10 meters)
@@ -1193,9 +1243,9 @@ export function useLocation() {
               setError(null)
               dispatchLocationUpdated(loc)
             } else {
-              // Coordinates haven't changed significantly, skip state update to prevent re-renders
-              // Still update localStorage silently for persistence
-              localStorage.setItem("userLocation", JSON.stringify(loc))
+              // Same coordinates: do not overwrite localStorage — a new geocode at the same point
+              // often returns a shorter label and replaced the user's street-level line from GPS.
+              return
             }
 
             // Debounce DB updates - only update every 5 seconds
@@ -1309,23 +1359,20 @@ export function useLocation() {
         // Show cached location immediately (even if incomplete) - better UX
         // We'll refresh in background but user sees something right away
         // BUT: Skip if it's just placeholder values ("Select location" or "Current Location")
-        if (parsedLocation &&
-          (parsedLocation.latitude || parsedLocation.city) &&
-          parsedLocation.formattedAddress !== "Select location" &&
-          parsedLocation.city !== "Current Location") {
+        const latOk = parsedLocation?.latitude != null && parsedLocation?.longitude != null
+        const canHydrateFromCache =
+          latOk &&
+          !isUnpersistableLocation(parsedLocation) &&
+          (parsedLocation.formattedAddress || "").trim() !== "Select location"
+
+        if (canHydrateFromCache) {
           setLocation(parsedLocation)
           setPermissionGranted(true)
           setLoading(false) // Set loading to false immediately
           hasInitialLocation = true
           console.log("ðŸ“‚ Loaded stored location instantly:", parsedLocation)
 
-          // Check if we should refresh in background for better address
-          const hasCompleteAddress = parsedLocation?.formattedAddress &&
-            parsedLocation.formattedAddress !== "Select location" &&
-            !parsedLocation.formattedAddress.match(/^-?\d+\.\d+,\s*-?\d+\.\d+$/) &&
-            parsedLocation.formattedAddress.split(',').length >= 4
-
-          if (!hasCompleteAddress) {
+          if (!hasDetailedAddress(parsedLocation)) {
             console.log("âš ï¸ Cached location incomplete, will refresh in background")
             shouldForceRefresh = true
           }
@@ -1350,13 +1397,7 @@ export function useLocation() {
             hasInitialLocation = true
             console.log("ðŸ“‚ Loaded location from DB:", dbLoc)
 
-            // Check if we should refresh for better address
-            const hasCompleteAddress = dbLoc?.formattedAddress &&
-              dbLoc.formattedAddress !== "Select location" &&
-              !dbLoc.formattedAddress.match(/^-?\d+\.\d+,\s*-?\d+\.\d+$/) &&
-              dbLoc.formattedAddress.split(',').length >= 4
-
-            if (!hasCompleteAddress) {
+            if (!hasDetailedAddress(dbLoc)) {
               shouldForceRefresh = true
             }
           } else {
@@ -1437,22 +1478,29 @@ export function useLocation() {
 
         console.log("ðŸš€ Permission granted! Fetching/Watching location...", shouldForceRefresh ? "(FORCE REFRESH)" : "");
 
-        // Always fetch fresh location if we don't have a valid one
-        // Check current location state to see if it's a placeholder
-        const currentLocation = location
-        const hasPlaceholder = currentLocation &&
-          (currentLocation.formattedAddress === "Select location" ||
-            currentLocation.city === "Current Location")
+        // Decide background fetch from localStorage snapshot (React state in this closure is stale on first run).
+        let locSnap = null
+        try {
+          const raw = localStorage.getItem("userLocation")
+          if (raw) locSnap = JSON.parse(raw)
+        } catch {
+          /* ignore */
+        }
+        const needsBetterAddress =
+          !!locSnap &&
+          !hasDetailedAddress(locSnap) &&
+          (isUnpersistableLocation(locSnap) ||
+            (locSnap.formattedAddress || "").trim() === "Select location" ||
+            (locSnap.city || "").trim() === "Current Location" ||
+            (locSnap.city || "").trim() === "Select location")
 
-        const shouldFetch = shouldForceRefresh || !hasInitialLocation || hasPlaceholder
+        const shouldFetch = shouldForceRefresh || !hasInitialLocation || needsBetterAddress
 
         if (shouldFetch) {
-          console.log("ðŸ”„ Fetching location - shouldForceRefresh:", shouldForceRefresh, "hasInitialLocation:", hasInitialLocation, "hasPlaceholder:", hasPlaceholder)
+          console.log("ðŸ”„ Fetching location - shouldForceRefresh:", shouldForceRefresh, "hasInitialLocation:", hasInitialLocation, "needsBetterAddress:", needsBetterAddress)
           getLocation(true, shouldForceRefresh) // forceFresh = true if cached location is incomplete
             .then((location) => {
-              if (location &&
-                location.formattedAddress !== "Select location" &&
-                location.city !== "Current Location") {
+              if (isAcceptableGeocodeResult(location)) {
                 console.log("âœ… Fresh location fetched:", location)
                 console.log("âœ… Location details:", {
                   formattedAddress: location?.formattedAddress,
@@ -1473,9 +1521,7 @@ export function useLocation() {
                 setTimeout(() => {
                   getLocation(true, true)
                     .then((retryLocation) => {
-                      if (retryLocation &&
-                        retryLocation.formattedAddress !== "Select location" &&
-                        retryLocation.city !== "Current Location") {
+                      if (isAcceptableGeocodeResult(retryLocation)) {
                         setLocation(retryLocation)
                         setPermissionGranted(true)
                         dispatchLocationUpdated(retryLocation)
@@ -1503,26 +1549,34 @@ export function useLocation() {
       }
     };
 
-    // Only check permissions/start watching if we already have a saved location
-    // This avoids "Requests geolocation permission on page load" warnings on fresh visits
-    // New users must explicitly click "Use Current Location" first
-    const hasStoredLocation = localStorage.getItem("userLocation");
-    if (hasStoredLocation) {
-      checkPermissionAndStart();
-    } else {
-      console.log("ðŸ“ Fresh visit - skipping auto-geolocation check (waiting for user action)");
-      setLoading(false);
+    // Avoid prompting on first paint when permission is still "prompt".
+    // If user already granted geolocation (or we have cached coords), start fetch/watch.
+    const hasStoredLocation = Boolean(localStorage.getItem("userLocation"))
+    const startIfEligible = () => {
+      if (hasStoredLocation) {
+        checkPermissionAndStart()
+        return
+      }
+      ;(async () => {
+        try {
+          if (navigator.permissions?.query) {
+            const r = await navigator.permissions.query({ name: "geolocation" })
+            if (r.state === "granted") {
+              checkPermissionAndStart()
+              return
+            }
+          }
+        } catch {
+          // ignore
+        }
+        console.log("Fresh visit — geolocation not pre-granted; navbar/overlay can call requestLocation()")
+        setLoading(false)
+      })()
     }
+    startIfEligible()
 
-    // Cleanup timeout and watcher
     return () => {
       clearTimeout(loadingTimeout)
-      console.log("ðŸ§¹ Cleaning up location watcher")
-      stopWatchingLocation()
-    }
-
-    return () => {
-      console.log("ðŸ§¹ Cleaning up location watcher")
       stopWatchingLocation()
     }
   }, [])
@@ -1602,8 +1656,25 @@ export function useLocation() {
       return location
     } catch (err) {
       console.error("âŒ Failed to request location:", err)
+      try {
+        const s = localStorage.getItem("userLocation")
+        if (s) {
+          const prev = JSON.parse(s)
+          const ok =
+            prev &&
+            (prev.latitude != null ||
+              (prev.city &&
+                prev.city !== "Select location" &&
+                prev.city !== "Current Location"))
+          if (ok) {
+            setLocation(prev)
+            setPermissionGranted(true)
+          }
+        }
+      } catch {
+        /* ignore */
+      }
       setError(err.message || "Failed to get location")
-      // Still try to start watching in case it works
       startWatchingLocation()
       throw err
     } finally {

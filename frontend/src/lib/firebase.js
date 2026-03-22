@@ -114,6 +114,12 @@ async function ensureFirebaseInitialized() {
   return app;
 }
 
+/** First initialized app, or null (use after ensureFirebaseInitialized when needed). */
+export function getFirebaseApp() {
+  const apps = getApps();
+  return apps.length ? apps[0] : null;
+}
+
 export function getFirebaseVapidKey() {
   return firebaseConfig.vapidKey || import.meta.env.VITE_FIREBASE_VAPID_KEY || import.meta.env.VITE_FCM_VAPID_KEY || "";
 }

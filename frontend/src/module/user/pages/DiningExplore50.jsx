@@ -194,7 +194,7 @@ export default function DiningExplore50() {
   return (
     <AnimatedPage className="bg-white" style={{ minHeight: '100vh', paddingBottom: '80px', overflow: 'visible' }}>
       {/* Banner Section with Back Button and Location */}
-      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh]">
+      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:pt-0">
         {/* Background with upto50off banner */}
         <div className="absolute inset-0 z-0">
           <img

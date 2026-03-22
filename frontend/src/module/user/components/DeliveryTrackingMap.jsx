@@ -46,62 +46,119 @@ const DeliveryTrackingMap = ({
   const isProgrammaticChangeRef = useRef(false);
   const mapInitializedRef = useRef(false);
   const lastDrawnPolylineRef = useRef(null);
+  /** Pending decoded route from socket before map is ready */
+  const pendingRoutePointsRef = useRef(null);
+  const pendingEncodedPolylineRef = useRef(null);
 
   const backendUrl = API_BASE_URL.replace('/api', '');
 
-  // Draw a pre-computed encoded polyline on the map (no Google Directions API call)
-  const drawPolylineFromEncoded = useCallback((encodedPolyline) => {
-    if (!mapInstance.current || !encodedPolyline) return;
+  useEffect(() => {
+    lastDrawnPolylineRef.current = null;
+    pendingRoutePointsRef.current = null;
+    pendingEncodedPolylineRef.current = null;
+    routePolylinePointsRef.current = null;
+    if (routePolylineRef.current) {
+      routePolylineRef.current.setMap(null);
+      routePolylineRef.current = null;
+    }
+  }, [orderId]);
 
-    // Skip if we already drew this exact polyline
-    if (lastDrawnPolylineRef.current === encodedPolyline) return;
-    lastDrawnPolylineRef.current = encodedPolyline;
+  const normalizePathPoints = useCallback((points) => {
+    if (!points || !Array.isArray(points)) return [];
+    return points
+      .map((p) => {
+        if (p && typeof p.lat === "number" && typeof p.lng === "number") {
+          return { lat: p.lat, lng: p.lng };
+        }
+        if (Array.isArray(p) && p.length >= 2) {
+          const a = Number(p[0]);
+          const b = Number(p[1]);
+          if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+          // Default: [lat, lng] (Google-style). GeoJSON [lng, lat] has |first| often > 40 for India lng.
+          if (Math.abs(a) <= 90 && Math.abs(b) <= 180 && Math.abs(a) < Math.abs(b)) {
+            return { lat: a, lng: b };
+          }
+          return { lat: b, lng: a };
+        }
+        return null;
+      })
+      .filter(Boolean);
+  }, []);
 
-    const points = decodePolyline(encodedPolyline);
-    if (!points || points.length === 0) return;
+  /** Draw any path (encoded route, socket points, or straight fallback). */
+  const drawPolylineFromPathPoints = useCallback((points, dedupeKey) => {
+    if (!mapInstance.current || !window.google?.maps) return;
+    const path = normalizePathPoints(points);
+    if (path.length < 2) return;
+    if (dedupeKey != null && lastDrawnPolylineRef.current === dedupeKey) return;
+    if (dedupeKey != null) lastDrawnPolylineRef.current = dedupeKey;
 
-    // Store decoded points for route-based animation
-    routePolylinePointsRef.current = points;
+    routePolylinePointsRef.current = path;
 
-    // Remove existing polyline
     if (routePolylineRef.current) {
       routePolylineRef.current.setMap(null);
     }
 
-    // Draw the polyline directly (no API call)
+    const isFallback = dedupeKey === "__straight_restaurant_customer__";
     routePolylineRef.current = new window.google.maps.Polyline({
-      path: points,
+      path,
       geodesic: true,
-      strokeColor: '#10b981',
-      strokeOpacity: 0.8,
-      strokeWeight: 4,
-      icons: [{
-        icon: {
-          path: 'M 0,-1 0,1',
-          strokeOpacity: 1,
-          strokeWeight: 2,
-          strokeColor: '#10b981',
-          scale: 4
-        },
-        offset: '0%',
-        repeat: '15px'
-      }],
+      strokeColor: "#10b981",
+      strokeOpacity: isFallback ? 0.55 : 0.85,
+      strokeWeight: isFallback ? 3 : 4,
+      icons: isFallback
+        ? [
+            {
+              icon: {
+                path: "M 0,-1 0,1",
+                strokeOpacity: 0.9,
+                strokeWeight: 2,
+                strokeColor: "#10b981",
+                scale: 3,
+              },
+              offset: "0%",
+              repeat: "12px",
+            },
+          ]
+        : [
+            {
+              icon: {
+                path: "M 0,-1 0,1",
+                strokeOpacity: 1,
+                strokeWeight: 2,
+                strokeColor: "#10b981",
+                scale: 4,
+              },
+              offset: "0%",
+              repeat: "15px",
+            },
+          ],
       map: mapInstance.current,
-      zIndex: 1
+      zIndex: 1,
     });
 
-    // Initialize or update animation controller
     if (bikeMarkerRef.current) {
       if (!animationControllerRef.current) {
         animationControllerRef.current = new RouteBasedAnimationController(
           bikeMarkerRef.current,
-          points
+          path,
         );
       } else {
-        animationControllerRef.current.updatePolyline(points);
+        animationControllerRef.current.updatePolyline(path);
       }
     }
-  }, []);
+  }, [normalizePathPoints]);
+
+  // Draw a pre-computed encoded polyline on the map (no Google Directions API call)
+  const drawPolylineFromEncoded = useCallback(
+    (encodedPolyline) => {
+      if (!encodedPolyline) return;
+      const points = decodePolyline(encodedPolyline);
+      if (!points || points.length === 0) return;
+      drawPolylineFromPathPoints(points, encodedPolyline);
+    },
+    [drawPolylineFromPathPoints],
+  );
 
   // Check if delivery partner is assigned
   const hasDeliveryPartner = useMemo(() => {
@@ -493,22 +550,15 @@ const DeliveryTrackingMap = ({
       }
     });
 
-    // Listen for route initialization from backend
+    // Listen for route initialization from backend (must also draw Polyline — refs alone do not render a line)
     socketRef.current.on(`route-initialized-${orderId}`, (data) => {
       console.log('🛣️ Route initialized from backend:', data);
-      if (data.points && Array.isArray(data.points) && data.points.length > 0) {
-        routePolylinePointsRef.current = data.points;
-
-        // Initialize animation controller if bike marker exists
-        if (bikeMarkerRef.current && !animationControllerRef.current) {
-          animationControllerRef.current = new RouteBasedAnimationController(
-            bikeMarkerRef.current,
-            data.points
-          );
-          console.log('✅ Route-based animation controller initialized from backend route');
-        } else if (animationControllerRef.current) {
-          // Update existing controller with new polyline
-          animationControllerRef.current.updatePolyline(data.points);
+      if (data.points && Array.isArray(data.points) && data.points.length > 1) {
+        const key = `routeInit:${data.points.length}:${JSON.stringify(data.points[0])}`;
+        pendingRoutePointsRef.current = data.points;
+        if (mapInstance.current && window.google?.maps) {
+          drawPolylineFromPathPoints(data.points, key);
+          pendingRoutePointsRef.current = null;
         }
       }
     });
@@ -548,7 +598,7 @@ const DeliveryTrackingMap = ({
         socketRef.current.disconnect();
       }
     };
-  }, [orderId, backendUrl, moveBikeSmoothly]);
+  }, [orderId, backendUrl, moveBikeSmoothly, drawPolylineFromPathPoints]);
 
   // Subscribe to Firebase Realtime Database for live location + polyline
   useEffect(() => {
@@ -563,11 +613,14 @@ const DeliveryTrackingMap = ({
       setCurrentLocation(location);
       setDeliveryBoyLocation(location);
 
-      if (isMapLoaded && mapInstance.current) {
-        // Draw polyline from Firebase data (no Google Directions API call)
-        if (loc.polyline) {
+      if (loc.polyline) {
+        if (isMapLoaded && mapInstance.current) {
           drawPolylineFromEncoded(loc.polyline);
+        } else {
+          pendingEncodedPolylineRef.current = loc.polyline;
         }
+      }
+      if (isMapLoaded && mapInstance.current) {
         moveBikeSmoothly(location.lat, location.lng, location.heading || 0);
       }
     });
@@ -576,6 +629,20 @@ const DeliveryTrackingMap = ({
       unsubscribe();
     };
   }, [orderId, isMapLoaded, moveBikeSmoothly, drawPolylineFromEncoded]);
+
+  // Apply route data that arrived before the map finished loading
+  useEffect(() => {
+    if (!isMapLoaded || !mapInstance.current) return;
+    if (pendingEncodedPolylineRef.current) {
+      drawPolylineFromEncoded(pendingEncodedPolylineRef.current);
+      pendingEncodedPolylineRef.current = null;
+    }
+    if (pendingRoutePointsRef.current?.length > 1) {
+      const pts = pendingRoutePointsRef.current;
+      pendingRoutePointsRef.current = null;
+      drawPolylineFromPathPoints(pts, `routeInit:${pts.length}:${JSON.stringify(pts[0])}`);
+    }
+  }, [isMapLoaded, drawPolylineFromEncoded, drawPolylineFromPathPoints]);
 
   // Initialize Google Map (only once - prevent re-initialization)
   useEffect(() => {
@@ -937,15 +1004,38 @@ const DeliveryTrackingMap = ({
       }
     }
 
-    // Clear route if no delivery partner
+    // No partner yet (e.g. "Preparing your order"): still show restaurant → customer line
     if (!hasDeliveryPartnerByPhase && !hasDeliveryPartner) {
-      if (routePolylineRef.current) {
-        routePolylineRef.current.setMap(null);
-        routePolylineRef.current = null;
-        lastDrawnPolylineRef.current = null;
+      if (
+        mapInstance.current &&
+        restaurantCoords?.lat != null &&
+        restaurantCoords?.lng != null &&
+        customerCoords?.lat != null &&
+        customerCoords?.lng != null
+      ) {
+        drawPolylineFromPathPoints(
+          [
+            { lat: restaurantCoords.lat, lng: restaurantCoords.lng },
+            { lat: customerCoords.lat, lng: customerCoords.lng },
+          ],
+          "__straight_restaurant_customer__",
+        );
       }
     }
-  }, [isMapLoaded, deliveryBoyLat, deliveryBoyLng, order?.deliveryState?.currentPhase, order?.deliveryState?.status, moveBikeSmoothly, hasDeliveryPartner]);
+  }, [
+    isMapLoaded,
+    deliveryBoyLat,
+    deliveryBoyLng,
+    order?.deliveryState?.currentPhase,
+    order?.deliveryState?.status,
+    moveBikeSmoothly,
+    hasDeliveryPartner,
+    restaurantCoords?.lat,
+    restaurantCoords?.lng,
+    customerCoords?.lat,
+    customerCoords?.lng,
+    drawPolylineFromPathPoints,
+  ]);
 
   // Update bike when REAL location changes (from socket)
   useEffect(() => {

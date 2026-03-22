@@ -129,9 +129,22 @@
   * {
     @apply border-border outline-ring/50;
   }
+
+  /* Hide viewport scrollbar (Lenis scrolls documentElement; thumb often shows on html) */
+  html {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE / legacy Edge */
+  }
+  html::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none; /* Chrome, Safari, Edge */
+  }
+
   body {
     @apply bg-background text-foreground m-0 min-h-screen;
-    scrollbar-width: none; /* Firefox - hide scrollbar track */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none;
   }
 
   body::-webkit-scrollbar {
@@ -242,11 +255,4 @@
 
 .touch-pan-x {
   touch-action: pan-x;
-}
-
-/* Mobile spacing: add a small top padding on all pages/modules */
-@media (max-width: 767px) {
-  #root {
-    padding-top: 0.5rem; /* tailwind pt-2 */
-  }
 }

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { ChevronDown, ShoppingCart, Wallet } from "lucide-react"
 import { TbLocation } from "react-icons/tb"
@@ -11,6 +11,7 @@ import { useLocationIconTransition } from "@/context/LocationIconTransitionConte
 import { FaLocationDot } from "react-icons/fa6"
 import { getCachedSettings, loadBusinessSettings } from "@/lib/utils/businessSettings"
 import { DEFAULT_LOGO_PLACEHOLDER } from "@/lib/constants/defaultLogo"
+import { hasDetailedAddress, pickNavbarLocationLines } from "@/lib/userLocationDisplay"
 
 export default function PageNavbar({
   textColor = "white",
@@ -54,21 +55,33 @@ export default function PageNavbar({
     }
   }, [transitionCtx?.phase])
 
-  // Auto-trigger location fetch if we have placeholder values (only once on mount)
+  // One-shot: if hook left us with a placeholder (or no coords), request GPS + reverse geocode.
+  // Previous effect used [] and read stale `location` — it never ran when state updated.
+  const locationFetchAttemptedRef = useRef(false)
   useEffect(() => {
-    if (location &&
-      !loading &&
-      requestLocation &&
-      (location.formattedAddress === "Select location" ||
-        location.city === "Current Location")) {
-      // Wait a bit to avoid multiple rapid calls, and only trigger once
-      const timeoutId = setTimeout(() => {
-        requestLocation().catch(() => {})
-      }, 2000) // Wait 2 seconds before triggering
+    if (loading) return
+    if (locationFetchAttemptedRef.current) return
 
-      return () => clearTimeout(timeoutId)
-    }
-  }, []) // Only run once on mount
+    // Do not treat `location === null` as a signal — useLocation may already be running getLocation.
+    const needsFetch =
+      !!location &&
+      !hasDetailedAddress(location) &&
+      (location.formattedAddress === "Select location" ||
+        location.city === "Select location" ||
+        (location.city === "Current Location" &&
+          (!(location.formattedAddress || "").trim() ||
+            (location.formattedAddress || "").trim() === "Select location")))
+
+    if (!needsFetch) return
+
+    locationFetchAttemptedRef.current = true
+    const timeoutId = setTimeout(() => {
+      requestLocation().catch(() => {
+        locationFetchAttemptedRef.current = false
+      })
+    }, 600)
+    return () => clearTimeout(timeoutId)
+  }, [location, loading, requestLocation])
 
   // Load business settings logo
   useEffect(() => {
@@ -817,8 +830,10 @@ export default function PageNavbar({
     }
   })()
 
-  const mainLocationName = locationDisplay.main
-  const subLocationName = locationDisplay.sub
+  const navLines = pickNavbarLocationLines(location)
+  const mainLocationName =
+    navLines.main && navLines.main !== "Select" ? navLines.main : locationDisplay.main
+  const subLocationName = navLines.sub || locationDisplay.sub
 
   const handleLocationClick = () => {
     // Open location selector overlay

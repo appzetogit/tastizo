@@ -13,6 +13,7 @@ import { useLocation } from "../hooks/useLocation"
 import { useCart } from "../context/CartContext"
 import { useLocationSelector } from "./UserLayout"
 import { getCachedSettings, loadBusinessSettings } from "@/lib/utils/businessSettings"
+import { pickNavbarLocationLines } from "@/lib/userLocationDisplay"
 
 export default function Navbar() {
   const { location, loading } = useLocation()
@@ -70,10 +71,9 @@ export default function Navbar() {
     }
   }, [])
 
-  // Show area if available, otherwise show city
-  const areaName = location?.area && location?.area !== location?.city ? location.area : null
-  const cityName = areaName || location?.city || "Select"
-  const stateName = location?.state || "Location"
+  const { main: cityName, sub: stateName } = pickNavbarLocationLines(location)
+  const displayMain = cityName === "Select" ? "Select" : cityName
+  const displaySub = stateName || "Location"
 
   const handleLocationClick = () => {
     // Open location selector overlay
@@ -103,11 +103,11 @@ export default function Navbar() {
                 <div className="flex flex-col items-start w-full min-w-0">
                   <span className="text-xs sm:text-sm flex flex-row items-center gap-1 font-semibold text-left text-foreground truncate w-full">
                     <MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-black flex-shrink-0" />
-                    {cityName}
+                    {displayMain}
                   </span>
-                  {location?.state && (
+                  {displaySub && (
                     <span className="text-[10px] sm:text-xs text-black pt-1 text-left truncate w-full">
-                      {stateName}
+                      {displaySub}
                     </span>
                   )}
                 </div>

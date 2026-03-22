@@ -1,9 +1,8 @@
 import { useSearchParams, Link, useNavigate } from "react-router-dom"
 import React, { useRef, useEffect, useState, useMemo, useCallback } from "react"
 import { createPortal } from "react-dom"
-import Lenis from "lenis"
-import { Star, Clock, MapPin, Heart, Search, Tag, Flame, ShoppingBag, ShoppingCart, Mic, SlidersHorizontal, CheckCircle2, Bookmark, BadgePercent, X, ArrowDownUp, Timer, CalendarClock, ShieldCheck, IndianRupee, UtensilsCrossed, Leaf, AlertCircle, Loader2, Plus, Check, Share2 } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
+import { Star, Clock, MapPin, Heart, Search, Tag, Flame, ShoppingBag, ShoppingCart, Mic, SlidersHorizontal, CheckCircle2, Bookmark, BadgePercent, X, ArrowDownUp, Timer, CalendarClock, ShieldCheck, IndianRupee, UtensilsCrossed, Leaf, AlertCircle, Loader2, Plus, Check, Share2, ChevronDown, ArrowRight } from "lucide-react"
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import Footer from "../components/Footer"
 import AddToCartButton from "../components/AddToCartButton"
 import StickyCartCard from "../components/StickyCartCard"
@@ -35,8 +34,16 @@ import { useLocation } from "../hooks/useLocation"
 import { useZone } from "../hooks/useZone"
 import offerImage from "@/assets/offerimage.png"
 import api, { restaurantAPI } from "@/lib/api"
-import { API_BASE_URL } from "@/lib/api/config"
 import OptimizedImage from "@/components/OptimizedImage"
+import {
+  getHomeDiscoveryCache,
+  patchHomeDiscoveryCache,
+  serializeHomeFilters,
+  sessionRouteGet,
+  sessionRouteSet,
+  SESSION_KEYS,
+} from "@/lib/cache/userNavSessionCache"
+import { pickNavbarLocationLines } from "@/lib/userLocationDisplay"
 // Explore More Icons
 import exploreOffers from "@/assets/explore more icons/offers.png"
 import exploreGourmet from "@/assets/explore more icons/gourmet.png"
@@ -193,6 +200,7 @@ const RestaurantImageCarousel = React.memo(({ restaurant, priority = false }) =>
 })
 
 export default function Home() {
+  const prefersReducedMotion = useReducedMotion()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const query = searchParams.get("q") || ""
@@ -208,6 +216,14 @@ export default function Home() {
   const [isSwitchingOffVegMode, setIsSwitchingOffVegMode] = useState(false)
   const [popupPosition, setPopupPosition] = useState({ top: 0, right: 0 })
   const vegModeToggleRef = useRef(null)
+  /** False after unmount so we skip setState, but API results still write to session cache */
+  const homeMountRef = useRef(true)
+  useEffect(() => {
+    homeMountRef.current = true
+    return () => {
+      homeMountRef.current = false
+    }
+  }, [])
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0)
   const [heroBannerImages, setHeroBannerImages] = useState([])
   const [heroBannersData, setHeroBannersData] = useState([]) // Store full banner data with linked restaurants
@@ -292,95 +308,146 @@ export default function Home() {
     }
   }, [showVegModePopup])
 
-  // Fetch hero banners from API
+  // Hero + categories + landing in parallel. Cache is written even if this effect cleaned up
+  // (Strict Mode / fast navigate) so revisiting Home does not repeat the same API calls.
   useEffect(() => {
-    const fetchHeroBanners = async () => {
-      try {
-        setLoadingBanners(true)
-        const response = await api.get('/hero-banners/public')
-        if (response.data.success && response.data.data.banners) {
-          const banners = response.data.data.banners
-          setHeroBannersData(banners)
-          // Extract image URLs for display, ensuring they are strings
-          setHeroBannerImages(banners.map(b => (typeof b === 'string' ? b : b.imageUrl)).filter(Boolean))
-        }
-      } catch (error) {
-        console.error('Error fetching hero banners:', error)
-        // Fallback to empty array if API fails
-        setHeroBannerImages([])
-        setHeroBannersData([])
-      } finally {
-        setLoadingBanners(false)
-      }
+    const disc = getHomeDiscoveryCache()
+    const sharedCats = sessionRouteGet(SESSION_KEYS.categoriesPublic)
+
+    const allFromCache =
+      disc?.heroLoaded &&
+      disc?.landingLoaded &&
+      (sharedCats !== undefined || disc?.realCategoriesList !== undefined)
+
+    if (allFromCache) {
+      setHeroBannersData(disc.heroBannersData ?? [])
+      setHeroBannerImages(disc.heroBannerImages ?? [])
+      setLandingCategories(disc.landingCategories ?? [])
+      setLandingExploreMore(disc.landingExploreMore ?? [])
+      setExploreMoreHeading(disc.exploreMoreHeading ?? "Explore More")
+      setRealCategories(sharedCats ?? disc.realCategoriesList ?? [])
+      setLoadingBanners(false)
+      setLoadingRealCategories(false)
+      setLoadingLandingConfig(false)
+      return
     }
 
-    fetchHeroBanners()
-  }, [])
+    let cancelled = false
+    setLoadingBanners(true)
+    setLoadingRealCategories(true)
+    setLoadingLandingConfig(true)
 
-  // Fetch real categories from backend API
-  useEffect(() => {
-    const fetchRealCategories = async () => {
-      try {
-        setLoadingRealCategories(true)
-        const response = await api.get('/categories/public')
-        if (response.data.success && response.data.data.categories) {
-          const adminCategories = response.data.data.categories.map(cat => ({
-            id: cat.id,
-            name: cat.name,
-            image: cat.image || foodImages[0], // Fallback to default image if not provided
-            slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, '-'),
-            label: cat.name // For compatibility with existing code
-          }))
-          setRealCategories(adminCategories)
-        } else {
-          setRealCategories([])
+    const run = async () => {
+      const [bOutcome, cOutcome, lOutcome] = await Promise.allSettled([
+        api.get("/hero-banners/public"),
+        sharedCats !== undefined
+          ? Promise.resolve({ data: { __fromCache: true } })
+          : api.get("/categories/public"),
+        api.get("/hero-banners/landing/public"),
+      ])
+
+      let heroBannersDataNext = []
+      let heroBannerImagesNext = []
+      if (bOutcome.status === "fulfilled") {
+        const response = bOutcome.value
+        try {
+          if (response.data?.success && response.data.data?.banners) {
+            const banners = response.data.data.banners
+            heroBannersDataNext = banners
+            heroBannerImagesNext = banners
+              .map((b) => (typeof b === "string" ? b : b.imageUrl))
+              .filter(Boolean)
+          }
+        } catch {
+          /* keep empty */
         }
-      } catch (error) {
-        console.error('Error fetching real categories:', error)
-        setRealCategories([])
-      } finally {
-        setLoadingRealCategories(false)
+      } else {
+        console.error("Error fetching hero banners:", bOutcome.reason)
       }
-    }
+      patchHomeDiscoveryCache({
+        heroLoaded: true,
+        heroBannersData: heroBannersDataNext,
+        heroBannerImages: heroBannerImagesNext,
+      })
 
-    fetchRealCategories()
-  }, [])
+      let realCategoriesNext = []
+      if (sharedCats !== undefined) {
+        realCategoriesNext = sharedCats
+      } else if (cOutcome.status === "fulfilled") {
+        const response = cOutcome.value
+        try {
+          if (response.data?.success && response.data.data?.categories) {
+            realCategoriesNext = response.data.data.categories.map((cat) => ({
+              id: cat.id,
+              name: cat.name,
+              image: cat.image || foodImages[0],
+              slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, "-"),
+              label: cat.name,
+            }))
+            sessionRouteSet(SESSION_KEYS.categoriesPublic, realCategoriesNext)
+          } else {
+            realCategoriesNext = []
+            sessionRouteSet(SESSION_KEYS.categoriesPublic, [])
+          }
+        } catch {
+          realCategoriesNext = []
+          sessionRouteSet(SESSION_KEYS.categoriesPublic, [])
+        }
+      } else {
+        console.error("Error fetching real categories:", cOutcome.reason)
+      }
+      patchHomeDiscoveryCache({
+        realCategoriesCached: true,
+        realCategoriesList: realCategoriesNext,
+      })
 
-  // Fetch landing page config (categories, explore more, settings)
-  useEffect(() => {
-    const fetchLandingConfig = async () => {
-      try {
-        setLoadingLandingConfig(true)
-        const response = await api.get('/hero-banners/landing/public')
-        if (response.data.success && response.data.data) {
-          const apiCategories = response.data.data.categories || []
-          const apiExploreMore = response.data.data.exploreMore || []
-
-          // Extra safety: only keep active items and ensure order ascending
-          setLandingCategories(
-            apiCategories
+      let landingCatsNext = []
+      let landingExploreNext = []
+      let exploreHeadingNext = "Explore More"
+      if (lOutcome.status === "fulfilled") {
+        const response = lOutcome.value
+        try {
+          if (response.data?.success && response.data.data) {
+            const apiCategories = response.data.data.categories || []
+            const apiExploreMore = response.data.data.exploreMore || []
+            landingCatsNext = apiCategories
               .filter((c) => c.isActive !== false)
               .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-          )
-          setLandingExploreMore(
-            apiExploreMore
+            landingExploreNext = apiExploreMore
               .filter((e) => e.isActive !== false)
               .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-          )
-          setExploreMoreHeading(response.data.data.settings?.exploreMoreHeading || "Explore More")
+            exploreHeadingNext = response.data.data.settings?.exploreMoreHeading || "Explore More"
+          }
+        } catch {
+          /* defaults */
         }
-      } catch (error) {
-        console.error('Error fetching landing config:', error)
-        // Fallback to empty arrays and default heading
-        setLandingCategories([])
-        setLandingExploreMore([])
-        setExploreMoreHeading("Explore More")
-      } finally {
-        setLoadingLandingConfig(false)
+      } else {
+        console.error("Error fetching landing config:", lOutcome.reason)
       }
+      patchHomeDiscoveryCache({
+        landingLoaded: true,
+        landingCategories: landingCatsNext,
+        landingExploreMore: landingExploreNext,
+        exploreMoreHeading: exploreHeadingNext,
+      })
+
+      if (cancelled || !homeMountRef.current) return
+
+      setHeroBannersData(heroBannersDataNext)
+      setHeroBannerImages(heroBannerImagesNext)
+      setRealCategories(realCategoriesNext)
+      setLandingCategories(landingCatsNext)
+      setLandingExploreMore(landingExploreNext)
+      setExploreMoreHeading(exploreHeadingNext)
+      setLoadingBanners(false)
+      setLoadingRealCategories(false)
+      setLoadingLandingConfig(false)
     }
 
-    fetchLandingConfig()
+    run()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // Auto-cycle hero banner images
@@ -400,22 +467,7 @@ export default function Home() {
     }
   }, [heroBannerImages.length])
 
-  // Lenis disabled on Home so the sticky categories+filters bar doesn't shake with transform-based smooth scroll
-  // (sticky + Lenis transform conflict on scroll)
-  // useEffect(() => {
-  //   const lenis = new Lenis({
-  //     duration: 1.2,
-  //     easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-  //     smoothWheel: true,
-  //     smoothTouch: false,
-  //   })
-  //   function raf(time) {
-  //     lenis.raf(time)
-  //     requestAnimationFrame(raf)
-  //   }
-  //   requestAnimationFrame(raf)
-  //   return () => { lenis.destroy() }
-  // }, [])
+  // Smooth scroll is provided by Lenis in UserLayout (native root scroll; works with sticky header).
 
   // Helper function to reset auto-slide timer
   const resetAutoSlide = useCallback(() => {
@@ -571,6 +623,29 @@ export default function Home() {
 
   const cityName = location?.city || "Select"
   const stateName = location?.state || "Location"
+  const { main: desktopLocMain, sub: desktopLocSub } = pickNavbarLocationLines(location)
+
+  const desktopExploreItems = useMemo(() => {
+    const filtered = (landingExploreMore || []).filter(
+      (item) => item.id !== "giftcard" && item.label?.toLowerCase() !== "gift card"
+    )
+    if (filtered.length > 0) {
+      return filtered.map((item) => ({
+        id: item._id,
+        title: (item.label || "Explore").toUpperCase(),
+        sub: "FROM TASTIZO",
+        tag: "DISCOVER",
+        image: item.imageUrl,
+        href: item.link || "/",
+      }))
+    }
+    return [
+      { id: "u250", title: "UNDER ₹250", sub: "MEALS ON A BUDGET", tag: "FLAT DEALS", image: offerImage, href: "/under-250" },
+      { id: "offers", title: "OFFERS", sub: "NEAR YOU", tag: "SAVE MORE", image: exploreOffers, href: "/user/offers" },
+      { id: "gourmet", title: "GOURMET", sub: "PREMIUM PICKS", tag: "TOP RATED", image: exploreGourmet, href: "/user/gourmet" },
+      { id: "top10", title: "TOP 10", sub: "MOST LOVED", tag: "CURATED", image: exploreTop10, href: "/user/top-10" },
+    ]
+  }, [landingExploreMore])
 
   // Mock points value - replace with actual points from context/store
   const userPoints = 99
@@ -625,26 +700,25 @@ export default function Home() {
     return () => observer.disconnect()
   }, [isFilterOpen])
 
-  // Fetch restaurants from API with filters
+  // Fetch restaurants from API with filters (no extra /health round-trip — saves latency)
   const fetchRestaurants = useCallback(async (filters = {}) => {
-    try {
-      setLoadingRestaurants(true)
-
-      // First, test backend connection
-      try {
-        // Use API_BASE_URL from config (supports both dev and production)
-        const backendUrl = API_BASE_URL.replace('/api', '')
-        const healthCheck = await fetch(`${backendUrl}/health`)
-        if (!healthCheck.ok) {
-          throw new Error(`Backend health check failed: ${healthCheck.status}`)
-        }
-        console.log('✅ Backend connection successful')
-      } catch (healthError) {
-        // Backend connection error - handled silently, toast notifications shown via axios interceptor
-        setRestaurantsData([])
+    const filtersKey = serializeHomeFilters(filters)
+    const disc = getHomeDiscoveryCache()
+    if (
+      disc?.restaurantsLoaded &&
+      disc.restaurantsZoneId === zoneId &&
+      disc.restaurantsFiltersKey === filtersKey &&
+      Array.isArray(disc.restaurantsData)
+    ) {
+      if (homeMountRef.current) {
+        setRestaurantsData(disc.restaurantsData)
         setLoadingRestaurants(false)
-        return
       }
+      return
+    }
+
+    try {
+      if (homeMountRef.current) setLoadingRestaurants(true)
 
       // Build query parameters from filters
       const params = {}
@@ -707,18 +781,22 @@ export default function Home() {
       }
       // Note: We show all restaurants regardless of zone, but apply grayscale styling if user is out of service
 
-      console.log('Fetching restaurants with params:', params)
       const response = await restaurantAPI.getRestaurants(params)
-      console.log('Restaurants API response:', response.data)
 
       if (response.data && response.data.success && response.data.data && response.data.data.restaurants) {
         const restaurantsArray = response.data.data.restaurants
-        console.log(`Fetched ${restaurantsArray.length} restaurants from API`)
 
         if (restaurantsArray.length === 0) {
-          console.warn('No restaurants found in API response')
-          setRestaurantsData([])
-          setLoadingRestaurants(false)
+          patchHomeDiscoveryCache({
+            restaurantsLoaded: true,
+            restaurantsZoneId: zoneId,
+            restaurantsFiltersKey: filtersKey,
+            restaurantsData: [],
+          })
+          if (homeMountRef.current) {
+            setRestaurantsData([])
+            setLoadingRestaurants(false)
+          }
           return
         }
 
@@ -872,21 +950,35 @@ export default function Home() {
           })
         }
 
-        console.log('Transformed and sorted restaurants:', transformedRestaurants)
-        setRestaurantsData(transformedRestaurants)
+        patchHomeDiscoveryCache({
+          restaurantsLoaded: true,
+          restaurantsZoneId: zoneId,
+          restaurantsFiltersKey: filtersKey,
+          restaurantsData: transformedRestaurants,
+        })
+        if (homeMountRef.current) {
+          setRestaurantsData(transformedRestaurants)
+        }
       } else {
-        console.warn('Invalid API response structure:', response.data)
-        setRestaurantsData([])
+        patchHomeDiscoveryCache({
+          restaurantsLoaded: true,
+          restaurantsZoneId: zoneId,
+          restaurantsFiltersKey: filtersKey,
+          restaurantsData: [],
+        })
+        if (homeMountRef.current) {
+          setRestaurantsData([])
+        }
       }
     } catch (error) {
       console.error('Error fetching restaurants:', error)
-      console.error('Error details:', error.response?.data || error.message)
-      // Don't set hardcoded data here - let the useMemo fallback handle it
-      // This way, if API succeeds later, it will show the real data
-      setRestaurantsData([])
+      if (homeMountRef.current) {
+        setRestaurantsData([])
+      }
     } finally {
-      setLoadingRestaurants(false)
-      console.log('Restaurant loading completed. restaurantsData length:', restaurantsData.length)
+      if (homeMountRef.current) {
+        setLoadingRestaurants(false)
+      }
     }
   }, [zoneId])
 
@@ -1119,7 +1211,7 @@ export default function Home() {
   )
 
   return (
-    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a] pb-28 md:pb-24 overflow-x-hidden">
+    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a] pb-28 md:pb-24 overflow-x-clip">
       {/* Unified Background for Entire Page - Vibrant Food Theme */}
       <div className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none overflow-hidden z-0">
         {/* Main Background */}
@@ -1231,11 +1323,11 @@ export default function Home() {
       </div>
 
       {/* Unified Navbar & Hero Section - rounded bottom on mobile for green area */}
-      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] pt-3 sm:pt-5 rounded-b-2xl md:rounded-b-none">
-        {/* Hero Banner Carousel Background */}
+      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[min(58vh,640px)] pt-[max(0.75rem,env(safe-area-inset-top,0px))] sm:pt-5 md:pt-0 rounded-b-2xl md:rounded-b-none lg:rounded-b-none">
+        {/* Hero Banner Carousel Background — hidden on large screens (desktop uses brand hero below) */}
         {heroBannerImages.length > 0 ? (
           <div
-            className="absolute top-0 left-0 right-0 bottom-0 z-0 cursor-grab active:cursor-grabbing overflow-hidden"
+            className="absolute top-0 left-0 right-0 bottom-0 z-0 cursor-grab active:cursor-grabbing overflow-hidden lg:hidden"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -1245,16 +1337,22 @@ export default function Home() {
             onMouseLeave={handleMouseUp}
           >
             <motion.div
-              className="flex h-full"
+              className="flex h-full transform-gpu"
               animate={{
                 x: `-${currentBannerIndex * 100}vw`
               }}
-              transition={{
-                duration: 0.6,
-                ease: "easeInOut"
-              }}
+              transition={
+                prefersReducedMotion
+                  ? { type: "tween", duration: 0.2, ease: "linear" }
+                  : {
+                      type: "tween",
+                      duration: 1.05,
+                      ease: [0.16, 1, 0.3, 1],
+                    }
+              }
               style={{
-                width: `${heroBannerImages.length * 100}vw`
+                width: `${heroBannerImages.length * 100}vw`,
+                willChange: "transform",
               }}
             >
               {heroBannerImages.map((image, index) => {
@@ -1291,8 +1389,22 @@ export default function Home() {
             </motion.div>
           </div>
         ) : (
-          <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-white" />
+          <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-white lg:hidden" />
         )}
+
+        {/* Desktop only: Swiggy-style full-width brand hero (Tastizo green, not orange) */}
+        <div
+          className="pointer-events-none hidden lg:block absolute inset-0 z-0 bg-gradient-to-br from-[#2B9C64] via-[#259052] to-[#1a5c38]"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none hidden lg:block absolute -right-32 top-16 h-[420px] w-[420px] rounded-full bg-white/[0.07] blur-3xl"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none hidden lg:block absolute -left-20 bottom-0 h-[280px] w-[280px] rounded-full bg-white/[0.06] blur-2xl"
+          aria-hidden
+        />
 
         {/* Navbar */}
         <motion.div
@@ -1305,9 +1417,9 @@ export default function Home() {
         </motion.div>
 
         {/* Hero Section */}
-        <section className="relative z-20 w-full py-4 sm:py-6 md:py-12 lg:py-12">
-          {/* Content */}
-          <div className="relative z-20 max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-3 sm:px-6 lg:px-8">
+        <section className="relative z-20 w-full py-4 sm:py-6 md:py-12 lg:py-10 lg:pb-16">
+          {/* Mobile / tablet: existing sticky search + veg */}
+          <div className="relative z-20 max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 lg:hidden">
             {/* Search Bar and VEG MODE Container - Sticky (hidden when overlay open to avoid 2 search bars) */}
             <motion.div
               className={`sticky top-4 z-30 flex items-center gap-3 sm:gap-4 lg:gap-6 ${isSearchOpen ? "pointer-events-none opacity-0" : ""}`}
@@ -1394,27 +1506,105 @@ export default function Home() {
               </motion.div>
             </motion.div>
           </div>
+
+          {/* Large screens only: Swiggy-like headline + location strip + search (Tastizo branding) */}
+          <div
+            className={`relative z-20 hidden lg:block max-w-5xl xl:max-w-6xl mx-auto px-8 xl:px-12 ${isSearchOpen ? "pointer-events-none opacity-0" : ""}`}
+          >
+            <h1 className="text-center text-white text-4xl xl:text-[2.65rem] font-extrabold leading-tight tracking-tight drop-shadow-sm">
+              Order food &amp; more.
+              <span className="block mt-2 text-white/95 text-3xl xl:text-[2.1rem] font-bold">
+                Discover best restaurants — Tastizo it!
+              </span>
+            </h1>
+
+            <div className="mt-10 flex flex-row items-stretch gap-4 max-w-4xl mx-auto">
+              <button
+                type="button"
+                onClick={() => openLocationSelector()}
+                className="flex-shrink-0 w-[min(100%,300px)] rounded-2xl bg-white shadow-lg border border-white/30 px-4 py-3 text-left flex items-start gap-3 hover:bg-gray-50 transition-colors"
+              >
+                <MapPin className="h-5 w-5 text-[#2B9C64] shrink-0 mt-0.5" strokeWidth={2.5} />
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Delivery location
+                  </span>
+                  <p className="font-bold text-gray-900 truncate">
+                    {loading ? "Locating…" : desktopLocMain || "Enter your delivery location"}
+                  </p>
+                  {desktopLocSub ? (
+                    <p className="text-xs text-gray-500 truncate mt-0.5">{desktopLocSub}</p>
+                  ) : null}
+                </div>
+                <ChevronDown className="h-5 w-5 text-gray-400 shrink-0" />
+              </button>
+
+              <div className="flex-1 min-w-0 relative">
+                <div className="h-full rounded-2xl bg-white shadow-lg border border-white/30 p-2 flex items-center gap-3">
+                  <Search className="h-5 w-5 text-[#2B9C64] flex-shrink-0 ml-3" strokeWidth={2.5} />
+                  <div className="flex-1 relative min-h-[44px] flex items-center">
+                    <Input
+                      value={heroSearch}
+                      onChange={(e) => setHeroSearch(e.target.value)}
+                      onFocus={handleSearchFocus}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && heroSearch.trim()) {
+                          navigate(`/user/search?q=${encodeURIComponent(heroSearch.trim())}`)
+                          closeSearch()
+                          setHeroSearch("")
+                        }
+                      }}
+                      aria-label="Search restaurants and food"
+                      className="h-11 w-full bg-transparent border-0 text-base font-semibold text-gray-800 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-lg pr-2"
+                    />
+                    {!heroSearch && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none h-6 overflow-hidden">
+                        <AnimatePresence mode="wait">
+                          <motion.span
+                            key={placeholderIndex}
+                            initial={{ y: 16, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: -16, opacity: 0 }}
+                            transition={{ duration: 0.3 }}
+                            className="text-base font-semibold text-gray-400 inline-block"
+                          >
+                            {placeholders[placeholderIndex]}
+                          </motion.span>
+                        </AnimatePresence>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Voice Search"
+                    onClick={handleSearchFocus}
+                    className="flex-shrink-0 mr-2 p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <Mic className="h-5 w-5 text-gray-500" strokeWidth={2.5} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-center justify-center gap-1 flex-shrink-0 w-[88px]">
+                <span className="text-white text-xs font-black leading-none">VEG</span>
+                <span className="text-white text-[10px] font-black leading-none">MODE</span>
+                <Switch
+                  checked={vegMode}
+                  onCheckedChange={handleVegModeChange}
+                  aria-label="Toggle Veg Mode"
+                  className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300 w-12 h-6 shadow-md [&_[data-slot=switch-thumb]]:bg-white [&_[data-slot=switch-thumb]]:h-5 [&_[data-slot=switch-thumb]]:w-5 [&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-6 [&_[data-slot=switch-thumb]]:data-[state=unchecked]:translate-x-0"
+                />
+              </div>
+            </div>
+          </div>
         </section>
       </div>
 
       {/* Rest of Content - Container Width with Unified Background */}
-      <motion.div
-        className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-4 sm:pt-5 lg:pt-8"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.4 }}
-      >
-        {/* Sticky Section - Food Categories and Filters (no Lenis on this page so sticky is stable) */}
-        <div
-          className="sticky top-0 z-40 bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5"
-          style={{
-            transform: 'translateZ(0)',
-            WebkitTransform: 'translateZ(0)',
-            backfaceVisibility: 'hidden',
-            WebkitBackfaceVisibility: 'hidden',
-            contain: 'layout style paint',
-          }}
-        >
+      {/* Plain div (not motion) so no ancestor transform breaks position:sticky on categories/filters */}
+      <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-4 sm:pt-5 lg:pt-8">
+        {/* Sticky Section - Food Categories and Filters */}
+        <div className="sticky top-0 z-40 bg-white dark:bg-[#0a0a0a] pt-3 sm:pt-4 pb-2 sm:pb-3">
           {/* Food Categories - Horizontal Scroll */}
           <motion.section
             className="space-y-0"
@@ -1424,7 +1614,8 @@ export default function Home() {
           >
             <div
               ref={categoryScrollRef}
-              className="flex gap-4 sm:gap-5 overflow-x-auto overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 lg:px-4 pt-0.5 sm:pt-1 pb-1.5 sm:pb-2"
+              data-lenis-prevent-touch
+              className="flex gap-4 sm:gap-5 overflow-x-auto overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 lg:px-4 pt-0.5 sm:pt-1 pb-1.5 sm:pb-2 lg:justify-center"
               style={{
                 scrollbarWidth: "none",
                 msOverflowStyle: "none",
@@ -1483,7 +1674,8 @@ export default function Home() {
                             sizes="(max-width: 640px) 64px, (max-width: 768px) 80px, 96px"
                             objectFit="cover"
                             placeholder="blur"
-                            priority={index === 0}
+                            observerRootMargin="120px 200px 120px 200px"
+                            priority={index < 8}
                             onError={() => { }}
                           />
                         </div>
@@ -1511,7 +1703,8 @@ export default function Home() {
                             sizes="(max-width: 640px) 64px, (max-width: 768px) 80px, 96px"
                             objectFit="cover"
                             placeholder="blur"
-                            priority={index === 0}
+                            observerRootMargin="120px 200px 120px 200px"
+                            priority={index < 8}
                           />
                         </div>
                         <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 text-center whitespace-nowrap max-w-[80px] truncate">
@@ -1538,7 +1731,8 @@ export default function Home() {
             transition={{ duration: 0 }}
           >
             <div
-              className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto scrollbar-hide pb-0.5 lg:pb-1"
+              data-lenis-prevent-touch
+              className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto scrollbar-hide pb-0.5 lg:pb-1 lg:justify-center lg:flex-wrap"
               style={{
                 scrollbarWidth: "none",
                 msOverflowStyle: "none",
@@ -1621,8 +1815,48 @@ export default function Home() {
           >
             {exploreMoreHeading}
           </motion.h2>
+
+          {/* Desktop only: large Swiggy-style explore tiles (Tastizo green accents) */}
+          <div className="hidden lg:grid gap-5 grid-cols-2 xl:grid-cols-4 mt-1 mb-2">
+            {loadingLandingConfig
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-[220px] rounded-[28px] bg-gray-100 dark:bg-gray-800 animate-pulse"
+                  />
+                ))
+              : desktopExploreItems.slice(0, 4).map((item) => (
+                  <Link
+                    key={item.id}
+                    to={item.href}
+                    className="group relative bg-white dark:bg-[#141414] rounded-[28px] p-6 shadow-md border border-gray-100 dark:border-gray-800 overflow-hidden min-h-[210px] flex flex-col hover:shadow-lg transition-shadow"
+                  >
+                    <div className="relative z-10 max-w-[58%] pr-2">
+                      <p className="text-[11px] font-extrabold uppercase tracking-wide text-gray-900 dark:text-white leading-snug">
+                        {item.title}
+                      </p>
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-1.5">
+                        {item.sub}
+                      </p>
+                      <p className="text-xs font-bold uppercase text-[#2B9C64] mt-4">{item.tag}</p>
+                    </div>
+                    <div className="absolute bottom-2 right-2 w-[118px] h-[118px] flex items-center justify-center pointer-events-none">
+                      <img
+                        src={item.image}
+                        alt=""
+                        className="max-w-full max-h-full object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-300"
+                      />
+                    </div>
+                    <div className="absolute bottom-5 left-6 w-10 h-10 rounded-full bg-[#2B9C64] text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+                      <ArrowRight className="w-5 h-5" strokeWidth={2.5} />
+                    </div>
+                  </Link>
+                ))}
+          </div>
+
           <div
-            className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto scrollbar-hide pb-2 lg:pb-3"
+            data-lenis-prevent-touch
+            className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto scrollbar-hide pb-2 lg:pb-3 lg:hidden"
             style={{
               scrollbarWidth: "none",
               msOverflowStyle: "none",
@@ -1931,7 +2165,7 @@ export default function Home() {
             </Link> */}
           </div>
         </motion.section>
-      </motion.div>
+      </div>
 
       {/* Filter Modal - Bottom Sheet */}
       <AnimatePresence>

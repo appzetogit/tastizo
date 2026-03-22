@@ -8,6 +8,8 @@ import { locationAPI } from "@/lib/api"
 import { useLocationIconTransition } from "@/context/LocationIconTransitionContext"
 import { getModuleToken, getUserIdFromToken, isModuleAuthenticated } from "@/lib/utils/auth"
 import { getUserLocationOnce } from "@/lib/firebaseRealtime"
+import { readLocalGeocodeCache } from "@/lib/geocodeCache"
+import { isUnpersistableLocation } from "@/lib/userLocationDisplay"
 
 const MOBILE_BREAKPOINT = 768
 const SPLASH_DURATION_LOGGED_OUT_MS = 2000
@@ -66,6 +68,45 @@ function formatSplashLocationFromFirebase(userLoc) {
   return { shortAddr, fullAddr: formatted || shortAddr }
 }
 
+/** Last known good address when live fetch fails — keeps splash text + handoff animation meaningful. */
+function readPreviousSplashLocation() {
+  try {
+    const raw = localStorage.getItem("userLocation")
+    if (raw) {
+      const p = JSON.parse(raw)
+      if (p && !isUnpersistableLocation(p)) {
+        const full = (p.formattedAddress || p.address || "").trim()
+        const short =
+          (p.area || "").trim() ||
+          (p.city || "").trim() ||
+          (p.mainTitle || "").trim() ||
+          full.split(",")[0]?.trim() ||
+          ""
+        if (short || full) {
+          return { shortAddr: short || "Saved location", fullAddr: full || short }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const geo = readLocalGeocodeCache()
+    const pr = geo?.parsed
+    if (!pr) return null
+    const full = (pr.formattedAddress || "").trim()
+    const short =
+      (pr.area || "").trim() ||
+      (pr.city || "").trim() ||
+      full.split(",")[0]?.trim() ||
+      ""
+    if (short || full) return { shortAddr: short || "Saved location", fullAddr: full || short }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
 export default function MobileSplashScreen() {
   const location = useLocation()
   const { registerSplashIconRef, captureSplashIconAndStartExit, setPhaseSplash } = useLocationIconTransition() || {}
@@ -119,20 +160,32 @@ export default function MobileSplashScreen() {
 
     let cancelled = false
     const FALLBACK_LOC = { shortAddr: "Current Location", fullAddr: "" }
+    const cachedSplash = readPreviousSplashLocation()
+    const skipFreshGps = Boolean(cachedSplash)
 
-    setLocationLoading(true)
+    // Show saved address + pin icon immediately so LocationIconTransition can capture the ref
+    // (while "Detecting…" there is no registerSplashIconRef — animation would skip).
+    if (cachedSplash) {
+      setSplashLocation(cachedSplash)
+      setLocationLoading(false)
+      if (setPhaseSplash) setPhaseSplash()
+    } else {
+      setLocationLoading(true)
+    }
 
     // Hard safety timeout so splash never stays stuck on "Detecting location..."
     const safetyId = setTimeout(() => {
       if (cancelled) return
-      setSplashLocation(FALLBACK_LOC)
+      const prev = readPreviousSplashLocation()
+      setSplashLocation((cur) => cur || prev || FALLBACK_LOC)
       if (setPhaseSplash) setPhaseSplash()
       setLocationLoading(false)
     }, 12000)
 
     const finish = (loc) => {
       if (cancelled) return
-      setSplashLocation(loc || FALLBACK_LOC)
+      const prev = readPreviousSplashLocation()
+      setSplashLocation(loc || prev || FALLBACK_LOC)
       if (setPhaseSplash) setPhaseSplash()
       setLocationLoading(false)
     }
@@ -155,10 +208,15 @@ export default function MobileSplashScreen() {
           return
         }
       } catch {
-        // ignore, fall through to GPS
+        // ignore, fall through to GPS or cache-only exit
       }
 
-      // 2) Fallback to GPS + backend reverse geocode
+      // 2) GPS + backend reverse geocode only when we had nothing usable in storage
+      if (skipFreshGps) {
+        clearTimeout(safetyId)
+        return
+      }
+
       try {
         const loc = await fetchSplashLocation()
         clearTimeout(safetyId)

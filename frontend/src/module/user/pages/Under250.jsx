@@ -4,7 +4,6 @@ import { Star, Clock, MapPin, ArrowDownUp, Timer, ArrowRight, ChevronDown, Bookm
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import AnimatedPage from "../components/AnimatedPage"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useLocationSelector } from "../components/UserLayout"
 import { useLocation } from "../hooks/useLocation"
@@ -410,14 +409,47 @@ export default function Under250() {
     })
   }
 
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success("Link copied to clipboard!")
+    } catch {
+      toast.error("Could not copy link")
+    }
+  }
+
+  const handleShareClick = async (item) => {
+    const slug = item.restaurantSlug || ""
+    const dishId = item.id || item._id
+    const shareUrl = `${window.location.origin}/restaurants/${slug}?dish=${dishId}`
+    const title = `${item.name}${item.restaurantName ? ` — ${item.restaurantName}` : ""}`
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title,
+          text: `Check out ${item.name}!`,
+          url: shareUrl,
+        })
+        toast.success("Dish shared successfully")
+      } catch (error) {
+        if (error?.name !== "AbortError") {
+          await copyToClipboard(shareUrl)
+        }
+      }
+    } else {
+      await copyToClipboard(shareUrl)
+    }
+  }
+
   // Check if should show grayscale (only when user is out of service)
   const shouldShowGrayscale = isOutOfService
 
   return (
 
-      <div className={`relative min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
+    <div className={`relative min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Banner Section with Navbar */}
-        <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh]">
+      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:pt-0">
         {/* Banner Image */}
         {bannerImage && (
           <div className="absolute top-0 left-0 right-0 bottom-0 z-0">
@@ -576,176 +608,192 @@ export default function Under250() {
           </div>
         ) : (
           <section className="pt-3 sm:pt-4 md:pt-5 lg:pt-6">
-            <div className="grid gap-3 sm:gap-4 md:gap-5 lg:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="space-y-0 bg-white dark:bg-[#1a1a1a] rounded-none sm:rounded-2xl overflow-hidden sm:border sm:border-gray-100 sm:dark:border-gray-800">
               {paginatedDishes.map((item, itemIndex) => {
                 const quantity = quantities[item.id] || 0
                 const isBookmarked = bookmarkedItems.has(item.id)
+                const isVeg = item.isVeg === true || item.foodType === "Veg"
+                const timeLabel =
+                  (item.preparationTime && String(item.preparationTime).trim()) ||
+                  item.deliveryTime ||
+                  "20-25 mins"
+
                 return (
-                  <motion.div
+                  <div
                     key={item.id}
-                    className="w-full bg-white dark:bg-[#1a1a1a] rounded-2xl overflow-hidden cursor-pointer"
+                    className="flex gap-4 p-4 border-b border-gray-100 dark:border-gray-800 last:border-none relative cursor-pointer"
                     onClick={() => handleItemClick(item, { name: item.restaurantName || "Under 250" })}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: "-50px" }}
-                    transition={{ duration: 0.4, delay: itemIndex * 0.05 }}
-                    whileHover={{ y: -8, scale: 1.02 }}
                   >
-                    {/* Item Row: left details, right image with floating ADD/qty pill */}
-                    <div className="flex gap-4 p-4 md:p-5 lg:p-6">
-                      {/* Left Side - Details */}
-                      <div className="flex-1 min-w-0">
-                        {/* Veg indicator + name */}
-                        <div className="flex items-center gap-2 mb-1">
-                          {item.isVeg ? (
-                            <div className="w-4 h-4 border-2 border-green-600 flex items-center justify-center rounded-sm flex-shrink-0">
-                              <div className="w-2 h-2 bg-green-600 rounded-full"></div>
-                            </div>
-                          ) : (
-                            <div className="w-4 h-4 border-2 border-orange-600 flex items-center justify-center rounded-sm flex-shrink-0">
-                              <div className="w-2 h-2 bg-orange-600 rounded-full"></div>
-                            </div>
-                          )}
-                          <h3 className="font-semibold text-gray-900 dark:text-white text-sm md:text-base lg:text-lg line-clamp-1">
-                            {item.name}
-                          </h3>
-                        </div>
-
-                        {/* Price + time pill */}
-                        <div className="flex items-center gap-3 mt-1 text-xs sm:text-sm">
-                          {item.price > 0 && (
-                            <p className="font-semibold text-gray-900 dark:text-white">
-                              ₹{Math.round(item.price)}
-                            </p>
-                          )}
-                          <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                            <Clock className="h-3 w-3" strokeWidth={1.5} />
-                            <span className="text-[11px] sm:text-xs font-medium">
-                              {item.deliveryTime || "20-25 mins"}
-                            </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        {isVeg ? (
+                          <div className="w-4 h-4 border-2 border-green-600 flex items-center justify-center rounded-sm flex-shrink-0">
+                            <div className="w-2 h-2 bg-green-600 rounded-full" />
                           </div>
+                        ) : (
+                          <div className="w-4 h-4 border-2 border-orange-600 flex items-center justify-center rounded-sm flex-shrink-0">
+                            <div className="w-2 h-2 bg-orange-600 rounded-full" />
+                          </div>
+                        )}
+                        {item.isSpicy && <span className="text-red-500">🌶️</span>}
+                      </div>
+
+                      <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight">
+                        {item.name}
+                      </h3>
+
+                      {item.customisable && (
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="h-1.5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div className="h-full bg-green-600 w-3/4" />
+                          </div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                            Highly reordered
+                          </span>
                         </div>
+                      )}
 
-                        {/* Restaurant name */}
-                        {item.restaurantName && (
-                          <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-clamp-1">
-                            {item.restaurantName}
+                      <div className="flex items-center gap-3 mt-1 flex-wrap">
+                        {item.price > 0 && (
+                          <p className="font-semibold text-gray-900 dark:text-white">
+                            ₹{Math.round(item.price)}
                           </p>
                         )}
-
-                        {/* Description */}
-                        {item.description && (
-                          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
-                            {item.description}
-                          </p>
-                        )}
-
-                        {/* Bookmark & Share */}
-                        <div className="flex items-center gap-2 mt-3">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7 sm:h-8 sm:w-8 rounded-full border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111] hover:bg-gray-100 dark:hover:bg-gray-800"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleBookmarkClick(item.id)
-                            }}
-                          >
-                            <Bookmark
-                              className={`h-4 w-4 ${isBookmarked ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"
-                                }`}
-                              strokeWidth={2}
-                            />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7 sm:h-8 sm:w-8 rounded-full border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111] hover:bg-gray-100 dark:hover:bg-gray-800"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              // Share action placeholder
-                            }}
-                          >
-                            <Share2 className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                          </Button>
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
+                          <Clock size={12} className="text-gray-500 shrink-0" />
+                          <span>{timeLabel}</span>
                         </div>
                       </div>
 
-                      {/* Right Side - Image and ADD/qty pill */}
-                      <div className="relative w-28 h-28 sm:w-32 sm:h-32 flex-shrink-0">
-                        {item.image ? (
-                          <OptimizedImage
-                            src={item.image}
-                            alt={item.name}
-                            className="w-full h-full rounded-2xl"
-                            objectFit="cover"
-                            sizes="128px"
-                            placeholder="blur"
-                            priority={itemIndex < 4}
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center">
-                            <span className="text-xs text-gray-400">No image</span>
-                          </div>
-                        )}
+                      {item.restaurantName && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-1">
+                          {item.restaurantName}
+                        </p>
+                      )}
 
-                        {quantity > 0 && !shouldShowGrayscale ? (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.85 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-[#111] font-bold px-4 py-1.5 rounded-lg flex items-center gap-2 text-green-600 border border-green-500/80 dark:border-green-400/80"
-                          >
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
+                      {item.description && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
+                          {item.description}
+                        </p>
+                      )}
+
+                      <div className="flex gap-4 mt-3">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            handleBookmarkClick(item.id)
+                          }}
+                          className={`p-1.5 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${isBookmarked
+                            ? "border-red-500 text-red-500 bg-red-50 dark:bg-red-900/20"
+                            : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400"
+                            }`}
+                        >
+                          <Bookmark size={18} className={isBookmarked ? "fill-red-500" : ""} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            handleShareClick(item)
+                          }}
+                          className="p-1.5 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        >
+                          <Share2 size={18} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="relative w-32 h-32 flex-shrink-0">
+                      {item.image ? (
+                        <OptimizedImage
+                          src={item.image}
+                          alt={item.name}
+                          className="w-full h-full rounded-2xl shadow-sm"
+                          objectFit="cover"
+                          sizes="128px"
+                          placeholder="blur"
+                          priority={itemIndex < 6}
+                          observerRootMargin="200px"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gray-200 dark:bg-gray-700 rounded-2xl flex items-center justify-center shadow-sm">
+                          <span className="text-xs text-gray-400">No image</span>
+                        </div>
+                      )}
+
+                      {quantity > 0 && !shouldShowGrayscale ? (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border font-bold px-4 py-1.5 rounded-lg shadow-md flex items-center gap-1 ${shouldShowGrayscale
+                            ? "border-gray-300 text-gray-400 cursor-not-allowed opacity-50"
+                            : "border-green-600 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30"
+                            }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (!shouldShowGrayscale) {
                                 updateItemQuantity(
                                   item,
                                   Math.max(0, quantity - 1),
                                   e,
                                   item.restaurantName,
                                 )
-                              }}
-                              className="text-green-600 hover:text-green-700"
-                            >
-                              <Minus size={14} />
-                            </button>
-                            <span className="text-sm">{quantity}</span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
+                              }
+                            }}
+                            disabled={shouldShowGrayscale}
+                            className={shouldShowGrayscale ? "text-gray-400 cursor-not-allowed" : "text-green-600 hover:text-green-700"}
+                          >
+                            <Minus size={14} />
+                          </button>
+                          <span className={`mx-2 text-sm ${shouldShowGrayscale ? "text-gray-400" : ""}`}>
+                            {quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (!shouldShowGrayscale) {
                                 updateItemQuantity(
                                   item,
                                   quantity + 1,
                                   e,
                                   item.restaurantName,
                                 )
-                              }}
-                              className="text-green-600 hover:text-green-700"
-                            >
-                              <Plus size={14} className="stroke-[3px]" />
-                            </button>
-                          </motion.div>
-                        ) : (
-                          <motion.button
-                            initial={false}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (!shouldShowGrayscale) {
-                                updateItemQuantity(item, 1, e, item.restaurantName)
                               }
                             }}
                             disabled={shouldShowGrayscale}
-                            className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-[#111] font-bold px-6 py-1.5 rounded-lg flex items-center gap-1 border ${shouldShowGrayscale
-                              ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50 dark:border-gray-600'
-                              : 'border-green-500/80 dark:border-green-400/80 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30'
-                              }`}
+                            className={shouldShowGrayscale ? "text-gray-400 cursor-not-allowed" : "text-green-600 hover:text-green-700"}
                           >
-                            ADD <Plus size={14} className="stroke-[3px]" />
-                          </motion.button>
-                        )}
-                      </div>
+                            <Plus size={14} className="stroke-[3px]" />
+                          </button>
+                        </motion.div>
+                      ) : (
+                        <motion.button
+                          type="button"
+                          initial={false}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (!shouldShowGrayscale) {
+                              updateItemQuantity(item, 1, e, item.restaurantName)
+                            }
+                          }}
+                          disabled={shouldShowGrayscale}
+                          className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border font-bold px-6 py-1.5 rounded-lg shadow-md flex items-center gap-1 transition-colors ${shouldShowGrayscale
+                            ? "border-gray-300 text-gray-400 cursor-not-allowed opacity-50"
+                            : "border-green-600 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30"
+                            }`}
+                        >
+                          ADD <Plus size={14} className="stroke-[3px]" />
+                        </motion.button>
+                      )}
                     </div>
-                  </motion.div>
+                  </div>
                 )
               })}
             </div>

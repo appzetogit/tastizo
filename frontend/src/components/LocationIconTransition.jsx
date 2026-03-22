@@ -25,6 +25,14 @@ export default function LocationIconTransition() {
     return () => window.removeEventListener("resize", check)
   }, [])
 
+  // Each new splash→navbar handoff must be allowed to animate (phase was "done" before).
+  useEffect(() => {
+    if (phase === "transitioning") {
+      hasAnimated.current = false
+      setTargetRect(null)
+    }
+  }, [phase])
+
   useEffect(() => {
     if (phase !== "transitioning") return
     let cancelled = false
@@ -121,7 +129,7 @@ export default function LocationIconTransition() {
       }
       animRef.current = null
     }
-  }, [targetRect, splashIconRect])
+  }, [targetRect, splashIconRect, setPhaseDone])
 
   useEffect(() => {
     return () => {
