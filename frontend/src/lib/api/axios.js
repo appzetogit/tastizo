@@ -486,7 +486,16 @@ apiClient.interceptors.response.use(
             localStorage.removeItem("delivery_accessToken");
             localStorage.removeItem("delivery_authenticated");
             localStorage.removeItem("delivery_user");
-            window.location.href = "/delivery/sign-in";
+            // Avoid hard-reload loops when already on delivery auth screens.
+            const isDeliveryAuthRoute =
+              currentPath === "/delivery/sign-in" ||
+              currentPath === "/delivery/signup" ||
+              currentPath === "/delivery/otp" ||
+              currentPath === "/delivery/welcome" ||
+              currentPath.startsWith("/delivery/signup/");
+            if (!isDeliveryAuthRoute) {
+              window.location.href = "/delivery/sign-in";
+            }
           } else {
             // User module: clear both storages
             clearModuleAuth("user");
