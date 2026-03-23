@@ -6,6 +6,23 @@ import {
   isUnpersistableLocation,
 } from "@/lib/userLocationDisplay"
 
+/** Haversine distance in meters (WGS84). */
+function haversineDistanceMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000
+  const φ1 = (lat1 * Math.PI) / 180
+  const φ2 = (lat2 * Math.PI) / 180
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180
+  const Δλ = ((lng2 - lng1) * Math.PI) / 180
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+/** Skip automatic re-geocode / DB write when GPS is within this distance of last saved location. */
+const MOVE_THRESHOLD_METERS = 100
+
 /** Single shared geolocation state for the whole app (navbar, Home, overlay, etc.). */
 export const UserGeoLocationContext = createContext(null)
 
@@ -661,56 +678,74 @@ function useUserGeoLocationEngine() {
   /* ===================== DB FETCH ===================== */
   const fetchLocationFromDB = async () => {
     try {
-      // Check if user is authenticated before trying to fetch from DB
       const userToken = localStorage.getItem('user_accessToken') || localStorage.getItem('accessToken')
       if (!userToken || userToken === 'null' || userToken === 'undefined') {
-        // User not logged in - skip DB fetch, return null to use localStorage
         return null
       }
 
       const res = await userAPI.getLocation()
       const loc = res?.data?.data?.location
-      if (loc?.latitude && loc?.longitude) {
-        // Validate coordinates are in India range BEFORE attempting geocoding
-        const isInIndiaRange = loc.latitude >= 6.5 && loc.latitude <= 37.1 && loc.longitude >= 68.7 && loc.longitude <= 97.4 && loc.longitude > 0
+      if (!loc?.latitude || !loc?.longitude) {
+        return null
+      }
 
-        if (!isInIndiaRange || loc.longitude < 0) {
-          // Coordinates are outside India - return placeholder
-          console.warn("âš ï¸ Coordinates from DB are outside India range:", { latitude: loc.latitude, longitude: loc.longitude })
-          return {
-            latitude: loc.latitude,
-            longitude: loc.longitude,
-            city: "Current Location",
-            state: "",
-            country: "",
-            area: "",
-            address: "Select location",
-            formattedAddress: "Select location",
-          }
+      const lat = Number(loc.latitude)
+      const lng = Number(loc.longitude)
+      const isInIndiaRange = lat >= 6.5 && lat <= 37.1 && lng >= 68.7 && lng <= 97.4 && lng > 0
+
+      if (!isInIndiaRange || lng < 0) {
+        console.warn("Coordinates from DB are outside India range:", { latitude: lat, longitude: lng })
+        return {
+          latitude: lat,
+          longitude: lng,
+          city: "Current Location",
+          state: "",
+          area: "",
+          address: "Select location",
+          formattedAddress: "Select location",
         }
+      }
 
-        try {
-          const addr = await reverseGeocodeWithGoogleMaps(
-            loc.latitude,
-            loc.longitude
-          )
-          return { ...addr, latitude: loc.latitude, longitude: loc.longitude }
-        } catch (geocodeErr) {
-          // If reverse geocoding fails, return location without coordinates in address
-          console.warn("âš ï¸ Reverse geocoding failed in fetchLocationFromDB:", geocodeErr.message)
-          return {
-            latitude: loc.latitude,
-            longitude: loc.longitude,
-            city: "Current Location",
-            area: "",
-            state: "",
-            address: "Select location", // Don't show coordinates
-            formattedAddress: "Select location", // Don't show coordinates
-          }
+      const fa = (loc.formattedAddress || "").trim()
+      const coordLike = /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(fa)
+      const hasSavedLine = fa && fa !== "Select location" && !coordLike
+
+      if (hasSavedLine) {
+        const mapped = {
+          latitude: lat,
+          longitude: lng,
+          address: (loc.address || "").trim() || fa,
+          city: (loc.city || "").trim(),
+          state: (loc.state || "").trim(),
+          area: (loc.area || "").trim(),
+          formattedAddress: fa,
+          postalCode: (loc.postalCode || "").trim(),
+          street: (loc.street || "").trim(),
+          streetNumber: (loc.streetNumber || "").trim(),
+        }
+        if (loc.accuracy != null && loc.accuracy !== undefined) {
+          mapped.accuracy = loc.accuracy
+        }
+        console.log("📂 Hydrating from database saved address (matches UI after refresh)")
+        return mapped
+      }
+
+      try {
+        const addr = await reverseGeocodeWithGoogleMaps(lat, lng)
+        return { ...addr, latitude: lat, longitude: lng }
+      } catch (geocodeErr) {
+        console.warn("Reverse geocoding failed in fetchLocationFromDB:", geocodeErr.message)
+        return {
+          latitude: lat,
+          longitude: lng,
+          city: (loc.city || "Current Location").trim() || "Current Location",
+          area: (loc.area || "").trim(),
+          state: (loc.state || "").trim(),
+          address: (loc.address || "Select location").trim() || "Select location",
+          formattedAddress: fa || (loc.address || "Select location").trim() || "Select location",
         }
       }
     } catch (err) {
-      // Silently fail for 404/401 (user not authenticated) or network errors
       if (err.code !== "ERR_NETWORK" && err.response?.status !== 404 && err.response?.status !== 401) {
         console.error("DB location fetch error:", err)
       }
@@ -719,7 +754,8 @@ function useUserGeoLocationEngine() {
   }
 
   /* ===================== MAIN LOCATION ===================== */
-  const getLocation = async (updateDB = true, forceFresh = false, showLoading = false) => {
+  const getLocation = async (updateDB = true, forceFresh = false, showLoading = false, geoOptions = {}) => {
+    const { forceBypassMoveThreshold = false } = geoOptions
     // If not forcing fresh, try DB first (faster)
     let dbLocation = !forceFresh ? await fetchLocationFromDB() : null
     if (dbLocation && !forceFresh) {
@@ -761,6 +797,39 @@ function useUserGeoLocationEngine() {
                 timestamp: new Date(timestamp).toISOString(),
                 coordinates: `${latitude.toFixed(8)}, ${longitude.toFixed(8)}`
               })
+
+              if (!forceBypassMoveThreshold) {
+                let baseline = locationRef.current
+                if (!baseline?.latitude) {
+                  try {
+                    const raw = localStorage.getItem("userLocation")
+                    if (raw) baseline = JSON.parse(raw)
+                  } catch {
+                    /* ignore */
+                  }
+                }
+                if (
+                  baseline?.latitude != null &&
+                  baseline?.longitude != null &&
+                  isAcceptableGeocodeResult(baseline)
+                ) {
+                  const moved = haversineDistanceMeters(
+                    latitude,
+                    longitude,
+                    Number(baseline.latitude),
+                    Number(baseline.longitude),
+                  )
+                  if (moved < MOVE_THRESHOLD_METERS) {
+                    console.log(
+                      `📍 GPS moved only ${moved.toFixed(1)}m (<${MOVE_THRESHOLD_METERS}m) — keeping saved address, skip geocode/DB`,
+                    )
+                    if (showLoading) setLoading(false)
+                    setError(null)
+                    resolve(baseline)
+                    return
+                  }
+                }
+              }
 
               // Validate coordinates are in India range BEFORE attempting geocoding
               // India: Latitude 6.5Â° to 37.1Â° N, Longitude 68.7Â° to 97.4Â° E
@@ -1226,20 +1295,22 @@ function useUserGeoLocationEngine() {
             // Use ref — watch callback must not close over stale `location` from an old render.
             const currentLoc = locationRef.current
             if (!bypassStability && currentLoc && currentLoc.latitude && currentLoc.longitude) {
-              // Calculate distance in meters (Haversine formula simplified for small distances)
-              const latDiff = latitude - currentLoc.latitude
-              const lngDiff = longitude - currentLoc.longitude
-              const distanceMeters = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) * 111320 // ~111320m per degree
+              const distanceMeters = haversineDistanceMeters(
+                latitude,
+                longitude,
+                Number(currentLoc.latitude),
+                Number(currentLoc.longitude),
+              )
 
-              // Check if address is better (more parts = more complete)
               const currentParts = (currentLoc.formattedAddress || "").split(',').filter(p => p.trim()).length
               const newParts = completeFormattedAddress.split(',').filter(p => p.trim()).length
               const addressImproved = newParts > currentParts
 
-              // Relaxed threshold (25m); explicit refresh bypasses this entirely
-              if (distanceMeters <= 25 && !addressImproved) {
-                console.log(`ðŸ“ Location unchanged (${distanceMeters.toFixed(1)}m change), keeping stable address`)
-                return // Don't update - keep current stable address
+              if (distanceMeters < MOVE_THRESHOLD_METERS && !addressImproved) {
+                console.log(
+                  `ðŸ“ Location unchanged (${distanceMeters.toFixed(1)}m < ${MOVE_THRESHOLD_METERS}m), keeping stable address`,
+                )
+                return
               }
 
               console.log(`ðŸ“ Location updated: ${distanceMeters.toFixed(1)}m change, address parts: ${currentParts} â†’ ${newParts}`)
@@ -1259,14 +1330,18 @@ function useUserGeoLocationEngine() {
               return
             }
 
-            // Check if coordinates have changed significantly (threshold: ~10 meters)
-            const coordThreshold = 0.0001 // approximately 10 meters
+            const prevLat = prevLocationCoordsRef.current.latitude
+            const prevLng = prevLocationCoordsRef.current.longitude
+            const movedFromPrev =
+              prevLat != null &&
+              prevLng != null &&
+              haversineDistanceMeters(loc.latitude, loc.longitude, Number(prevLat), Number(prevLng)) >=
+                MOVE_THRESHOLD_METERS
             const coordsChanged =
               bypassStability ||
-              !prevLocationCoordsRef.current.latitude ||
-              !prevLocationCoordsRef.current.longitude ||
-              Math.abs(prevLocationCoordsRef.current.latitude - loc.latitude) > coordThreshold ||
-              Math.abs(prevLocationCoordsRef.current.longitude - loc.longitude) > coordThreshold
+              prevLat == null ||
+              prevLng == null ||
+              movedFromPrev
 
             // Only update location state if coordinates changed significantly (or user requested fresh location)
             if (coordsChanged) {
@@ -1383,106 +1458,23 @@ function useUserGeoLocationEngine() {
 
   /* ===================== INIT ===================== */
   useEffect(() => {
-    // Load stored location first for IMMEDIATE display (no loading state)
-    const stored = localStorage.getItem("userLocation")
-    let shouldForceRefresh = false
-    let hasInitialLocation = false
+    let cancelled = false
 
-    if (stored) {
-      try {
-        const parsedLocation = JSON.parse(stored)
-
-        // Show cached location immediately (even if incomplete) - better UX
-        // We'll refresh in background but user sees something right away
-        // BUT: Skip if it's just placeholder values ("Select location" or "Current Location")
-        const latOk = parsedLocation?.latitude != null && parsedLocation?.longitude != null
-        const canHydrateFromCache =
-          latOk &&
-          !isUnpersistableLocation(parsedLocation) &&
-          (parsedLocation.formattedAddress || "").trim() !== "Select location"
-
-        if (canHydrateFromCache) {
-          setLocation(stampLocation(parsedLocation))
-          setPermissionGranted(true)
-          setLoading(false) // Set loading to false immediately
-          hasInitialLocation = true
-          console.log("ðŸ“‚ Loaded stored location instantly:", parsedLocation)
-
-          if (!hasDetailedAddress(parsedLocation)) {
-            console.log("âš ï¸ Cached location incomplete, will refresh in background")
-            shouldForceRefresh = true
-          }
-        } else {
-          console.log("âš ï¸ Cached location is placeholder, will fetch fresh")
-          shouldForceRefresh = true
-        }
-      } catch (err) {
-        console.error("Failed to parse stored location:", err)
-        shouldForceRefresh = true
-      }
-    }
-
-    // If no cached location, try DB
-    if (!hasInitialLocation) {
-      fetchLocationFromDB()
-        .then((dbLoc) => {
-          if (dbLoc && (dbLoc.latitude || dbLoc.city)) {
-            // Race: GPS / requestLocation may have written localStorage first — do not overwrite with stale DB row
-            try {
-              const raw = localStorage.getItem("userLocation")
-              if (raw) {
-                const local = JSON.parse(raw)
-                if (
-                  local?.latitude != null &&
-                  local?.longitude != null &&
-                  !isUnpersistableLocation(local) &&
-                  isAcceptableGeocodeResult(local)
-                ) {
-                  console.log("📌 Skipping DB hydrate — localStorage already has acceptable location (fresh GPS wins)")
-                  setLoading(false)
-                  return
-                }
-              }
-            } catch {
-              /* ignore */
-            }
-
-            setLocation(stampLocation(dbLoc))
-            setPermissionGranted(true)
-            setLoading(false)
-            hasInitialLocation = true
-            console.log("ðŸ“‚ Loaded location from DB:", dbLoc)
-
-            if (!hasDetailedAddress(dbLoc)) {
-              shouldForceRefresh = true
-            }
-          } else {
-            // No location found - set loading to false and show fallback
-            setLoading(false)
-            shouldForceRefresh = true
-          }
-        })
-        .catch(() => {
-          setLoading(false)
-          shouldForceRefresh = true
-        })
-    }
-
-    // Always ensure loading is false after initial check
-    // Safety timeout to prevent infinite loading
     const loadingTimeout = setTimeout(() => {
       setLoading((currentLoading) => {
         if (currentLoading) {
-          console.warn("âš ï¸ Loading timeout - setting loading to false")
-          // Only set fallback if we still don't have a location
+          console.warn("Loading timeout - setting loading to false")
           setLocation((currentLocation) => {
-            if (!currentLocation ||
+            if (
+              !currentLocation ||
               (currentLocation.formattedAddress === "Select location" &&
-                !currentLocation.latitude && !currentLocation.city)) {
+                !currentLocation.latitude &&
+                !currentLocation.city)
+            ) {
               return {
                 city: "Select location",
                 address: "Select location",
-                formattedAddress: "Select location"
+                formattedAddress: "Select location",
               }
             }
             return currentLocation
@@ -1490,51 +1482,40 @@ function useUserGeoLocationEngine() {
         }
         return false
       })
-    }, 5000) // 5 second safety timeout (increased to allow background fetch to complete)
+    }, 5000)
 
-    // Don't set fallback immediately - wait for background fetch to complete
-    // The background fetch will set the location, or we'll use the cached/DB location
-    // Only set fallback if we have no location after all attempts
-
-    // Request fresh location in BACKGROUND (non-blocking)
-    // CRITICAL FIX: Only auto-request if permission is ALREADY granted
-    // This prevents "Requests geolocation permission on page load" warning
-    const checkPermissionAndStart = async () => {
+    const checkPermissionAndStart = async (shouldForceRefresh, hasInitialLocation) => {
+      if (cancelled) return
       try {
-        let permissionGranted = false;
+        let permissionGranted = false
 
         if (navigator.permissions && navigator.permissions.query) {
           try {
-            const result = await navigator.permissions.query({ name: 'geolocation' });
-            if (result.state === 'granted') {
-              permissionGranted = true;
+            const result = await navigator.permissions.query({ name: "geolocation" })
+            if (result.state === "granted") {
+              permissionGranted = true
             } else {
-              console.log(`ðŸ“ Geolocation permission is '${result.state}' - Waiting for user action (avoiding prompt on load)`);
+              console.log(
+                `Geolocation permission is '${result.state}' - waiting for user action`,
+              )
             }
           } catch (permErr) {
-            console.warn("âš ï¸ Permission query failed:", permErr);
+            console.warn("Permission query failed:", permErr)
           }
         } else {
-          // Fallback for browsers without permissions API - assume not granted to be safe
-          console.log("ðŸ“ Permissions API not available - Skipping auto-start");
+          console.log("Permissions API not available - skipping auto-start")
         }
 
-        // If permission NOT granted, and we don't have a specific user request (this is page load),
-        // we should SKIP automatic fetching/watching to allow the user to choose when to enable it.
-        // UNLESS we already have a valid initial location from localStorage/DB, in which case we might want to refresh?
-        // Actually, even then, we shouldn't prompt.
         if (!permissionGranted) {
-          // If we have an initial location, we are fine (it's displayed).
-          // If we don't, we show "Select Location".
-          // In either case, we avoid the PROMPT.
-          // Ensure loading is false so UI doesn't hang
-          setLoading(false);
-          return;
+          setLoading(false)
+          return
         }
 
-        console.log("ðŸš€ Permission granted! Fetching/Watching location...", shouldForceRefresh ? "(FORCE REFRESH)" : "");
+        console.log(
+          "Permission granted — background location:",
+          shouldForceRefresh ? "(force refresh)" : "",
+        )
 
-        // Decide background fetch from localStorage snapshot (React state in this closure is stale on first run).
         let locSnap = null
         try {
           const raw = localStorage.getItem("userLocation")
@@ -1553,34 +1534,34 @@ function useUserGeoLocationEngine() {
         const shouldFetch = shouldForceRefresh || !hasInitialLocation || needsBetterAddress
 
         if (shouldFetch) {
-          console.log("ðŸ”„ Fetching location - shouldForceRefresh:", shouldForceRefresh, "hasInitialLocation:", hasInitialLocation, "needsBetterAddress:", needsBetterAddress)
-          getLocation(true, shouldForceRefresh) // forceFresh = true if cached location is incomplete
+          console.log(
+            "Background fetch — force:",
+            shouldForceRefresh,
+            "hasInitial:",
+            hasInitialLocation,
+            "needsBetter:",
+            needsBetterAddress,
+          )
+          getLocation(true, shouldForceRefresh, false, {})
             .then((location) => {
+              if (cancelled || !location) return
               if (isAcceptableGeocodeResult(location)) {
-                console.log("âœ… Fresh location fetched:", location)
-                console.log("âœ… Location details:", {
-                  formattedAddress: location?.formattedAddress,
-                  address: location?.address,
-                  city: location?.city,
-                  state: location?.state,
-                  area: location?.area
-                })
-                // CRITICAL: Update state with fresh location so PageNavbar displays it
                 setLocation(stampLocation(location))
                 setPermissionGranted(true)
                 dispatchLocationUpdated(location)
-                // Start watching for live updates
                 startWatchingLocation()
               } else {
-                console.warn("âš ï¸ Location fetch returned placeholder, retrying...")
-                // Retry after 2 seconds if we got placeholder
+                console.warn("Location fetch returned placeholder, retrying...")
                 setTimeout(() => {
-                  getLocation(true, true)
+                  getLocation(true, true, false, {})
                     .then((retryLocation) => {
+                      if (cancelled || !retryLocation) return
                       if (isAcceptableGeocodeResult(retryLocation)) {
                         setLocation(stampLocation(retryLocation))
                         setPermissionGranted(true)
                         dispatchLocationUpdated(retryLocation)
+                        startWatchingLocation()
+                      } else {
                         startWatchingLocation()
                       }
                     })
@@ -1591,52 +1572,138 @@ function useUserGeoLocationEngine() {
               }
             })
             .catch((err) => {
-              console.warn("âš ï¸ Background location fetch failed (using cached):", err.message)
-              // Still start watching in case permission is granted later
+              console.warn("Background location fetch failed (using cache):", err.message)
               startWatchingLocation()
             })
         } else {
-          // We have a valid location, just start watching
           startWatchingLocation()
         }
       } catch (err) {
-        console.error("Error in checkPermissionAndStart:", err);
-        setLoading(false);
+        console.error("Error in checkPermissionAndStart:", err)
+        setLoading(false)
       }
-    };
+    }
 
-    // Avoid prompting on first paint when permission is still "prompt".
-    // If user already granted geolocation (or we have cached coords), start fetch/watch.
-    const hasStoredLocation = Boolean(localStorage.getItem("userLocation"))
-    const startIfEligible = () => {
-      if (hasStoredLocation) {
-        checkPermissionAndStart()
+    const bootstrap = async () => {
+      let shouldForceRefresh = false
+      let hasInitialLocation = false
+
+      const token =
+        localStorage.getItem("user_accessToken") || localStorage.getItem("accessToken")
+      const authed = token && token !== "null" && token !== "undefined"
+
+      if (authed) {
+        setLoading(true)
+        const dbLoc = await fetchLocationFromDB()
+        if (cancelled) return
+
+        if (dbLoc && (dbLoc.latitude || dbLoc.city)) {
+          const stamped = stampLocation(dbLoc)
+          setLocation(stamped)
+          try {
+            localStorage.setItem("userLocation", JSON.stringify(stamped))
+          } catch {
+            /* ignore */
+          }
+          prevLocationCoordsRef.current = {
+            latitude: stamped.latitude,
+            longitude: stamped.longitude,
+          }
+          setPermissionGranted(true)
+          setLoading(false)
+          hasInitialLocation = true
+          if (!hasDetailedAddress(dbLoc)) {
+            shouldForceRefresh = true
+          }
+          console.log("Logged-in: hydrated from DB first (same address after refresh)")
+          await checkPermissionAndStart(shouldForceRefresh, hasInitialLocation)
+          return
+        }
+        setLoading(false)
+      }
+
+      const stored = localStorage.getItem("userLocation")
+      if (stored) {
+        try {
+          const parsedLocation = JSON.parse(stored)
+          const latOk = parsedLocation?.latitude != null && parsedLocation?.longitude != null
+          const canHydrateFromCache =
+            latOk &&
+            !isUnpersistableLocation(parsedLocation) &&
+            (parsedLocation.formattedAddress || "").trim() !== "Select location"
+
+          if (canHydrateFromCache) {
+            setLocation(stampLocation(parsedLocation))
+            setPermissionGranted(true)
+            setLoading(false)
+            hasInitialLocation = true
+            if (!hasDetailedAddress(parsedLocation)) {
+              shouldForceRefresh = true
+            }
+          } else {
+            shouldForceRefresh = true
+          }
+        } catch (err) {
+          console.error("Failed to parse stored location:", err)
+          shouldForceRefresh = true
+        }
+      }
+
+      if (!hasInitialLocation) {
+        const dbLoc = await fetchLocationFromDB()
+        if (cancelled) return
+        if (dbLoc && (dbLoc.latitude || dbLoc.city)) {
+          const stamped = stampLocation(dbLoc)
+          setLocation(stamped)
+          try {
+            localStorage.setItem("userLocation", JSON.stringify(stamped))
+          } catch {
+            /* ignore */
+          }
+          prevLocationCoordsRef.current = {
+            latitude: stamped.latitude,
+            longitude: stamped.longitude,
+          }
+          setPermissionGranted(true)
+          setLoading(false)
+          hasInitialLocation = true
+          if (!hasDetailedAddress(dbLoc)) {
+            shouldForceRefresh = true
+          }
+        } else {
+          setLoading(false)
+          shouldForceRefresh = true
+        }
+      }
+
+      if (localStorage.getItem("userLocation")) {
+        await checkPermissionAndStart(shouldForceRefresh, hasInitialLocation)
         return
       }
-      ;(async () => {
-        try {
-          if (navigator.permissions?.query) {
-            const r = await navigator.permissions.query({ name: "geolocation" })
-            if (r.state === "granted") {
-              checkPermissionAndStart()
-              return
-            }
+
+      try {
+        if (navigator.permissions?.query) {
+          const r = await navigator.permissions.query({ name: "geolocation" })
+          if (r.state === "granted") {
+            await checkPermissionAndStart(shouldForceRefresh, hasInitialLocation)
+            return
           }
-        } catch {
-          // ignore
         }
-        console.log("Fresh visit — geolocation not pre-granted; navbar/overlay can call requestLocation()")
-        setLoading(false)
-      })()
+      } catch {
+        /* ignore */
+      }
+      console.log("Fresh visit — geolocation not pre-granted; use location picker when needed")
+      setLoading(false)
     }
-    startIfEligible()
+
+    void bootstrap()
 
     return () => {
+      cancelled = true
       clearTimeout(loadingTimeout)
       stopWatchingLocation()
     }
   }, [])
-
   // Listen for address updates (from overlay, cart, or other tabs) so top nav and all consumers update instantly
   useEffect(() => {
     const onUserLocationUpdated = (e) => {
@@ -1687,7 +1754,9 @@ function useUserGeoLocationEngine() {
 
       // Show loading, so pass showLoading = true
       // updateDB: false when overlay will persist Google-refined address after handleMapMoveEnd
-      const location = await getLocation(!skipDatabaseUpdate, true, true)
+      const location = await getLocation(!skipDatabaseUpdate, true, true, {
+        forceBypassMoveThreshold: true,
+      })
 
       console.log("âœ…âœ…âœ… Fresh location requested successfully:", location)
       console.log("âœ…âœ…âœ… Complete Location details:", {
