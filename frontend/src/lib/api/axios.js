@@ -150,17 +150,36 @@ apiClient.interceptors.request.use(
           requestUrl.match(/\/restaurant\/[^/]+\/inventory/) ||
           requestUrl.match(/\/restaurant\/[^/]+\/offers/)));
 
+    const isAdminAuthRoute =
+      path === "/admin/login" ||
+      path === "/admin/signup" ||
+      path === "/admin/forgot-password";
+
+    const isRestaurantAuthRoute =
+      path === "/restaurant/login" ||
+      path === "/restaurant/signup" ||
+      path === "/restaurant/signup-email" ||
+      path === "/restaurant/forgot-password" ||
+      path === "/restaurant/otp" ||
+      path === "/restaurant/welcome" ||
+      path === "/restaurant/auth/sign-in" ||
+      path === "/restaurant/auth/google-callback" ||
+      path.startsWith("/restaurant/auth/");
+
     const isDeliveryAuthRoute =
       path === "/delivery/sign-in" ||
       path === "/delivery/signup" ||
       path === "/delivery/otp" ||
       path === "/delivery/welcome" ||
-      path.startsWith("/delivery/signup/");
+      path.startsWith("/delivery/signup/") ||
+      path === "/delivery/terms" ||
+      path === "/delivery/privacy";
 
     const isAuthenticatedRoute =
-      ((path.startsWith("/admin") && !path.startsWith("/admin/login")) ||
+      ((path.startsWith("/admin") && !isAdminAuthRoute) ||
         (path.startsWith("/restaurant") &&
           !path.startsWith("/restaurants") &&
+          !isRestaurantAuthRoute &&
           !isPublicRestaurantRoute) ||
         (path.startsWith("/delivery") && !isDeliveryAuthRoute) ||
         path.startsWith("/user") ||
@@ -349,8 +368,21 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // If error is 401 and we haven't tried to refresh yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const failedRequestUrl = String(originalRequest?.url || "");
+    const isAuthFlowRequest =
+      failedRequestUrl.includes("/auth/login") ||
+      failedRequestUrl.includes("/auth/signup") ||
+      failedRequestUrl.includes("/auth/forgot-password") ||
+      failedRequestUrl.includes("/auth/send-otp") ||
+      failedRequestUrl.includes("/auth/verify-otp") ||
+      failedRequestUrl.includes("/auth/refresh-token");
+
+    // If error is 401 and we haven't tried refresh yet (skip auth flow endpoints)
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !isAuthFlowRequest
+    ) {
       originalRequest._retry = true;
 
       try {
@@ -479,7 +511,13 @@ apiClient.interceptors.response.use(
             localStorage.removeItem("admin_accessToken");
             localStorage.removeItem("admin_authenticated");
             localStorage.removeItem("admin_user");
-            window.location.href = "/admin/login";
+            const isAdminAuthRoute =
+              currentPath === "/admin/login" ||
+              currentPath === "/admin/signup" ||
+              currentPath === "/admin/forgot-password";
+            if (!isAdminAuthRoute) {
+              window.location.href = "/admin/login";
+            }
           } else if (
             currentPath.startsWith("/restaurant") &&
             !currentPath.startsWith("/restaurants")
@@ -488,7 +526,19 @@ apiClient.interceptors.response.use(
             localStorage.removeItem("restaurant_accessToken");
             localStorage.removeItem("restaurant_authenticated");
             localStorage.removeItem("restaurant_user");
-            window.location.href = "/restaurant/login";
+            const isRestaurantAuthRoute =
+              currentPath === "/restaurant/login" ||
+              currentPath === "/restaurant/signup" ||
+              currentPath === "/restaurant/signup-email" ||
+              currentPath === "/restaurant/forgot-password" ||
+              currentPath === "/restaurant/otp" ||
+              currentPath === "/restaurant/welcome" ||
+              currentPath === "/restaurant/auth/sign-in" ||
+              currentPath === "/restaurant/auth/google-callback" ||
+              currentPath.startsWith("/restaurant/auth/");
+            if (!isRestaurantAuthRoute) {
+              window.location.href = "/restaurant/login";
+            }
           } else if (currentPath.startsWith("/delivery")) {
             localStorage.removeItem("delivery_accessToken");
             localStorage.removeItem("delivery_authenticated");
