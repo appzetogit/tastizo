@@ -773,25 +773,9 @@ export default function DeliveryHome() {
     
     window.addEventListener('onlineStatusChanged', handleCustomStorageChange)
 
-    // Also poll localStorage periodically to catch any missed updates (fallback)
-    const pollInterval = setInterval(() => {
-      try {
-        const raw = localStorage.getItem(LS_KEY)
-        const next = raw ? JSON.parse(raw) === true : false
-        setIsOnline(prev => {
-          if (prev !== next) {
-            console.log('[DeliveryHome] Polling detected change:', prev, '->', next)
-            return next
-          }
-          return prev
-        })
-      } catch {}
-    }, 1000) // Check every second
-
     return () => {
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('onlineStatusChanged', handleCustomStorageChange)
-      clearInterval(pollInterval)
     }
   }, [])
 
@@ -952,29 +936,13 @@ export default function DeliveryHome() {
     // Fetch immediately on mount
     fetchActiveEarningAddons()
 
-    // Refresh every 5 seconds to get latest offers
+    // Keep refresh lightweight to avoid UI feeling like page reload
     const refreshInterval = setInterval(() => {
       fetchActiveEarningAddons()
-    }, 5000)
-
-    // Refresh when page becomes visible
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        fetchActiveEarningAddons()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    // Also listen for focus events for instant refresh
-    const handleFocus = () => {
-      fetchActiveEarningAddons()
-    }
-    window.addEventListener('focus', handleFocus)
+    }, 60000)
 
     return () => {
       clearInterval(refreshInterval)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('focus', handleFocus)
     }
   }, [])
 

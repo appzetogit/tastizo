@@ -5,6 +5,14 @@ import AuthRedirect from "@/components/AuthRedirect"
 import { Suspense, lazy, useEffect, useRef } from "react"
 import Loader from "@/components/Loader"
 import { UserGeoLocationProvider } from "@/module/user/hooks/useLocation"
+import DeliverySignIn from "@/module/delivery/pages/auth/SignIn"
+import DeliverySignup from "@/module/delivery/pages/auth/Signup"
+import DeliveryOTP from "@/module/delivery/pages/auth/OTP"
+import DeliveryTermsAndConditions from "@/module/delivery/pages/TermsAndConditions"
+import DeliveryPrivacyPolicy from "@/module/delivery/pages/PrivacyPolicy"
+import DeliverySignupStep1 from "@/module/delivery/pages/auth/SignupStep1"
+import DeliverySignupStep2 from "@/module/delivery/pages/auth/SignupStep2"
+import DeliveryWelcome from "@/module/delivery/pages/auth/Welcome"
 
 // Lazy Loading Components
 const UserRouter = lazy(() => import("@/module/user/components/UserRouter"))
@@ -117,14 +125,6 @@ const AdminForgotPassword = lazy(() => import("@/module/admin/pages/auth/AdminFo
 
 // Delivery Module
 const DeliveryRouter = lazy(() => import("@/module/delivery/components/DeliveryRouter"))
-const DeliverySignIn = lazy(() => import("@/module/delivery/pages/auth/SignIn"))
-const DeliverySignup = lazy(() => import("@/module/delivery/pages/auth/Signup"))
-const DeliveryOTP = lazy(() => import("@/module/delivery/pages/auth/OTP"))
-const DeliveryTermsAndConditions = lazy(() => import("@/module/delivery/pages/TermsAndConditions"))
-const DeliveryPrivacyPolicy = lazy(() => import("@/module/delivery/pages/PrivacyPolicy"))
-const DeliverySignupStep1 = lazy(() => import("@/module/delivery/pages/auth/SignupStep1"))
-const DeliverySignupStep2 = lazy(() => import("@/module/delivery/pages/auth/SignupStep2"))
-const DeliveryWelcome = lazy(() => import("@/module/delivery/pages/auth/Welcome"))
 
 function UserPathRedirect() {
   const location = useLocation()
