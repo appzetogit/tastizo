@@ -4,6 +4,7 @@ import AuthRedirect from "@/components/AuthRedirect"
 
 import { Suspense, lazy, useEffect, useRef } from "react"
 import Loader from "@/components/Loader"
+import { UserGeoLocationProvider } from "@/module/user/hooks/useLocation"
 
 // Lazy Loading Components
 const UserRouter = lazy(() => import("@/module/user/components/UserRouter"))
@@ -193,6 +194,7 @@ export default function App() {
   return (
     <Suspense fallback={<Loader />}>
       <RoutePersistence>
+        <UserGeoLocationProvider>
         <Routes>
         <Route path="/user" element={<Navigate to="/" replace />} />
         <Route path="/user/*" element={<UserPathRedirect />} />
@@ -904,6 +906,7 @@ export default function App() {
           element={<UserRouter />}
         />
         </Routes>
+        </UserGeoLocationProvider>
       </RoutePersistence>
     </Suspense>
   )

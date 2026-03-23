@@ -38,6 +38,48 @@ export function isAcceptableGeocodeResult(loc) {
   return Boolean(c && c !== "Current Location" && c !== "Select location")
 }
 
+/** True if a comma segment is only an Open Location Code (e.g. PV6X+9XP), not a street name. */
+export function isLikelyPlusCodeOnlySegment(s) {
+  const t = (s || "").trim()
+  if (!t.includes("+")) return false
+  const core = t.replace(/\s/g, "")
+  return (
+    /^[2-9CFGHJMPQRVWX]{2,}\+[2-9CFGHJMPQRVWX]{2,}$/i.test(core) &&
+    core.length <= 24
+  )
+}
+
+/** Drop leading plus-code segments from Google's formatted_address so UI shows real street/area first. */
+export function stripLeadingPlusCodeFromFormatted(str) {
+  if (!str || typeof str !== "string") return ""
+  const parts = str.split(",").map((p) => p.trim()).filter(Boolean)
+  while (parts.length > 1 && isLikelyPlusCodeOnlySegment(parts[0])) {
+    parts.shift()
+  }
+  if (parts.length === 1 && isLikelyPlusCodeOnlySegment(parts[0])) return ""
+  return parts.join(", ")
+}
+
+/**
+ * Remove repeated comma-separated segments (case-insensitive), e.g. duplicated city/state from API + DB fields.
+ */
+export function dedupeFormattedAddressLine(str) {
+  if (!str || typeof str !== "string") return ""
+  const parts = str
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean)
+  const seen = new Set()
+  const out = []
+  for (const p of parts) {
+    const key = p.toLowerCase().replace(/\s+/g, " ")
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(p)
+  }
+  return out.join(", ")
+}
+
 /** Primary / secondary lines for DesktopNavbar & mobile Navbar (street-level when present in formattedAddress). */
 export function pickNavbarLocationLines(loc) {
   if (!loc) return { main: "Select", sub: "" }

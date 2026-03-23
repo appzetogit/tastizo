@@ -9,8 +9,21 @@ import { useLocation as useGeoLocation } from "../hooks/useLocation"
 import { useProfile } from "../context/ProfileContext"
 import { toast } from "sonner"
 import { locationAPI, userAPI } from "@/lib/api"
-import { isUnpersistableLocation } from "@/lib/userLocationDisplay"
+import {
+  isUnpersistableLocation,
+  dedupeFormattedAddressLine,
+  stripLeadingPlusCodeFromFormatted,
+  isLikelyPlusCodeOnlySegment,
+} from "@/lib/userLocationDisplay"
 import { Loader } from '@googlemaps/js-api-loader'
+
+function cleanLocationDisplayLine(str) {
+  if (!str || typeof str !== "string") return ""
+  const t = str.trim().replace(/,\s*India\s*$/i, "")
+  if (!t) return ""
+  if (/^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(t)) return t
+  return dedupeFormattedAddressLine(stripLeadingPlusCodeFromFormatted(t))
+}
 
 // Google Maps implementation - Leaflet components removed
 
@@ -65,9 +78,21 @@ function formattedLineFromReverseResult(result) {
   return parts.join(", ")
 }
 
+/** Google Geocoder: prefer rooftop / interpolated over approximate centroid (more exact pin). */
+function geometryPrecisionRank(r) {
+  const t = r?.geometry?.location_type || r?.geometry?.locationType
+  const order = {
+    ROOFTOP: 0,
+    RANGE_INTERPOLATED: 1,
+    GEOMETRIC_CENTER: 2,
+    APPROXIMATE: 3,
+  }
+  return order[t] ?? 4
+}
+
 function pickBestGoogleGeocodeResult(results) {
   if (!results?.length) return null
-  const rank = (r) => {
+  const typeRank = (r) => {
     const types = r.types || []
     if (types.includes("street_address")) return 0
     if (types.includes("premise")) return 1
@@ -79,12 +104,15 @@ function pickBestGoogleGeocodeResult(results) {
     return 10
   }
   let best = results[0]
-  let bestRank = rank(best)
-  for (const r of results.slice(0, 12)) {
-    const rk = rank(r)
-    if (rk < bestRank) {
+  let bestGeo = geometryPrecisionRank(best)
+  let bestType = typeRank(best)
+  for (const r of results.slice(0, 15)) {
+    const g = geometryPrecisionRank(r)
+    const t = typeRank(r)
+    if (g < bestGeo || (g === bestGeo && t < bestType)) {
       best = r
-      bestRank = rk
+      bestGeo = g
+      bestType = t
     }
   }
   return best
@@ -112,27 +140,36 @@ function parseGoogleGeocodeResult(bestResult) {
   let postalCode = ""
   let pointOfInterest = ""
   let premise = ""
+  let areaGranularity = -1
+  const considerArea = (types, name) => {
+    const n = (name || "").trim()
+    if (!n) return
+    let sc = -1
+    if (types.includes("sublocality_level_3")) sc = 6
+    else if (types.includes("sublocality_level_2")) sc = 5
+    else if (types.includes("neighborhood")) sc = 4
+    else if (types.includes("sublocality_level_1")) sc = 3
+    else if (types.includes("sublocality")) sc = 2
+    else if (types.includes("colloquial_area")) sc = 2
+    if (sc > areaGranularity) {
+      areaGranularity = sc
+      area = n
+    }
+  }
   for (const component of bestResult.address_components || []) {
     const types = component.types || []
     if (types.includes("point_of_interest") && !pointOfInterest) pointOfInterest = component.long_name
     if (types.includes("premise") && !premise) premise = component.long_name
     if (types.includes("street_number") && !streetNumber) streetNumber = component.long_name
     if (types.includes("route") && !street) street = component.long_name
-    if (
-      (types.includes("sublocality_level_1") ||
-        types.includes("sublocality_level_2") ||
-        types.includes("sublocality")) &&
-      !area
-    ) {
-      area = component.long_name
-    }
-    if (types.includes("neighborhood") && !area) area = component.long_name
+    considerArea(types, component.long_name)
     if (types.includes("locality") && !city) city = component.long_name
     if (types.includes("administrative_area_level_1") && !state) state = component.long_name
     if (types.includes("postal_code") && !postalCode) postalCode = component.long_name
   }
+  const rawFormatted = (bestResult.formatted_address || "").trim()
   return {
-    formattedAddress: (bestResult.formatted_address || "").trim(),
+    formattedAddress: cleanLocationDisplayLine(rawFormatted),
     city,
     state,
     area,
@@ -144,8 +181,23 @@ function parseGoogleGeocodeResult(bestResult) {
   }
 }
 
-function geocodeLatLngWithGoogleMaps(googleNs, lat, lng) {
+function raceWithTimeout(promise, ms, errorTag = "TIMEOUT") {
   return new Promise((resolve, reject) => {
+    const tid = setTimeout(() => reject(new Error(errorTag)), ms)
+    promise
+      .then((v) => {
+        clearTimeout(tid)
+        resolve(v)
+      })
+      .catch((e) => {
+        clearTimeout(tid)
+        reject(e)
+      })
+  })
+}
+
+function geocodeLatLngWithGoogleMaps(googleNs, lat, lng) {
+  const inner = new Promise((resolve, reject) => {
     if (!googleNs?.maps?.Geocoder) {
       reject(new Error("Geocoder unavailable"))
       return
@@ -160,12 +212,21 @@ function geocodeLatLngWithGoogleMaps(googleNs, lat, lng) {
       }
     })
   })
+  return raceWithTimeout(inner, 12000, "GEOCODE_JS_TIMEOUT")
 }
 
 async function geocodeLatLngGoogleRest(lat, lng, apiKey) {
   if (!apiKey) throw new Error("Missing Google Maps API key")
   const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${encodeURIComponent(apiKey)}&language=en&region=in`
-  const geocodeResponse = await fetch(url)
+  const controller = new AbortController()
+  const geocodeResponse = await raceWithTimeout(
+    fetch(url, { signal: controller.signal }),
+    10000,
+    "GEOCODE_REST_TIMEOUT",
+  ).catch((e) => {
+    controller.abort()
+    throw e
+  })
   const geocodeData = await geocodeResponse.json()
   if (geocodeData.status !== "OK" || !geocodeData.results?.length) {
     throw new Error(geocodeData.error_message || geocodeData.status || "Geocode failed")
@@ -249,7 +310,8 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const [googleMapsAuthFailed, setGoogleMapsAuthFailed] = useState(false)
   /** Live GPS line for "Use current location" subtitle (not DB/saved Home). */
   const [gpsLiveLine, setGpsLiveLine] = useState("")
-  const [gpsLiveStatus, setGpsLiveStatus] = useState("loading") // loading | ok | denied | error | unsupported
+  /** idle = show saved/context address; no auto GPS on open (avoids "Detecting…" every time). */
+  const [gpsLiveStatus, setGpsLiveStatus] = useState("idle") // idle | loading | ok | denied | error | unsupported
 
   // Decide where to send user after closing this overlay.
   // If a page (like Cart) stored a custom return path in localStorage,
@@ -323,6 +385,17 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   // Format should match saved addresses: "B2/4, Gandhi Park Colony, Anand Nagar, Indore, Madhya Pradesh, 452001"
   // Show ALL parts of formattedAddress (like saved addresses show all parts)
   const currentLocationText = (() => {
+    const partCnt = (s) =>
+      (s || "").split(",").map((x) => x.trim()).filter(Boolean).length
+
+    // Fresh "Use current location" line — beats hook/localStorage heuristics so UI updates immediately
+    if (
+      gpsLiveLine &&
+      (gpsLiveStatus === "ok" || gpsLiveStatus === "loading")
+    ) {
+      return cleanLocationDisplayLine(gpsLiveLine)
+    }
+
     // Priority 0: Use currentAddress from map (most up-to-date when user selects location on map)
     // This is updated when map moves or "Use current location" is clicked
     if (currentAddress &&
@@ -333,7 +406,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       if (fullAddress.endsWith(', India')) {
         fullAddress = fullAddress.replace(', India', '').trim()
       }
-      return fullAddress
+      return cleanLocationDisplayLine(fullAddress)
     }
 
     // Priority 1: Use addressFormData.additionalDetails (updated when map moves)
@@ -345,19 +418,58 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       if (fullAddress.endsWith(', India')) {
         fullAddress = fullAddress.replace(', India', '').trim()
       }
-      // Build complete address with all components
-      const addressParts = [fullAddress]
-      if (addressFormData.city) addressParts.push(addressFormData.city)
-      if (addressFormData.state) {
-        if (addressFormData.zipCode) {
-          addressParts.push(`${addressFormData.state} ${addressFormData.zipCode}`)
-        } else {
-          addressParts.push(addressFormData.state)
-        }
-      } else if (addressFormData.zipCode) {
-        addressParts.push(addressFormData.zipCode)
+      const faNorm = fullAddress.toLowerCase()
+      const extras = []
+      const pushIfMissing = (s) => {
+        const t = (s || "").trim()
+        if (!t) return
+        if (faNorm.includes(t.toLowerCase())) return
+        extras.push(t)
       }
-      return addressParts.join(', ')
+      pushIfMissing(addressFormData.city)
+      if (addressFormData.state && addressFormData.zipCode) {
+        const st = `${addressFormData.state} ${addressFormData.zipCode}`
+        if (!faNorm.includes(addressFormData.state.toLowerCase()) || !faNorm.includes(String(addressFormData.zipCode))) {
+          extras.push(st)
+        }
+      } else {
+        pushIfMissing(addressFormData.state)
+        pushIfMissing(addressFormData.zipCode)
+      }
+      return cleanLocationDisplayLine(
+        extras.length ? `${fullAddress}, ${extras.join(", ")}` : fullAddress,
+      )
+    }
+
+    // Prefer device-stored line from map / last save over stale useLocation() (fixes list vs "final extracted" mismatch)
+    let storedFormatted = ""
+    try {
+      const raw = localStorage.getItem("userLocation")
+      if (raw) {
+        const p = JSON.parse(raw)
+        const f = (p?.formattedAddress || "").trim()
+        if (f && f !== "Select location" && !/^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(f)) {
+          storedFormatted = cleanLocationDisplayLine(f)
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const hookClean = cleanLocationDisplayLine(location?.formattedAddress || "")
+
+    if (storedFormatted) {
+      const sc = partCnt(storedFormatted)
+      const hc = partCnt(hookClean)
+      if (
+        sc >= 4 &&
+        (sc > hc ||
+          (sc === hc && storedFormatted.length >= hookClean.length) ||
+          !hookClean)
+      ) {
+        return storedFormatted
+      }
+      if (!hookClean && sc >= 3) return storedFormatted
     }
 
     // Priority 2: Use formattedAddress from location hook (complete detailed address) - SAVED ADDRESSES FORMAT
@@ -371,10 +483,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         fullAddress = fullAddress.replace(', India', '').trim()
       }
 
-      // Show complete address - ALL parts (like saved addresses format)
-      // Saved addresses format: "additionalDetails, street, city, state, zipCode"
-      // Current location format: "POI, Building, Floor, Area, City, State, Pincode"
-      return fullAddress
+      return cleanLocationDisplayLine(fullAddress)
     }
 
     // Priority 3: Build address from components (SAVED ADDRESSES FORMAT)
@@ -407,7 +516,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       }
 
       if (addressParts.length > 0) {
-        return addressParts.join(', ')
+        return dedupeFormattedAddressLine(addressParts.join(", "))
       }
     }
 
@@ -417,7 +526,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       if (location.postalCode) {
         parts.push(location.postalCode)
       }
-      return parts.join(', ')
+      return dedupeFormattedAddressLine(parts.join(", "))
     }
 
     // Priority 4: Fallback to city + state + pincode
@@ -426,77 +535,56 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       if (location.postalCode) {
         parts.push(location.postalCode)
       }
-      return parts.join(', ')
+      return dedupeFormattedAddressLine(parts.join(", "))
     }
 
     // Final fallback
     return location?.city || location?.area || "Detecting location..."
   })()
 
-  // Subtitle under "Use current location" must reflect device GPS, not user.currentLocation (often same as saved Home).
+  // On open: reset to idle and show saved/context address — do not auto-call GPS (battery + avoids perpetual "Detecting…").
   useEffect(() => {
     if (!isOpen) return
-
     if (!navigator.geolocation) {
       setGpsLiveStatus("unsupported")
       return
     }
-
-    let cancelled = false
-    setGpsLiveStatus("loading")
+    setGpsLiveStatus("idle")
     setGpsLiveLine("")
+  }, [isOpen])
 
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        if (cancelled) return
-        const { latitude, longitude } = pos.coords
-        try {
-          const parsed = await reverseGeocodeWithGoogleMapsPrefer(
-            latitude,
-            longitude,
-            GOOGLE_MAPS_API_KEY,
-          )
-          const line =
-            lineFromGoogleParsed(parsed) || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
-          if (cancelled) return
-          setGpsLiveLine(line)
-          setGpsLiveStatus("ok")
-        } catch {
-          try {
-            const res = await locationAPI.reverseGeocode(latitude, longitude)
-            const backendData = res?.data?.data || {}
-            const result =
-              Array.isArray(backendData.results) && backendData.results.length > 0
-                ? backendData.results[0]
-                : backendData
-            const line = formattedLineFromReverseResult(result)
-            if (cancelled) return
-            setGpsLiveLine(line || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`)
-            setGpsLiveStatus("ok")
-          } catch {
-            if (cancelled) return
-            setGpsLiveLine(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`)
-            setGpsLiveStatus("ok")
-          }
-        }
-      },
-      (err) => {
-        if (cancelled) return
-        if (err?.code === 1) setGpsLiveStatus("denied")
-        else setGpsLiveStatus("error")
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
-    )
-
-    return () => {
-      cancelled = true
+  useEffect(() => {
+    const onUserLocationUpdated = (e) => {
+      const d = e.detail
+      if (!d) return
+      const line = cleanLocationDisplayLine(d.formattedAddress || d.address || "")
+      if (!line) return
+      setCurrentAddress(line)
+      setAddressFormData((prev) => ({
+        ...prev,
+        city: d.city || prev.city,
+        state: d.state || prev.state,
+        zipCode: d.postalCode || prev.zipCode,
+        additionalDetails: line || prev.additionalDetails,
+      }))
     }
-  }, [isOpen, GOOGLE_MAPS_API_KEY])
+    window.addEventListener("userLocationUpdated", onUserLocationUpdated)
+    return () =>
+      window.removeEventListener("userLocationUpdated", onUserLocationUpdated)
+  }, [])
 
   const useCurrentLocationSubtitle = (() => {
-    if (loading) return "Getting location..."
-    if (gpsLiveStatus === "loading") return "Detecting your live location…"
-    if (gpsLiveStatus === "ok" && gpsLiveLine) return gpsLiveLine
+    const hasContextLocation =
+      Boolean(location?.latitude) ||
+      Boolean(location?.city) ||
+      Boolean(location?.formattedAddress) ||
+      Boolean(
+        currentLocationText &&
+          currentLocationText !== "Detecting location...",
+      )
+
+    if (loading && !hasContextLocation) return "Getting location..."
+
     if (gpsLiveStatus === "denied") {
       return "Turn on location access to see where you are right now"
     }
@@ -504,6 +592,13 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       return "Could not read GPS — tap below to try again"
     }
     if (gpsLiveStatus === "unsupported") return currentLocationText
+
+    if (gpsLiveStatus === "ok" && gpsLiveLine) return gpsLiveLine
+
+    if (gpsLiveStatus === "loading") {
+      return hasContextLocation ? currentLocationText : "Updating your location…"
+    }
+
     return currentLocationText
   })()
 
@@ -888,7 +983,11 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               }
             )
 
-            // Then, watch for position updates (live tracking)
+            // Then, watch for position updates (live tracking) — single watch; avoid stacking callbacks
+            if (watchPositionIdRef.current !== null) {
+              navigator.geolocation.clearWatch(watchPositionIdRef.current)
+              watchPositionIdRef.current = null
+            }
             const watchId = navigator.geolocation.watchPosition(
               (position) => {
                 if (!isMounted) return
@@ -1063,6 +1162,43 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     }
   }, [])
 
+  /** PUT /user/location using localStorage after Google/refined geocode (avoids saving coarse backend-only row first). */
+  const persistRefinedLocationToBackend = async (coordsSource) => {
+    if (!coordsSource?.latitude || !coordsSource?.longitude) return
+    try {
+      let storedParsed = null
+      try {
+        const raw = localStorage.getItem("userLocation")
+        if (raw) storedParsed = JSON.parse(raw)
+      } catch {
+        /* ignore */
+      }
+      const fmt =
+        cleanLocationDisplayLine(storedParsed?.formattedAddress || "") ||
+        storedParsed?.formattedAddress ||
+        coordsSource.formattedAddress ||
+        ""
+      await userAPI.updateLocation({
+        latitude: coordsSource.latitude,
+        longitude: coordsSource.longitude,
+        address: storedParsed?.address || coordsSource.address || "",
+        city: storedParsed?.city || coordsSource.city || "",
+        state: storedParsed?.state || coordsSource.state || "",
+        area: storedParsed?.area || coordsSource.area || "",
+        formattedAddress: fmt || coordsSource.formattedAddress || coordsSource.address || "",
+        accuracy: storedParsed?.accuracy ?? coordsSource.accuracy,
+        postalCode: storedParsed?.postalCode || coordsSource.postalCode,
+        street: storedParsed?.street || coordsSource.street,
+        streetNumber: storedParsed?.streetNumber || coordsSource.streetNumber,
+      })
+      console.log("✅ Location saved to backend (matches refined localStorage)")
+    } catch (backendError) {
+      if (backendError.code !== "ERR_NETWORK" && backendError.message !== "Network Error") {
+        console.error("Error saving location to backend:", backendError)
+      }
+    }
+  }
+
   const handleUseCurrentLocation = async () => {
     try {
       // Check if geolocation is supported
@@ -1077,6 +1213,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       toast.loading("Fetching your current location...", {
         id: "location-request",
       })
+      setGpsLiveStatus("loading")
 
       // Request location - this will automatically prompt for permission if needed
       // Clear any cached location first to ensure fresh coordinates
@@ -1084,7 +1221,8 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
       // Increase timeout to 15 seconds to allow GPS to get accurate fix
       // The getLocation function already has a 15-second timeout, so we match it
-      const locationPromise = requestLocation()
+      console.log("📍 Using fresh GPS location — overlay will not prefer stale cache for this action")
+      const locationPromise = requestLocation({ skipDatabaseUpdate: true })
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(
           () =>
@@ -1141,6 +1279,11 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               id: "location-request",
               duration: 5000,
             })
+            setGpsLiveStatus(
+              errorMessage.includes("permission") || errorMessage.includes("denied")
+                ? "denied"
+                : "error",
+            )
             return
           }
         } else {
@@ -1158,6 +1301,11 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             id: "location-request",
             duration: 5000,
           })
+          setGpsLiveStatus(
+            errorMessage.includes("permission") || errorMessage.includes("denied")
+              ? "denied"
+              : "error",
+          )
           return
         }
       }
@@ -1165,11 +1313,13 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       // Validate location data
       if (!locationData) {
         toast.error("Could not get location. Please try again.", { id: "location-request" })
+        setGpsLiveStatus("error")
         return
       }
 
       if (!locationData.latitude || !locationData.longitude) {
         toast.error("Invalid location data received. Please try again.", { id: "location-request" })
+        setGpsLiveStatus("error")
         return
       }
 
@@ -1204,39 +1354,19 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           locationData.formattedAddress.split(',').length >= 4
       })
 
-      // Save location to backend with ALL fields
-      if (locationData?.latitude && locationData?.longitude) {
-        try {
-          await userAPI.updateLocation({
-            latitude: locationData.latitude,
-            longitude: locationData.longitude,
-            address: locationData.address || locationData.formattedAddress || "",
-            city: locationData.city || "",
-            state: locationData.state || "",
-            area: locationData.area || "",
-            formattedAddress: locationData.formattedAddress || locationData.address || "",
-            accuracy: locationData.accuracy,
-            postalCode: locationData.postalCode,
-            street: locationData.street,
-            streetNumber: locationData.streetNumber
-          })
-          console.log("✅ Location saved to backend successfully")
-        } catch (backendError) {
-          // Only log non-network errors (network errors are handled by axios interceptor)
-          if (backendError.code !== 'ERR_NETWORK' && backendError.message !== 'Network Error') {
-            console.error("Error saving location to backend:", backendError)
-          }
-          // Don't fail the whole operation if backend save fails
-        }
-      }
+      // Backend PUT runs after handleMapMoveEnd (below) so DB gets Google/refined line, not coarse backend geocode.
 
       // Update map + run same rich geocode path as the live subtitle (Google-first), then persist.
-      // requestLocation() alone often stores backend city-only rows; force:true bypasses duplicate-coord skip.
+      // requestLocation({ skipDatabaseUpdate: true }) avoids writing coarse backend row before this pass.
       if (locationData?.latitude && locationData?.longitude) {
         setMapPosition([locationData.latitude, locationData.longitude])
 
         if (locationData.formattedAddress) {
-          setCurrentAddress(locationData.formattedAddress)
+          setCurrentAddress(
+            cleanLocationDisplayLine(locationData.formattedAddress || "") ||
+              locationData.formattedAddress ||
+              "",
+          )
           setAddressFormData(prev => ({
             ...prev,
             street: locationData.street || locationData.area || prev.street,
@@ -1259,7 +1389,20 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           console.error("Error updating map:", mapError)
         }
 
-        await handleMapMoveEnd(locationData.latitude, locationData.longitude, { force: true })
+        try {
+          await raceWithTimeout(
+            handleMapMoveEnd(locationData.latitude, locationData.longitude, { force: true }),
+            16000,
+            "USE_LOCATION_MAP_TIMEOUT",
+          )
+        } catch (mapEndErr) {
+          console.warn(
+            "handleMapMoveEnd skipped or timed out after use current location:",
+            mapEndErr?.message || mapEndErr,
+          )
+        }
+
+        await persistRefinedLocationToBackend(locationData)
       }
 
       // Navbar / other tabs: broadcast what is actually in storage after rich geocode
@@ -1273,6 +1416,31 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         }
       } catch {
         // ignore cross-window errors
+      }
+
+      try {
+        const raw = localStorage.getItem("userLocation")
+        if (raw) {
+          const p = JSON.parse(raw)
+          const line =
+            cleanLocationDisplayLine(p.formattedAddress || p.address || "") ||
+            String(p.formattedAddress || p.address || "").trim()
+          if (line && line !== "Select location") {
+            console.log("✅ UI updated with new location (overlay sync from localStorage)")
+            setGpsLiveLine(line)
+            setCurrentAddress(line)
+            setAddressFormData((prev) => ({
+              ...prev,
+              city: p.city || prev.city,
+              state: p.state || prev.state,
+              zipCode: p.postalCode || prev.zipCode,
+              additionalDetails: line || prev.additionalDetails,
+            }))
+            setGpsLiveStatus("ok")
+          }
+        }
+      } catch {
+        /* ignore */
       }
 
       const storedPreview = (() => {
@@ -1302,21 +1470,25 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           id: "location-request",
           duration: 4000,
         })
+        setGpsLiveStatus("denied")
       } else if (error.code === 2 || error.message?.includes("unavailable")) {
         toast.error("Location unavailable. Please check your GPS settings.", {
           id: "location-request",
           duration: 3000,
         })
+        setGpsLiveStatus("error")
       } else if (error.code === 3 || error.message?.includes("timeout")) {
         toast.error("Location request timed out. Please try again.", {
           id: "location-request",
           duration: 3000,
         })
+        setGpsLiveStatus("error")
       } else {
         toast.error("Failed to get location. Please try again.", {
           id: "location-request",
           duration: 3000,
         })
+        setGpsLiveStatus("error")
       }
       // Don't close the selector if there's an error, so user can try other options
     }
@@ -1942,16 +2114,24 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         }
 
         try {
-          const parsed = await reverseGeocodeWithGoogleMapsPrefer(
-            roundedLat,
-            roundedLng,
-            GOOGLE_MAPS_API_KEY,
+          const parsed = await raceWithTimeout(
+            reverseGeocodeWithGoogleMapsPrefer(
+              roundedLat,
+              roundedLng,
+              GOOGLE_MAPS_API_KEY,
+            ),
+            12000,
+            "MAP_REVERSE_TIMEOUT",
           )
           applyGoogleParsed(parsed)
         } catch (googleErr) {
           console.warn("Google Maps geocode failed, using backend:", googleErr?.message)
           try {
-            const response = await locationAPI.reverseGeocode(roundedLat, roundedLng, { force: true })
+            const response = await raceWithTimeout(
+              locationAPI.reverseGeocode(roundedLat, roundedLng, { force: true }),
+              12000,
+              "MAP_BACKEND_TIMEOUT",
+            )
             const backendData = response?.data?.data
             const result = backendData?.results?.[0] || backendData?.result?.[0] || null
 
@@ -2021,22 +2201,29 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             formattedAddress = addressParts.join(', ')
           }
 
-          // Set street from formatted address if not set
+          // Remove "India", leading plus codes, dupes — before inferring street from segments
+          if (formattedAddress && formattedAddress.endsWith(', India')) {
+            formattedAddress = formattedAddress.replace(', India', '').trim()
+          }
+          if (formattedAddress) {
+            formattedAddress = dedupeFormattedAddressLine(
+              stripLeadingPlusCodeFromFormatted(formattedAddress),
+            )
+          }
+
+          // Set street from formatted address if route component was missing (never use plus-code segment)
           if (!street && formattedAddress) {
-            const parts = formattedAddress.split(',').map(p => p.trim()).filter(p => p.length > 0)
-            if (parts.length > 0) {
-              street = parts[0]
-            }
+            const parts = formattedAddress
+              .split(",")
+              .map((p) => p.trim())
+              .filter((p) => p.length > 0)
+            const firstReal = parts.find((p) => !isLikelyPlusCodeOnlySegment(p))
+            if (firstReal) street = firstReal
           }
 
           // Set area if not set
           if (!area) {
             area = pointOfInterest || premise || street || ""
-          }
-
-          // Remove "India" from formatted address if present
-          if (formattedAddress && formattedAddress.endsWith(', India')) {
-            formattedAddress = formattedAddress.replace(', India', '').trim()
           }
 
           console.log("✅ Final extracted address components:", {
@@ -2064,13 +2251,18 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             (city && state ? `${city}, ${state}` : '') ||
             ''
           const isGenericAddress = !fullAddressForField || /^current location(\s|,|$)/i.test(fullAddressForField.trim())
+          const detailsLine = fullAddressForField
+            ? cleanLocationDisplayLine(fullAddressForField)
+            : ""
           setAddressFormData(prev => ({
             ...prev,
             street: street || prev.street,
             city: city || prev.city,
             state: state || prev.state,
             zipCode: postalCode || prev.zipCode,
-            additionalDetails: isGenericAddress ? prev.additionalDetails : (fullAddressForField || prev.additionalDetails),
+            additionalDetails: isGenericAddress
+              ? prev.additionalDetails
+              : detailsLine || prev.additionalDetails,
           }))
 
           // requestLocation() often persists a shorter backend geocode first; this map pass has the richer line.
@@ -2108,7 +2300,26 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               window.dispatchEvent(new CustomEvent("userLocationUpdated", { detail: merged }))
             }
 
-            if (prev.latitude == null || prev.longitude == null) {
+            const mergePayload = {
+              ...prev,
+              latitude: roundedLat,
+              longitude: roundedLng,
+              city: city || prev.city || "",
+              state: state || prev.state || "",
+              country: prev.country || "",
+              area: area || prev.area || "",
+              address: displayAddressForStore,
+              formattedAddress: stripTrailingIndia(formattedAddress),
+              street: street || prev.street || "",
+              streetNumber: streetNumber || prev.streetNumber || "",
+              postalCode: postalCode || prev.postalCode || "",
+            }
+
+            // "Use current location" passes force:true — always persist + broadcast so UI (single context) updates
+            if (force && formattedAddress && newParts >= 3 && !isUnpersistableLocation(mergePayload)) {
+              console.log("📍 Persisting map geocode (force) — skipping richer/sameSpot gate")
+              writeMerged(mergePayload)
+            } else if (prev.latitude == null || prev.longitude == null) {
               if (formattedAddress && newParts >= 4) {
                 writeMerged({
                   latitude: roundedLat,
@@ -2201,7 +2412,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
       // Request fresh GPS location (can take a few seconds on real devices)
       // Use a longer timeout to avoid false failures.
-      const locationPromise = requestLocation() // from useLocation hook
+      const locationPromise = requestLocation({ skipDatabaseUpdate: true }) // from useLocation hook
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Location timeout")), 25000),
       )
@@ -2328,6 +2539,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           // Wait for map to finish moving, then fetch address (reduced delay for faster response)
           setTimeout(async () => {
             await handleMapMoveEnd(lat, lng, { force: true })
+            await persistRefinedLocationToBackend(locationData)
             toast.success("Location updated!", { id: "current-location" })
           }, 200)
 
@@ -2339,6 +2551,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         // Map not initialized yet, just update position and fetch address (reduced delay)
         setTimeout(async () => {
           await handleMapMoveEnd(lat, lng, { force: true })
+          await persistRefinedLocationToBackend(locationData)
           toast.success("Location updated!", { id: "current-location" })
         }, 200)
       }
@@ -2346,6 +2559,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       // If map is unavailable (key blocked), still fetch address and fill form.
       if (googleMapsAuthFailed || !window.google || !window.google.maps) {
         await handleMapMoveEnd(lat, lng, { force: true })
+        await persistRefinedLocationToBackend(locationData)
       }
     } catch (error) {
       console.error("❌ Error getting current location:", error)
@@ -2377,6 +2591,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
                   setTimeout(async () => {
                     await handleMapMoveEnd(cachedLocation.latitude, cachedLocation.longitude, { force: true });
+                    await persistRefinedLocationToBackend(cachedLocation);
                     toast.success("Using cached location", { id: "current-location" });
                   }, 500);
                 } catch (mapErr) {
@@ -2386,6 +2601,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               } else {
                 setTimeout(async () => {
                   await handleMapMoveEnd(cachedLocation.latitude, cachedLocation.longitude, { force: true })
+                  await persistRefinedLocationToBackend(cachedLocation)
                   toast.success("Using cached location", { id: "current-location" })
                 }, 300)
               }
@@ -3043,13 +3259,17 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                                 {address.label || address.additionalDetails || "Home"}
                               </p>
                               <p className="text-sm text-gray-500 dark:text-gray-400">
-                                {[
-                                  address.additionalDetails,
-                                  address.street,
-                                  address.city,
-                                  address.state,
-                                  address.zipCode
-                                ].filter(Boolean).join(", ")}
+                                {cleanLocationDisplayLine(
+                                  [
+                                    address.additionalDetails,
+                                    address.street,
+                                    address.city,
+                                    address.state,
+                                    address.zipCode,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(", "),
+                                )}
                               </p>
                               <p className="text-sm text-gray-500 dark:text-gray-400">
                                 Phone number: {address.phone || userProfile?.phone || "Not provided"}
