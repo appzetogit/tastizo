@@ -150,12 +150,19 @@ apiClient.interceptors.request.use(
           requestUrl.match(/\/restaurant\/[^/]+\/inventory/) ||
           requestUrl.match(/\/restaurant\/[^/]+\/offers/)));
 
+    const isDeliveryAuthRoute =
+      path === "/delivery/sign-in" ||
+      path === "/delivery/signup" ||
+      path === "/delivery/otp" ||
+      path === "/delivery/welcome" ||
+      path.startsWith("/delivery/signup/");
+
     const isAuthenticatedRoute =
       ((path.startsWith("/admin") && !path.startsWith("/admin/login")) ||
         (path.startsWith("/restaurant") &&
           !path.startsWith("/restaurants") &&
           !isPublicRestaurantRoute) ||
-        path.startsWith("/delivery") ||
+        (path.startsWith("/delivery") && !isDeliveryAuthRoute) ||
         path.startsWith("/user") ||
         path.startsWith("/usermain") ||
         path.startsWith("/orders")) &&
