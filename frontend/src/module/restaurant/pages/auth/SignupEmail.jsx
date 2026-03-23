@@ -219,6 +219,17 @@ export default function RestaurantSignupEmail() {
 
       {/* Right form section */}
       <div className="w-full lg:w-1/2 h-full flex flex-col">
+        <div className="px-6 sm:px-10 lg:px-16 pt-4">
+          <button
+            type="button"
+            onClick={() => navigate("/restaurant/login")}
+            className="inline-flex items-center gap-2 text-sm font-medium text-primary-orange hover:underline"
+            aria-label="Back to login"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to login
+          </button>
+        </div>
         {/* Top logo */}
         <div className="relative flex items-center justify-center px-6 sm:px-10 lg:px-16 pt-6 pb-4">
           <div className="flex items-center gap-3">

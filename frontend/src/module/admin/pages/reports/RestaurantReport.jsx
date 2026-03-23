@@ -7,15 +7,18 @@ import { adminAPI } from "@/lib/api"
 import { toast } from "sonner"
 
 export default function RestaurantReport() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [restaurants, setRestaurants] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState({
+  const defaultFilters = {
     zone: "All Zones",
     all: "All",
     type: "All types",
     time: "All Time",
-  })
+  }
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchInput, setSearchInput] = useState("")
+  const [restaurants, setRestaurants] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState(defaultFilters)
+  const [pendingFilters, setPendingFilters] = useState(defaultFilters)
   const [zones, setZones] = useState([])
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
@@ -77,12 +80,9 @@ export default function RestaurantReport() {
   const totalRestaurants = filteredRestaurants.length
 
   const handleReset = () => {
-    setFilters({
-      zone: "All Zones",
-      all: "All",
-      type: "All types",
-      time: "All Time",
-    })
+    setFilters(defaultFilters)
+    setPendingFilters(defaultFilters)
+    setSearchInput("")
     setSearchQuery("")
   }
 
@@ -111,10 +111,11 @@ export default function RestaurantReport() {
   }
 
   const handleFilterApply = () => {
-    // Filters are already applied via useMemo
+    setFilters(pendingFilters)
+    setSearchQuery(searchInput.trim())
   }
 
-  const activeFiltersCount = (filters.zone !== "All Zones" ? 1 : 0) + (filters.all !== "All" ? 1 : 0) + (filters.type !== "All types" ? 1 : 0) + (filters.time !== "All Time" ? 1 : 0)
+  const activeFiltersCount = (pendingFilters.zone !== "All Zones" ? 1 : 0) + (pendingFilters.all !== "All" ? 1 : 0) + (pendingFilters.type !== "All types" ? 1 : 0) + (pendingFilters.time !== "All Time" ? 1 : 0)
 
   const renderStars = (rating, reviews) => {
     if (rating === 0) {
@@ -159,8 +160,8 @@ export default function RestaurantReport() {
                   Zone
                 </label>
                 <select
-                  value={filters.zone}
-                  onChange={(e) => setFilters(prev => ({ ...prev, zone: e.target.value }))}
+                  value={pendingFilters.zone}
+                  onChange={(e) => setPendingFilters(prev => ({ ...prev, zone: e.target.value }))}
                   className="w-full px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="All Zones">All Zones</option>
@@ -176,8 +177,8 @@ export default function RestaurantReport() {
                   All
                 </label>
                 <select
-                  value={filters.all}
-                  onChange={(e) => setFilters(prev => ({ ...prev, all: e.target.value }))}
+                  value={pendingFilters.all}
+                  onChange={(e) => setPendingFilters(prev => ({ ...prev, all: e.target.value }))}
                   className="w-full px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="All">All</option>
@@ -192,8 +193,8 @@ export default function RestaurantReport() {
                   Type
                 </label>
                 <select
-                  value={filters.type}
-                  onChange={(e) => setFilters(prev => ({ ...prev, type: e.target.value }))}
+                  value={pendingFilters.type}
+                  onChange={(e) => setPendingFilters(prev => ({ ...prev, type: e.target.value }))}
                   className="w-full px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="All types">All types</option>
@@ -208,8 +209,8 @@ export default function RestaurantReport() {
                   Time
                 </label>
                 <select
-                  value={filters.time}
-                  onChange={(e) => setFilters(prev => ({ ...prev, time: e.target.value }))}
+                  value={pendingFilters.time}
+                  onChange={(e) => setPendingFilters(prev => ({ ...prev, time: e.target.value }))}
                   className="w-full px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="All Time">All Time</option>
@@ -257,9 +258,10 @@ export default function RestaurantReport() {
               <div className="relative flex-1 sm:flex-initial min-w-[250px]">
                 <input
                   type="text"
-                  placeholder="Ex: search restaurant nam"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Ex: search restaurant name"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleFilterApply()}
                   className="pl-4 pr-10 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />

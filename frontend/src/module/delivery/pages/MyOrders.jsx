@@ -15,6 +15,10 @@ import {
 import { deliveryAPI } from "@/lib/api"
 import { toast } from "sonner"
 import { useCompanyName } from "@/lib/hooks/useCompanyName"
+import {
+  setFlutterVoiceGlobals,
+  startFlutterVoiceSearch,
+} from "@/lib/voice/flutterVoiceSearch"
 
 export default function MyOrders() {
   const navigate = useNavigate()
@@ -208,9 +212,27 @@ export default function MyOrders() {
     })
   }, [filteredOrders, searchQuery])
 
-  // Voice search using Web Speech API (if available in browser)
+  // Voice search: Flutter WebView bridge first, then Web Speech API
   const handleVoiceSearch = () => {
     try {
+      setFlutterVoiceGlobals({
+        onResult: (text) => {
+          if (text) {
+            setSearchQuery(text)
+            toast.success(`Searching for "${text}"`)
+          }
+        },
+        onError: (msg) => {
+          if (msg && msg !== "No speech detected") {
+            toast.error(msg)
+          }
+        },
+      })
+
+      if (startFlutterVoiceSearch()) {
+        return
+      }
+
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
       if (!SpeechRecognition) {
         toast.error("Voice search is not supported in this browser.")

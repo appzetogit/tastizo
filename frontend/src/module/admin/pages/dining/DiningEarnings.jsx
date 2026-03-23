@@ -7,7 +7,7 @@ export default function DiningEarnings() {
   const [summary, setSummary] = useState(null)
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
-  const [restaurantId, setRestaurantId] = useState("")
+  const [bookingId, setBookingId] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
 
@@ -15,7 +15,7 @@ export default function DiningEarnings() {
     setLoading(true)
     try {
       const params = {}
-      if (restaurantId) params.restaurantId = restaurantId
+      if (bookingId) params.bookingId = bookingId
       if (startDate) params.startDate = startDate
       if (endDate) params.endDate = endDate
       const res = await adminAPI.getDiningEarnings(params)
@@ -46,12 +46,12 @@ export default function DiningEarnings() {
           <h1 className="text-2xl font-bold text-slate-900 mb-4">Dining Earnings</h1>
           <form onSubmit={handleFilter} className="flex flex-wrap items-end gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Restaurant ID</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Booking ID</label>
               <input
                 type="text"
-                value={restaurantId}
-                onChange={(e) => setRestaurantId(e.target.value)}
-                placeholder="Filter by restaurant ID"
+                value={bookingId}
+                onChange={(e) => setBookingId(e.target.value)}
+                placeholder="Filter by booking ID"
                 className="px-3 py-2 border border-slate-200 rounded-lg text-sm w-48"
               />
             </div>

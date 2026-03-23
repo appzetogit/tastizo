@@ -104,6 +104,7 @@ const PhoneNumbersPage = lazy(() => import("@/module/restaurant/pages/PhoneNumbe
 const DownloadReport = lazy(() => import("@/module/restaurant/pages/DownloadReport"))
 const ToHub = lazy(() => import("@/module/restaurant/pages/ToHub"))
 const ManageOutlets = lazy(() => import("@/module/restaurant/pages/ManageOutlets"))
+const AddOutletRequest = lazy(() => import("@/module/restaurant/pages/AddOutletRequest"))
 const UpdateBankDetails = lazy(() => import("@/module/restaurant/pages/UpdateBankDetails"))
 const ZoneSetup = lazy(() => import("@/module/restaurant/pages/ZoneSetup"))
 const DiningReservations = lazy(() => import("@/module/restaurant/pages/DiningReservations"))
@@ -823,6 +824,14 @@ export default function App() {
           element={
             <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
               <ManageOutlets />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/restaurant/add-outlet-request"
+          element={
+            <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
+              <AddOutletRequest />
             </ProtectedRoute>
           }
         />

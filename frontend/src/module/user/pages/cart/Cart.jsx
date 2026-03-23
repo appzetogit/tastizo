@@ -17,6 +17,7 @@ import { API_BASE_URL } from "@/lib/api/config"
 import { initRazorpayPayment } from "@/lib/utils/razorpay"
 import { toast } from "sonner"
 import { getCompanyNameAsync } from "@/lib/utils/businessSettings"
+import { shareWithFallback } from "@/lib/utils/shareBridge"
 
 
 // Removed hardcoded suggested items - now fetching approved addons from backend
@@ -110,6 +111,7 @@ export default function Cart() {
   const [isEditingContact, setIsEditingContact] = useState(false)
   const [contactName, setContactName] = useState(userProfile?.name || "")
   const [contactPhoneInput, setContactPhoneInput] = useState(userProfile?.phone || "")
+  const [contactErrors, setContactErrors] = useState({ name: "", phone: "" })
 
   // Restaurant and pricing state
   const [restaurantData, setRestaurantData] = useState(null)
@@ -179,7 +181,45 @@ export default function Cart() {
   useEffect(() => {
     setContactName(userProfile?.name || "")
     setContactPhoneInput(userProfile?.phone || "")
+    setContactErrors({ name: "", phone: "" })
   }, [userProfile?.name, userProfile?.phone])
+
+  const validateContactDetails = (nameValue, phoneValue) => {
+    const errors = { name: "", phone: "" }
+    const nameTrimmed = String(nameValue || "").trim()
+    const digits = String(phoneValue || "").replace(/\D/g, "")
+
+    if (!nameTrimmed) {
+      errors.name = "Please enter contact name."
+    } else if (!/^[A-Za-z][A-Za-z\s.'-]{1,49}$/.test(nameTrimmed)) {
+      errors.name = "Name should be alphabetic (2-50 chars)."
+    }
+
+    if (!digits) {
+      errors.phone = "Please enter phone number."
+    } else if (digits.length !== 10) {
+      errors.phone = "Phone number must be exactly 10 digits."
+    } else if (!/^[6-9]/.test(digits)) {
+      errors.phone = "Phone number should start with 6, 7, 8, or 9."
+    }
+
+    return {
+      isValid: !errors.name && !errors.phone,
+      errors,
+      normalizedName: nameTrimmed,
+      normalizedPhone: digits,
+    }
+  }
+
+  const formatContactName = (value) => {
+    const lettersOnly = String(value || "").replace(/[^A-Za-z\s]/g, "")
+    return lettersOnly
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ")
+      .slice(0, 50)
+  }
 
   // Sync selected address type from saved default address (for initial render / refresh)
   useEffect(() => {
@@ -1346,13 +1386,10 @@ export default function Cart() {
                   const companyName = await getCompanyNameAsync()
                   const text = `${restaurantName} on ${companyName} – ${cart.length} item(s). Order from the app.`
                   const url = window.location.href
-                  if (navigator.share) {
-                    await navigator.share({ title: restaurantName, text, url })
-                    toast.success("Shared")
-                  } else {
-                    await navigator.clipboard?.writeText(`${text}\n${url}`)
-                    toast.success("Link copied to clipboard")
-                  }
+                  const result = await shareWithFallback({ title: restaurantName, text, url })
+                  if (result.method === "copy") toast.success("Link copied to clipboard")
+                  else if (result.method === "web" || result.method === "flutter") toast.success("Shared")
+                  else if (result.method === "failed") toast.error("Share failed")
                 } catch (e) {
                   if (e?.name !== "AbortError") toast.error("Share failed")
                 }
@@ -1804,23 +1841,18 @@ export default function Cart() {
                     className="flex flex-col gap-3 md:gap-4"
                     onSubmit={async (e) => {
                       e.preventDefault()
-                      const nameTrimmed = (contactName || "").trim()
-                      const trimmed = (contactPhoneInput || "").replace(/\D/g, "")
-                      if (!nameTrimmed) {
-                        toast.error("Please enter a contact name.")
+                      const validation = validateContactDetails(contactName, contactPhoneInput)
+                      setContactErrors(validation.errors)
+                      if (!validation.isValid) {
+                        toast.error(validation.errors.name || validation.errors.phone || "Please enter valid contact details.")
                         return
                       }
-                      if (!trimmed || trimmed.length < 6) {
-                        toast.error("Please enter a valid phone number.")
-                        return
-                      }
-                      const maxLen = 10
-                      const normalized = trimmed.slice(0, maxLen)
 
                       // Locally update contact info just for this order view
-                      setContactName(nameTrimmed)
-                      setContactPhoneInput(normalized)
+                      setContactName(validation.normalizedName)
+                      setContactPhoneInput(validation.normalizedPhone)
                       setIsEditingContact(false)
+                      setContactErrors({ name: "", phone: "" })
                       toast.success("Contact details updated for this order.")
                     }}
                   >
@@ -1833,21 +1865,38 @@ export default function Cart() {
                         <input
                           type="text"
                           value={contactName}
-                          onChange={(e) => setContactName(e.target.value)}
-                          className="mb-2 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#0f0f0f] px-3 py-2 text-sm md:text-base text-gray-900 dark:text-gray-100 focus:border-green-600 focus:outline-none focus:ring-1 focus:ring-green-600"
+                          onChange={(e) => {
+                            const formatted = formatContactName(e.target.value)
+                            setContactName(formatted)
+                            if (contactErrors.name) {
+                              setContactErrors((prev) => ({ ...prev, name: "" }))
+                            }
+                          }}
+                          className={`mb-2 w-full rounded-md border ${
+                            contactErrors.name ? "border-red-400 focus:border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:border-green-600 focus:ring-green-600"
+                          } bg-white dark:bg-[#0f0f0f] px-3 py-2 text-sm md:text-base text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1`}
                           placeholder="Contact name"
                         />
+                        {contactErrors.name && (
+                          <p className="mb-2 text-xs text-red-600">{contactErrors.name}</p>
+                        )}
                         <input
                           type="tel"
                           value={contactPhoneInput}
-                          onChange={(e) =>
-                            setContactPhoneInput(
-                              e.target.value.replace(/\D/g, "").slice(0, 10),
-                            )
-                          }
-                          className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#0f0f0f] px-3 py-2 text-sm md:text-base text-gray-900 dark:text-gray-100 focus:border-green-600 focus:outline-none focus:ring-1 focus:ring-green-600"
-                          placeholder="+91XXXXXXXXXX"
+                          onChange={(e) => {
+                            setContactPhoneInput(e.target.value.replace(/\D/g, "").slice(0, 10))
+                            if (contactErrors.phone) {
+                              setContactErrors((prev) => ({ ...prev, phone: "" }))
+                            }
+                          }}
+                          className={`w-full rounded-md border ${
+                            contactErrors.phone ? "border-red-400 focus:border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:border-green-600 focus:ring-green-600"
+                          } bg-white dark:bg-[#0f0f0f] px-3 py-2 text-sm md:text-base text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1`}
+                          placeholder="10-digit mobile number"
                         />
+                        {contactErrors.phone && (
+                          <p className="mt-2 text-xs text-red-600">{contactErrors.phone}</p>
+                        )}
                       </div>
                     </div>
                     <div className="flex justify-end gap-2">
@@ -1857,6 +1906,7 @@ export default function Cart() {
                           setIsEditingContact(false)
                           setContactName(userProfile?.name || "")
                           setContactPhoneInput(userProfile?.phone || "")
+                          setContactErrors({ name: "", phone: "" })
                         }}
                         className="rounded-md border border-gray-300 px-3 py-1.5 text-xs md:text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                       >

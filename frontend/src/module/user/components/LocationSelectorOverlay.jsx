@@ -3052,14 +3052,28 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
                 Receiver details for this address
               </Label>
-              <div className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex items-center gap-3">
+              <div className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex items-start gap-3">
                 <Phone className="h-5 w-5 text-gray-600 dark:text-gray-400 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
                     {userProfile?.name || "User"}, {addressFormData.phone || userProfile?.phone || "Add phone"}
                   </p>
+                  <Input
+                    type="tel"
+                    name="phone"
+                    value={addressFormData.phone || ""}
+                    onChange={(e) =>
+                      setAddressFormData((prev) => ({
+                        ...prev,
+                        phone: String(e.target.value || "").replace(/\D/g, "").slice(0, 10),
+                      }))
+                    }
+                    placeholder="Receiver phone number"
+                    inputMode="numeric"
+                    maxLength={10}
+                    className="mt-2 bg-white dark:bg-[#1a1a1a] border-gray-200 dark:border-gray-700"
+                  />
                 </div>
-                <ChevronRight className="h-5 w-5 text-gray-400 flex-shrink-0" />
               </div>
             </div>
 

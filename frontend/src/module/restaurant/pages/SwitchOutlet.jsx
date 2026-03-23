@@ -2,11 +2,13 @@ import { useState, useEffect, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
-import { ArrowLeft, Search, Power, X } from "lucide-react"
+import { ArrowLeft, Search, Power, X, Plus } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
 import { clearModuleAuth } from "@/lib/utils/auth"
 import { restaurantAPI } from "@/lib/api"
 import { firebaseAuth } from "@/lib/firebase"
+import { toast } from "sonner"
 
 const OUTLET_STORAGE_KEY = "restaurant_selected_outlet_id"
 
@@ -43,7 +45,7 @@ function buildOutletsFromRestaurant(restaurant) {
 
 export default function SwitchOutlet() {
   const navigate = useNavigate()
-  const [showOffline, setShowOffline] = useState(true)
+  const [showOffline, setShowOffline] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [outlets, setOutlets] = useState([])
   const [loading, setLoading] = useState(true)
@@ -160,7 +162,31 @@ export default function SwitchOutlet() {
 
   const handleSearchClick = () => {
     setSearchOpen((prev) => !prev)
-    if (!searchOpen) setSearchQuery("")
+  }
+
+  const handleStatusToggle = async (outlet, nextChecked) => {
+    const prevStatus = outlet.status
+    const nextStatus = nextChecked ? "online" : "offline"
+    setOutlets((prev) =>
+      prev.map((o) => (o.id === outlet.id ? { ...o, status: nextStatus } : o)),
+    )
+    try {
+      await restaurantAPI.updateDeliveryStatus(nextChecked)
+      localStorage.setItem("restaurant_online_status", JSON.stringify(nextChecked))
+      window.dispatchEvent(
+        new CustomEvent("restaurantStatusChanged", {
+          detail: { isOnline: nextChecked },
+        }),
+      )
+      toast.success(`Outlet marked ${nextChecked ? "online" : "offline"}`)
+    } catch (error) {
+      setOutlets((prev) =>
+        prev.map((o) => (o.id === outlet.id ? { ...o, status: prevStatus } : o)),
+      )
+      toast.error(
+        error?.response?.data?.message || "Failed to update outlet status. Please try again.",
+      )
+    }
   }
 
   return (
@@ -239,25 +265,41 @@ export default function SwitchOutlet() {
 
       {/* Main Content */}
       <div className="px-4 py-6">
-        {/* Show Offline Outlets Checkbox */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.05 }}
-          className="flex items-center gap-3 mb-6"
+          className="flex flex-wrap items-center justify-between gap-3 mb-6"
         >
-          <Checkbox
-            id="show-offline"
-            checked={showOffline}
-            onCheckedChange={setShowOffline}
-            className="w-5 h-5 border-2 border-gray-300 rounded data-[state=checked]:bg-red-600 text-white data-[state=checked]:border-red-600"
-          />
-          <label
-            htmlFor="show-offline"
-            className="text-sm font-light text-red-600 cursor-pointer"
-          >
-            Show outlets currently offline
-          </label>
+          <div className="flex items-center gap-3">
+            <Checkbox
+              id="show-offline"
+              checked={showOffline}
+              onCheckedChange={setShowOffline}
+              className="w-5 h-5 border-2 border-gray-300 rounded data-[state=checked]:bg-red-600 text-white data-[state=checked]:border-red-600"
+            />
+            <label
+              htmlFor="show-offline"
+              className="text-sm font-light text-red-600 cursor-pointer"
+            >
+              Show outlets currently offline
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate("/restaurant/manage-outlets")}
+              className="px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Manage outlet
+            </button>
+            <button
+              onClick={() => navigate("/restaurant/add-outlet-request")}
+              className="px-3 py-2 rounded-lg bg-black text-white text-sm font-medium hover:bg-black/90 flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              Add outlet
+            </button>
+          </div>
         </motion.div>
 
         {/* Loading */}
@@ -330,6 +372,24 @@ export default function SwitchOutlet() {
                       <h3 className="text-base font-bold text-gray-900">{outlet.name}</h3>
                       <p className="text-sm text-gray-700">{outlet.address || "—"}</p>
                       <p className="text-xs text-gray-600">Outlet ID: {outlet.id}</p>
+                    </div>
+                    <div
+                      className="ml-2 flex items-center gap-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span
+                        className={`text-xs font-medium ${
+                          outlet.status === "online" ? "text-green-700" : "text-gray-600"
+                        }`}
+                      >
+                        {outlet.status === "online" ? "Online" : "Offline"}
+                      </span>
+                      <Switch
+                        checked={outlet.status === "online"}
+                        onCheckedChange={(checked) => handleStatusToggle(outlet, checked)}
+                        className="data-[state=unchecked]:bg-gray-300 data-[state=checked]:bg-green-600"
+                        aria-label={`Toggle ${outlet.name} status`}
+                      />
                     </div>
                   </div>
                 </motion.div>

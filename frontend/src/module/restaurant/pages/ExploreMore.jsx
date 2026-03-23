@@ -422,6 +422,11 @@ export default function ExploreMore() {
   const restaurantDisplayAddress = restaurantData?.location ? formatAddress(restaurantData.location) : ""
 
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const profileQuickActions = [
+    { label: "Manage outlet", route: "/restaurant/manage-outlets" },
+    { label: "Switch outlet", route: "/restaurant/switch-outlet" },
+    { label: "Add new outlet", route: "/restaurant/add-outlet-request" },
+  ]
 
   const handleLogout = async () => {
     if (isLoggingOut) return // Prevent multiple clicks
@@ -1132,6 +1137,23 @@ export default function ExploreMore() {
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* Logout Buttons */}
+              <div className="px-6 pb-4 space-y-2">
+                {profileQuickActions.map((action) => (
+                  <button
+                    key={action.label}
+                    onClick={() => {
+                      setProfileOpen(false)
+                      navigate(action.route)
+                    }}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="text-sm font-medium text-gray-900">{action.label}</span>
+                    <ChevronRight className="w-4 h-4 text-gray-500" />
+                  </button>
+                ))}
               </div>
 
               {/* Logout Buttons */}

@@ -1,47 +1,31 @@
-import mongoose from "mongoose";
 import TableBooking from "../../dining/models/TableBooking.js";
-import Restaurant from "../../restaurant/models/Restaurant.js";
 import {
   successResponse,
-  errorResponse,
 } from "../../../shared/utils/response.js";
 import { asyncHandler } from "../../../shared/middleware/asyncHandler.js";
 
 /**
  * Get dining earnings summary and list (admin)
  * GET /api/admin/dining-earnings
- * Query: restaurantId, startDate, endDate, page, limit
- * restaurantId can be MongoDB _id or restaurant's custom restaurantId string
+ * Query: bookingId, startDate, endDate, page, limit
  */
 export const getDiningEarnings = asyncHandler(async (req, res) => {
-  const { restaurantId, startDate, endDate, page = 1, limit = 20 } = req.query;
+  const { bookingId, startDate, endDate, page = 1, limit = 20 } = req.query;
   const skip = (Math.max(1, parseInt(page, 10)) - 1) * Math.max(1, Math.min(100, parseInt(limit, 10)));
   const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
 
   const match = { paymentStatus: "paid", billStatus: "completed" };
-  if (restaurantId && restaurantId.trim()) {
-    const id = restaurantId.trim();
-    // If valid MongoDB ObjectId, use directly
-    if (mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === id) {
-      match.restaurant = id;
-    } else {
-      // Otherwise lookup by restaurant's custom restaurantId or name
-      const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const restaurant = await Restaurant.findOne({
-        $or: [
-          { restaurantId: { $regex: new RegExp(`^${escaped}$`, "i") } },
-          { name: { $regex: new RegExp(escaped, "i") } },
-        ],
-      }).select("_id").lean();
-      if (restaurant) {
-        match.restaurant = restaurant._id;
-      } else {
-        // No restaurant found - return empty by matching impossible condition
-        match.restaurant = { $in: [] };
-      }
-    }
+  const normalizedBookingId = (bookingId || "")
+    .trim()
+    .replace(/^#/, "")
+    .replace(/\s+/g, "");
+  const hasBookingIdFilter = Boolean(normalizedBookingId);
+  if (hasBookingIdFilter) {
+    const escapedBookingId = normalizedBookingId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    match.bookingId = { $regex: new RegExp(escapedBookingId, "i") };
   }
-  if (startDate || endDate) {
+  // Booking ID search should not be constrained by date range filters.
+  if (!hasBookingIdFilter && (startDate || endDate)) {
     match.paidAt = {};
     if (startDate) match.paidAt.$gte = new Date(startDate);
     if (endDate) {

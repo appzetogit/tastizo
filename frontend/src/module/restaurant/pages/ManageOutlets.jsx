@@ -8,6 +8,9 @@ export default function ManageOutlets() {
   const [showToast, setShowToast] = useState(false)
 
   const options = [
+    "Switch outlet",
+    "Restaurant status",
+    "Add new outlet",
     "Timings",
     "Contacts",
     "FSSAI Food License",
@@ -21,6 +24,15 @@ export default function ManageOutlets() {
   const handleOptionClick = (option) => {
     // Navigate based on option selected
     switch (option) {
+      case "Switch outlet":
+        navigate("/restaurant/switch-outlet")
+        break
+      case "Restaurant status":
+        navigate("/restaurant/status")
+        break
+      case "Add new outlet":
+        navigate("/restaurant/add-outlet-request")
+        break
       case "Timings":
         navigate("/restaurant/outlet-timings")
         break

@@ -65,9 +65,19 @@ export default function BusinessSetup() {
   };
 
   const handleInputChange = (field, value) => {
+    let nextValue = value;
+    if (field === "email") {
+      nextValue = String(value || "").trimStart().toLowerCase();
+    } else if (field === "phoneNumber") {
+      nextValue = String(value || "").replace(/\D/g, "").slice(0, 10);
+    } else if (field === "state") {
+      nextValue = String(value || "").replace(/[^A-Za-z\s]/g, "");
+    } else if (field === "pincode") {
+      nextValue = String(value || "").replace(/\D/g, "").slice(0, 6);
+    }
     setFormData((prev) => ({
       ...prev,
-      [field]: value,
+      [field]: nextValue,
     }));
   };
 
@@ -82,8 +92,24 @@ export default function BusinessSetup() {
         toast.error("Email is required");
         return;
       }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+        toast.error("Please enter a valid email format");
+        return;
+      }
       if (!formData.phoneNumber.trim()) {
         toast.error("Phone number is required");
+        return;
+      }
+      if (!/^\d{10}$/.test(formData.phoneNumber.trim())) {
+        toast.error("Phone number should be in valid 10-digit format");
+        return;
+      }
+      if (formData.state.trim() && !/^[A-Za-z\s]+$/.test(formData.state.trim())) {
+        toast.error("State should contain only alphabets");
+        return;
+      }
+      if (formData.pincode.trim() && !/^\d{6}$/.test(formData.pincode.trim())) {
+        toast.error("Pincode should be in 6-digit format");
         return;
       }
 

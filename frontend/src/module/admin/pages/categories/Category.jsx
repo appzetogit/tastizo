@@ -9,6 +9,38 @@ import { toast } from "sonner"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
+function StableCategoryImage({ src, alt, name, objectFitClass = "object-cover" }) {
+  const [hasError, setHasError] = useState(false)
+
+  useEffect(() => {
+    setHasError(false)
+  }, [src])
+
+  const initial =
+    String(name || "")
+      .trim()
+      .charAt(0)
+      .toUpperCase() || "C"
+
+  if (!src || hasError) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-600">
+        <span className="text-sm font-semibold">{initial}</span>
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt || name || "Category"}
+      className={`w-full h-full ${objectFitClass}`}
+      onError={() => setHasError(true)}
+      loading="lazy"
+    />
+  )
+}
+
 export default function Category() {
   const [searchQuery, setSearchQuery] = useState("")
   const [categories, setCategories] = useState([])
@@ -416,11 +448,18 @@ export default function Category() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
+      const trimmedName = String(formData.name || "").trim()
+      const hasImage = !!selectedImageFile || (!!formData.image && formData.image !== 'https://via.placeholder.com/40')
+      if (!trimmedName || !hasImage) {
+        toast.error("Name and Image are required")
+        return
+      }
+
       setUploadingImage(true)
 
       // Prepare FormData for file upload
       const formDataToSend = new FormData()
-      formDataToSend.append('name', formData.name)
+      formDataToSend.append('name', trimmedName)
       formDataToSend.append('type', formData.type)
       formDataToSend.append('status', formData.status.toString())
 
@@ -525,7 +564,7 @@ export default function Category() {
             <div className="relative flex-1 sm:flex-initial min-w-[200px]">
               <input
                 type="text"
-                placeholder="Ex : Categories"
+                placeholder="Search by order, Customer, Restaurant name"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value.replace(/\s/g, ""))}
                 className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
@@ -566,19 +605,6 @@ export default function Category() {
             >
               <SlidersHorizontal className="h-2.5 w-2.5" />
               <span className="text-[10px] font-bold text-black">Filters</span>
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setActiveFilters(new Set())
-                setSortBy(null)
-                setSelectedCuisine(null)
-                setIsFilterOpen(false)
-              }}
-              className="h-5 px-1.5 rounded-md flex items-center gap-1 whitespace-nowrap shrink-0 transition-all bg-white border border-gray-200 hover:bg-gray-50"
-            >
-              <X className="h-2.5 w-2.5" />
-              <span className="text-[10px] font-bold text-black">Remove All filters</span>
             </Button>
             {[
               { id: 'delivery-under-30', label: 'Under 30 mins' },
@@ -686,13 +712,11 @@ export default function Category() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center">
-                        <img
+                        <StableCategoryImage
                           src={category.image}
                           alt={category.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.target.src = "https://via.placeholder.com/40"
-                          }}
+                          name={category.name}
+                          objectFitClass="object-cover"
                         />
                       </div>
                     </td>
@@ -1146,13 +1170,11 @@ export default function Category() {
                         {/* Image Preview */}
                         {(imagePreview || formData.image) && (
                           <div className="relative w-32 h-32 rounded-lg overflow-hidden border border-slate-300">
-                            <img
+                            <StableCategoryImage
                               src={imagePreview || formData.image}
                               alt="Category preview"
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.target.src = "https://via.placeholder.com/128"
-                              }}
+                              name={formData.name || (editingCategory && editingCategory.name)}
+                              objectFitClass="object-cover"
                             />
                             {imagePreview && (
                               <button

@@ -4,6 +4,7 @@ import { ArrowLeft, Search, MoreVertical, ChevronRight, Star, RotateCcw, AlertCi
 import { orderAPI, api, API_ENDPOINTS } from "@/lib/api"
 import { toast } from "sonner"
 import { getCompanyNameAsync } from "@/lib/utils/businessSettings"
+import { shareWithFallback } from "@/lib/utils/shareBridge"
 
 export default function Orders() {
   const navigate = useNavigate()
@@ -391,22 +392,12 @@ Location: ${location || "Location not available"}
 Order again from this restaurant in the ${companyName} app.`
 
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: order.restaurant,
-          text: shareText,
-        })
-      } else if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(shareText)
-        toast.success("Restaurant details copied to clipboard")
-      } else {
-        toast.info("Sharing is not supported on this device")
-      }
-    } catch (error) {
-      if (error?.name !== "AbortError") {
-        console.error("Error sharing restaurant:", error)
-        toast.error("Failed to share restaurant")
-      }
+      const result = await shareWithFallback({
+        title: order.restaurant,
+        text: shareText,
+      })
+      if (result.method === "copy") toast.success("Restaurant details copied to clipboard")
+      else if (result.method === "failed") toast.error("Failed to share restaurant")
     } finally {
       setActiveMenuOrderId(null)
     }

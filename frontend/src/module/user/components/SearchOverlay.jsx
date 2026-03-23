@@ -5,6 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { restaurantAPI } from "@/lib/api"
 import { foodImages } from "@/constants/images"
+import {
+  isAnyVoiceInputAvailable,
+  setFlutterVoiceGlobals,
+  startFlutterVoiceSearch,
+  stopFlutterVoiceSearch,
+} from "@/lib/voice/flutterVoiceSearch"
 
 const SEARCH_HISTORY_KEY = "user_search_history_v1"
 const MAX_HISTORY_ITEMS = 10
@@ -18,13 +24,16 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
   const [recentSearches, setRecentSearches] = useState([])
   const [loadingFoods, setLoadingFoods] = useState(false)
   const [isListening, setIsListening] = useState(false)
-  const [micSupported, setMicSupported] = useState(false)
+  const [micSupported, setMicSupported] = useState(() =>
+    typeof window !== "undefined" ? isAnyVoiceInputAvailable() : false,
+  )
+  const flutterListeningRef = useRef(false)
 
-  // Check if browser supports speech recognition
+  // Web Speech API and/or Flutter WebView bridge (channel / inappwebview)
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    setMicSupported(!!SpeechRecognition)
-  }, [])
+    if (!isOpen) return
+    setMicSupported(isAnyVoiceInputAvailable())
+  }, [isOpen])
 
   // Focus input when opened
   useEffect(() => {
@@ -181,6 +190,23 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     loadFoods()
   }, [isOpen, allFoods.length, loadingFoods])
 
+  useEffect(() => {
+    if (isOpen) return
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop()
+      } catch {
+        /* ignore */
+      }
+      recognitionRef.current = null
+    }
+    if (flutterListeningRef.current) {
+      stopFlutterVoiceSearch()
+      flutterListeningRef.current = false
+    }
+    setIsListening(false)
+  }, [isOpen])
+
   // Filter foods based on search input (name, cuisine, featured dish)
   // When search is empty, "Popular restaurants around you" shows only restaurants (no dishes)
   useEffect(() => {
@@ -267,16 +293,44 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
   }
 
   const handleMicClick = () => {
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognitionAPI) return
-
     if (isListening) {
       if (recognitionRef.current) {
-        recognitionRef.current.stop()
+        try {
+          recognitionRef.current.stop()
+        } catch {
+          /* ignore */
+        }
+        recognitionRef.current = null
+      }
+      if (flutterListeningRef.current) {
+        stopFlutterVoiceSearch()
+        flutterListeningRef.current = false
       }
       setIsListening(false)
       return
     }
+
+    setFlutterVoiceGlobals({
+      onResult: (text) => {
+        flutterListeningRef.current = false
+        setIsListening(false)
+        if (text) onSearchChange(text)
+      },
+      onError: () => {
+        flutterListeningRef.current = false
+        setIsListening(false)
+      },
+    })
+
+    const flutterMode = startFlutterVoiceSearch()
+    if (flutterMode) {
+      flutterListeningRef.current = true
+      setIsListening(true)
+      return
+    }
+
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognitionAPI) return
 
     const recognition = new SpeechRecognitionAPI()
     recognition.continuous = false
@@ -336,8 +390,7 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
                   variant="ghost"
                   size="icon"
                   onClick={handleMicClick}
-                  disabled={isListening}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-primary-orange disabled:opacity-70"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-primary-orange"
                   aria-label={isListening ? "Stop listening" : "Search by voice"}
                 >
                   {isListening ? (

@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { shareWithFallback } from "@/lib/utils/shareBridge"
 
 export default function DiningRestaurantDetails() {
     const { diningType, slug } = useParams() // Get params from URL
@@ -34,52 +35,20 @@ export default function DiningRestaurantDetails() {
     const [diningOffers, setDiningOffers] = useState([])
     const [diningMenu, setDiningMenu] = useState(null)
 
-    // Share handler (Web Share API + clipboard fallback)
-    const copyToClipboard = async (text) => {
-        try {
-            await navigator.clipboard.writeText(text)
-            toast.success("Link copied to clipboard!")
-        } catch (error) {
-            const textArea = document.createElement("textarea")
-            textArea.value = text
-            textArea.style.position = "fixed"
-            textArea.style.opacity = "0"
-            document.body.appendChild(textArea)
-            textArea.select()
-            try {
-                document.execCommand("copy")
-                toast.success("Link copied to clipboard!")
-            } catch (err) {
-                toast.error("Failed to copy link")
-            }
-            document.body.removeChild(textArea)
-        }
-    }
-
     const handleShareClick = async () => {
         if (!restaurant) return
 
         const shareUrl = window.location.href
         const shareTitle = `${restaurant.name || "Dining"} - Tastizo`
         const shareText = `Book your table at ${restaurant.name || "this restaurant"} on Tastizo.`
-
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: shareTitle,
-                    text: shareText,
-                    url: shareUrl,
-                })
-                return
-            } catch (error) {
-                if (error.name === "AbortError") {
-                    return
-                }
-                // fall through to clipboard fallback
-            }
-        }
-
-        await copyToClipboard(shareUrl)
+        const result = await shareWithFallback({
+            title: shareTitle,
+            text: shareText,
+            url: shareUrl,
+        })
+        if (result.method === "copy") toast.success("Link copied to clipboard!")
+        else if (result.method === "web" || result.method === "flutter") toast.success("Shared")
+        else if (result.method === "failed") toast.error("Failed to share link")
     }
 
     // Fetch data

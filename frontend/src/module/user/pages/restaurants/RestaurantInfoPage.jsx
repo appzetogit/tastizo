@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { diningAPI } from "@/lib/api"
 import { getCompanyNameAsync } from "@/lib/utils/businessSettings"
+import { shareWithFallback } from "@/lib/utils/shareBridge"
 import { useProfile } from "../../context/ProfileContext"
 import { toast } from "sonner"
 import {
@@ -243,24 +244,10 @@ export default function RestaurantInfoPage() {
               onClick={async () => {
                 const url = window.location.href
                 const title = restaurant?.name ? `${restaurant.name} - ${companyName}` : companyName
-                try {
-                  if (navigator.share) {
-                    await navigator.share({ title, url })
-                    toast.success("Shared")
-                  } else {
-                    await navigator.clipboard.writeText(url)
-                    toast.success("Link copied to clipboard")
-                  }
-                } catch (err) {
-                  if (err?.name !== "AbortError") {
-                    try {
-                      await navigator.clipboard.writeText(url)
-                      toast.success("Link copied to clipboard")
-                    } catch {
-                      toast.error("Could not share")
-                    }
-                  }
-                }
+                const result = await shareWithFallback({ title, url })
+                if (result.method === "copy") toast.success("Link copied to clipboard")
+                else if (result.method === "web" || result.method === "flutter") toast.success("Shared")
+                else if (result.method === "failed") toast.error("Could not share")
               }}
               aria-label="Share"
             >

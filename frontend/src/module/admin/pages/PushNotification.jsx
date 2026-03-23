@@ -9,6 +9,11 @@ import {
 import { adminAPI } from "../../../lib/api/index.js"
 
 export default function PushNotification() {
+  const defaultSettings = {
+    maxImageSizeMB: 2,
+    defaultZone: "All",
+    defaultTarget: "Customer",
+  }
   const [formData, setFormData] = useState({
     title: "",
     zone: "All",
@@ -20,7 +25,10 @@ export default function PushNotification() {
   const [notifications, setNotifications] = useState([])
   const [editingNotification, setEditingNotification] = useState(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [notificationSettings, setNotificationSettings] = useState(defaultSettings)
   const fileInputRef = useRef(null)
+  const formSectionRef = useRef(null)
+  const titleInputRef = useRef(null)
 
   const fetchNotifications = async () => {
     try {
@@ -34,6 +42,21 @@ export default function PushNotification() {
 
   useEffect(() => {
     fetchNotifications()
+  }, [])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("admin_push_notification_settings")
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      setNotificationSettings({
+        maxImageSizeMB: Number(parsed?.maxImageSizeMB) > 0 ? Number(parsed.maxImageSizeMB) : 2,
+        defaultZone: parsed?.defaultZone || "All",
+        defaultTarget: parsed?.defaultTarget || "Customer",
+      })
+    } catch (error) {
+      console.error("Failed to load notification settings:", error)
+    }
   }, [])
 
   const filteredNotifications = useMemo(() => {
@@ -56,6 +79,27 @@ export default function PushNotification() {
     e.preventDefault()
     if (!formData.title?.trim() || !formData.description?.trim()) {
       alert("Please fill in title and description.")
+      return
+    }
+    if (editingNotification) {
+      const editingId = editingNotification._id || editingNotification.id
+      setNotifications((prev) =>
+        prev.map((n) => {
+          const id = n._id || n.id
+          if (id !== editingId) return n
+          return {
+            ...n,
+            title: formData.title.trim(),
+            description: formData.description.trim(),
+            zone: formData.zone,
+            target: formData.sendTo,
+            ...(formData.bannerImage ? { image: formData.bannerImage } : {}),
+          }
+        }),
+      )
+      alert("Notification updated successfully.")
+      setEditingNotification(null)
+      handleReset()
       return
     }
     try {
@@ -86,8 +130,8 @@ export default function PushNotification() {
   const handleReset = () => {
     setFormData({
       title: "",
-      zone: "All",
-      sendTo: "Customer",
+      zone: notificationSettings.defaultZone || "All",
+      sendTo: notificationSettings.defaultTarget || "Customer",
       description: "",
       bannerImage: null,
     })
@@ -95,12 +139,13 @@ export default function PushNotification() {
 
   const handleBannerUpload = (e) => {
     const file = e.target.files?.[0]
-    if (file && file.type.startsWith("image/") && file.size <= 2 * 1024 * 1024) {
+    const maxImageSizeMB = Number(notificationSettings.maxImageSizeMB) || 2
+    if (file && file.type.startsWith("image/") && file.size <= maxImageSizeMB * 1024 * 1024) {
       const reader = new FileReader()
       reader.onload = () => setFormData(prev => ({ ...prev, bannerImage: reader.result }))
       reader.readAsDataURL(file)
     } else if (file) {
-      alert("Please upload an image (jpg, png, jpeg, gif, webp) under 2 MB.")
+      alert(`Please upload an image (jpg, png, jpeg, gif, webp) under ${maxImageSizeMB} MB.`)
     }
   }
 
@@ -113,9 +158,17 @@ export default function PushNotification() {
       description: notification.description || "",
       bannerImage: notification.image || null,
     })
+    formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    setTimeout(() => {
+      titleInputRef.current?.focus()
+    }, 150)
   }
 
   const handleExportNotifications = () => {
+    if (filteredNotifications.length === 0) {
+      alert("No notifications available to export.")
+      return
+    }
     const headers = ["SI", "Title", "Description", "Zone", "Target", "Status"]
     const rows = filteredNotifications.map((n, idx) => [
       idx + 1,
@@ -130,9 +183,29 @@ export default function PushNotification() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = "notifications.csv"
+    a.download = `notifications-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
     a.click()
+    document.body.removeChild(a)
     URL.revokeObjectURL(url)
+    alert("Notifications exported successfully.")
+  }
+
+  const handleSaveSettings = () => {
+    const normalized = {
+      maxImageSizeMB: Math.max(1, Number(notificationSettings.maxImageSizeMB) || 2),
+      defaultZone: notificationSettings.defaultZone || "All",
+      defaultTarget: notificationSettings.defaultTarget || "Customer",
+    }
+    setNotificationSettings(normalized)
+    localStorage.setItem("admin_push_notification_settings", JSON.stringify(normalized))
+    setFormData((prev) => ({
+      ...prev,
+      zone: normalized.defaultZone,
+      sendTo: normalized.defaultTarget,
+    }))
+    setIsSettingsOpen(false)
+    alert("Notification settings saved.")
   }
 
   const handleToggleStatus = (id) => {
@@ -180,9 +253,17 @@ export default function PushNotification() {
       <div className="max-w-7xl mx-auto">
         {/* Create New Notification Section */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+          <div ref={formSectionRef} />
           <div className="flex items-center gap-3 mb-6">
             <Bell className="w-5 h-5 text-blue-600" />
-            <h1 className="text-2xl font-bold text-slate-900">Notification</h1>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {editingNotification ? "Edit Notification" : "Notification"}
+            </h1>
+            {editingNotification && (
+              <span className="px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                Editing
+              </span>
+            )}
           </div>
 
           <form onSubmit={handleSubmit}>
@@ -192,6 +273,7 @@ export default function PushNotification() {
                   Title
                 </label>
                 <input
+                  ref={titleInputRef}
                   type="text"
                   value={formData.title}
                   onChange={(e) => handleInputChange("title", e.target.value)}
@@ -253,7 +335,9 @@ export default function PushNotification() {
                   <Upload className="w-12 h-12 text-slate-400 mx-auto mb-3" />
                 )}
                 <p className="text-sm font-medium text-blue-600 mb-1">Upload Image</p>
-                <p className="text-xs text-slate-500">Image format - jpg png jpeg gif webp Image Size -maximum size 2 MB Image Ratio - 3:1</p>
+                <p className="text-xs text-slate-500">
+                  Image format - jpg png jpeg gif webp Image Size -maximum size {notificationSettings.maxImageSizeMB} MB Image Ratio - 3:1
+                </p>
               </div>
             </div>
 
@@ -284,8 +368,20 @@ export default function PushNotification() {
                   type="submit"
                   className="px-6 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-md"
                 >
-                  Send Notification
+                  {editingNotification ? "Update Notification" : "Send Notification"}
                 </button>
+                {editingNotification && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingNotification(null)
+                      handleReset()
+                    }}
+                    className="px-6 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all"
+                  >
+                    Cancel Edit
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsSettingsOpen(true)}
@@ -444,8 +540,64 @@ export default function PushNotification() {
           <DialogHeader>
             <DialogTitle>Notification Settings</DialogTitle>
           </DialogHeader>
-          <div className="py-4 text-sm text-slate-600">
-            Configure default notification preferences, delivery options, and templates here.
+          <div className="py-2 space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Default Zone</label>
+              <select
+                value={notificationSettings.defaultZone}
+                onChange={(e) =>
+                  setNotificationSettings((prev) => ({ ...prev, defaultZone: e.target.value }))
+                }
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              >
+                <option value="All">All</option>
+                <option value="Asia">Asia</option>
+                <option value="Europe">Europe</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Default Send To</label>
+              <select
+                value={notificationSettings.defaultTarget}
+                onChange={(e) =>
+                  setNotificationSettings((prev) => ({ ...prev, defaultTarget: e.target.value }))
+                }
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              >
+                <option value="Customer">Customer</option>
+                <option value="Delivery Man">Delivery Man</option>
+                <option value="Restaurant">Restaurant</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Max Banner Size (MB)</label>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={notificationSettings.maxImageSizeMB}
+                onChange={(e) =>
+                  setNotificationSettings((prev) => ({ ...prev, maxImageSizeMB: e.target.value }))
+                }
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              />
+            </div>
+            <div className="pt-2 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSettings}
+                className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all"
+              >
+                Save settings
+              </button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

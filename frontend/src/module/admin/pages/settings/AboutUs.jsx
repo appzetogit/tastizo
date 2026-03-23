@@ -171,7 +171,7 @@ export default function AboutUs() {
           <CardHeader>
             <CardTitle>Basic Information</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5 px-6 py-5">
             <div>
               <Label htmlFor="appName">App Name</Label>
               <Input
@@ -225,12 +225,12 @@ export default function AboutUs() {
               Add Feature
             </Button>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5 px-6 py-5">
             {aboutData.features.map((feature, index) => {
               const IconComponent = iconMap[feature.icon] || Heart
               return (
                 <Card key={index} className="border-2">
-                  <CardContent className="p-4">
+                  <CardContent className="p-5">
                     <div className="flex items-start gap-4">
                       <div className={`${feature.bgColor} rounded-lg p-3 flex-shrink-0`}>
                         <IconComponent className={`h-6 w-6 ${feature.color}`} />

@@ -14,6 +14,27 @@ export default function DeliveryEmergencyHelp() {
   })
   const [formErrors, setFormErrors] = useState({})
 
+  const normalizePhoneInput = (value) => {
+    const raw = String(value || "").trim()
+    if (!raw) return ""
+    const hasPlusPrefix = raw.startsWith("+")
+    const digitsOnly = raw.replace(/\D/g, "")
+    return `${hasPlusPrefix ? "+" : ""}${digitsOnly}`
+  }
+
+  const validatePhoneField = (value, label) => {
+    const normalized = normalizePhoneInput(value)
+    if (!normalized) return null
+    const digits = normalized.replace(/\D/g, "")
+    if (digits.length < 3 || digits.length > 15) {
+      return `${label} must be between 3 and 15 digits`
+    }
+    if (normalized.includes("+") && !normalized.startsWith("+")) {
+      return `${label} has invalid format`
+    }
+    return null
+  }
+
   // Fetch emergency help numbers on component mount
   useEffect(() => {
     fetchEmergencyHelp()
@@ -43,29 +64,25 @@ export default function DeliveryEmergencyHelp() {
 
   const validateForm = () => {
     const errors = {}
-    const phoneRegex = /^[\d\s\-\+\(\)]+$/
+    const medicalError = validatePhoneField(formData.medicalEmergency, "Medical emergency number")
+    const accidentError = validatePhoneField(formData.accidentHelpline, "Accident helpline number")
+    const policeError = validatePhoneField(formData.contactPolice, "Police number")
+    const insuranceError = validatePhoneField(formData.insurance, "Insurance number")
 
-    if (formData.medicalEmergency && !phoneRegex.test(formData.medicalEmergency.trim())) {
-      errors.medicalEmergency = "Invalid phone number format"
-    }
-    if (formData.accidentHelpline && !phoneRegex.test(formData.accidentHelpline.trim())) {
-      errors.accidentHelpline = "Invalid phone number format"
-    }
-    if (formData.contactPolice && !phoneRegex.test(formData.contactPolice.trim())) {
-      errors.contactPolice = "Invalid phone number format"
-    }
-    if (formData.insurance && !phoneRegex.test(formData.insurance.trim())) {
-      errors.insurance = "Invalid phone number format"
-    }
+    if (medicalError) errors.medicalEmergency = medicalError
+    if (accidentError) errors.accidentHelpline = accidentError
+    if (policeError) errors.contactPolice = policeError
+    if (insuranceError) errors.insurance = insuranceError
 
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
 
   const handleInputChange = (field, value) => {
+    const normalizedValue = normalizePhoneInput(value)
     setFormData(prev => ({
       ...prev,
-      [field]: value
+      [field]: normalizedValue
     }))
     // Clear error for this field when user starts typing
     if (formErrors[field]) {
@@ -88,10 +105,10 @@ export default function DeliveryEmergencyHelp() {
     try {
       setSaving(true)
       const response = await adminAPI.createOrUpdateEmergencyHelp({
-        medicalEmergency: formData.medicalEmergency.trim(),
-        accidentHelpline: formData.accidentHelpline.trim(),
-        contactPolice: formData.contactPolice.trim(),
-        insurance: formData.insurance.trim(),
+        medicalEmergency: normalizePhoneInput(formData.medicalEmergency),
+        accidentHelpline: normalizePhoneInput(formData.accidentHelpline),
+        contactPolice: normalizePhoneInput(formData.contactPolice),
+        insurance: normalizePhoneInput(formData.insurance),
       })
 
       if (response?.data?.success) {
@@ -198,6 +215,8 @@ export default function DeliveryEmergencyHelp() {
                     value={formData[field.id]}
                     onChange={(e) => handleInputChange(field.id, e.target.value)}
                     placeholder={field.placeholder}
+                    inputMode="tel"
+                    maxLength={16}
                     className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                       formErrors[field.id]
                         ? "border-red-300 focus:ring-red-500"

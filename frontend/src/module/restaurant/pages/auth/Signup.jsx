@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Phone, User, AlertCircle, Loader2, UtensilsCrossed } from "lucide-react"
+import { Phone, User, AlertCircle, Loader2, UtensilsCrossed, ArrowLeft } from "lucide-react"
 import { restaurantAPI } from "@/lib/api"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -41,6 +41,7 @@ const countryCodes = [
 ]
 
 export default function RestaurantSignup() {
+  const companyName = useCompanyName()
   const navigate = useNavigate()
   const [formData, setFormData] = useState({
     phone: "",
@@ -183,6 +184,17 @@ export default function RestaurantSignup() {
 
       {/* Right form section */}
       <div className="w-full lg:w-1/2 h-full flex flex-col">
+        <div className="px-6 sm:px-10 lg:px-16 pt-4">
+          <button
+            type="button"
+            onClick={() => navigate("/restaurant/login")}
+            className="inline-flex items-center gap-2 text-sm font-medium text-primary-orange hover:underline"
+            aria-label="Back to login"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to login
+          </button>
+        </div>
         {/* Top logo and version */}
         <div className="relative flex items-center justify-center px-6 sm:px-10 lg:px-16 pt-6 pb-4">
           <div

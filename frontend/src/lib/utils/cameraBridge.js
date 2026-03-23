@@ -78,6 +78,50 @@ export async function openCameraViaFlutter(options = {}) {
   }
 }
 
+function normalizeFlutterImageResult(result) {
+  if (!result || !result.success) {
+    return { success: false, raw: result };
+  }
+
+  if (result.file instanceof File) {
+    return { success: true, file: result.file, raw: result };
+  }
+
+  if (result.base64) {
+    const file = base64ToFile(
+      result.base64,
+      result.fileName || `image-${Date.now()}.jpg`,
+      result.mimeType || "image/jpeg",
+    );
+    return { success: true, file, raw: result };
+  }
+
+  return { success: false, raw: result };
+}
+
+/**
+ * Open gallery/image picker via Flutter InAppWebView bridge.
+ * Tries common handler names for compatibility.
+ */
+export async function openGalleryViaFlutter() {
+  if (!hasFlutterCameraBridge()) {
+    return { success: false, reason: "no_flutter_bridge" };
+  }
+
+  const handlerNames = ["openGallery", "pickImageFromGallery", "pickImage"];
+  for (const handlerName of handlerNames) {
+    try {
+      const result = await window.flutter_inappwebview.callHandler(handlerName);
+      const normalized = normalizeFlutterImageResult(result);
+      if (normalized.success) return normalized;
+    } catch {
+      // Try the next supported handler
+    }
+  }
+
+  return { success: false, reason: "gallery_handler_unavailable" };
+}
+
 /**
  * Pick image for upload: uses Flutter camera bridge when in WebView, else triggers file input.
  * Use when you need a single flow that works in both Flutter and browser.

@@ -109,6 +109,10 @@ const orderSchema = new mongoose.Schema(
     phoneNumber: {
       type: String,
     },
+    /** Snapshot: delivery contact name (optional) */
+    contactName: {
+      type: String,
+    },
     alternatePhone: {
       type: String,
     },

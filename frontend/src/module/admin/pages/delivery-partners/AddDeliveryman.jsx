@@ -1,6 +1,6 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useNavigate, Link } from "react-router-dom"
-import { Upload, Calendar, Eye, EyeOff, Settings, ArrowLeft } from "lucide-react"
+import { Upload, Eye, EyeOff, Settings, ArrowLeft } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { adminAPI } from "@/lib/api"
 
@@ -24,13 +24,65 @@ export default function AddDeliveryman() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false)
   const [formErrors, setFormErrors] = useState({})
   const [submitError, setSubmitError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [createdDelivery, setCreatedDelivery] = useState(null)
+  const [profileImageName, setProfileImageName] = useState("")
+  const [identityImageName, setIdentityImageName] = useState("")
+  const profileImageInputRef = useRef(null)
+  const identityImageInputRef = useRef(null)
+
+  const formatNameWithCapitalFirstLetter = (value) => {
+    const lettersOnly = String(value || "").replace(/[^A-Za-z\s]/g, "")
+    return lettersOnly
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ")
+  }
+
+  const formatIdentityNumberByType = (value, identityType) => {
+    const cleaned = String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "")
+
+    if (identityType === "Passport") {
+      const firstChar = cleaned.replace(/[^A-Z]/g, "").slice(0, 1)
+      const digits = cleaned.replace(/\D/g, "").slice(0, 7)
+      return `${firstChar}${digits}`.slice(0, 8)
+    }
+
+    if (identityType === "National ID") {
+      const digits = cleaned.replace(/\D/g, "").slice(0, 12)
+      const parts = digits.match(/.{1,4}/g) || []
+      return parts.join("-")
+    }
+
+    // Driving License and fallback
+    return cleaned.slice(0, 16)
+  }
 
   const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    let nextValue = value
+    if (field === "firstName" || field === "lastName") {
+      nextValue = formatNameWithCapitalFirstLetter(value)
+    } else if (field === "email") {
+      nextValue = String(value || "").trimStart().toLowerCase()
+    } else if (field === "identityType") {
+      nextValue = value
+    } else if (field === "identityNumber") {
+      nextValue = formatIdentityNumberByType(value, formData.identityType)
+    }
+    setFormData(prev => {
+      if (field === "identityType") {
+        return {
+          ...prev,
+          identityType: nextValue,
+          identityNumber: formatIdentityNumberByType(prev.identityNumber, nextValue),
+        }
+      }
+      return { ...prev, [field]: nextValue }
+    })
     if (formErrors[field]) {
       setFormErrors(prev => ({ ...prev, [field]: "" }))
     }
@@ -38,21 +90,81 @@ export default function AddDeliveryman() {
 
   const validateForm = () => {
     const errors = {}
-    if (!formData.firstName.trim()) errors.firstName = "First name is required"
-    if (!formData.lastName.trim()) errors.lastName = "Last name is required"
+    const firstName = formData.firstName.trim()
+    const lastName = formData.lastName.trim()
+    if (!firstName) {
+      errors.firstName = "First name is required"
+    } else if (!/^[A-Za-z]+(?:\s[A-Za-z]+)*$/.test(firstName)) {
+      errors.firstName = "First name should contain alphabets only"
+    }
+    if (!lastName) {
+      errors.lastName = "Last name is required"
+    } else if (!/^[A-Za-z]+(?:\s[A-Za-z]+)*$/.test(lastName)) {
+      errors.lastName = "Last name should contain alphabets only"
+    }
     if (!formData.email.trim()) {
       errors.email = "Email is required"
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       errors.email = "Invalid email format"
     }
+    if (!formData.deliverymanType) errors.deliverymanType = "Deliveryman type is required"
     if (!formData.zone?.trim()) errors.zone = "Zone is required"
     if (!formData.vehicle) errors.vehicle = "Vehicle is required"
+    if (!formData.identityNumber?.trim()) {
+      errors.identityNumber = "Vehicle identity number is required"
+    } else if (
+      formData.identityType === "Passport" &&
+      !/^[A-Z][0-9]{7}$/.test(formData.identityNumber.trim())
+    ) {
+      errors.identityNumber = "Passport format should be like A1234567"
+    } else if (
+      formData.identityType === "National ID" &&
+      !/^[0-9]{4}-[0-9]{4}-[0-9]{4}$/.test(formData.identityNumber.trim())
+    ) {
+      errors.identityNumber = "National ID format should be like 1234-5678-9012"
+    } else if (
+      formData.identityType === "Driving License" &&
+      !/^[A-Z0-9]{8,16}$/.test(formData.identityNumber.trim())
+    ) {
+      errors.identityNumber = "Driving License should be 8-16 alphanumeric characters"
+    }
+    const ageNum = Number(formData.age)
+    if (!formData.age?.toString().trim()) {
+      errors.age = "Age is required"
+    } else if (!Number.isInteger(ageNum) || ageNum < 18 || ageNum > 99) {
+      errors.age = "Age should be in format (accept 2 digit number only)"
+    }
+    if (!formData.birthdate) errors.birthdate = "Birthdate is required"
     const phoneNum = (formData.phone || "").replace(/\D/g, "")
-    if (phoneNum.length < 10) errors.phone = "Valid phone number is required (at least 10 digits)"
+    if (phoneNum.length !== 12) {
+      errors.phone = "Enter valid 10-digit phone number"
+    } else if (!/^[6-9]/.test(phoneNum.slice(-10))) {
+      errors.phone = "Phone number must start with 6, 7, 8, or 9"
+    }
+    if (!profileImageName) errors.image = "Profile image is required"
     if (!formData.password || formData.password.length < 8) errors.password = "Password must be at least 8 characters"
+    if (!formData.confirmPassword) errors.confirmPassword = "Confirm password is required"
     if (formData.password !== formData.confirmPassword) errors.confirmPassword = "Passwords do not match"
     setFormErrors(errors)
     return Object.keys(errors).length === 0
+  }
+
+  const handleFileSelect = (type, file) => {
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      setSubmitError("Only image files are allowed for upload.")
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setSubmitError("Image size must be 2 MB or smaller.")
+      return
+    }
+    setSubmitError("")
+    if (type === "profile") {
+      setProfileImageName(file.name)
+      return
+    }
+    setIdentityImageName(file.name)
   }
 
   const handleSubmit = async (e) => {
@@ -110,6 +222,8 @@ export default function AddDeliveryman() {
     setFormErrors({})
     setSubmitError("")
     setCreatedDelivery(null)
+    setProfileImageName("")
+    setIdentityImageName("")
   }
 
   return (
@@ -117,7 +231,11 @@ export default function AddDeliveryman() {
       <div className="max-w-5xl mx-auto">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative">
           {/* Settings Icon */}
-          <button className="absolute top-6 right-6 p-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors">
+          <button
+            type="button"
+            onClick={() => setShowSettingsDialog(true)}
+            className="absolute top-6 right-6 p-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors"
+          >
             <Settings className="w-5 h-5 text-slate-600" />
           </button>
 
@@ -192,12 +310,15 @@ export default function AddDeliveryman() {
                   <select
                     value={formData.deliverymanType}
                     onChange={(e) => handleInputChange("deliverymanType", e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    className={`w-full px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
+                      formErrors.deliverymanType ? "border-red-500" : "border-slate-300"
+                    }`}
                   >
                     <option value="">Delivery man type</option>
                     <option value="full-time">Full Time</option>
                     <option value="part-time">Part Time</option>
                   </select>
+                  {formErrors.deliverymanType && <p className="text-xs text-red-500 mt-1">{formErrors.deliverymanType}</p>}
                 </div>
 
                 <div>
@@ -222,11 +343,25 @@ export default function AddDeliveryman() {
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
                     Image <span className="text-red-500">*</span>
                   </label>
-                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer">
+                  <input
+                    ref={profileImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleFileSelect("profile", e.target.files?.[0])}
+                  />
+                  <div
+                    onClick={() => profileImageInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer ${
+                      formErrors.image ? "border-red-400" : "border-slate-300"
+                    }`}
+                  >
                     <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
                     <p className="text-sm font-medium text-blue-600 mb-1">Click to upload Or drag and drop</p>
                     <p className="text-xs text-slate-500">JPG, JPEG, PNG, Gif Image size: Max 2 MB (1:1)</p>
+                    {profileImageName && <p className="text-xs text-emerald-600 mt-2">{profileImageName}</p>}
                   </div>
+                  {formErrors.image && <p className="text-xs text-red-500 mt-1">{formErrors.image}</p>}
                 </div>
               </div>
             </div>
@@ -277,19 +412,39 @@ export default function AddDeliveryman() {
                     type="text"
                     value={formData.identityNumber}
                     onChange={(e) => handleInputChange("identityNumber", e.target.value)}
-                    placeholder="Ex: DH-23434-LS"
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder={
+                      formData.identityType === "Passport"
+                        ? "Ex: A1234567"
+                        : formData.identityType === "National ID"
+                          ? "Ex: 1234-5678-9012"
+                          : "Ex: MH12AB12345678"
+                    }
+                    className={`w-full px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
+                      formErrors.identityNumber ? "border-red-500" : "border-slate-300"
+                    }`}
                   />
+                  {formErrors.identityNumber && <p className="text-xs text-red-500 mt-1">{formErrors.identityNumber}</p>}
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
                     Identity Image
                   </label>
-                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer">
+                  <input
+                    ref={identityImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleFileSelect("identity", e.target.files?.[0])}
+                  />
+                  <div
+                    onClick={() => identityImageInputRef.current?.click()}
+                    className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer"
+                  >
                     <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
                     <p className="text-sm font-medium text-blue-600 mb-1">Select a file or Drag & Drop here</p>
                     <p className="text-xs text-slate-500">Pdf, doc, jpg. File size: max 2 MB</p>
+                    {identityImageName && <p className="text-xs text-emerald-600 mt-2">{identityImageName}</p>}
                   </div>
                 </div>
               </div>
@@ -306,25 +461,30 @@ export default function AddDeliveryman() {
                   <input
                     type="number"
                     value={formData.age}
-                    onChange={(e) => handleInputChange("age", e.target.value)}
+                    onChange={(e) => handleInputChange("age", (e.target.value || "").replace(/\D/g, "").slice(0, 2))}
                     placeholder="Enter Age"
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    min="18"
+                    max="99"
+                    className={`w-full px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
+                      formErrors.age ? "border-red-500" : "border-slate-300"
+                    }`}
                   />
+                  {formErrors.age && <p className="text-xs text-red-500 mt-1">{formErrors.age}</p>}
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
                     Enter your birthdate <span className="text-red-500">*</span>
                   </label>
-                  <div className="relative">
-                    <input
-                      type="date"
-                      value={formData.birthdate}
-                      onChange={(e) => handleInputChange("birthdate", e.target.value)}
-                      className="w-full px-4 py-2.5 pr-10 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    />
-                    <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                  </div>
+                  <input
+                    type="date"
+                    value={formData.birthdate}
+                    onChange={(e) => handleInputChange("birthdate", e.target.value)}
+                    className={`w-full px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
+                      formErrors.birthdate ? "border-red-500" : "border-slate-300"
+                    }`}
+                  />
+                  {formErrors.birthdate && <p className="text-xs text-red-500 mt-1">{formErrors.birthdate}</p>}
                 </div>
 
                 <div>
@@ -376,7 +536,9 @@ export default function AddDeliveryman() {
                       value={formData.password}
                       onChange={(e) => handleInputChange("password", e.target.value)}
                       placeholder="Ex: 8+ Character"
-                      className="w-full px-4 py-2.5 pr-10 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      className={`w-full px-4 py-2.5 pr-10 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
+                        formErrors.password ? "border-red-500" : "border-slate-300"
+                      }`}
                     />
                     <button
                       type="button"
@@ -386,6 +548,7 @@ export default function AddDeliveryman() {
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                  {formErrors.password && <p className="text-xs text-red-500 mt-1">{formErrors.password}</p>}
                 </div>
 
                 <div>
@@ -398,7 +561,9 @@ export default function AddDeliveryman() {
                       value={formData.confirmPassword}
                       onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
                       placeholder="Ex: 8+ Character"
-                      className="w-full px-4 py-2.5 pr-10 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      className={`w-full px-4 py-2.5 pr-10 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
+                        formErrors.confirmPassword ? "border-red-500" : "border-slate-300"
+                      }`}
                     />
                     <button
                       type="button"
@@ -408,6 +573,7 @@ export default function AddDeliveryman() {
                       {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                  {formErrors.confirmPassword && <p className="text-xs text-red-500 mt-1">{formErrors.confirmPassword}</p>}
                 </div>
               </div>
             </div>
@@ -436,6 +602,29 @@ export default function AddDeliveryman() {
           </form>
         </div>
       </div>
+
+      {/* Success Dialog */}
+      <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
+        <DialogContent className="max-w-md bg-white p-0">
+          <DialogHeader className="px-6 pt-6 pb-4">
+            <DialogTitle>Add Delivery Boy Settings</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-6">
+            <p className="text-sm text-slate-700">
+              This panel will contain page-level configuration options. For now, form validation and upload behavior are enabled by default.
+            </p>
+          </div>
+          <DialogFooter className="px-6 pb-6">
+            <button
+              type="button"
+              onClick={() => setShowSettingsDialog(false)}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-all shadow-md"
+            >
+              Close
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Success Dialog */}
       <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>

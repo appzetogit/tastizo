@@ -61,8 +61,6 @@ export default function FeedbackExperienceReport() {
       const query = searchQuery.toLowerCase().trim()
       result = result.filter(feedback =>
         feedback.userName?.toLowerCase().includes(query) ||
-        feedback.userEmail?.toLowerCase().includes(query) ||
-        feedback.userPhone?.includes(query) ||
         feedback._id?.toString().includes(query)
       )
     }
@@ -364,7 +362,7 @@ export default function FeedbackExperienceReport() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by user name, email, phone..."
+                placeholder="Search by name, order id"
                 className="w-full pl-10 pr-4 py-2.5 text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
@@ -375,7 +373,7 @@ export default function FeedbackExperienceReport() {
                 <span>Export</span>
                 <ChevronDown className="w-3 h-3" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
                 <DropdownMenuLabel>Export Format</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => handleExport('csv')}>CSV</DropdownMenuItem>
@@ -487,7 +485,7 @@ export default function FeedbackExperienceReport() {
 
       {/* Details Dialog */}
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
-        <DialogContent className="max-w-2xl bg-white p-0">
+        <DialogContent className="max-w-2xl bg-white border border-slate-200 shadow-xl rounded-xl p-0 overflow-hidden">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200">
             <DialogTitle className="text-xl font-bold text-slate-900">Feedback Details</DialogTitle>
           </DialogHeader>

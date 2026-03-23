@@ -33,6 +33,12 @@ const statusMeta = {
 const PAGE_SIZE = 25
 
 export default function RegularOrderReport() {
+  const defaultFilters = {
+    zone: "All Zones",
+    restaurant: "All restaurants",
+    customer: "All customers",
+    time: "All Time",
+  }
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -40,16 +46,16 @@ export default function RegularOrderReport() {
   const [restaurants, setRestaurants] = useState([])
   const [customers, setCustomers] = useState([])
   
-  const [filters, setFilters] = useState({
-    zone: "All Zones",
-    restaurant: "All restaurants",
-    customer: "All customers",
-    time: "All Time",
-  })
+  const [filters, setFilters] = useState(defaultFilters)
+  const [pendingFilters, setPendingFilters] = useState(defaultFilters)
   const [searchQuery, setSearchQuery] = useState("")
+  const [searchInput, setSearchInput] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [tableSettings, setTableSettings] = useState({
+    wrapText: false,
+  })
 
   // Fetch zones, restaurants, and customers for filter dropdowns
   useEffect(() => {
@@ -195,19 +201,19 @@ export default function RegularOrderReport() {
   }
 
   const handleFilterApply = () => {
-    // Filters are already applied via useMemo
+    setFilters(pendingFilters)
+    setSearchQuery(searchInput.trim())
+    setCurrentPage(1)
   }
 
   const handleResetFilters = () => {
-    setFilters({
-      zone: "All Zones",
-      restaurant: "All restaurants",
-      customer: "All customers",
-      time: "All Time",
-    })
+    setFilters(defaultFilters)
+    setPendingFilters(defaultFilters)
+    setSearchInput("")
+    setSearchQuery("")
   }
 
-  const activeFiltersCount = (filters.zone !== "All Zones" ? 1 : 0) + (filters.restaurant !== "All restaurants" ? 1 : 0) + (filters.customer !== "All customers" ? 1 : 0) + (filters.time !== "All Time" ? 1 : 0)
+  const activeFiltersCount = (pendingFilters.zone !== "All Zones" ? 1 : 0) + (pendingFilters.restaurant !== "All restaurants" ? 1 : 0) + (pendingFilters.customer !== "All customers" ? 1 : 0) + (pendingFilters.time !== "All Time" ? 1 : 0)
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE))
 
@@ -245,8 +251,7 @@ export default function RegularOrderReport() {
     `₹${Number(amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
   const handleFilterChange = (key, value) => {
-    setFilters((prev) => ({ ...prev, [key]: value }))
-    setCurrentPage(1)
+    setPendingFilters((prev) => ({ ...prev, [key]: value }))
   }
 
   const handlePageChange = (newPage) => {
@@ -425,11 +430,11 @@ export default function RegularOrderReport() {
                 <input
                   type="text"
                   placeholder="Search by Order ID"
-                  value={searchQuery}
+                  value={searchInput}
                   onChange={(e) => {
-                    setSearchQuery(e.target.value)
-                    setCurrentPage(1)
+                    setSearchInput(e.target.value)
                   }}
+                  onKeyDown={(e) => e.key === "Enter" && handleFilterApply()}
                   className="pl-7 pr-2 py-1.5 w-full text-[11px] rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 <img src={searchIcon} alt="Search" className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3" />
@@ -475,7 +480,7 @@ export default function RegularOrderReport() {
 
           {/* Table */}
           <div className="overflow-x-auto scrollbar-hide">
-            <table className="w-full" style={{ tableLayout: "fixed", width: "100%" }}>
+            <table className="w-full min-w-[1360px]" style={{ tableLayout: "auto", width: "100%" }}>
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "3%" }}>
@@ -538,10 +543,10 @@ export default function RegularOrderReport() {
                         </span>
                       </td>
                       <td className="px-1.5 py-1">
-                        <span className="text-[10px] text-blue-600 hover:underline cursor-pointer">{order.orderId}</span>
+                        <span className={`text-[10px] text-blue-600 hover:underline cursor-pointer block ${tableSettings.wrapText ? "whitespace-normal break-all" : "whitespace-nowrap truncate max-w-[130px]"}`}>{order.orderId}</span>
                       </td>
                       <td className="px-1.5 py-1">
-                        <span className="text-[10px] text-slate-700 truncate block">{order.restaurant}</span>
+                        <span className={`text-[10px] text-slate-700 block ${tableSettings.wrapText ? "whitespace-normal break-words" : "whitespace-nowrap truncate max-w-[180px]"}`}>{order.restaurant}</span>
                       </td>
                       <td className="px-1.5 py-1">
                         <span className="text-[10px] text-slate-700 truncate block">{order.customerName}</span>
@@ -636,9 +641,15 @@ export default function RegularOrderReport() {
             </DialogTitle>
           </DialogHeader>
           <div className="px-6 pb-6">
-            <p className="text-sm text-slate-700">
-              Regular order report settings and preferences will be available here.
-            </p>
+            <label className="flex items-center justify-between gap-3 text-sm text-slate-700">
+              <span>Wrap long Order ID/Restaurant text</span>
+              <input
+                type="checkbox"
+                checked={tableSettings.wrapText}
+                onChange={(e) => setTableSettings((prev) => ({ ...prev, wrapText: e.target.checked }))}
+                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+            </label>
           </div>
           <div className="px-6 pb-6 flex items-center justify-end">
             <button

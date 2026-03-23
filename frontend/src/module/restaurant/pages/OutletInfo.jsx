@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { restaurantAPI } from "@/lib/api"
 import { toast } from "sonner"
-import { openCameraViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
+import { openCameraViaFlutter, openGalleryViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
 
 const CUISINES_STORAGE_KEY = "restaurant_cuisines"
 
@@ -50,6 +50,8 @@ export default function OutletInfo() {
   const [uploadingImage, setUploadingImage] = useState(false)
   const [imageType, setImageType] = useState(null) // 'profile' or 'menu'
   const [uploadingCount, setUploadingCount] = useState(0) // Track how many images are being uploaded
+  const [showImageSourceDialog, setShowImageSourceDialog] = useState(false)
+  const [imageActionTarget, setImageActionTarget] = useState(null) // 'profile' | 'cover'
   const profileImageInputRef = useRef(null)
   const menuImageInputRef = useRef(null)
 
@@ -265,30 +267,9 @@ export default function OutletInfo() {
     }
   }
 
-  // Bridge-aware handler for editing profile photo
-  const handleEditPhotoClick = async () => {
-    if (!hasFlutterCameraBridge()) {
-      profileImageInputRef.current?.click()
-      return
-    }
-
-    try {
-      const result = await openCameraViaFlutter()
-
-      if (result?.success && result.file) {
-        const syntheticEvent = { target: { files: [result.file] } }
-        await handleProfileImageReplace(syntheticEvent)
-      } else if (result && !result.success) {
-        console.error("Flutter camera returned unsuccessful result:", result)
-        toast.error("Failed to capture image from camera")
-      } else {
-        console.log("Camera cancelled by user or no result returned")
-      }
-    } catch (error) {
-      console.error("Error opening camera for profile image:", error)
-      toast.error("Failed to open camera. Please try again.")
-      profileImageInputRef.current?.click()
-    }
+  const openImageSourceDialog = (target) => {
+    setImageActionTarget(target)
+    setShowImageSourceDialog(true)
   }
 
   // Handle multiple cover images addition (separate from menu images)
@@ -427,31 +408,103 @@ export default function OutletInfo() {
     }
   }
 
-  // Bridge-aware handler for adding cover images
-  const handleAddCoverImageClick = async () => {
-    if (!hasFlutterCameraBridge()) {
-      menuImageInputRef.current?.click()
+  const openNativeFilePicker = (target, useCamera) => {
+    const inputRef = target === "profile" ? profileImageInputRef : menuImageInputRef
+    const input = inputRef.current
+    if (!input) return
+
+    if (useCamera) {
+      input.setAttribute("capture", "environment")
+      input.removeAttribute("multiple")
+    } else {
+      input.removeAttribute("capture")
+      if (target === "cover") {
+        input.setAttribute("multiple", "multiple")
+      } else {
+        input.removeAttribute("multiple")
+      }
+    }
+    input.click()
+  }
+
+  const handleImageSourceSelect = async (source) => {
+    const target = imageActionTarget
+    setShowImageSourceDialog(false)
+    if (!target) return
+
+    if (source === "gallery") {
+      if (hasFlutterCameraBridge()) {
+        const flutterResult = await openGalleryViaFlutter()
+        if (flutterResult?.success && flutterResult.file) {
+          const syntheticEvent = { target: { files: [flutterResult.file] } }
+          if (target === "profile") {
+            await handleProfileImageReplace(syntheticEvent)
+          } else {
+            await handleCoverImageAdd(syntheticEvent)
+          }
+          return
+        }
+      }
+      openNativeFilePicker(target, false)
       return
     }
 
-    try {
-      const result = await openCameraViaFlutter()
-
-      if (result?.success && result.file) {
-        const syntheticEvent = { target: { files: [result.file] } }
-        await handleCoverImageAdd(syntheticEvent)
-      } else if (result && !result.success) {
-        console.error("Flutter camera returned unsuccessful result for cover image:", result)
-        toast.error("Failed to capture image from camera")
-      } else {
-        console.log("Cover image camera cancelled by user or no result returned")
+    if (source === "camera") {
+      if (hasFlutterCameraBridge()) {
+        try {
+          const result = await openCameraViaFlutter()
+          if (result?.success && result.file) {
+            const syntheticEvent = { target: { files: [result.file] } }
+            if (target === "profile") {
+              await handleProfileImageReplace(syntheticEvent)
+            } else {
+              await handleCoverImageAdd(syntheticEvent)
+            }
+            return
+          }
+        } catch (error) {
+          console.error("Error opening camera via Flutter:", error)
+        }
       }
-    } catch (error) {
-      console.error("Error opening camera for cover image:", error)
-      toast.error("Failed to open camera. Please try again.")
-      menuImageInputRef.current?.click()
+      openNativeFilePicker(target, true)
     }
   }
+
+  // Bridge-aware handler for editing profile photo
+  const handleEditPhotoClick = async () => {
+    openImageSourceDialog("profile")
+  }
+
+  // Bridge-aware handler for adding cover images
+  const handleAddCoverImageClick = async () => {
+    openImageSourceDialog("cover")
+  }
+
+  const closeImageSourceDialog = () => {
+    setShowImageSourceDialog(false)
+    setImageActionTarget(null)
+  }
+
+  useEffect(() => {
+    if (!showImageSourceDialog) return
+    const onEsc = (event) => {
+      if (event.key === "Escape") closeImageSourceDialog()
+    }
+    window.addEventListener("keydown", onEsc)
+    return () => window.removeEventListener("keydown", onEsc)
+  }, [showImageSourceDialog])
+
+  useEffect(() => {
+    if (!showImageSourceDialog) {
+      setImageActionTarget(null)
+    }
+  }, [showImageSourceDialog])
+
+  // Keep menu input behavior aligned with selected mode
+  useEffect(() => {
+    if (!menuImageInputRef.current) return
+    menuImageInputRef.current.setAttribute("multiple", "multiple")
+  }, [])
 
   // Handle cover image deletion
   const handleCoverImageDelete = async (indexToDelete) => {
@@ -937,6 +990,35 @@ export default function OutletInfo() {
               Save
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showImageSourceDialog} onOpenChange={(open) => {
+        if (!open) closeImageSourceDialog()
+      }}>
+        <DialogContent className="sm:max-w-sm p-4 w-[90%]">
+          <DialogHeader>
+            <DialogTitle>Select image source</DialogTitle>
+            <DialogDescription>
+              Choose how you want to upload your image.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3 py-2">
+            <Button
+              type="button"
+              onClick={() => handleImageSourceSelect("camera")}
+              className="bg-black text-white hover:bg-black/90"
+            >
+              Camera
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleImageSourceSelect("gallery")}
+            >
+              Gallery
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

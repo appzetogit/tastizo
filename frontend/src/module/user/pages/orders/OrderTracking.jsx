@@ -35,6 +35,7 @@ import { useProfile } from "../../context/ProfileContext"
 import { useLocation as useUserLocation } from "../../hooks/useLocation"
 import DeliveryTrackingMap from "../../components/DeliveryTrackingMap"
 import { orderAPI, restaurantAPI } from "@/lib/api"
+import { shareWithFallback } from "@/lib/utils/shareBridge"
 import circleIcon from "@/assets/circleicon.png"
 
 // Animated checkmark component
@@ -640,20 +641,10 @@ export default function OrderTracking() {
       url: window.location.href,
     };
 
-    try {
-      if (navigator.share) {
-        await navigator.share(shareData);
-        toast.success("Shared successfully");
-      } else {
-        await navigator.clipboard.writeText(window.location.href);
-        toast.success("Link copied to clipboard");
-      }
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        console.error("Error sharing:", err);
-        toast.error("Failed to share");
-      }
-    }
+    const result = await shareWithFallback(shareData)
+    if (result.method === "copy") toast.success("Link copied to clipboard")
+    else if (result.method === "web" || result.method === "flutter") toast.success("Shared successfully")
+    else if (result.method === "failed") toast.error("Failed to share")
   };
 
   const handleCallRestaurant = async () => {

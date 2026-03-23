@@ -20,7 +20,7 @@ export default function Customers() {
     joiningDate: "",
     status: "",
     sortBy: "",
-    chooseFirst: "",
+    orderAmount: "",
   })
 
   const filteredCustomers = useMemo(() => {
@@ -39,12 +39,14 @@ export default function Customers() {
     // Filter by order date (if customer has order date field, otherwise skip)
     // Note: customersDummy doesn't have orderDate, so this is a placeholder for future implementation
 
-    // Filter by joining date
+    // Filter by joining date (apply only when both dates are valid)
     if (filters.joiningDate) {
       result = result.filter(customer => {
-        // Parse joining date from format "17 Oct 2021"
         const customerDate = new Date(customer.joiningDate)
         const filterDate = new Date(filters.joiningDate)
+        if (Number.isNaN(customerDate.getTime()) || Number.isNaN(filterDate.getTime())) {
+          return true
+        }
         return customerDate.toDateString() === filterDate.toDateString()
       })
     }
@@ -71,9 +73,12 @@ export default function Customers() {
       }
     }
 
-    // Limit results if "Choose First" is set
-    if (filters.chooseFirst && parseInt(filters.chooseFirst) > 0) {
-      result = result.slice(0, parseInt(filters.chooseFirst))
+    // Filter by minimum total order amount
+    if (filters.orderAmount !== "") {
+      const minAmount = Number(filters.orderAmount)
+      if (!Number.isNaN(minAmount) && minAmount >= 0) {
+        result = result.filter(customer => Number(customer.totalOrderAmount || 0) >= minAmount)
+      }
     }
 
     return result
@@ -275,9 +280,10 @@ export default function Customers() {
               </label>
               <input
                 type="number"
-                value={filters.chooseFirst}
-                onChange={(e) => handleFilterChange("chooseFirst", e.target.value)}
+                value={filters.orderAmount}
+                onChange={(e) => handleFilterChange("orderAmount", e.target.value)}
                 placeholder="Ex: 100"
+                min="0"
                 className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               />
             </div>
@@ -300,7 +306,7 @@ export default function Customers() {
                     joiningDate: "",
                     status: "",
                     sortBy: "",
-                    chooseFirst: "",
+                    orderAmount: "",
                   })
                 }}
                 className="px-6 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all"

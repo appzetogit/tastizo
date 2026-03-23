@@ -43,6 +43,7 @@ import { useCart } from "../../context/CartContext"
 import { useProfile } from "../../context/ProfileContext"
 import AddToCartAnimation from "../../components/AddToCartAnimation"
 import { getCompanyNameAsync } from "@/lib/utils/businessSettings"
+import { shareWithFallback } from "@/lib/utils/shareBridge"
 import { isModuleAuthenticated } from "@/lib/utils/auth"
 
 
@@ -682,27 +683,15 @@ export default function RestaurantDetails() {
     const shareUrl = `${window.location.origin}/user/restaurants/${restaurantSlug}`
     const shareText = `Check out ${restaurantName} on ${companyName}! ${shareUrl}`
 
-    // Try Web Share API first (mobile)
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: restaurantName,
-          text: shareText,
-          url: shareUrl,
-        })
-        toast.success("Restaurant shared successfully")
-        setShowMenuOptionsSheet(false)
-      } catch (error) {
-        // User cancelled or error occurred
-        if (error.name !== "AbortError") {
-          // Fallback to copy to clipboard
-          await copyToClipboard(shareUrl)
-        }
-      }
-    } else {
-      // Fallback to copy to clipboard
-      await copyToClipboard(shareUrl)
-    }
+    const result = await shareWithFallback({
+      title: restaurantName,
+      text: shareText,
+      url: shareUrl,
+    })
+    if (result.method === "copy") toast.success("Link copied to clipboard!")
+    else if (result.method === "web" || result.method === "flutter") toast.success("Restaurant shared successfully")
+    else if (result.method === "failed") toast.error("Failed to share link")
+    setShowMenuOptionsSheet(false)
   }
 
 
@@ -717,49 +706,14 @@ export default function RestaurantDetails() {
     const shareUrl = `${window.location.origin}/user/restaurants/${restaurantSlug}?dish=${dishId}`
     const shareText = `Check out ${item.name} from ${restaurant?.name || "this restaurant"}! ${shareUrl}`
 
-    // Try Web Share API first (mobile)
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `${item.name} - ${restaurant?.name || ""}`,
-          text: shareText,
-          url: shareUrl,
-        })
-        toast.success("Dish shared successfully")
-      } catch (error) {
-        // User cancelled or error occurred
-        if (error.name !== "AbortError") {
-          // Fallback to copy to clipboard
-          await copyToClipboard(shareUrl)
-        }
-      }
-    } else {
-      // Fallback to copy to clipboard
-      await copyToClipboard(shareUrl)
-    }
-  }
-
-  // Copy to clipboard helper
-  const copyToClipboard = async (text) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      toast.success("Link copied to clipboard!")
-    } catch (error) {
-      // Fallback for older browsers
-      const textArea = document.createElement("textarea")
-      textArea.value = text
-      textArea.style.position = "fixed"
-      textArea.style.opacity = "0"
-      document.body.appendChild(textArea)
-      textArea.select()
-      try {
-        document.execCommand("copy")
-        toast.success("Link copied to clipboard!")
-      } catch (err) {
-        toast.error("Failed to copy link")
-      }
-      document.body.removeChild(textArea)
-    }
+    const result = await shareWithFallback({
+      title: `${item.name} - ${restaurant?.name || ""}`,
+      text: shareText,
+      url: shareUrl,
+    })
+    if (result.method === "copy") toast.success("Link copied to clipboard!")
+    else if (result.method === "web" || result.method === "flutter") toast.success("Dish shared successfully")
+    else if (result.method === "failed") toast.error("Failed to share link")
   }
 
   // Handle item card click

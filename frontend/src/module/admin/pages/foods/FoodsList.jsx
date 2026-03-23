@@ -3,6 +3,33 @@ import { Search, Trash2, Loader2 } from "lucide-react"
 import { adminAPI, restaurantAPI } from "@/lib/api"
 import { toast } from "sonner"
 
+function FoodImage({ src, name }) {
+  const [showImage, setShowImage] = useState(Boolean(src))
+
+  useEffect(() => {
+    setShowImage(Boolean(src))
+  }, [src])
+
+  const initial = (name || "F").trim().charAt(0).toUpperCase()
+
+  return (
+    <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center">
+      {showImage ? (
+        <img
+          src={src}
+          alt={name}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          decoding="async"
+          onError={() => setShowImage(false)}
+        />
+      ) : (
+        <span className="text-slate-400 text-xs font-semibold">{initial}</span>
+      )}
+    </div>
+  )
+}
+
 export default function FoodsList() {
   const [searchQuery, setSearchQuery] = useState("")
   const [foods, setFoods] = useState([])
@@ -46,7 +73,7 @@ export default function FoodsList() {
                       id: item.id || `${restaurantId}-${section.id}-${item.name}`,
                       _id: item._id,
                       name: item.name || "Unnamed Item",
-                      image: item.image || item.images?.[0] || "https://via.placeholder.com/40",
+                      image: item.image || item.images?.[0] || null,
                       priority: "Normal", // Default priority
                       status: item.isAvailable !== false && item.approvalStatus !== 'rejected',
                       restaurantId: restaurantId,
@@ -69,7 +96,7 @@ export default function FoodsList() {
                           id: item.id || `${restaurantId}-${section.id}-${subsection.id}-${item.name}`,
                           _id: item._id,
                           name: item.name || "Unnamed Item",
-                          image: item.image || item.images?.[0] || "https://via.placeholder.com/40",
+                          image: item.image || item.images?.[0] || null,
                           priority: "Normal", // Default priority
                           status: item.isAvailable !== false && item.approvalStatus !== 'rejected',
                           restaurantId: restaurantId,
@@ -270,16 +297,7 @@ export default function FoodsList() {
                       <span className="text-sm font-medium text-slate-700">{index + 1}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center">
-                        <img
-                          src={food.image}
-                          alt={food.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.target.src = "https://via.placeholder.com/40"
-                          }}
-                        />
-                      </div>
+                      <FoodImage src={food.image} name={food.name} />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col">
