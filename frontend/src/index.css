@@ -128,29 +128,18 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: none !important; /* Firefox */
+    -ms-overflow-style: none !important; /* IE / legacy Edge */
   }
 
-  /* Hide viewport scrollbar (Lenis scrolls documentElement; thumb often shows on html) */
-  html {
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE / legacy Edge */
-  }
-  html::-webkit-scrollbar {
-    width: 0;
-    height: 0;
-    display: none; /* Chrome, Safari, Edge */
+  *::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important; /* Chrome, Safari, Edge */
   }
 
   body {
     @apply bg-background text-foreground m-0 min-h-screen;
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none;
-  }
-
-  body::-webkit-scrollbar {
-    width: 0;
-    height: 0;
-    display: none; /* Chrome/Safari/Edge */
   }
 }
 

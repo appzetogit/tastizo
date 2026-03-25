@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useSearchOverlay, useLocationSelector } from "../components/UserLayout"
 import PageNavbar from "../components/PageNavbar"
+import StickySearchShell from "../components/StickySearchShell"
 
 // Import shared food images - prevents duplication
 import { foodImages } from "@/constants/images"
@@ -218,6 +219,77 @@ export default function Home() {
   const vegModeToggleRef = useRef(null)
   /** Desktop hero veg switch lives outside the mobile-only block; needs its own ref for popup anchor */
   const vegModeDesktopToggleRef = useRef(null)
+
+  const mobileStickySearchRef = useRef(null)
+  const desktopStickySearchRef = useRef(null)
+  const [isStickySearch, setIsStickySearch] = useState(false)
+  const [stickySearchTopPx, setStickySearchTopPx] = useState(0)
+  const [stickySearchHeightPx, setStickySearchHeightPx] = useState(0)
+
+  const stickyCatsTopPx = isStickySearch && !isSearchOpen ? stickySearchTopPx + (stickySearchHeightPx > 0 ? stickySearchHeightPx : 80) : 0
+
+  // Detect when the sticky search has reached its sticky threshold so categories can shift down smoothly.
+  useEffect(() => {
+    let raf = 0
+    const last = { stuck: false, top: 0, height: 0 }
+
+    const update = () => {
+      const isDesktop = window.matchMedia("(min-width: 1024px)").matches
+      const el = isDesktop ? desktopStickySearchRef.current : mobileStickySearchRef.current
+      if (!el) return
+
+      const rootFontSize =
+        parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+
+      // `UserLayout` adds `md:pt-[4.5rem]` to the main content when desktop navbar is shown.
+      const desktopPaddingTopPx = 4.5 * rootFontSize
+      const topClassPx = 0
+      const desiredViewportTop = isDesktop ? desktopPaddingTopPx + topClassPx : topClassPx
+      const rectTop = el.getBoundingClientRect().top
+      const stuck = rectTop <= desiredViewportTop + 1
+
+      if (last.top !== topClassPx) {
+        last.top = topClassPx
+        setStickySearchTopPx(topClassPx)
+      }
+      
+      if (last.stuck !== stuck) {
+        last.stuck = stuck
+        setIsStickySearch(stuck)
+      }
+
+      // Always remeasure if stuck or just became stuck, using a minimum fallback for height
+      if (stuck) {
+        const measuredHeight = el.scrollHeight || el.offsetHeight || 0
+        if (measuredHeight > 0 && Math.abs(last.height - measuredHeight) > 1) {
+          last.height = measuredHeight
+          setStickySearchHeightPx(measuredHeight)
+        }
+      }
+    }
+
+    const onScroll = () => {
+      if (raf) return
+      raf = window.requestAnimationFrame(() => {
+        raf = 0
+        update()
+      })
+    }
+
+    update()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    window.addEventListener("resize", onScroll)
+
+    // Periodic check to ensure height is stable during/after transitions
+    const interval = setInterval(update, 100)
+
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      window.removeEventListener("scroll", onScroll)
+      window.removeEventListener("resize", onScroll)
+      clearInterval(interval)
+    }
+  }, [])
 
   const getVegModeToggleRect = () => {
     const el = vegModeDesktopToggleRef.current || vegModeToggleRef.current
@@ -1549,7 +1621,11 @@ export default function Home() {
           <div className="relative z-20 max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 lg:hidden">
             {/* Search Bar and VEG MODE Container - Sticky (hidden when overlay open to avoid 2 search bars) */}
             <div
-              className={`sticky top-4 z-50 flex items-center gap-3 sm:gap-4 lg:gap-6 ${isSearchOpen ? "pointer-events-none opacity-0" : ""}`}
+              className={`flex items-center gap-3 sm:gap-4 lg:gap-6 ${
+                isSearchOpen || isStickySearch
+                  ? "pointer-events-none opacity-0 invisible h-0 overflow-hidden"
+                  : ""
+              }`}
             >
               {/* Enhanced Search Bar */}
               <div className="flex-1 relative">
@@ -1633,7 +1709,15 @@ export default function Home() {
               </span>
             </h1>
 
-            <div className="mt-10 flex flex-row items-stretch gap-4 max-w-4xl mx-auto">
+            <div className="mt-10">
+              <StickySearchShell
+                ref={desktopStickySearchRef}
+                topClass="top-0"
+                zIndexClass="z-50"
+                isSearchOpen={isSearchOpen}
+                isSticky={isStickySearch}
+                className="flex flex-row items-stretch gap-4 max-w-4xl mx-auto"
+              >
               <button
                 type="button"
                 onClick={() => openLocationSelector()}
@@ -1713,6 +1797,7 @@ export default function Home() {
                   className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300 w-12 h-6 shadow-md [&_[data-slot=switch-thumb]]:bg-white [&_[data-slot=switch-thumb]]:h-5 [&_[data-slot=switch-thumb]]:w-5 [&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-6 [&_[data-slot=switch-thumb]]:data-[state=unchecked]:translate-x-0"
                 />
               </div>
+              </StickySearchShell>
             </div>
           </div>
         </section>
@@ -1721,8 +1806,90 @@ export default function Home() {
       {/* Rest of Content - Container Width with Unified Background */}
       {/* Plain div (not motion) so no ancestor transform breaks position:sticky on categories/filters */}
       <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-4 sm:pt-5 lg:pt-8">
+        {/* Swiggy-like Sticky Search Clone (mobile priority) */}
+        <StickySearchShell
+          ref={mobileStickySearchRef}
+          topClass="top-0"
+          isSearchOpen={isSearchOpen}
+          isVisible={isStickySearch}
+          isSticky={true}
+          className="lg:hidden flex items-center gap-3 sm:gap-4"
+        >
+          {/* Enhanced Search Bar */}
+          <div className="flex-1 relative">
+            <div className="relative bg-white dark:bg-[#1a1a1a] rounded-xl lg:rounded-2xl shadow-lg border border-gray-200 dark:border-gray-800 p-1 sm:p-1.5 lg:p-2 transition-all duration-300 hover:shadow-xl">
+              <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
+                <Search className="h-4 w-4 sm:h-4 sm:w-4 lg:h-5 lg:w-5 text-green-600 flex-shrink-0 ml-2 sm:ml-3 lg:ml-4" strokeWidth={2.5} />
+                <div className="flex-1 relative">
+                  <div className="relative w-full">
+                    <Input
+                      value={heroSearch}
+                      onChange={(e) => setHeroSearch(e.target.value)}
+                      onFocus={handleSearchFocus}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && heroSearch.trim()) {
+                          navigate(`/user/search?q=${encodeURIComponent(heroSearch.trim())}`)
+                          closeSearch()
+                          setHeroSearch("")
+                        }
+                      }}
+                      aria-label="Search restaurants and food"
+                      className="pl-0 pr-2 h-8 sm:h-9 lg:h-11 w-full bg-white dark:bg-[#1a1a1a] border-0 text-sm sm:text-base lg:text-lg font-semibold text-gray-700 dark:text-white focus-visible:ring-0 focus-visible:ring-offset-0 rounded-full placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                    />
+                    {!heroSearch && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none h-5 lg:h-6 overflow-hidden">
+                        <AnimatePresence mode="wait">
+                          <motion.span
+                            key={placeholderIndex}
+                            initial={{ y: 16, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: -16, opacity: 0 }}
+                            transition={{ duration: 0.3 }}
+                            className="text-sm sm:text-base lg:text-lg font-semibold text-gray-500 dark:text-gray-400 inline-block"
+                          >
+                            {placeholders[placeholderIndex]}
+                          </motion.span>
+                        </AnimatePresence>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Voice Search"
+                  onClick={handleSearchFocus}
+                  className="flex-shrink-0 mr-2 sm:mr-3 lg:mr-4 p-1 lg:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                >
+                  <Mic className="h-4 w-4 sm:h-4 sm:w-4 lg:h-5 lg:w-5 text-gray-500 dark:text-gray-400" strokeWidth={2.5} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* VEG MODE Toggle */}
+          <div className="flex flex-col items-center gap-0.5 sm:gap-1 lg:gap-1.5 flex-shrink-0 relative ml-1">
+            <div className="flex flex-col items-center">
+              <span className="text-gray-900 dark:text-white text-[13px] sm:text-[11px] lg:text-sm font-black leading-none">
+                VEG
+              </span>
+              <span className="text-gray-900/90 dark:text-white text-[9.5px] sm:text-[10px] lg:text-xs font-black leading-none">
+                MODE
+              </span>
+            </div>
+            <Switch
+              checked={vegMode}
+              onCheckedChange={handleVegModeChange}
+              aria-label="Toggle Veg Mode"
+              className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300 w-9 h-4 sm:w-10 sm:h-5 lg:w-12 lg:h-6 shadow-lg [&_[data-slot=switch-thumb]]:bg-white [&_[data-slot=switch-thumb]]:h-3 [&_[data-slot=switch-thumb]]:w-3 sm:[&_[data-slot=switch-thumb]]:h-4 sm:[&_[data-slot=switch-thumb]]:w-4 lg:[&_[data-slot=switch-thumb]]:h-5 lg:[&_[data-slot=switch-thumb]]:w-5 [&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 sm:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 lg:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-6 [&_[data-slot=switch-thumb]]:data-[state=unchecked]:translate-x-0"
+            />
+          </div>
+        </StickySearchShell>
+
         {/* Sticky Section - Food Categories and Filters */}
-        <div className="sticky top-16 z-40 bg-white dark:bg-[#0a0a0a] pt-3 sm:pt-4 pb-2 sm:pb-3 lg:top-0">
+        <div
+          className="sticky z-40 bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5 pb-2 sm:pb-3 transition-[top] duration-300 ease-in-out"
+          style={{ top: stickyCatsTopPx }}
+        >
           {/* Food Categories - Horizontal Scroll */}
           <motion.section
             className="space-y-0"

@@ -681,7 +681,7 @@ export default function SearchResults() {
       <div className="sticky top-0 z-20 bg-white dark:bg-[#1a1a1a] shadow-sm">
         <div className="max-w-7xl mx-auto">
           {/* Search Bar with Back Button */}
-          <div className="flex items-center gap-2 px-3 sm:px-4 md:px-6 lg:px-8 py-3 md:py-4 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2 px-3 sm:px-4 md:px-6 lg:px-8 pt-6 pb-3 md:pt-8 md:pb-4 border-b border-gray-100 dark:border-gray-800">
             <button
               onClick={() => navigate('/user')}
               className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors flex-shrink-0"

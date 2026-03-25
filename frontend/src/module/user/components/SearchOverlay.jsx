@@ -373,7 +373,7 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     >
       {/* Header with Search Bar */}
       <div className="flex-shrink-0 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-4">
           <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 sm:gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground dark:text-gray-400 z-10 pointer-events-none" />

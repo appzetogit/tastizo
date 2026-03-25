@@ -692,6 +692,8 @@ export default function CategoryPage() {
     <div className={`min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Sticky Header */}
       <div className="sticky top-0 z-20 bg-white dark:bg-[#1a1a1a] shadow-sm">
+        {/* Spacer to avoid the sticky search area covering the categories row */}
+        <div className="h-2 bg-white dark:bg-[#1a1a1a]" aria-hidden />
         <div className="max-w-7xl mx-auto">
           {/* Search Bar with Back Button */}
           <div className="flex items-center gap-2 px-3 md:px-6 py-3 border-b border-gray-100 dark:border-gray-800">

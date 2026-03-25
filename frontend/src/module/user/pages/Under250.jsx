@@ -39,6 +39,8 @@ export default function Under250() {
   const [quantities, setQuantities] = useState({})
   const [viewCartButtonBottom, setViewCartButtonBottom] = useState("bottom-20")
   const lastScrollY = useRef(0)
+  const under250StickyHeaderRef = useRef(null)
+  const [isUnder250HeaderStuck, setIsUnder250HeaderStuck] = useState(false)
   const [categories, setCategories] = useState([])
   const [loadingCategories, setLoadingCategories] = useState(true)
   const [bannerImage, setBannerImage] = useState(null)
@@ -63,6 +65,51 @@ export default function Under250() {
   const handleApply = () => {
     setShowSortPopup(false)
   }
+
+  // When the sticky categories header reaches the top, add extra top padding
+  // (inside the same bg) so the UI doesn't feel cramped/overlapping.
+  useEffect(() => {
+    let raf = 0
+    const last = { stuck: false }
+
+    const update = () => {
+      const el = under250StickyHeaderRef.current
+      if (!el) return
+
+      const rootFontSize =
+        parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+
+      // Tailwind: md:top-16 => 4rem, md breakpoint => min-width 768px
+      const isMd = window.matchMedia("(min-width: 768px)").matches
+      const desiredViewportTop = isMd ? 4 * rootFontSize : 0
+
+      const rectTop = el.getBoundingClientRect().top
+      const stuck = rectTop <= desiredViewportTop + 1
+
+      if (last.stuck !== stuck) {
+        last.stuck = stuck
+        setIsUnder250HeaderStuck(stuck)
+      }
+    }
+
+    const onScroll = () => {
+      if (raf) return
+      raf = window.requestAnimationFrame(() => {
+        raf = 0
+        update()
+      })
+    }
+
+    update()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    window.addEventListener("resize", onScroll)
+
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      window.removeEventListener("scroll", onScroll)
+      window.removeEventListener("resize", onScroll)
+    }
+  }, [])
 
   // Helper function to parse delivery time (e.g., "12-15 mins" -> 12 or average)
   const parseDeliveryTime = (deliveryTime) => {
@@ -535,7 +582,10 @@ export default function Under250() {
       <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-2 sm:pt-3 md:pt-4 lg:pt-6 pb-24 md:pb-28 lg:pb-32">
 
         {/* Sticky Header: Categories and Filters */}
-        <div className="sticky top-0 md:top-16 z-30 bg-white dark:bg-[#0a0a0a] -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8 xl:-mx-12 xl:px-12 shadow-sm transition-all duration-300">
+        <div
+          ref={under250StickyHeaderRef}
+          className={`sticky top-0 md:top-16 z-30 bg-white dark:bg-[#0a0a0a] -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8 xl:-mx-12 xl:px-12 shadow-sm transition-[padding-top] duration-300 ease-in-out ${isUnder250HeaderStuck ? "pt-8" : "pt-0"}`}
+        >
           <section className="pb-1">
             <div
               className="flex gap-3 sm:gap-4 md:gap-5 lg:gap-6 overflow-x-auto md:overflow-x-hidden md:flex-wrap md:justify-center scrollbar-hide scroll-smooth px-2 sm:px-3 pt-0.5 pb-2 sm:pt-1 sm:pb-2 md:pt-1 md:pb-2"
