@@ -128,20 +128,36 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    scrollbar-width: none !important; /* Firefox */
-    -ms-overflow-style: none !important; /* IE / legacy Edge */
-  }
-
-  *::-webkit-scrollbar {
-    width: 0 !important;
-    height: 0 !important;
-    display: none !important; /* Chrome, Safari, Edge */
   }
 
   body {
     @apply bg-background text-foreground m-0 min-h-screen;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
   }
 }
+
+/* 100% ACCURACY SCROLLBAR HIDING: Must be outside any layer for maximum precedence */
+html, body, #root, * {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+#root::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Disable accidental whole-page focus outlines that can look like scrollbars */
+html:focus, body:focus, #root:focus {
+  outline: none !important;
+}
+
+
 
 @layer utilities {
   .scrollbar-hide {
