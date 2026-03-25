@@ -223,10 +223,14 @@ export default function Home() {
   const mobileStickySearchRef = useRef(null)
   const desktopStickySearchRef = useRef(null)
   const [isStickySearch, setIsStickySearch] = useState(false)
-  const [stickySearchTopPx, setStickySearchTopPx] = useState(0)
-  const [stickySearchHeightPx, setStickySearchHeightPx] = useState(0)
+  const [isDesktop, setIsDesktop] = useState(window.matchMedia("(min-width: 1024px)").matches)
 
-  const stickyCatsTopPx = isStickySearch && !isSearchOpen ? stickySearchTopPx + (stickySearchHeightPx > 0 ? stickySearchHeightPx : 80) : 0
+  useEffect(() => {
+    const mm = window.matchMedia("(min-width: 1024px)")
+    const onChange = (e) => setIsDesktop(e.matches)
+    mm.addEventListener("change", onChange)
+    return () => mm.removeEventListener("change", onChange)
+  }, [])
 
   // Detect when the sticky search has reached its sticky threshold so categories can shift down smoothly.
   useEffect(() => {
@@ -248,23 +252,9 @@ export default function Home() {
       const rectTop = el.getBoundingClientRect().top
       const stuck = rectTop <= desiredViewportTop + 1
 
-      if (last.top !== topClassPx) {
-        last.top = topClassPx
-        setStickySearchTopPx(topClassPx)
-      }
-      
       if (last.stuck !== stuck) {
         last.stuck = stuck
         setIsStickySearch(stuck)
-      }
-
-      // Always remeasure if stuck or just became stuck, using a minimum fallback for height
-      if (stuck) {
-        const measuredHeight = el.scrollHeight || el.offsetHeight || 0
-        if (measuredHeight > 0 && Math.abs(last.height - measuredHeight) > 1) {
-          last.height = measuredHeight
-          setStickySearchHeightPx(measuredHeight)
-        }
       }
     }
 
@@ -278,16 +268,12 @@ export default function Home() {
 
     update()
     window.addEventListener("scroll", onScroll, { passive: true })
-    window.addEventListener("resize", onScroll)
-
-    // Periodic check to ensure height is stable during/after transitions
-    const interval = setInterval(update, 100)
+    window.addEventListener("resize", update)
 
     return () => {
       if (raf) cancelAnimationFrame(raf)
       window.removeEventListener("scroll", onScroll)
-      window.removeEventListener("resize", onScroll)
-      clearInterval(interval)
+      window.removeEventListener("resize", update)
     }
   }, [])
 
@@ -1620,12 +1606,20 @@ export default function Home() {
           {/* Mobile / tablet: existing sticky search + veg */}
           <div className="relative z-20 max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 lg:hidden">
             {/* Search Bar and VEG MODE Container - Sticky (hidden when overlay open to avoid 2 search bars) */}
-            <div
-              className={`flex items-center gap-3 sm:gap-4 lg:gap-6 ${
-                isSearchOpen || isStickySearch
-                  ? "pointer-events-none opacity-0 invisible h-0 overflow-hidden"
-                  : ""
-              }`}
+            <motion.div
+              layout
+              initial={false}
+              animate={{
+                height: (isSearchOpen || isStickySearch) ? 0 : "auto",
+                opacity: (isSearchOpen || isStickySearch) ? 0 : 1,
+                marginTop: (isSearchOpen || isStickySearch) ? 0 : "inherit",
+                marginBottom: (isSearchOpen || isStickySearch) ? 0 : "inherit",
+              }}
+              transition={{
+                duration: 0.4,
+                ease: [0.16, 1, 0.3, 1]
+              }}
+              className="flex items-center gap-3 sm:gap-4 lg:gap-6 overflow-hidden"
             >
               {/* Enhanced Search Bar */}
               <div className="flex-1 relative">
@@ -1695,7 +1689,7 @@ export default function Home() {
                   className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300 w-9 h-4 sm:w-10 sm:h-5 lg:w-12 lg:h-6 shadow-lg [&_[data-slot=switch-thumb]]:bg-white [&_[data-slot=switch-thumb]]:h-3 [&_[data-slot=switch-thumb]]:w-3 sm:[&_[data-slot=switch-thumb]]:h-4 sm:[&_[data-slot=switch-thumb]]:w-4 lg:[&_[data-slot=switch-thumb]]:h-5 lg:[&_[data-slot=switch-thumb]]:w-5 [&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 sm:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 lg:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-6 [&_[data-slot=switch-thumb]]:data-[state=unchecked]:translate-x-0"
                 />
               </div>
-            </div>
+            </motion.div>
           </div>
 
           {/* Large screens only: Swiggy-like headline + location strip + search (Tastizo branding) */}
@@ -1806,7 +1800,12 @@ export default function Home() {
       {/* Rest of Content - Container Width with Unified Background */}
       {/* Plain div (not motion) so no ancestor transform breaks position:sticky on categories/filters */}
       <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-4 sm:pt-5 lg:pt-8">
-        {/* Swiggy-like Sticky Search Clone (mobile priority) */}
+        {/* Unified Sticky Wrapper - Groups Search and Categories to prevent lag/overlap */}
+        <div 
+          className="sticky z-50 transition-[top] duration-300 ease-in-out"
+          style={{ top: isDesktop ? "4.5rem" : 0 }}
+        >
+          {/* Swiggy-like Sticky Search Clone (mobile priority) */}
         <StickySearchShell
           ref={mobileStickySearchRef}
           topClass="top-0"
@@ -1885,11 +1884,11 @@ export default function Home() {
           </div>
         </StickySearchShell>
 
-        {/* Sticky Section - Food Categories and Filters */}
-        <div
-          className="sticky z-40 bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5 pb-2 sm:pb-3 transition-[top] duration-300 ease-in-out"
-          style={{ top: stickyCatsTopPx }}
-        >
+          {/* Sticky Section - Food Categories and Filters */}
+          <motion.div
+            layout
+            className="bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5 pb-2 sm:pb-3"
+          >
           {/* Food Categories - Horizontal Scroll */}
           <motion.section
             className="space-y-0"
@@ -2080,7 +2079,9 @@ export default function Home() {
               })}
             </div>
           </motion.section>
-        </div>
+        </motion.div>
+      </div>
+      {/* End Unified Sticky Wrapper */}
         {/* End Sticky Section */}
 
         {/* Explore More Section */}
