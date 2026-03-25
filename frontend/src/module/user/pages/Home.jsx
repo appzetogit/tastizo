@@ -1549,7 +1549,7 @@ export default function Home() {
           <div className="relative z-20 max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 lg:hidden">
             {/* Search Bar and VEG MODE Container - Sticky (hidden when overlay open to avoid 2 search bars) */}
             <div
-              className={`sticky top-4 z-30 flex items-center gap-3 sm:gap-4 lg:gap-6 ${isSearchOpen ? "pointer-events-none opacity-0" : ""}`}
+              className={`sticky top-4 z-50 flex items-center gap-3 sm:gap-4 lg:gap-6 ${isSearchOpen ? "pointer-events-none opacity-0" : ""}`}
             >
               {/* Enhanced Search Bar */}
               <div className="flex-1 relative">
@@ -1722,7 +1722,7 @@ export default function Home() {
       {/* Plain div (not motion) so no ancestor transform breaks position:sticky on categories/filters */}
       <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-4 sm:pt-5 lg:pt-8">
         {/* Sticky Section - Food Categories and Filters */}
-        <div className="sticky top-0 z-40 bg-white dark:bg-[#0a0a0a] pt-3 sm:pt-4 pb-2 sm:pb-3">
+        <div className="sticky top-16 z-40 bg-white dark:bg-[#0a0a0a] pt-3 sm:pt-4 pb-2 sm:pb-3 lg:top-0">
           {/* Food Categories - Horizontal Scroll */}
           <motion.section
             className="space-y-0"
