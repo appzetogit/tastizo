@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { ChevronLeft, Search, ChevronRight, Plus, MapPin, MoreHorizontal, Navigation, Home, Building2, Briefcase, Phone, X, Crosshair } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -371,6 +371,57 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   }, [])
   const reverseGeocodeTimeoutRef = useRef(null) // Debounce timeout for reverse geocoding
   const lastReverseGeocodeCoordsRef = useRef(null) // Track last coordinates to avoid duplicate calls
+
+  const teardownAddressMap = useCallback(() => {
+    try {
+      if (watchPositionIdRef.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchPositionIdRef.current)
+      }
+    } catch {
+      // ignore
+    }
+    watchPositionIdRef.current = null
+
+    try {
+      if (googleMapsApiRef.current?.maps?.event) {
+        if (greenMarkerRef.current) googleMapsApiRef.current.maps.event.clearInstanceListeners(greenMarkerRef.current)
+        if (googleMapRef.current) googleMapsApiRef.current.maps.event.clearInstanceListeners(googleMapRef.current)
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      if (greenMarkerRef.current?.setMap) greenMarkerRef.current.setMap(null)
+    } catch {
+      // ignore
+    }
+    try {
+      if (userLocationMarkerRef.current?.setMap) userLocationMarkerRef.current.setMap(null)
+    } catch {
+      // ignore
+    }
+    try {
+      if (blueDotCircleRef.current?.setMap) blueDotCircleRef.current.setMap(null)
+    } catch {
+      // ignore
+    }
+    try {
+      if (userLocationAccuracyCircleRef.current?.setMap) userLocationAccuracyCircleRef.current.setMap(null)
+    } catch {
+      // ignore
+    }
+
+    greenMarkerRef.current = null
+    userLocationMarkerRef.current = null
+    blueDotCircleRef.current = null
+    userLocationAccuracyCircleRef.current = null
+    googleMapRef.current = null
+
+    if (mapContainerRef.current) {
+      mapContainerRef.current.innerHTML = ""
+    }
+  }, [])
 
   // Debug: Log API key status (only first few characters for security)
   useEffect(() => {
@@ -790,6 +841,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     }
 
     let isMounted = true
+    let mapClickListener = null
     setMapLoading(true)
 
     const initializeGoogleMap = async () => {
@@ -848,6 +900,19 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           setSelectedPlaceAddress('')
           setMapPosition([newLat, newLng])
           handleMapMoveEnd(newLat, newLng)
+        })
+
+        // Allow users to pin exact location by tapping on map (mobile-friendly).
+        mapClickListener = map.addListener('click', (e) => {
+          const clickedLat = e?.latLng?.lat?.()
+          const clickedLng = e?.latLng?.lng?.()
+          if (typeof clickedLat !== "number" || typeof clickedLng !== "number") return
+          if (greenMarkerRef.current) {
+            greenMarkerRef.current.setPosition({ lat: clickedLat, lng: clickedLng })
+          }
+          setSelectedPlaceAddress('')
+          setMapPosition([clickedLat, clickedLng])
+          handleMapMoveEnd(clickedLat, clickedLng, { force: true })
         })
 
         // Function to create/update blue dot and accuracy circle
@@ -1031,29 +1096,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
     return () => {
       isMounted = false
-      // Cleanup geolocation watch
-      if (watchPositionIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchPositionIdRef.current)
-        watchPositionIdRef.current = null
-      }
-      // Cleanup markers
-      if (greenMarkerRef.current) {
-        greenMarkerRef.current.setMap(null)
-      }
-      if (userLocationMarkerRef.current) {
-        try {
-          userLocationMarkerRef.current.setMap(null)
-        } catch (e) {
-          console.warn("Error cleaning up blue dot marker:", e)
-        }
-      }
-      if (blueDotCircleRef.current) {
-        try {
-          blueDotCircleRef.current.setMap(null)
-        } catch (e) {
-          console.warn("Error cleaning up accuracy circle:", e)
-        }
-      }
+      teardownAddressMap()
       if (placesAutocompleteRef.current && googleMapsApiRef.current?.maps?.event) {
         try {
           googleMapsApiRef.current.maps.event.clearInstanceListeners(placesAutocompleteRef.current)
@@ -1062,8 +1105,15 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         }
         placesAutocompleteRef.current = null
       }
+      if (mapClickListener) {
+        try {
+          mapClickListener.remove()
+        } catch (e) {
+          console.warn("Error cleaning up map click listener:", e)
+        }
+      }
     }
-  }, [showAddressForm, GOOGLE_MAPS_API_KEY, location?.latitude, location?.longitude])
+  }, [showAddressForm, GOOGLE_MAPS_API_KEY, location?.latitude, location?.longitude, teardownAddressMap])
 
   // Fetch up to 4 place suggestions when user types in address-form search
   useEffect(() => {
@@ -2759,6 +2809,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   }
 
   const handleCancelAddressForm = () => {
+    teardownAddressMap()
     setShowAddressForm(false)
     setAddressFormData({
       street: "",
