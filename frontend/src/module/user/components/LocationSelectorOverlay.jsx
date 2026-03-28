@@ -274,7 +274,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const addressFormSearchRef = useRef(null) // Search input in "Select delivery location" form - for focus and Places Autocomplete
   const [searchValue, setSearchValue] = useState("")
   const { location, loading, requestLocation } = useGeoLocation()
-  const { addresses = [], addAddress, updateAddress, userProfile } = useProfile()
+  const { addresses = [], addAddress, setDefaultAddress, userProfile } = useProfile()
   const [showAddressForm, setShowAddressForm] = useState(false)
   const [mapPosition, setMapPosition] = useState([22.7196, 75.8577]) // Default Indore coordinates [lat, lng]
   const [addressFormData, setAddressFormData] = useState({
@@ -2676,7 +2676,32 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         zipCode: (addressFormData.zipCode || "").trim(),
         latitude: mapPosition[0], // latitude from mapPosition[0]
         longitude: mapPosition[1], // longitude from mapPosition[1]
+        isDefault: true,
       }
+
+      const savedAddress = await addAddress(addressToSave)
+      if (savedAddress) {
+        await handleSelectSavedAddress(savedAddress, { closeAfterSelect: false, showToast: false })
+      }
+      toast.success(`Address saved as ${normalizedLabel}!`)
+
+      // Reset form
+      setAddressFormData({
+        street: "",
+        city: "",
+        state: "",
+        zipCode: "",
+        additionalDetails: "",
+        label: "Home",
+        phone: "",
+      })
+      setShowAddressForm(false)
+      setLoadingAddress(false)
+
+      // Close overlay and redirect back to caller (cart/home/etc.)
+      onClose()
+      navigateAfterClose("/")
+      return
 
       // Check if an address with the same label already exists
       const existingAddressWithSameLabel = addresses.find(addr => addr.label === normalizedLabel)
@@ -2747,37 +2772,62 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     navigateAfterClose("/")
   }
 
-  const handleSelectSavedAddress = async (address) => {
+  const buildLocationDataFromAddress = (address) => {
+    const coordinates = address?.location?.coordinates || []
+    const longitude = coordinates[0] ?? address?.longitude ?? null
+    const latitude = coordinates[1] ?? address?.latitude ?? null
+    const formattedAddress = cleanLocationDisplayLine(
+      [
+        address?.additionalDetails,
+        address?.street,
+        address?.city,
+        address?.state,
+        address?.zipCode,
+      ].filter(Boolean).join(", "),
+    )
+
+    return {
+      city: address?.city || "",
+      state: address?.state || "",
+      address: cleanLocationDisplayLine(
+        [address?.additionalDetails, address?.street, address?.city].filter(Boolean).join(", "),
+      ),
+      area: address?.additionalDetails || "",
+      zipCode: address?.zipCode || "",
+      latitude,
+      longitude,
+      formattedAddress,
+      street: address?.street || "",
+    }
+  }
+
+  const handleSelectSavedAddress = async (address, options = {}) => {
+    const { closeAfterSelect = true, showToast = true } = options
     try {
-      // Get coordinates from address location
-      const coordinates = address.location?.coordinates || []
-      const longitude = coordinates[0]
-      const latitude = coordinates[1]
+      const locationData = buildLocationDataFromAddress(address)
+      const { longitude, latitude } = locationData
+
+      if (address?.id) {
+        await setDefaultAddress(address.id)
+        localStorage.setItem("selectedUserAddressId", address.id)
+      }
 
       if (latitude && longitude) {
         // Update location in backend
         await userAPI.updateLocation({
           latitude,
           longitude,
-          address: `${address.street}, ${address.city}`,
-          city: address.city,
-          state: address.state,
-          area: address.additionalDetails || "",
-          formattedAddress: `${address.street}, ${address.city}, ${address.state}`
+          address: locationData.address,
+          city: locationData.city,
+          state: locationData.state,
+          area: locationData.area,
+          postalCode: locationData.zipCode,
+          street: locationData.street,
+          formattedAddress: locationData.formattedAddress
         })
       }
 
       // Update the location in localStorage with this address
-      const locationData = {
-        city: address.city,
-        state: address.state,
-        address: `${address.street}, ${address.city}`,
-        area: address.additionalDetails || "",
-        zipCode: address.zipCode,
-        latitude,
-        longitude,
-        formattedAddress: `${address.street}, ${address.city}, ${address.state}`
-      }
       localStorage.setItem("userLocation", JSON.stringify(locationData))
 
       // Broadcast updated location so Navbar and other components update immediately
@@ -2817,23 +2867,30 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           // Fetch and update address details
           setTimeout(async () => {
             await handleMapMoveEnd(latitude, longitude)
-            toast.success("Location updated!", { id: "saved-address" })
+            if (showToast) {
+              toast.success("Location updated!", { id: "saved-address" })
+            }
           }, 500)
         } catch (mapError) {
           console.error("Error updating map:", mapError)
-          toast.success("Location updated!", { id: "saved-address" })
+          if (showToast) {
+            toast.success("Location updated!", { id: "saved-address" })
+          }
         }
       } else {
         // Map not initialized yet, just fetch address
         setTimeout(async () => {
           await handleMapMoveEnd(latitude, longitude)
-          toast.success("Location updated!", { id: "saved-address" })
+          if (showToast) {
+            toast.success("Location updated!", { id: "saved-address" })
+          }
         }, 300)
       }
 
-      // Don't close overlay - keep user on select location page
-      // onClose()
-      // window.location.reload()
+      if (closeAfterSelect) {
+        onClose()
+        navigateAfterClose("/")
+      }
     } catch (error) {
       console.error("Error selecting saved address:", error)
       toast.error("Failed to update location. Please try again.")
@@ -3243,11 +3300,6 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               </div>
               <div className="bg-white dark:bg-[#1a1a1a]">
                 {addresses
-                  .filter((address, index, self) => {
-                    // Filter out duplicate addresses with same label - keep only first occurrence
-                    const firstIndex = self.findIndex(addr => addr.label === address.label)
-                    return index === firstIndex
-                  })
                   .map((address, index) => {
                     const IconComponent = getAddressIcon(address)
                     return (
@@ -3388,6 +3440,3 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     </div>
   )
 }
-
-
-

@@ -811,7 +811,7 @@ function useUserGeoLocationEngine() {
                 if (
                   baseline?.latitude != null &&
                   baseline?.longitude != null &&
-                  isAcceptableGeocodeResult(baseline)
+                  hasDetailedAddress(baseline)
                 ) {
                   const moved = haversineDistanceMeters(
                     latitude,
@@ -1487,33 +1487,30 @@ function useUserGeoLocationEngine() {
     const checkPermissionAndStart = async (shouldForceRefresh, hasInitialLocation) => {
       if (cancelled) return
       try {
-        let permissionGranted = false
+        let permissionState = "prompt"
 
         if (navigator.permissions && navigator.permissions.query) {
           try {
             const result = await navigator.permissions.query({ name: "geolocation" })
-            if (result.state === "granted") {
-              permissionGranted = true
-            } else {
-              console.log(
-                `Geolocation permission is '${result.state}' - waiting for user action`,
-              )
+            permissionState = result.state
+            if (result.state !== "granted") {
+              console.log(`Geolocation permission is '${result.state}' - requesting current location on open`)
             }
           } catch (permErr) {
             console.warn("Permission query failed:", permErr)
           }
         } else {
-          console.log("Permissions API not available - skipping auto-start")
+          console.log("Permissions API not available - requesting current location directly")
         }
 
-        if (!permissionGranted) {
+        if (permissionState === "denied") {
           setLoading(false)
           return
         }
 
         console.log(
-          "Permission granted — background location:",
-          shouldForceRefresh ? "(force refresh)" : "",
+          "Startup location sync:",
+          shouldForceRefresh ? "refreshing detailed current location" : "watching current location",
         )
 
         let locSnap = null
@@ -1681,19 +1678,7 @@ function useUserGeoLocationEngine() {
         return
       }
 
-      try {
-        if (navigator.permissions?.query) {
-          const r = await navigator.permissions.query({ name: "geolocation" })
-          if (r.state === "granted") {
-            await checkPermissionAndStart(shouldForceRefresh, hasInitialLocation)
-            return
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-      console.log("Fresh visit — geolocation not pre-granted; use location picker when needed")
-      setLoading(false)
+      await checkPermissionAndStart(true, hasInitialLocation)
     }
 
     void bootstrap()

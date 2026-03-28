@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { restaurantAPI } from "@/lib/api"
 import { foodImages } from "@/constants/images"
+import { useLocation } from "../hooks/useLocation"
+import { useZone } from "../hooks/useZone"
 import {
   isAnyVoiceInputAvailable,
   setFlutterVoiceGlobals,
@@ -17,6 +19,8 @@ const MAX_HISTORY_ITEMS = 10
 
 export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchChange }) {
   const navigate = useNavigate()
+  const { location } = useLocation()
+  const { zoneId } = useZone(location)
   const inputRef = useRef(null)
   const recognitionRef = useRef(null)
   const [allFoods, setAllFoods] = useState([])
@@ -86,7 +90,11 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     const loadFoods = async () => {
       try {
         setLoadingFoods(true)
-        const response = await restaurantAPI.getRestaurants({ limit: 50 })
+        const params = { limit: 50 }
+        if (zoneId) {
+          params.zoneId = zoneId
+        }
+        const response = await restaurantAPI.getRestaurants(params)
         const restaurants = response?.data?.data?.restaurants || []
 
         const restaurantSlug = (r) =>
@@ -188,7 +196,7 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     }
 
     loadFoods()
-  }, [isOpen, allFoods.length, loadingFoods])
+  }, [isOpen, allFoods.length, loadingFoods, zoneId])
 
   useEffect(() => {
     if (isOpen) return
@@ -556,4 +564,3 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     </div>
   )
 }
-

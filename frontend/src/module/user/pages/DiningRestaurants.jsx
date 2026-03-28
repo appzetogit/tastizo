@@ -8,7 +8,10 @@ import { Card, CardContent } from "@/components/ui/card"
 import AnimatedPage from "../components/AnimatedPage"
 import { useSearchOverlay, useLocationSelector } from "../components/UserLayout"
 import { useLocation as useLocationHook } from "../hooks/useLocation"
+import { useZone } from "../hooks/useZone"
 import { useProfile } from "../context/ProfileContext"
+import { diningAPI } from "@/lib/api"
+import { pickNavbarLocationLines } from "@/lib/userLocationDisplay"
 import { FaLocationDot } from "react-icons/fa6"
 // Using placeholder for dining restaurant banner
 const diningBanner = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&h=400&fit=crop"
@@ -113,9 +116,59 @@ export default function DiningRestaurants() {
   const { openSearch, closeSearch, setSearchValue } = useSearchOverlay()
   const { openLocationSelector } = useLocationSelector()
   const { location, loading } = useLocationHook()
+  const { zoneId } = useZone(location)
   const { addFavorite, removeFavorite, isFavorite } = useProfile()
-  const cityName = location?.city || "Select"
-  const stateName = location?.state || "Location"
+  const { main: cityName, sub: stateName } = pickNavbarLocationLines(location)
+  const [restaurantResults, setRestaurantResults] = useState([])
+  const [restaurantsLoading, setRestaurantsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchRestaurants = async () => {
+      try {
+        setRestaurantsLoading(true)
+        setRestaurantResults([])
+
+        const params = {}
+        if (location?.city) {
+          params.city = location.city
+        }
+        if (zoneId) {
+          params.zoneId = zoneId
+        }
+
+        const response = await diningAPI.getRestaurants(params)
+        const data = response?.data?.data || []
+        const normalized = data.map((restaurant, index) => ({
+          id: restaurant._id || restaurant.id || `${restaurant.slug || restaurant.name}-${index}`,
+          name: restaurant.name,
+          rating: restaurant.rating || 0,
+          location:
+            restaurant.location ||
+            [restaurant.coordinates?.latitude, restaurant.coordinates?.longitude]
+              .filter(Boolean)
+              .join(", "),
+          distance: restaurant.distance || "Nearby",
+          cuisine: restaurant.cuisine || "Multi-cuisine",
+          price: restaurant.price || "Price on request",
+          image: restaurant.image || diningBanner,
+          offer: restaurant.offer || "",
+          deliveryTime: restaurant.deliveryTime || "Open now",
+          featuredDish: restaurant.featuredDish || restaurant.cuisine || "Chef special",
+          featuredPrice: restaurant.featuredPrice || 0,
+          slug: restaurant.slug,
+        }))
+
+        setRestaurantResults(normalized)
+      } catch (error) {
+        console.error("Failed to fetch dining restaurants", error)
+        setRestaurantResults([])
+      } finally {
+        setRestaurantsLoading(false)
+      }
+    }
+
+    fetchRestaurants()
+  }, [location?.city, location?.latitude, location?.longitude, zoneId])
 
   const toggleFilter = (filterId) => {
     setActiveFilters(prev => {
@@ -130,7 +183,7 @@ export default function DiningRestaurants() {
   }
 
   const filteredRestaurants = useMemo(() => {
-    let filtered = [...popularRestaurants]
+    let filtered = [...restaurantResults]
 
     if (activeFilters.has('delivery-under-30')) {
       filtered = filtered.filter(r => {
@@ -179,7 +232,7 @@ export default function DiningRestaurants() {
     }
 
     return filtered
-  }, [activeFilters, selectedCuisine, sortBy])
+  }, [activeFilters, selectedCuisine, sortBy, restaurantResults])
 
   const handleLocationClick = useCallback(() => {
     openLocationSelector()
@@ -232,12 +285,12 @@ export default function DiningRestaurants() {
               onClick={handleLocationClick}
               className="text-left text-white text-sm sm:text-base font-semibold backdrop-blur-sm rounded-full px-3 sm:px-4 py-2 hover:bg-white transition-colors"
             >
-              <div className="flex items-start justify-start gap-2 min-w-0">
-                <FaLocationDot className="h-4 w-4 sm:h-5 sm:w-5 text-white flex-shrink-0 mt-1" />
-                <span className="text-sm sm:text-base font-semibold text-white truncate border-b-2 border-dotted border-white">
-                  Home - {cityName}
-                </span>
-              </div>
+                <div className="flex items-start justify-start gap-2 min-w-0">
+                  <FaLocationDot className="h-4 w-4 sm:h-5 sm:w-5 text-white flex-shrink-0 mt-1" />
+                  <span className="text-sm sm:text-base font-semibold text-white truncate border-b-2 border-dotted border-white">
+                    {cityName}
+                  </span>
+                </div>
             </Button>
           </div>
         </nav>
@@ -341,7 +394,7 @@ export default function DiningRestaurants() {
             {/* Restaurant Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 md:gap-6">
               {filteredRestaurants.map((restaurant, index) => {
-                const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
+                const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
                 const favorite = isFavorite(restaurantSlug)
 
                 const handleToggleFavorite = (e) => {
@@ -363,7 +416,7 @@ export default function DiningRestaurants() {
                 }
 
                 return (
-                  <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`}>
+                  <Link key={restaurant.id} to={`/user/dining/restaurants/${restaurantSlug}`}>
                     <Card className="overflow-hidden gap-0 cursor-pointer border-0 group bg-white shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl">
                       {/* Image Section */}
                       <div className="relative h-48 sm:h-56 md:h-60 w-full overflow-hidden rounded-t-2xl">

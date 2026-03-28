@@ -3,6 +3,8 @@ import { useLocation, useNavigate, useParams } from "react-router-dom"
 import { ArrowLeft, ChevronDown, Calendar, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import AnimatedPage from "../../components/AnimatedPage"
+import { useLocation as useUserLocation } from "../../hooks/useLocation"
+import { useZone } from "../../hooks/useZone"
 import { useEffect } from "react"
 import { diningAPI, restaurantAPI } from "@/lib/api"
 import Loader from "@/components/Loader"
@@ -11,6 +13,8 @@ export default function TableBooking() {
     const { slug } = useParams()
     const location = useLocation()
     const navigate = useNavigate()
+    const { location: userLocation } = useUserLocation()
+    const { zoneId } = useZone(userLocation)
     const [restaurant, setRestaurant] = useState(null)
     const [loading, setLoading] = useState(true)
 
@@ -44,7 +48,8 @@ export default function TableBooking() {
                 console.error("Error fetching restaurant:", error)
                 // FAILSAFE: Try to get list and find match
                 try {
-                    const listResp = await restaurantAPI.getRestaurants()
+                    const params = zoneId ? { zoneId } : {}
+                    const listResp = await restaurantAPI.getRestaurants(params)
                     if (listResp.data?.data?.restaurants) {
                         const match = listResp.data.data.restaurants.find(r =>
                             r.slug === slug ||
@@ -55,7 +60,7 @@ export default function TableBooking() {
                             setRestaurant(actualMatch)
                         } else {
                             // Last resort: try dining restaurants list
-                            const diningListResp = await diningAPI.getRestaurants()
+                            const diningListResp = await diningAPI.getRestaurants(params)
                             if (diningListResp.data?.data) {
                                 const dMatch = (diningListResp.data.data.restaurants || diningListResp.data.data).find(r =>
                                     r.slug === slug ||
@@ -75,7 +80,7 @@ export default function TableBooking() {
             }
         }
         fetchRestaurant()
-    }, [slug])
+    }, [slug, zoneId])
 
     // Generate next 7 days (only future dates - start from today)
     const dates = useMemo(() => {

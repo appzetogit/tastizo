@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import AnimatedPage from "../components/AnimatedPage"
 import { useSearchOverlay, useLocationSelector } from "../components/UserLayout"
 import { useLocation as useLocationHook } from "../hooks/useLocation"
+import { useZone } from "../hooks/useZone"
 import { useProfile } from "../context/ProfileContext"
 import { diningAPI } from "@/lib/api"
 import api from "@/lib/api"
@@ -68,6 +69,7 @@ export default function Dining() {
   const { openSearch, closeSearch, setSearchValue } = useSearchOverlay()
   const { openLocationSelector } = useLocationSelector()
   const { location, loading: locationLoading } = useLocationHook()
+  const { zoneId } = useZone(location)
   const { main: desktopLocMain, sub: desktopLocSub } = pickNavbarLocationLines(location)
   const { addFavorite, removeFavorite, isFavorite } = useProfile()
 
@@ -99,11 +101,21 @@ export default function Dining() {
   useEffect(() => {
     const fetchDiningData = async () => {
       try {
+        setLoading(true)
+        setRestaurantList([])
+        const restaurantParams = {}
+        if (location?.city) {
+          restaurantParams.city = location.city
+        }
+        if (zoneId) {
+          restaurantParams.zoneId = zoneId
+        }
+
         const [cats, limes, tries, rests, offers] = await Promise.all([
           diningAPI.getCategories(),
           diningAPI.getOfferBanners(),
           diningAPI.getStories(),
-          diningAPI.getRestaurants(location?.city ? { city: location.city } : {}),
+          diningAPI.getRestaurants(restaurantParams),
           diningAPI.getBankOffers()
         ])
 
@@ -121,7 +133,7 @@ export default function Dining() {
       }
     }
     fetchDiningData()
-  }, [location?.city])
+  }, [location?.city, location?.latitude, location?.longitude, zoneId])
 
   const toggleFilter = (filterId) => {
     setActiveFilters(prev => {
@@ -849,4 +861,3 @@ export default function Dining() {
     </AnimatedPage>
   )
 }
-

@@ -107,6 +107,36 @@ function getRestaurantZoneId(restaurantLat, restaurantLng, activeZones) {
   return null;
 }
 
+function getRestaurantCoordinates(restaurant) {
+  const lat = Number(
+    restaurant?.location?.latitude ?? restaurant?.location?.coordinates?.[1],
+  );
+  const lng = Number(
+    restaurant?.location?.longitude ?? restaurant?.location?.coordinates?.[0],
+  );
+
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { lat, lng };
+  }
+
+  return null;
+}
+
+function filterRestaurantsByZone(restaurants, zoneId, activeZones) {
+  if (!zoneId) return restaurants;
+
+  return restaurants.filter((restaurant) => {
+    const coords = getRestaurantCoordinates(restaurant);
+    if (!coords) return false;
+
+    const restaurantZoneId = getRestaurantZoneId(coords.lat, coords.lng, activeZones);
+    if (!restaurantZoneId) return false;
+
+    restaurant.zoneId = restaurantZoneId;
+    return restaurantZoneId === zoneId;
+  });
+}
+
 // Get all restaurants (for user module)
 export const getRestaurants = async (req, res) => {
   try {
@@ -255,16 +285,33 @@ export const getRestaurants = async (req, res) => {
       }
     }
 
-    // Fetch restaurants - Show ALL restaurants regardless of zone
-    let restaurants = await Restaurant.find(query)
-      .select("-owner -createdAt -updatedAt -password")
-      .sort(sortObj)
-      .limit(parseInt(limit))
-      .skip(parseInt(offset))
-      .lean();
+    const activeZones = userZone
+      ? [userZone]
+      : await Zone.find({ isActive: true }).lean();
 
-    // Note: We show all restaurants regardless of zone. Zone-based filtering is removed.
-    // Users in any zone will see all restaurants.
+    // Fetch restaurants
+    const mongoQuery = Restaurant.find(query)
+      .select("-owner -createdAt -updatedAt -password")
+      .sort(sortObj);
+
+    if (!userZone) {
+      mongoQuery.limit(parseInt(limit)).skip(parseInt(offset));
+    }
+
+    let restaurants = await mongoQuery.lean();
+
+    restaurants = filterRestaurantsByZone(
+      restaurants,
+      userZone?._id?.toString() || null,
+      activeZones,
+    );
+
+    if (userZone) {
+      restaurants = restaurants.slice(
+        parseInt(offset),
+        parseInt(offset) + parseInt(limit),
+      );
+    }
 
     // Apply string-based filters that can't be done in MongoDB query
     if (maxDeliveryTime) {
@@ -288,7 +335,7 @@ export const getRestaurants = async (req, res) => {
     // Get total count (before filtering by string fields)
     const totalQuery = { ...query };
     delete totalQuery.$or; // Remove $or for count
-    const total = await Restaurant.countDocuments(totalQuery);
+    const total = userZone ? restaurants.length : await Restaurant.countDocuments(totalQuery);
     return successResponse(res, 200, "Restaurants retrieved successfully", {
       restaurants,
       total: restaurants.length,
@@ -1042,14 +1089,21 @@ export const getRestaurantsWithDishesUnder250 = async (req, res) => {
       }
     };
 
-    // Get all active restaurants - Show ALL restaurants regardless of zone
+    const activeZones = userZone
+      ? [userZone]
+      : await Zone.find({ isActive: true }).lean();
+
+    // Get active restaurants
     let restaurants = await Restaurant.find({ isActive: true })
       .select("-owner -createdAt -updatedAt")
       .lean()
       .limit(100); // Limit to first 100 restaurants for performance
 
-    // Note: We show all restaurants regardless of zone. Zone-based filtering is removed.
-    // Users in any zone will see all restaurants.
+    restaurants = filterRestaurantsByZone(
+      restaurants,
+      userZone?._id?.toString() || null,
+      activeZones,
+    );
 
     // Process restaurants in parallel (batch processing for better performance)
     const batchSize = 10; // Process 10 restaurants at a time

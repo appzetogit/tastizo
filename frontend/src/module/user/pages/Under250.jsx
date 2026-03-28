@@ -241,6 +241,7 @@ export default function Under250() {
     const fetchRestaurantsUnder250 = async () => {
       try {
         setLoadingRestaurants(true)
+        setUnder250Restaurants([])
         // Optional: Add zoneId if available (for sorting/filtering, but show all restaurants)
         const response = await restaurantAPI.getRestaurantsUnder250(zoneId)
         if (response.data.success && response.data.data.restaurants) {

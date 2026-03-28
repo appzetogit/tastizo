@@ -11,6 +11,7 @@ import DiningCoupon from "../models/DiningCoupon.js";
 import Restaurant from "../../restaurant/models/Restaurant.js";
 import RestaurantDiningOffer from "../../restaurant/models/RestaurantDiningOffer.js";
 import RestaurantWallet from "../../restaurant/models/RestaurantWallet.js";
+import Zone from "../../admin/models/Zone.js";
 import emailService from "../../auth/services/emailService.js";
 import {
   createOrder as createRazorpayOrder,
@@ -18,10 +19,51 @@ import {
 } from "../../payment/services/razorpayService.js";
 import { getRazorpayCredentials } from "../../../shared/utils/envService.js";
 
+function isPointInZone(lat, lng, zoneCoordinates = []) {
+  if (!zoneCoordinates || zoneCoordinates.length < 3) return false;
+
+  let inside = false;
+  for (let i = 0, j = zoneCoordinates.length - 1; i < zoneCoordinates.length; j = i++) {
+    const coordI = zoneCoordinates[i];
+    const coordJ = zoneCoordinates[j];
+    const xi = typeof coordI === "object" ? coordI.latitude || coordI.lat : null;
+    const yi = typeof coordI === "object" ? coordI.longitude || coordI.lng : null;
+    const xj = typeof coordJ === "object" ? coordJ.latitude || coordJ.lat : null;
+    const yj = typeof coordJ === "object" ? coordJ.longitude || coordJ.lng : null;
+
+    if (xi === null || yi === null || xj === null || yj === null) continue;
+
+    const intersect =
+      yi > lng !== yj > lng && lat < ((xj - xi) * (lng - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
+function getDiningCoordinates(restaurant) {
+  const lat = Number(
+    restaurant?.coordinates?.latitude ??
+      restaurant?.location?.latitude ??
+      restaurant?.location?.coordinates?.[1],
+  );
+  const lng = Number(
+    restaurant?.coordinates?.longitude ??
+      restaurant?.location?.longitude ??
+      restaurant?.location?.coordinates?.[0],
+  );
+
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { lat, lng };
+  }
+
+  return null;
+}
+
 // Get all dining restaurants (with filtering)
 export const getRestaurants = async (req, res) => {
   try {
-    const { city } = req.query;
+    const { city, zoneId } = req.query;
     let query = {};
 
     // Simple filter support
@@ -29,7 +71,24 @@ export const getRestaurants = async (req, res) => {
       query.location = { $regex: city, $options: "i" };
     }
 
-    const restaurants = await DiningRestaurant.find(query);
+    const userZone = zoneId ? await Zone.findById(zoneId).lean() : null;
+    if (zoneId && (!userZone || !userZone.isActive)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or inactive zone. Please select your address again.",
+      });
+    }
+
+    let restaurants = await DiningRestaurant.find(query).lean();
+
+    if (userZone) {
+      restaurants = restaurants.filter((restaurant) => {
+        const coords = getDiningCoordinates(restaurant);
+        if (!coords) return false;
+        return isPointInZone(coords.lat, coords.lng, userZone.coordinates || []);
+      });
+    }
+
     res.status(200).json({
       success: true,
       count: restaurants.length,

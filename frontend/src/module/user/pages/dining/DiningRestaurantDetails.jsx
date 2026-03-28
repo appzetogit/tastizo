@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { useProfile } from "@/module/user/context/ProfileContext"
+import { useLocation } from "@/module/user/hooks/useLocation"
+import { useZone } from "@/module/user/hooks/useZone"
 import { restaurantAPI, diningAPI } from "@/lib/api"
 import {
     ArrowLeft,
@@ -23,6 +25,8 @@ export default function DiningRestaurantDetails() {
     const { diningType, slug } = useParams() // Get params from URL
     const navigate = useNavigate()
     const { addFavorite, removeFavorite, isFavorite } = useProfile()
+    const { location } = useLocation()
+    const { zoneId } = useZone(location)
     const isFav = isFavorite(slug)
 
     const [restaurant, setRestaurant] = useState(null)
@@ -78,7 +82,8 @@ export default function DiningRestaurantDetails() {
                 // FAILSAFE: If API by slug fails, let's try to get list and find match (temporary fix for development if slug isn't unique ID)
                 // In a real app, backend should support slug lookup reliably.
                 try {
-                    const listResp = await restaurantAPI.getRestaurants()
+                    const params = zoneId ? { zoneId } : {}
+                    const listResp = await restaurantAPI.getRestaurants(params)
                     if (listResp.data?.data?.restaurants) {
                         const match = listResp.data.data.restaurants.find(r =>
                             r.slug === slug ||
@@ -100,7 +105,7 @@ export default function DiningRestaurantDetails() {
             }
         }
         fetchRestaurant()
-    }, [slug])
+    }, [slug, zoneId])
 
     // Fetch this restaurant's dining offers (pre-book & walk-in) by slug
     useEffect(() => {

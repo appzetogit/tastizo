@@ -1667,20 +1667,22 @@ export default function Home() {
               style={{ opacity: mobileStickyBgOpacity }}
               aria-hidden
             />
-            <div
-              className={`relative z-20 pt-2 sm:pt-3 px-3 sm:px-6 bg-transparent overflow-hidden transition-all duration-200 ${
-                isStickySearch
-                  ? "opacity-0 pointer-events-none h-7 sm:h-8"
-                  : "opacity-100 h-auto"
-              }`}
+            <motion.div
+              initial={false}
+              animate={{
+                opacity: isStickySearch ? 0 : 1,
+                height: isStickySearch ? 0 : "auto",
+              }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              className="relative z-20 pt-2 sm:pt-3 px-3 sm:px-6 bg-transparent overflow-hidden"
+              style={{ pointerEvents: isStickySearch ? "none" : "auto" }}
             >
-              <PageNavbar textColor={isStickySearchSolid ? "dark" : "white"} zIndex={20} />
-            </div>
+              <PageNavbar textColor={isStickySearchSolid ? "dark" : "white"} zIndex={20} showBrandLogo={false} />
+            </motion.div>
 
             <section className="relative z-20 w-full py-4 sm:py-6">
               <div className="relative z-20 max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 lg:hidden">
                 <motion.div
-                  layout
                   initial={false}
                   animate={{
                     height: isSearchOpen ? 0 : "auto",
@@ -1772,7 +1774,7 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
-          <PageNavbar textColor="white" zIndex={20} />
+          <PageNavbar textColor="white" zIndex={20} showBrandLogo={false} />
         </motion.div>
 
         {/* Hero Section */}
@@ -1887,7 +1889,6 @@ export default function Home() {
       <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-4 sm:pt-5 lg:pt-8">
           {/* Sticky Section - Food Categories and Filters */}
           <motion.div
-            layout
             className="sticky z-[999] bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5 pb-2 sm:pb-3"
             style={{ top: isDesktop ? "4.5rem" : `${mobileStickyHeaderHeight}px` }}
           >

@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import AnimatedPage from "../components/AnimatedPage"
 import { useLocationSelector } from "../components/UserLayout"
 import { useLocation as useLocationHook } from "../hooks/useLocation"
+import { useZone } from "../hooks/useZone"
 import { useProfile } from "../context/ProfileContext"
 import { FaLocationDot } from "react-icons/fa6"
 import { restaurantAPI } from "@/lib/api"
@@ -26,6 +27,7 @@ export default function DiningCategory() {
   const rightContentRef = useRef(null)
   const { openLocationSelector } = useLocationSelector()
   const { location } = useLocationHook()
+  const { zoneId } = useZone(location)
   const { addFavorite, removeFavorite, isFavorite } = useProfile()
   const cityName = location?.city || "Select"
 
@@ -34,10 +36,14 @@ export default function DiningCategory() {
     const fetchRestaurants = async () => {
       try {
         setIsLoading(true)
-        const response = await restaurantAPI.getRestaurants({
+        const params = {
           diningCategory: category,
           limit: 100
-        })
+        }
+        if (zoneId) {
+          params.zoneId = zoneId
+        }
+        const response = await restaurantAPI.getRestaurants(params)
         if (response.data && response.data.success) {
           // Map backend data to UI format
           const mappedData = (response.data.data.restaurants || response.data.data || [])
@@ -69,7 +75,7 @@ export default function DiningCategory() {
       }
     }
     fetchRestaurants()
-  }, [])
+  }, [category, zoneId])
 
   // Category headings mapping
   const categoryHeadings = {

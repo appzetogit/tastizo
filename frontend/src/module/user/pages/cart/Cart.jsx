@@ -354,7 +354,11 @@ export default function Cart() {
       if (cart[0]?.restaurant && !restaurantData) {
         try {
           console.log("🔍 Searching restaurant by name:", cart[0].restaurant)
-          const searchResponse = await restaurantAPI.getRestaurants({ limit: 100 })
+          const params = { limit: 100 }
+          if (zoneId) {
+            params.zoneId = zoneId
+          }
+          const searchResponse = await restaurantAPI.getRestaurants(params)
           const restaurants = searchResponse?.data?.data?.restaurants || searchResponse?.data?.data || []
           console.log("📋 Fetched", restaurants.length, "restaurants for name search")
 
@@ -416,7 +420,7 @@ export default function Cart() {
     }
 
     fetchRestaurantData()
-  }, [cart.length, cart[0]?.restaurantId, cart[0]?.restaurant])
+  }, [cart.length, cart[0]?.restaurantId, cart[0]?.restaurant, zoneId])
 
   // Fetch approved addons for the restaurant
   useEffect(() => {

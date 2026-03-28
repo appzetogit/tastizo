@@ -316,7 +316,9 @@ export const getUserAddresses = asyncHandler(async (req, res) => {
     // Add _id to each address for frontend compatibility
     const addresses = (user.addresses || []).map(addr => ({
       ...addr,
-      id: addr._id ? addr._id.toString() : null
+      id: addr._id ? addr._id.toString() : null,
+      latitude: Array.isArray(addr.location?.coordinates) ? addr.location.coordinates[1] : undefined,
+      longitude: Array.isArray(addr.location?.coordinates) ? addr.location.coordinates[0] : undefined,
     }));
 
     return successResponse(res, 200, 'Addresses retrieved successfully', {
@@ -358,7 +360,7 @@ export const addUserAddress = asyncHandler(async (req, res) => {
     };
 
     // Add location coordinates if provided
-    if (latitude && longitude) {
+    if (latitude !== undefined && longitude !== undefined) {
       const latNum = parseFloat(latitude);
       const lngNum = parseFloat(longitude);
       if (!isNaN(latNum) && !isNaN(lngNum)) {
@@ -366,6 +368,8 @@ export const addUserAddress = asyncHandler(async (req, res) => {
           type: 'Point',
           coordinates: [lngNum, latNum] // [longitude, latitude]
         };
+      } else {
+        return errorResponse(res, 400, 'Invalid latitude or longitude');
       }
     }
 
@@ -384,7 +388,9 @@ export const addUserAddress = asyncHandler(async (req, res) => {
     const addedAddress = user.addresses[user.addresses.length - 1];
     const addressResponse = {
       ...addedAddress.toObject(),
-      id: addedAddress._id.toString()
+      id: addedAddress._id.toString(),
+      latitude: Array.isArray(addedAddress.location?.coordinates) ? addedAddress.location.coordinates[1] : undefined,
+      longitude: Array.isArray(addedAddress.location?.coordinates) ? addedAddress.location.coordinates[0] : undefined,
     };
 
     logger.info(`Address added for user: ${user._id}`, {
@@ -437,6 +443,8 @@ export const updateUserAddress = asyncHandler(async (req, res) => {
           type: 'Point',
           coordinates: [lngNum, latNum] // [longitude, latitude]
         };
+      } else {
+        return errorResponse(res, 400, 'Invalid latitude or longitude');
       }
     }
 
@@ -458,7 +466,9 @@ export const updateUserAddress = asyncHandler(async (req, res) => {
 
     const addressResponse = {
       ...address.toObject(),
-      id: address._id.toString()
+      id: address._id.toString(),
+      latitude: Array.isArray(address.location?.coordinates) ? address.location.coordinates[1] : undefined,
+      longitude: Array.isArray(address.location?.coordinates) ? address.location.coordinates[0] : undefined,
     };
 
     logger.info(`Address updated for user: ${user._id}`, {
@@ -515,4 +525,3 @@ export const deleteUserAddress = asyncHandler(async (req, res) => {
     return errorResponse(res, 500, 'Failed to delete address');
   }
 });
-

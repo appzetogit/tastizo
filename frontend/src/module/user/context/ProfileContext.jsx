@@ -210,7 +210,9 @@ export function ProfileProvider({ children }) {
 
       if (newAddress) {
         setAddresses((prev) => {
-          const updated = [...prev, newAddress]
+          const updated = newAddress.isDefault
+            ? [...prev.map((addr) => ({ ...addr, isDefault: false })), newAddress]
+            : [...prev, newAddress]
           localStorage.setItem("userAddresses", JSON.stringify(updated))
           return updated
         })
@@ -229,7 +231,15 @@ export function ProfileProvider({ children }) {
 
       if (updatedAddr) {
         setAddresses((prev) => {
-          const updated = prev.map((addr) => (addr.id === id ? { ...updatedAddr, id } : addr))
+          const updated = prev.map((addr) => {
+            if (addr.id === id) {
+              return { ...updatedAddr, id }
+            }
+            if (updatedAddr.isDefault) {
+              return { ...addr, isDefault: false }
+            }
+            return addr
+          })
           localStorage.setItem("userAddresses", JSON.stringify(updated))
           return updated
         })
@@ -255,13 +265,26 @@ export function ProfileProvider({ children }) {
     }
   }, [])
 
-  const setDefaultAddress = useCallback((id) => {
-    setAddresses((prev) =>
-      prev.map((addr) => ({
-        ...addr,
-        isDefault: addr.id === id,
-      }))
-    )
+  const setDefaultAddress = useCallback(async (id) => {
+    try {
+      const response = await userAPI.updateAddress(id, { isDefault: true })
+      const updatedAddr = response?.data?.data?.address || response?.data?.address
+
+      if (updatedAddr) {
+        setAddresses((prev) => {
+          const updated = prev.map((addr) => ({
+            ...(addr.id === id ? { ...addr, ...updatedAddr, id } : addr),
+            isDefault: addr.id === id,
+          }))
+          localStorage.setItem("userAddresses", JSON.stringify(updated))
+          return updated
+        })
+        return updatedAddr
+      }
+    } catch (error) {
+      console.error("Error setting default address:", error)
+      throw error
+    }
   }, [])
 
   const getDefaultAddress = useCallback(() => {
