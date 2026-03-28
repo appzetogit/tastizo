@@ -137,6 +137,44 @@ function filterRestaurantsByZone(restaurants, zoneId, activeZones) {
   });
 }
 
+function hasVisibleMenuItems(menu) {
+  if (!menu || menu.isActive === false) return false;
+
+  const sections = Array.isArray(menu.sections) ? menu.sections : [];
+  for (const section of sections) {
+    if (!section || section.isEnabled === false) continue;
+
+    const sectionItems = Array.isArray(section.items) ? section.items : [];
+    const hasVisibleSectionItem = sectionItems.some((item) => {
+      if (!item) return false;
+      const isAvailable = item.isAvailable !== false;
+      const isApproved =
+        item.approvalStatus === "approved" || !item.approvalStatus;
+      return isAvailable && isApproved;
+    });
+    if (hasVisibleSectionItem) return true;
+
+    const subsections = Array.isArray(section.subsections)
+      ? section.subsections
+      : [];
+    for (const subsection of subsections) {
+      const subsectionItems = Array.isArray(subsection?.items)
+        ? subsection.items
+        : [];
+      const hasVisibleSubItem = subsectionItems.some((item) => {
+        if (!item) return false;
+        const isAvailable = item.isAvailable !== false;
+        const isApproved =
+          item.approvalStatus === "approved" || !item.approvalStatus;
+        return isAvailable && isApproved;
+      });
+      if (hasVisibleSubItem) return true;
+    }
+  }
+
+  return false;
+}
+
 // Get all restaurants (for user module)
 export const getRestaurants = async (req, res) => {
   try {
@@ -310,6 +348,25 @@ export const getRestaurants = async (req, res) => {
       restaurants = restaurants.slice(
         parseInt(offset),
         parseInt(offset) + parseInt(limit),
+      );
+    }
+
+    // User side: hide restaurants that have no visible menu items.
+    if (restaurants.length > 0) {
+      const restaurantIds = restaurants.map((r) => r?._id).filter(Boolean);
+      const menus = await Menu.find({
+        restaurant: { $in: restaurantIds },
+        isActive: true,
+      })
+        .select("restaurant sections isActive")
+        .lean();
+
+      const menuByRestaurantId = new Map(
+        menus.map((menu) => [String(menu.restaurant), menu]),
+      );
+
+      restaurants = restaurants.filter((restaurant) =>
+        hasVisibleMenuItems(menuByRestaurantId.get(String(restaurant._id))),
       );
     }
 

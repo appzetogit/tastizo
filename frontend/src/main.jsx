@@ -114,6 +114,45 @@ if (savedTheme === 'dark') {
   document.documentElement.classList.remove('dark')
 }
 
+// Disable browser zoom (keyboard shortcuts, Ctrl/Cmd + wheel, and pinch gestures)
+const disableAppZoom = () => {
+  document.addEventListener(
+    'wheel',
+    (event) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault()
+      }
+    },
+    { passive: false },
+  )
+
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return
+      if (event.key === '+' || event.key === '-' || event.key === '=' || event.key === '0') {
+        event.preventDefault()
+      }
+    },
+    { passive: false },
+  )
+
+  document.addEventListener(
+    'touchmove',
+    (event) => {
+      if (event.touches && event.touches.length > 1) {
+        event.preventDefault()
+      }
+    },
+    { passive: false },
+  )
+
+  document.addEventListener('gesturestart', (event) => event.preventDefault(), { passive: false })
+  document.addEventListener('gesturechange', (event) => event.preventDefault(), { passive: false })
+  document.addEventListener('gestureend', (event) => event.preventDefault(), { passive: false })
+}
+disableAppZoom()
+
 // Suppress browser extension errors
 const originalError = console.error
 console.error = (...args) => {

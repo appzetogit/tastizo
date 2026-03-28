@@ -157,6 +157,13 @@ html:focus, body:focus, #root:focus {
   outline: none !important;
 }
 
+/* Prevent horizontal page drift/white edge without affecting sticky containers */
+html,
+body {
+  overflow-x: clip !important;
+  overscroll-behavior-x: none;
+}
+
 
 
 @layer utilities {

@@ -1532,7 +1532,7 @@ export default function Home() {
                     <OptimizedImage
                       src={image}
                       alt={`Hero Banner ${index + 1}`}
-                      className="w-full h-full sm:rounded-2xl lg:rounded-3xl shadow-md"
+                      className="w-full h-full rounded-b-4xl sm:rounded-2xl lg:rounded-3xl shadow-md"
                       priority={index === 0}
                       sizes="100vw"
                       objectFit="cover"
@@ -1544,7 +1544,7 @@ export default function Home() {
             </motion.div>
           </div>
         ) : (
-          <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-white lg:hidden" />
+          <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-white rounded-b-2xl lg:hidden" />
         )}
 
         {showDesktopHeroCarousel && (

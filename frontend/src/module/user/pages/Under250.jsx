@@ -12,7 +12,6 @@ import { useZone } from "../hooks/useZone"
 import { useCart } from "../context/CartContext"
 import PageNavbar from "../components/PageNavbar"
 import { foodImages } from "@/constants/images"
-import offerImage from "@/assets/offerimage.png"
 import AddToCartAnimation from "../components/AddToCartAnimation"
 import OptimizedImage from "@/components/OptimizedImage"
 import api from "@/lib/api"
@@ -596,31 +595,6 @@ export default function Under250() {
                 touchAction: "pan-x pan-y pinch-zoom",
               }}
             >
-              {/* All Button */}
-              <div className="flex-shrink-0">
-                <Link to="/under-250" onClick={() => setActiveCategory(null)}>
-                  <motion.div
-                    className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28 cursor-pointer"
-                    whileHover={{ scale: 1.1, y: -4 }}
-                    whileTap={{ scale: 0.95 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                  >
-                    <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden shadow-md transition-all">
-                      <OptimizedImage
-                        src={offerImage}
-                        alt="All"
-                        className="w-full h-full bg-white rounded-full"
-                        objectFit="cover"
-                        sizes="(max-width: 640px) 62px, (max-width: 768px) 96px, 112px"
-                        placeholder="blur"
-                      />
-                    </div>
-                    <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center pb-1">
-                      All
-                    </span>
-                  </motion.div>
-                </Link>
-              </div>
               {categories.slice(0, 6).map((category, index) => {
                 const isActive = activeCategory === category.id
                 const categorySlug = category.slug || category.name.toLowerCase().replace(/\s+/g, '-')
