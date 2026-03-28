@@ -65,6 +65,8 @@ const placeholders = [
   "Search \"dosa\""
 ]
 
+const MOBILE_STICKY_SEARCH_HEIGHT = 60
+
 // Default placeholder for restaurant/dish when image is missing or invalid
 const RESTAURANT_PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
 
@@ -221,9 +223,13 @@ export default function Home() {
   const vegModeDesktopToggleRef = useRef(null)
 
   const mobileStickySearchRef = useRef(null)
+  const mobileStickySentinelRef = useRef(null)
   const desktopStickySearchRef = useRef(null)
   const [isStickySearch, setIsStickySearch] = useState(false)
+  const [isStickySearchSolid, setIsStickySearchSolid] = useState(false)
+  const [mobileStickyBgOpacity, setMobileStickyBgOpacity] = useState(0)
   const [isDesktop, setIsDesktop] = useState(window.matchMedia("(min-width: 1024px)").matches)
+  const [mobileStickyHeaderHeight, setMobileStickyHeaderHeight] = useState(MOBILE_STICKY_SEARCH_HEIGHT)
 
   useEffect(() => {
     const mm = window.matchMedia("(min-width: 1024px)")
@@ -232,14 +238,38 @@ export default function Home() {
     return () => mm.removeEventListener("change", onChange)
   }, [])
 
+  useEffect(() => {
+    if (isDesktop) return
+    const el = mobileStickySearchRef.current
+    if (!el) return
+
+    const updateHeight = () => {
+      const nextHeight = Math.ceil(el.getBoundingClientRect().height || MOBILE_STICKY_SEARCH_HEIGHT)
+      setMobileStickyHeaderHeight(nextHeight)
+    }
+
+    updateHeight()
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateHeight()
+    })
+    resizeObserver.observe(el)
+    window.addEventListener("resize", updateHeight)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener("resize", updateHeight)
+    }
+  }, [isDesktop, isSearchOpen])
+
   // Detect when the sticky search has reached its sticky threshold so categories can shift down smoothly.
   useEffect(() => {
     let raf = 0
-    const last = { stuck: false, top: 0, height: 0 }
+    const last = { stuck: false, solid: false, opacity: -1 }
 
     const update = () => {
       const isDesktop = window.matchMedia("(min-width: 1024px)").matches
-      const el = isDesktop ? desktopStickySearchRef.current : mobileStickySearchRef.current
+      const el = isDesktop ? desktopStickySearchRef.current : mobileStickySentinelRef.current
       if (!el) return
 
       const rootFontSize =
@@ -251,10 +281,29 @@ export default function Home() {
       const desiredViewportTop = isDesktop ? desktopPaddingTopPx + topClassPx : topClassPx
       const rectTop = el.getBoundingClientRect().top
       const stuck = rectTop <= desiredViewportTop + 1
+      const fadeDistance = Math.max(48, mobileStickyHeaderHeight * 0.6)
+      const progress = isDesktop
+        ? rectTop <= desiredViewportTop
+          ? 1
+          : 0
+        : Math.min(1, Math.max(0, (desiredViewportTop - rectTop) / fadeDistance))
+      const solid = progress >= 0.55
 
       if (last.stuck !== stuck) {
         last.stuck = stuck
         setIsStickySearch(stuck)
+      }
+      if (!isDesktop && Math.abs(last.opacity - progress) > 0.025) {
+        last.opacity = progress
+        setMobileStickyBgOpacity(progress)
+      }
+      if (isDesktop && last.opacity !== 0) {
+        last.opacity = 0
+        setMobileStickyBgOpacity(0)
+      }
+      if (last.solid !== solid) {
+        last.solid = solid
+        setIsStickySearchSolid(solid)
       }
     }
 
@@ -275,7 +324,7 @@ export default function Home() {
       window.removeEventListener("scroll", onScroll)
       window.removeEventListener("resize", update)
     }
-  }, [])
+  }, [mobileStickyHeaderHeight])
 
   const getVegModeToggleRect = () => {
     const el = vegModeDesktopToggleRef.current || vegModeToggleRef.current
@@ -821,7 +870,10 @@ export default function Home() {
     }
 
     try {
-      if (homeMountRef.current) setLoadingRestaurants(true)
+      if (homeMountRef.current) {
+        setLoadingRestaurants(true)
+        setRestaurantsData([])
+      }
 
       // Build query parameters from filters
       const params = {}
@@ -1426,7 +1478,7 @@ export default function Home() {
       </div>
 
       {/* Unified Navbar & Hero Section - rounded bottom on mobile for green area */}
-      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[min(58vh,640px)] pt-[max(0.75rem,env(safe-area-inset-top,0px))] sm:pt-5 md:pt-0 rounded-b-2xl md:rounded-b-none lg:rounded-b-none">
+      <div className="relative w-full overflow-visible lg:overflow-hidden min-h-[39vh] lg:min-h-[min(58vh,640px)] pt-[max(0.75rem,env(safe-area-inset-top,0px))] sm:pt-5 md:pt-0 rounded-b-2xl md:rounded-b-none lg:rounded-b-none">
         {/* Mobile/tablet: phone banners. Desktop: separate block — desktop uploads only, never mobile art */}
         {heroBannerImages.length > 0 ? (
           <div
@@ -1591,9 +1643,131 @@ export default function Home() {
           </>
         )}
 
+        {/* Mobile sticky header */}
+        <div
+          ref={mobileStickySentinelRef}
+          className="lg:hidden"
+          style={{ height: isStickySearch ? `${mobileStickyHeaderHeight}px` : "auto" }}
+        >
+          <motion.div
+            ref={mobileStickySearchRef}
+            className={`${isStickySearch ? "fixed inset-x-0 top-0" : "relative"} z-50`}
+            style={{
+              boxShadow:
+                mobileStickyBgOpacity > 0.02
+                  ? `0 1px 2px rgba(0,0,0,${(0.1 * mobileStickyBgOpacity).toFixed(3)})`
+                  : "none",
+            }}
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          >
+            <div
+              className="absolute inset-0 pointer-events-none bg-white dark:bg-[#0a0a0a]"
+              style={{ opacity: mobileStickyBgOpacity }}
+              aria-hidden
+            />
+            <div
+              className={`relative z-20 pt-2 sm:pt-3 px-3 sm:px-6 bg-transparent overflow-hidden transition-all duration-200 ${
+                isStickySearch
+                  ? "opacity-0 pointer-events-none h-7 sm:h-8"
+                  : "opacity-100 h-auto"
+              }`}
+            >
+              <PageNavbar textColor={isStickySearchSolid ? "dark" : "white"} zIndex={20} />
+            </div>
+
+            <section className="relative z-20 w-full py-4 sm:py-6">
+              <div className="relative z-20 max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 lg:hidden">
+                <motion.div
+                  layout
+                  initial={false}
+                  animate={{
+                    height: isSearchOpen ? 0 : "auto",
+                    opacity: isSearchOpen ? 0 : 1,
+                    marginTop: isSearchOpen ? 0 : "inherit",
+                    marginBottom: isSearchOpen ? 0 : "inherit",
+                  }}
+                  transition={{
+                    duration: 0.4,
+                    ease: [0.16, 1, 0.3, 1]
+                  }}
+                  className="flex items-center gap-3 sm:gap-4 lg:gap-6 overflow-hidden bg-transparent py-1"
+                >
+                  <div className="flex-1 relative">
+                    <div className="relative bg-white dark:bg-[#1a1a1a] rounded-xl lg:rounded-2xl shadow-lg border border-gray-200 dark:border-gray-800 p-1 sm:p-1.5 lg:p-2 transition-all duration-300 hover:shadow-xl">
+                      <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
+                        <Search className="h-4 w-4 sm:h-4 sm:w-4 lg:h-5 lg:w-5 text-green-600 flex-shrink-0 ml-2 sm:ml-3 lg:ml-4" strokeWidth={2.5} />
+                        <div className="flex-1 relative">
+                          <div className="relative w-full">
+                            <Input
+                              value={heroSearch}
+                              onChange={(e) => setHeroSearch(e.target.value)}
+                              onFocus={handleSearchFocus}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && heroSearch.trim()) {
+                                  navigate(`/user/search?q=${encodeURIComponent(heroSearch.trim())}`)
+                                  closeSearch()
+                                  setHeroSearch("")
+                                }
+                              }}
+                              aria-label="Search restaurants and food"
+                              className="pl-0 pr-2 h-8 sm:h-9 lg:h-11 w-full bg-white dark:bg-[#1a1a1a] border-0 text-sm sm:text-base lg:text-lg font-semibold text-gray-700 dark:text-white focus-visible:ring-0 focus-visible:ring-offset-0 rounded-full placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                            />
+                            {!heroSearch && (
+                              <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none h-5 lg:h-6 overflow-hidden">
+                                <AnimatePresence mode="wait">
+                                  <motion.span
+                                    key={placeholderIndex}
+                                    initial={{ y: 16, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    exit={{ y: -16, opacity: 0 }}
+                                    transition={{ duration: 0.3 }}
+                                    className="text-sm sm:text-base lg:text-lg font-semibold text-gray-500 dark:text-gray-400 inline-block"
+                                  >
+                                    {placeholders[placeholderIndex]}
+                                  </motion.span>
+                                </AnimatePresence>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          aria-label="Voice Search"
+                          onClick={handleSearchFocus}
+                          className="flex-shrink-0 mr-2 sm:mr-3 lg:mr-4 p-1 lg:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                        >
+                          <Mic className="h-4 w-4 sm:h-4 sm:w-4 lg:h-5 lg:w-5 text-gray-500 dark:text-gray-400" strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    ref={vegModeToggleRef}
+                    className="flex flex-col items-center gap-0.5 sm:gap-1 lg:gap-1.5 flex-shrink-0 relative"
+                  >
+                    <div className="flex flex-col items-center">
+                      <span className={`text-[13px] sm:text-[11px] lg:text-sm font-black leading-none transition-colors duration-300 ${isStickySearchSolid ? "text-gray-900 dark:text-white" : "text-white"}`}>VEG</span>
+                      <span className={`text-[9.5px] sm:text-[10px] lg:text-xs font-black leading-none transition-colors duration-300 ${isStickySearchSolid ? "text-gray-900 dark:text-white" : "text-white"}`}>MODE</span>
+                    </div>
+                    <Switch
+                      checked={vegMode}
+                      onCheckedChange={handleVegModeChange}
+                      aria-label="Toggle Veg Mode"
+                      className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300 w-9 h-4 sm:w-10 sm:h-5 lg:w-12 lg:h-6 shadow-lg [&_[data-slot=switch-thumb]]:bg-white [&_[data-slot=switch-thumb]]:h-3 [&_[data-slot=switch-thumb]]:w-3 sm:[&_[data-slot=switch-thumb]]:h-4 sm:[&_[data-slot=switch-thumb]]:w-4 lg:[&_[data-slot=switch-thumb]]:h-5 lg:[&_[data-slot=switch-thumb]]:w-5 [&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 sm:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 lg:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-6 [&_[data-slot=switch-thumb]]:data-[state=unchecked]:translate-x-0"
+                    />
+                  </div>
+                </motion.div>
+              </div>
+            </section>
+          </motion.div>
+        </div>
+
         {/* Navbar */}
         <motion.div
-          className="relative z-20 pt-2 sm:pt-3 lg:pt-4"
+          className="relative z-20 pt-2 sm:pt-3 lg:pt-4 hidden lg:block"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
@@ -1603,95 +1777,6 @@ export default function Home() {
 
         {/* Hero Section */}
         <section className="relative z-20 w-full py-4 sm:py-6 md:py-12 lg:py-10 lg:pb-16">
-          {/* Mobile / tablet: existing sticky search + veg */}
-          <div className="relative z-20 max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 lg:hidden">
-            {/* Search Bar and VEG MODE Container - Sticky (hidden when overlay open to avoid 2 search bars) */}
-            <motion.div
-              layout
-              initial={false}
-              animate={{
-                height: (isSearchOpen || isStickySearch) ? 0 : "auto",
-                opacity: (isSearchOpen || isStickySearch) ? 0 : 1,
-                marginTop: (isSearchOpen || isStickySearch) ? 0 : "inherit",
-                marginBottom: (isSearchOpen || isStickySearch) ? 0 : "inherit",
-              }}
-              transition={{
-                duration: 0.4,
-                ease: [0.16, 1, 0.3, 1]
-              }}
-              className="flex items-center gap-3 sm:gap-4 lg:gap-6 overflow-hidden"
-            >
-              {/* Enhanced Search Bar */}
-              <div className="flex-1 relative">
-                <div className="relative bg-white dark:bg-[#1a1a1a] rounded-xl lg:rounded-2xl shadow-lg border border-gray-200 dark:border-gray-800 p-1 sm:p-1.5 lg:p-2 transition-all duration-300 hover:shadow-xl">
-                  <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
-                    <Search className="h-4 w-4 sm:h-4 sm:w-4 lg:h-5 lg:w-5 text-green-600 flex-shrink-0 ml-2 sm:ml-3 lg:ml-4" strokeWidth={2.5} />
-                    <div className="flex-1 relative">
-                      <div className="relative w-full">
-                        <Input
-                          value={heroSearch}
-                          onChange={(e) => setHeroSearch(e.target.value)}
-                          onFocus={handleSearchFocus}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && heroSearch.trim()) {
-                              navigate(`/user/search?q=${encodeURIComponent(heroSearch.trim())}`)
-                              closeSearch()
-                              setHeroSearch("")
-                            }
-                          }}
-                          aria-label="Search restaurants and food"
-                          className="pl-0 pr-2 h-8 sm:h-9 lg:h-11 w-full bg-white dark:bg-[#1a1a1a] border-0 text-sm sm:text-base lg:text-lg font-semibold text-gray-700 dark:text-white focus-visible:ring-0 focus-visible:ring-offset-0 rounded-full placeholder:text-gray-500 dark:placeholder:text-gray-400"
-                        />
-                        {/* Animated placeholder - same animation as RestaurantDetails highlight offer */}
-                        {!heroSearch && (
-                          <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none h-5 lg:h-6 overflow-hidden">
-                            <AnimatePresence mode="wait">
-                              <motion.span
-                                key={placeholderIndex}
-                                initial={{ y: 16, opacity: 0 }}
-                                animate={{ y: 0, opacity: 1 }}
-                                exit={{ y: -16, opacity: 0 }}
-                                transition={{ duration: 0.3 }}
-                                className="text-sm sm:text-base lg:text-lg font-semibold text-gray-500 dark:text-gray-400 inline-block"
-                              >
-                                {placeholders[placeholderIndex]}
-                              </motion.span>
-                            </AnimatePresence>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      aria-label="Voice Search"
-                      onClick={handleSearchFocus}
-                      className="flex-shrink-0 mr-2 sm:mr-3 lg:mr-4 p-1 lg:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
-                    >
-                      <Mic className="h-4 w-4 sm:h-4 sm:w-4 lg:h-5 lg:w-5 text-gray-500 dark:text-gray-400" strokeWidth={2.5} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* VEG MODE Toggle */}
-              <div
-                ref={vegModeToggleRef}
-                className="flex flex-col items-center gap-0.5 sm:gap-1 lg:gap-1.5 flex-shrink-0 relative"
-              >
-                <div className="flex flex-col items-center">
-                  <span className="text-white text-[13px] sm:text-[11px] lg:text-sm font-black leading-none">VEG</span>
-                  <span className="text-white text-[9.5px] sm:text-[10px] lg:text-xs font-black leading-none">MODE</span>
-                </div>
-                <Switch
-                  checked={vegMode}
-                  onCheckedChange={handleVegModeChange}
-                  aria-label="Toggle Veg Mode"
-                  className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300 w-9 h-4 sm:w-10 sm:h-5 lg:w-12 lg:h-6 shadow-lg [&_[data-slot=switch-thumb]]:bg-white [&_[data-slot=switch-thumb]]:h-3 [&_[data-slot=switch-thumb]]:w-3 sm:[&_[data-slot=switch-thumb]]:h-4 sm:[&_[data-slot=switch-thumb]]:w-4 lg:[&_[data-slot=switch-thumb]]:h-5 lg:[&_[data-slot=switch-thumb]]:w-5 [&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 sm:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 lg:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-6 [&_[data-slot=switch-thumb]]:data-[state=unchecked]:translate-x-0"
-                />
-              </div>
-            </motion.div>
-          </div>
-
           {/* Large screens only: Swiggy-like headline + location strip + search (Tastizo branding) */}
           <div
             className={`relative z-20 hidden lg:block max-w-5xl xl:max-w-6xl mx-auto px-8 xl:px-12 ${isSearchOpen ? "pointer-events-none opacity-0" : ""}`}
@@ -1800,94 +1885,11 @@ export default function Home() {
       {/* Rest of Content - Container Width with Unified Background */}
       {/* Plain div (not motion) so no ancestor transform breaks position:sticky on categories/filters */}
       <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-4 sm:pt-5 lg:pt-8">
-        {/* Unified Sticky Wrapper - Groups Search and Categories to prevent lag/overlap */}
-        <div 
-          className="sticky z-50 transition-[top] duration-300 ease-in-out"
-          style={{ top: isDesktop ? "4.5rem" : 0 }}
-        >
-          {/* Swiggy-like Sticky Search Clone (mobile priority) */}
-        <StickySearchShell
-          ref={mobileStickySearchRef}
-          topClass="top-0"
-          isSearchOpen={isSearchOpen}
-          isVisible={isStickySearch}
-          isSticky={true}
-          className="lg:hidden flex items-center gap-3 sm:gap-4"
-        >
-          {/* Enhanced Search Bar */}
-          <div className="flex-1 relative">
-            <div className="relative bg-white dark:bg-[#1a1a1a] rounded-xl lg:rounded-2xl shadow-lg border border-gray-200 dark:border-gray-800 p-1 sm:p-1.5 lg:p-2 transition-all duration-300 hover:shadow-xl">
-              <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
-                <Search className="h-4 w-4 sm:h-4 sm:w-4 lg:h-5 lg:w-5 text-green-600 flex-shrink-0 ml-2 sm:ml-3 lg:ml-4" strokeWidth={2.5} />
-                <div className="flex-1 relative">
-                  <div className="relative w-full">
-                    <Input
-                      value={heroSearch}
-                      onChange={(e) => setHeroSearch(e.target.value)}
-                      onFocus={handleSearchFocus}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && heroSearch.trim()) {
-                          navigate(`/user/search?q=${encodeURIComponent(heroSearch.trim())}`)
-                          closeSearch()
-                          setHeroSearch("")
-                        }
-                      }}
-                      aria-label="Search restaurants and food"
-                      className="pl-0 pr-2 h-8 sm:h-9 lg:h-11 w-full bg-white dark:bg-[#1a1a1a] border-0 text-sm sm:text-base lg:text-lg font-semibold text-gray-700 dark:text-white focus-visible:ring-0 focus-visible:ring-offset-0 rounded-full placeholder:text-gray-500 dark:placeholder:text-gray-400"
-                    />
-                    {!heroSearch && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none h-5 lg:h-6 overflow-hidden">
-                        <AnimatePresence mode="wait">
-                          <motion.span
-                            key={placeholderIndex}
-                            initial={{ y: 16, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            exit={{ y: -16, opacity: 0 }}
-                            transition={{ duration: 0.3 }}
-                            className="text-sm sm:text-base lg:text-lg font-semibold text-gray-500 dark:text-gray-400 inline-block"
-                          >
-                            {placeholders[placeholderIndex]}
-                          </motion.span>
-                        </AnimatePresence>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Voice Search"
-                  onClick={handleSearchFocus}
-                  className="flex-shrink-0 mr-2 sm:mr-3 lg:mr-4 p-1 lg:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
-                >
-                  <Mic className="h-4 w-4 sm:h-4 sm:w-4 lg:h-5 lg:w-5 text-gray-500 dark:text-gray-400" strokeWidth={2.5} />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* VEG MODE Toggle */}
-          <div className="flex flex-col items-center gap-0.5 sm:gap-1 lg:gap-1.5 flex-shrink-0 relative ml-1">
-            <div className="flex flex-col items-center">
-              <span className="text-gray-900 dark:text-white text-[13px] sm:text-[11px] lg:text-sm font-black leading-none">
-                VEG
-              </span>
-              <span className="text-gray-900/90 dark:text-white text-[9.5px] sm:text-[10px] lg:text-xs font-black leading-none">
-                MODE
-              </span>
-            </div>
-            <Switch
-              checked={vegMode}
-              onCheckedChange={handleVegModeChange}
-              aria-label="Toggle Veg Mode"
-              className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300 w-9 h-4 sm:w-10 sm:h-5 lg:w-12 lg:h-6 shadow-lg [&_[data-slot=switch-thumb]]:bg-white [&_[data-slot=switch-thumb]]:h-3 [&_[data-slot=switch-thumb]]:w-3 sm:[&_[data-slot=switch-thumb]]:h-4 sm:[&_[data-slot=switch-thumb]]:w-4 lg:[&_[data-slot=switch-thumb]]:h-5 lg:[&_[data-slot=switch-thumb]]:w-5 [&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 sm:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 lg:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-6 [&_[data-slot=switch-thumb]]:data-[state=unchecked]:translate-x-0"
-            />
-          </div>
-        </StickySearchShell>
-
           {/* Sticky Section - Food Categories and Filters */}
           <motion.div
             layout
-            className="bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5 pb-2 sm:pb-3"
+            className="sticky z-[999] bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5 pb-2 sm:pb-3"
+            style={{ top: isDesktop ? "4.5rem" : `${mobileStickyHeaderHeight}px` }}
           >
           {/* Food Categories - Horizontal Scroll */}
           <motion.section
@@ -1907,28 +1909,6 @@ export default function Home() {
                 overflowY: "hidden",
               }}
             >
-              {/* Offer Image - Static, Centered */}
-              {/* Special Offer Badge - Meals Under 200 */}
-              <motion.div
-                className="flex-shrink-0 flex flex-col items-center gap-2 cursor-pointer group"
-                initial={{ opacity: 1, scale: 1 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0 }}
-                onClick={() => navigate("/under-250")}
-              >
-                <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 flex items-center justify-center relative overflow-hidden">
-                  <img
-                    src={offerImage}
-                    alt="Special Offer"
-                    width={96}
-                    height={96}
-                    fetchPriority="high"
-                    loading="eager"
-                    decoding="async"
-                    className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300"
-                  />
-                </div>
-              </motion.div>
               {loadingRealCategories ? (
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -2080,9 +2060,6 @@ export default function Home() {
             </div>
           </motion.section>
         </motion.div>
-      </div>
-      {/* End Unified Sticky Wrapper */}
-        {/* End Sticky Section */}
 
         {/* Explore More Section */}
         <motion.section
