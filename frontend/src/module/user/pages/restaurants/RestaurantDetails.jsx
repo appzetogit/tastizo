@@ -135,7 +135,10 @@ export default function RestaurantDetails() {
 
         // Try to get restaurant by slug
         try {
-          const response = await diningAPI.getRestaurantBySlug(slug)
+          const response = await diningAPI.getRestaurantBySlug(
+            slug,
+            zoneId ? { zoneId } : {},
+          )
           if (response.data?.success) {
             apiRestaurant = response.data.data
           }
@@ -182,7 +185,10 @@ export default function RestaurantDetails() {
             try {
               console.log('📋 Fetching menu and inventory for:', restaurantId)
               const [menuRes, inventoryRes] = await Promise.allSettled([
-                restaurantAPI.getMenuByRestaurantId(restaurantId),
+                restaurantAPI.getMenuByRestaurantId(
+                  restaurantId,
+                  zoneId ? { zoneId } : {},
+                ),
                 restaurantAPI.getInventoryByRestaurantId(restaurantId)
               ])
 

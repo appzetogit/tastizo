@@ -941,11 +941,25 @@ export default function Home() {
         params.trusted = 'true'
       }
 
-      // Optional: Add zoneId if available (for sorting/filtering, but show all restaurants)
+      // Enforce zone-specific restaurant visibility for the user.
       if (zoneId) {
         params.zoneId = zoneId
       }
-      // Note: We show all restaurants regardless of zone, but apply grayscale styling if user is out of service
+
+      if (zoneLoading) return
+      if (!zoneId) {
+        patchHomeDiscoveryCache({
+          restaurantsLoaded: true,
+          restaurantsZoneId: null,
+          restaurantsFiltersKey: filtersKey,
+          restaurantsData: [],
+        })
+        if (homeMountRef.current) {
+          setRestaurantsData([])
+          setLoadingRestaurants(false)
+        }
+        return
+      }
 
       const response = await restaurantAPI.getRestaurants(params)
 
@@ -1146,7 +1160,7 @@ export default function Home() {
         setLoadingRestaurants(false)
       }
     }
-  }, [zoneId])
+  }, [zoneId, zoneLoading])
 
   // Fetch restaurants when appliedFilters change
   useEffect(() => {

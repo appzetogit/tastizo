@@ -28,14 +28,20 @@ export default function TableBooking() {
             if (!slug) return
             try {
                 // Try fetch by ID/Slug using restaurantAPI which seems more robust in other components
-                const response = await restaurantAPI.getRestaurantById(slug)
+                const response = await restaurantAPI.getRestaurantById(
+                    slug,
+                    zoneId ? { zoneId } : {},
+                )
                 if (response.data && response.data.success) {
                     const apiRestaurant = response.data.data
                     const actualRestaurant = apiRestaurant?.restaurant || apiRestaurant
                     setRestaurant(actualRestaurant)
                 } else {
                     // Try diningAPI as backup
-                    const diningResponse = await diningAPI.getRestaurantBySlug(slug)
+                    const diningResponse = await diningAPI.getRestaurantBySlug(
+                        slug,
+                        zoneId ? { zoneId } : {},
+                    )
                     if (diningResponse.data && diningResponse.data.success) {
                         const apiRestaurant = diningResponse.data.data
                         const actualRestaurant = apiRestaurant?.restaurant || apiRestaurant

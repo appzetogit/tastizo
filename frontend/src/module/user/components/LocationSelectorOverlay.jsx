@@ -2363,6 +2363,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               street: street || prev.street || "",
               streetNumber: streetNumber || prev.streetNumber || "",
               postalCode: postalCode || prev.postalCode || "",
+              selectionSource: force ? "gps" : prev.selectionSource,
             }
 
             // "Use current location" passes force:true — always persist + broadcast so UI (single context) updates
@@ -2383,6 +2384,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                   street: street || "",
                   streetNumber: streetNumber || "",
                   postalCode: postalCode || "",
+                  selectionSource: force ? "gps" : undefined,
                 })
               }
             } else {
@@ -2407,6 +2409,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                   street: street || prev.street || "",
                   streetNumber: streetNumber || prev.streetNumber || "",
                   postalCode: postalCode || prev.postalCode || "",
+                  selectionSource: force ? "gps" : prev.selectionSource,
                 })
               }
             }
@@ -2836,19 +2839,26 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         address?.zipCode,
       ].filter(Boolean).join(", "),
     )
+    const mainLine = cleanLocationDisplayLine(
+      address?.additionalDetails ||
+        [address?.street, address?.city].filter(Boolean).join(", "),
+    )
 
     return {
       city: address?.city || "",
       state: address?.state || "",
-      address: cleanLocationDisplayLine(
-        [address?.additionalDetails, address?.street, address?.city].filter(Boolean).join(", "),
+      address: mainLine || cleanLocationDisplayLine(
+        [address?.street, address?.city].filter(Boolean).join(", "),
       ),
-      area: address?.additionalDetails || "",
+      area: cleanLocationDisplayLine(address?.additionalDetails || "") || address?.street || "",
       zipCode: address?.zipCode || "",
       latitude,
       longitude,
       formattedAddress,
       street: address?.street || "",
+      postalCode: address?.zipCode || "",
+      mainTitle: mainLine.split(",")[0]?.trim() || address?.street || address?.city || "",
+      selectionSource: "manual",
     }
   }
 
@@ -2862,6 +2872,8 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         await setDefaultAddress(address.id)
         localStorage.setItem("selectedUserAddressId", address.id)
       }
+
+      localStorage.setItem("userLocationMode", "manual")
 
       if (latitude && longitude) {
         // Update location in backend
@@ -2880,6 +2892,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
       // Update the location in localStorage with this address
       localStorage.setItem("userLocation", JSON.stringify(locationData))
+      setCurrentAddress(locationData.formattedAddress || locationData.address || "")
 
       // Broadcast updated location so Navbar and other components update immediately
       try {
@@ -2904,7 +2917,8 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         phone: address.phone || "",
       })
 
-      // Update Google Maps to show selected address
+      // Update Google Maps to show selected address, but do not re-persist from reverse geocode here.
+      // The selected saved address is the source of truth and should never be downgraded to city-level.
       if (googleMapRef.current && window.google && window.google.maps) {
         try {
           googleMapRef.current.panTo({ lat: latitude, lng: longitude })
@@ -2915,13 +2929,9 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             greenMarkerRef.current.setPosition({ lat: latitude, lng: longitude })
           }
 
-          // Fetch and update address details
-          setTimeout(async () => {
-            await handleMapMoveEnd(latitude, longitude)
-            if (showToast) {
-              toast.success("Location updated!", { id: "saved-address" })
-            }
-          }, 500)
+          if (showToast) {
+            toast.success("Location updated!", { id: "saved-address" })
+          }
         } catch (mapError) {
           console.error("Error updating map:", mapError)
           if (showToast) {
@@ -2929,13 +2939,9 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           }
         }
       } else {
-        // Map not initialized yet, just fetch address
-        setTimeout(async () => {
-          await handleMapMoveEnd(latitude, longitude)
-          if (showToast) {
-            toast.success("Location updated!", { id: "saved-address" })
-          }
-        }, 300)
+        if (showToast) {
+          toast.success("Location updated!", { id: "saved-address" })
+        }
       }
 
       if (closeAfterSelect) {
@@ -3289,7 +3295,12 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           <Input
             ref={inputRef}
             value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
+            onClick={handleAddAddress}
+            onFocus={(e) => {
+              e.target.blur()
+              handleAddAddress()
+            }}
+            readOnly
             placeholder="Search for area, street name..."
             className="pl-12 pr-4 h-12 w-full bg-gray-50 dark:bg-[#2a2a2a] border-gray-200 dark:border-gray-700 focus:border-primary-orange dark:focus:border-primary-orange rounded-xl text-base dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
           />

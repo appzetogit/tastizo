@@ -1,5 +1,6 @@
 import Menu from '../models/Menu.js';
 import Restaurant from '../models/Restaurant.js';
+import Zone from '../../admin/models/Zone.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import asyncHandler from '../../../shared/middleware/asyncHandler.js';
 import mongoose from 'mongoose';
@@ -34,6 +35,43 @@ const deriveBasePriceFromVariations = (rawPrice, variations) => {
     ? numericPrice
     : 0;
 };
+
+function isPointInZone(lat, lng, zoneCoordinates = []) {
+  if (!zoneCoordinates || zoneCoordinates.length < 3) return false;
+
+  let inside = false;
+  for (let i = 0, j = zoneCoordinates.length - 1; i < zoneCoordinates.length; j = i++) {
+    const coordI = zoneCoordinates[i];
+    const coordJ = zoneCoordinates[j];
+    const xi = typeof coordI === 'object' ? coordI.latitude || coordI.lat : null;
+    const yi = typeof coordI === 'object' ? coordI.longitude || coordI.lng : null;
+    const xj = typeof coordJ === 'object' ? coordJ.latitude || coordJ.lat : null;
+    const yj = typeof coordJ === 'object' ? coordJ.longitude || coordJ.lng : null;
+
+    if (xi === null || yi === null || xj === null || yj === null) continue;
+
+    const intersect =
+      yi > lng !== yj > lng && lat < ((xj - xi) * (lng - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
+function getRestaurantCoordinates(restaurant) {
+  const lat = Number(
+    restaurant?.location?.latitude ?? restaurant?.location?.coordinates?.[1],
+  );
+  const lng = Number(
+    restaurant?.location?.longitude ?? restaurant?.location?.coordinates?.[0],
+  );
+
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { lat, lng };
+  }
+
+  return null;
+}
 
 // Get menu for a restaurant
 export const getMenu = asyncHandler(async (req, res) => {
@@ -574,6 +612,7 @@ export const addItemToSubsection = asyncHandler(async (req, res) => {
 export const getMenuByRestaurantId = async (req, res) => {
   try {
     const { id } = req.params;
+    const { zoneId } = req.query;
     
     // Find restaurant by ID, slug, or restaurantId
     const restaurant = await Restaurant.findOne({
@@ -589,6 +628,22 @@ export const getMenuByRestaurantId = async (req, res) => {
 
     if (!restaurant) {
       return errorResponse(res, 404, 'Restaurant not found');
+    }
+
+    if (zoneId) {
+      const userZone = await Zone.findById(zoneId).lean();
+      if (!userZone || !userZone.isActive) {
+        return errorResponse(res, 400, 'Invalid or inactive zone. Please detect your zone again.');
+      }
+
+      const coords = getRestaurantCoordinates(restaurant);
+      const isAccessible =
+        coords &&
+        isPointInZone(coords.lat, coords.lng, userZone.coordinates || []);
+
+      if (!isAccessible) {
+        return errorResponse(res, 404, 'Restaurant menu not available in your current zone');
+      }
     }
 
     // Find menu

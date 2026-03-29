@@ -62,7 +62,10 @@ export default function DiningRestaurantDetails() {
             try {
                 setLoading(true)
                 // Try fetch by ID/Slug
-                const response = await diningAPI.getRestaurantBySlug(slug)
+                const response = await diningAPI.getRestaurantBySlug(
+                    slug,
+                    zoneId ? { zoneId } : {},
+                )
 
                 if (response.data && response.data.success) {
                     const apiRestaurant = response.data.data
@@ -130,7 +133,10 @@ export default function DiningRestaurantDetails() {
         if (!restaurant?._id) return
         const fetchMenu = async () => {
             try {
-                const res = await restaurantAPI.getMenuByRestaurantId(restaurant._id)
+                const res = await restaurantAPI.getMenuByRestaurantId(
+                    restaurant._id,
+                    zoneId ? { zoneId } : {},
+                )
                 const data = res?.data?.data || res?.data
                 setDiningMenu(data?.menu || data || null)
             } catch {

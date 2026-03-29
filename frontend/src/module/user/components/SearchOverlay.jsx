@@ -90,10 +90,12 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     const loadFoods = async () => {
       try {
         setLoadingFoods(true)
-        const params = { limit: 50 }
-        if (zoneId) {
-          params.zoneId = zoneId
+        if (!zoneId) {
+          setAllFoods([])
+          return
         }
+        const params = { limit: 50 }
+        params.zoneId = zoneId
         const response = await restaurantAPI.getRestaurants(params)
         const restaurants = response?.data?.data?.restaurants || []
 

@@ -137,6 +137,27 @@ function filterRestaurantsByZone(restaurants, zoneId, activeZones) {
   });
 }
 
+async function getValidatedUserZone(zoneId) {
+  if (!zoneId) return null;
+
+  const userZone = await Zone.findById(zoneId).lean();
+  if (!userZone || !userZone.isActive) {
+    return undefined;
+  }
+
+  return userZone;
+}
+
+function isRestaurantAccessibleInZone(restaurant, zoneId, activeZones) {
+  if (!zoneId) return true;
+
+  const coords = getRestaurantCoordinates(restaurant);
+  if (!coords) return false;
+
+  const restaurantZoneId = getRestaurantZoneId(coords.lat, coords.lng, activeZones);
+  return !!restaurantZoneId && restaurantZoneId === zoneId;
+}
+
 function hasVisibleMenuItems(menu) {
   if (!menu || menu.isActive === false) return false;
 
@@ -193,17 +214,13 @@ export const getRestaurants = async (req, res) => {
     } = req.query;
 
     // Optional: Zone-based filtering - if zoneId is provided, validate and filter by zone
-    let userZone = null;
-    if (zoneId) {
-      // Validate zone exists and is active
-      userZone = await Zone.findById(zoneId).lean();
-      if (!userZone || !userZone.isActive) {
-        return errorResponse(
-          res,
-          400,
-          "Invalid or inactive zone. Please detect your zone again.",
-        );
-      }
+    const userZone = await getValidatedUserZone(zoneId);
+    if (zoneId && !userZone) {
+      return errorResponse(
+        res,
+        400,
+        "Invalid or inactive zone. Please detect your zone again.",
+      );
     }
 
     // Build query
@@ -416,6 +433,16 @@ export const getRestaurants = async (req, res) => {
 export const getRestaurantById = async (req, res) => {
   try {
     const { id } = req.params;
+    const { zoneId } = req.query;
+
+    const userZone = await getValidatedUserZone(zoneId);
+    if (zoneId && !userZone) {
+      return errorResponse(
+        res,
+        400,
+        "Invalid or inactive zone. Please detect your zone again.",
+      );
+    }
 
     // Build query conditions - only include _id if it's a valid ObjectId
     const queryConditions = {
@@ -437,6 +464,21 @@ export const getRestaurantById = async (req, res) => {
 
     if (!restaurant) {
       return errorResponse(res, 404, "Restaurant not found");
+    }
+
+    if (
+      userZone &&
+      !isRestaurantAccessibleInZone(
+        restaurant,
+        userZone._id.toString(),
+        [userZone],
+      )
+    ) {
+      return errorResponse(
+        res,
+        404,
+        "Restaurant not available in your current zone",
+      );
     }
 
     return successResponse(res, 200, "Restaurant retrieved successfully", {
@@ -1007,17 +1049,13 @@ export const getRestaurantsWithDishesUnder250 = async (req, res) => {
     const { zoneId } = req.query; // User's zone ID (optional - if provided, filters by zone)
 
     // Optional: Zone-based filtering - if zoneId is provided, validate and filter by zone
-    let userZone = null;
-    if (zoneId) {
-      // Validate zone exists and is active
-      userZone = await Zone.findById(zoneId).lean();
-      if (!userZone || !userZone.isActive) {
-        return errorResponse(
-          res,
-          400,
-          "Invalid or inactive zone. Please detect your zone again.",
-        );
-      }
+    const userZone = await getValidatedUserZone(zoneId);
+    if (zoneId && !userZone) {
+      return errorResponse(
+        res,
+        400,
+        "Invalid or inactive zone. Please detect your zone again.",
+      );
     }
 
     const MAX_PRICE = 250;

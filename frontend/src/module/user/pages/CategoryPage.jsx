@@ -36,7 +36,7 @@ export default function CategoryPage() {
   const navigate = useNavigate()
   const { vegMode } = useProfile()
   const { location } = useLocation()
-  const { zoneId, isOutOfService } = useZone(location)
+  const { zoneId, isOutOfService, loading: zoneLoading } = useZone(location)
   const { addToCart, updateQuantity, getCartItem, cart, addItemOrAskVariant } = useCart()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState(category?.toLowerCase() || 'all')
@@ -227,13 +227,15 @@ export default function CategoryPage() {
   // Fetch restaurants from API
   useEffect(() => {
     const fetchRestaurants = async () => {
+      if (zoneLoading) return
+
       try {
         setLoadingRestaurants(true)
-        // Optional: Add zoneId if available (for sorting/filtering, but show all restaurants)
-        const params = {}
-        if (zoneId) {
-          params.zoneId = zoneId
+        if (!zoneId) {
+          setRestaurantsData([])
+          return
         }
+        const params = { zoneId }
         const response = await restaurantAPI.getRestaurants(params)
 
         if (response.data && response.data.success && response.data.data && response.data.data.restaurants) {
@@ -402,7 +404,7 @@ export default function CategoryPage() {
     }
 
     fetchRestaurants()
-  }, [zoneId, isOutOfService])
+  }, [zoneId, isOutOfService, zoneLoading])
 
   // Update selected category when URL changes
   useEffect(() => {

@@ -542,12 +542,13 @@ export const restaurantAPI = {
       item,
     });
   },
-  getMenuByRestaurantId: (restaurantId) => {
+  getMenuByRestaurantId: (restaurantId, params = {}) => {
     return apiClient.get(
       API_ENDPOINTS.RESTAURANT.MENU_BY_RESTAURANT_ID.replace(
         ":id",
         restaurantId,
       ),
+      { params },
     );
   },
 
@@ -651,8 +652,10 @@ export const restaurantAPI = {
   },
 
   // Get restaurant by ID or slug
-  getRestaurantById: (id) => {
-    return apiClient.get(API_ENDPOINTS.RESTAURANT.BY_ID.replace(":id", id));
+  getRestaurantById: (id, params = {}) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.BY_ID.replace(":id", id), {
+      params,
+    });
   },
   // Get coupons for item (public - for user cart)
   getCouponsByItemIdPublic: (restaurantId, itemId) => {
@@ -2015,9 +2018,10 @@ export const diningAPI = {
   },
 
   // Get restaurant by slug
-  getRestaurantBySlug: (slug) => {
+  getRestaurantBySlug: (slug, params = {}) => {
     return apiClient.get(
       API_ENDPOINTS.DINING.RESTAURANT_BY_SLUG.replace(":slug", slug),
+      { params },
     );
   },
 

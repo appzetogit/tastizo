@@ -22,6 +22,32 @@ function haversineDistanceMeters(lat1, lng1, lat2, lng2) {
 
 /** Skip automatic re-geocode / DB write when GPS is within this distance of last saved location. */
 const MOVE_THRESHOLD_METERS = 100
+const LOCATION_MODE_KEY = "userLocationMode"
+const LOCATION_MODE_MANUAL = "manual"
+const LOCATION_MODE_GPS = "gps"
+
+function getStoredLocationMode() {
+  if (typeof window === "undefined") return LOCATION_MODE_GPS
+  try {
+    return localStorage.getItem(LOCATION_MODE_KEY) === LOCATION_MODE_MANUAL
+      ? LOCATION_MODE_MANUAL
+      : LOCATION_MODE_GPS
+  } catch {
+    return LOCATION_MODE_GPS
+  }
+}
+
+function setStoredLocationMode(mode) {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(
+      LOCATION_MODE_KEY,
+      mode === LOCATION_MODE_MANUAL ? LOCATION_MODE_MANUAL : LOCATION_MODE_GPS,
+    )
+  } catch {
+    // ignore storage errors
+  }
+}
 
 /** Single shared geolocation state for the whole app (navbar, Home, overlay, etc.). */
 export const UserGeoLocationContext = createContext(null)
@@ -42,9 +68,25 @@ function useUserGeoLocationEngine() {
   /** After "Use current location" / requestLocation(), bypass distance/coord stability so UI updates. */
   const forceExplicitRefreshRef = useRef(false)
   const forceExplicitRefreshTimerRef = useRef(null)
+  const locationModeRef = useRef(getStoredLocationMode())
 
   const stampLocation = (loc) =>
     loc && typeof loc === "object" ? { ...loc, updatedAt: Date.now() } : loc
+
+  const normalizeLocationPayload = (loc) => {
+    if (!loc || typeof loc !== "object") return loc
+    return {
+      ...loc,
+      city: (loc.city || "").trim(),
+      state: (loc.state || "").trim(),
+      area: (loc.area || "").trim(),
+      address: (loc.address || "").trim(),
+      formattedAddress: (loc.formattedAddress || loc.address || "").trim(),
+      mainTitle: (loc.mainTitle || "").trim(),
+      street: (loc.street || "").trim(),
+      streetNumber: (loc.streetNumber || "").trim(),
+    }
+  }
 
   useEffect(() => {
     locationRef.current = location
@@ -904,14 +946,14 @@ function useUserGeoLocationEngine() {
               }
 
               // Build location object with ALL fields from reverse geocoding
-              const finalLoc = stampLocation({
+              const finalLoc = stampLocation(normalizeLocationPayload({
                 ...addr, // This includes: city, state, area, street, streetNumber, postalCode, formattedAddress
                 latitude,
                 longitude,
                 accuracy: accuracy || null,
                 address: displayAddress, // Locality parts for navbar display
                 formattedAddress: completeFormattedAddress || addr.formattedAddress || displayAddress // Complete detailed address
-              })
+              }))
 
               if (isUnpersistableLocation(finalLoc)) {
                 console.warn("Skipping save - incomplete location:", finalLoc)
@@ -964,12 +1006,12 @@ function useUserGeoLocationEngine() {
                   !lastResortAddr.address.includes(latitude.toFixed(4)) &&
                   lastResortAddr.formattedAddress &&
                   !lastResortAddr.formattedAddress.includes(latitude.toFixed(4))) {
-                  const lastResortLoc = stampLocation({
+                  const lastResortLoc = stampLocation(normalizeLocationPayload({
                     ...lastResortAddr,
                     latitude,
                     longitude,
                     accuracy: pos.coords.accuracy || null
-                  })
+                  }))
                   console.log("âœ… Last resort geocoding succeeded:", lastResortLoc)
                   prevLocationCoordsRef.current = { latitude, longitude }
                   localStorage.setItem("userLocation", JSON.stringify(lastResortLoc))
@@ -1010,7 +1052,7 @@ function useUserGeoLocationEngine() {
           },
           async (err) => {
             // If timeout and we haven't retried yet, try with lower accuracy
-            if (err.code === 3 && retryCount === 0 && options.enableHighAccuracy) {
+            if (!forceFresh && err.code === 3 && retryCount === 0 && options.enableHighAccuracy) {
               console.warn("â±ï¸ High accuracy timeout, retrying with lower accuracy...")
               // Retry with lower accuracy - faster response (uses network-based location)
               getPositionWithRetry({
@@ -1145,6 +1187,11 @@ function useUserGeoLocationEngine() {
       return
     }
 
+    if (locationModeRef.current === LOCATION_MODE_MANUAL && !forceExplicitRefreshRef.current) {
+      console.log("Manual location mode active - skipping background GPS watch")
+      stopWatchingLocation()
+      return
+    }
     // Clear any existing watch
     if (watchIdRef.current) {
       navigator.geolocation.clearWatch(watchIdRef.current)
@@ -1163,6 +1210,11 @@ function useUserGeoLocationEngine() {
       watchIdRef.current = navigator.geolocation.watchPosition(
         async (pos) => {
           if (watchGen !== watchGenerationRef.current) {
+            return
+          }
+          if (locationModeRef.current === LOCATION_MODE_MANUAL && !forceExplicitRefreshRef.current) {
+            console.log("Ignoring GPS watch update because manual location mode is active")
+            stopWatchingLocation()
             return
           }
           try {
@@ -1487,6 +1539,8 @@ function useUserGeoLocationEngine() {
     const checkPermissionAndStart = async (shouldForceRefresh, hasInitialLocation) => {
       if (cancelled) return
       try {
+        const locationMode = getStoredLocationMode()
+        locationModeRef.current = locationMode
         let permissionState = "prompt"
 
         if (navigator.permissions && navigator.permissions.query) {
@@ -1529,6 +1583,20 @@ function useUserGeoLocationEngine() {
             (locSnap.city || "").trim() === "Select location")
 
         const shouldFetch = shouldForceRefresh || !hasInitialLocation || needsBetterAddress
+        const hasUsableInitialLocation =
+          !!locSnap &&
+          locSnap.latitude != null &&
+          locSnap.longitude != null &&
+          !isUnpersistableLocation(locSnap) &&
+          (locSnap.formattedAddress || "").trim() !== "Select location"
+
+        if (locationMode === LOCATION_MODE_MANUAL && hasUsableInitialLocation) {
+          console.log("Manual location mode active - keeping selected place and skipping auto GPS refresh")
+          setPermissionGranted(true)
+          setLoading(false)
+          stopWatchingLocation()
+          return
+        }
 
         if (shouldFetch) {
           console.log(
@@ -1539,7 +1607,10 @@ function useUserGeoLocationEngine() {
             "needsBetter:",
             needsBetterAddress,
           )
-          getLocation(true, shouldForceRefresh, false, {})
+          const forceFreshFetch = shouldForceRefresh || !hasInitialLocation || needsBetterAddress
+          getLocation(true, forceFreshFetch, false, {
+            forceBypassMoveThreshold: forceFreshFetch,
+          })
             .then((location) => {
               if (cancelled || !location) return
               if (isAcceptableGeocodeResult(location)) {
@@ -1550,7 +1621,9 @@ function useUserGeoLocationEngine() {
               } else {
                 console.warn("Location fetch returned placeholder, retrying...")
                 setTimeout(() => {
-                  getLocation(true, true, false, {})
+                  getLocation(true, true, false, {
+                    forceBypassMoveThreshold: true,
+                  })
                     .then((retryLocation) => {
                       if (cancelled || !retryLocation) return
                       if (isAcceptableGeocodeResult(retryLocation)) {
@@ -1694,14 +1767,25 @@ function useUserGeoLocationEngine() {
     const onUserLocationUpdated = (e) => {
       const payload = e?.detail
       if (!payload || (payload.formattedAddress === "Select location" && payload.latitude == null)) return
-      setLocation((prev) => {
-        const next = stampLocation({ ...(prev || {}), ...payload })
+      const nextMode =
+        payload?.selectionSource === "manual" ? LOCATION_MODE_MANUAL : LOCATION_MODE_GPS
+      locationModeRef.current = nextMode
+      setStoredLocationMode(nextMode)
+      if (nextMode === LOCATION_MODE_MANUAL) {
+        stopWatchingLocation()
+      }
+      setLocation(() => {
+        const next = stampLocation(normalizeLocationPayload(payload))
         try {
           if (next.latitude != null && next.longitude != null) {
             localStorage.setItem("userLocation", JSON.stringify(next))
           }
         } catch {
           // ignore
+        }
+        prevLocationCoordsRef.current = {
+          latitude: next.latitude ?? null,
+          longitude: next.longitude ?? null,
         }
         console.log("✅ UI updated with new location (userLocationUpdated)")
         return next
@@ -1721,6 +1805,8 @@ function useUserGeoLocationEngine() {
     const { skipDatabaseUpdate = false } = options
     console.log("ðŸ“ðŸ“ðŸ“ User requested location update - fetching fresh GPS (keeping cache fallback)")
     console.log("📍 Using fresh GPS location — explicit user request (cache/stability bypass active briefly)")
+    locationModeRef.current = LOCATION_MODE_GPS
+    setStoredLocationMode(LOCATION_MODE_GPS)
     forceExplicitRefreshRef.current = true
     if (forceExplicitRefreshTimerRef.current) {
       clearTimeout(forceExplicitRefreshTimerRef.current)
@@ -1836,3 +1922,6 @@ export function useLocation() {
   }
   return ctx
 }
+
+
+

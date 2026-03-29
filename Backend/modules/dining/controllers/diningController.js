@@ -60,6 +60,26 @@ function getDiningCoordinates(restaurant) {
   return null;
 }
 
+async function getValidatedUserZone(zoneId) {
+  if (!zoneId) return null;
+
+  const userZone = await Zone.findById(zoneId).lean();
+  if (!userZone || !userZone.isActive) {
+    return undefined;
+  }
+
+  return userZone;
+}
+
+function isDiningRestaurantAccessibleInZone(restaurant, userZone) {
+  if (!userZone) return true;
+
+  const coords = getDiningCoordinates(restaurant);
+  if (!coords) return false;
+
+  return isPointInZone(coords.lat, coords.lng, userZone.coordinates || []);
+}
+
 // Get all dining restaurants (with filtering)
 export const getRestaurants = async (req, res) => {
   try {
@@ -71,8 +91,8 @@ export const getRestaurants = async (req, res) => {
       query.location = { $regex: city, $options: "i" };
     }
 
-    const userZone = zoneId ? await Zone.findById(zoneId).lean() : null;
-    if (zoneId && (!userZone || !userZone.isActive)) {
+    const userZone = await getValidatedUserZone(zoneId);
+    if (zoneId && !userZone) {
       return res.status(400).json({
         success: false,
         message: "Invalid or inactive zone. Please select your address again.",
@@ -106,6 +126,16 @@ export const getRestaurants = async (req, res) => {
 // Get single restaurant by slug
 export const getRestaurantBySlug = async (req, res) => {
   try {
+    const { zoneId } = req.query;
+    const userZone = await getValidatedUserZone(zoneId);
+
+    if (zoneId && !userZone) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or inactive zone. Please select your address again.",
+      });
+    }
+
     const restaurant = await DiningRestaurant.findOne({
       slug: req.params.slug,
     });
@@ -128,6 +158,13 @@ export const getRestaurantBySlug = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Restaurant not found",
+      });
+    }
+
+    if (!isDiningRestaurantAccessibleInZone(actualRestaurant, userZone)) {
+      return res.status(404).json({
+        success: false,
+        message: "Restaurant not available in your current zone",
       });
     }
 

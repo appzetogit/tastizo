@@ -832,9 +832,8 @@ export default function PageNavbar({
   })()
 
   const navLines = pickNavbarLocationLines(location)
-  const mainLocationName =
-    navLines.main && navLines.main !== "Select" ? navLines.main : locationDisplay.main
-  const subLocationName = navLines.sub || locationDisplay.sub
+  const mainLocationName = navLines.main || "Select"
+  const subLocationName = navLines.sub || ""
 
   const handleLocationClick = () => {
     // Open location selector overlay

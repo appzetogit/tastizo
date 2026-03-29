@@ -25,7 +25,7 @@ export default function Under250() {
   const { location, loading: geoLoading } = useLocation()
   const { openLocationSelector } = useLocationSelector()
   const { main: desktopLocMain, sub: desktopLocSub } = pickNavbarLocationLines(location)
-  const { zoneId, zoneStatus, isInService, isOutOfService } = useZone(location)
+  const { zoneId, zoneStatus, isInService, isOutOfService, loading: zoneLoading } = useZone(location)
   const navigate = useNavigate()
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart, openVariantPicker } = useCart()
   const { addDishFavorite, removeDishFavorite, isDishFavorite } = useProfile()
@@ -238,10 +238,14 @@ export default function Under250() {
   // Fetch restaurants with dishes under ₹250 from backend
   useEffect(() => {
     const fetchRestaurantsUnder250 = async () => {
+      if (zoneLoading) return
+
       try {
         setLoadingRestaurants(true)
         setUnder250Restaurants([])
-        // Optional: Add zoneId if available (for sorting/filtering, but show all restaurants)
+        if (!zoneId) {
+          return
+        }
         const response = await restaurantAPI.getRestaurantsUnder250(zoneId)
         if (response.data.success && response.data.data.restaurants) {
           setUnder250Restaurants(response.data.data.restaurants)
@@ -257,7 +261,7 @@ export default function Under250() {
     }
 
     fetchRestaurantsUnder250()
-  }, [zoneId, isOutOfService])
+  }, [zoneId, isOutOfService, zoneLoading])
 
   // Fetch categories from admin API
   useEffect(() => {

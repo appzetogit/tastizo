@@ -23,7 +23,7 @@ const reverseGeocodeLastGoodByIp = new Map(); // ip -> { ts, payload, lat, lng }
 const roundCoord = (n) => Math.round(n * 10000) / 10000;
 const cacheKeyFor = (latNum, lngNum) => `${roundCoord(latNum)},${roundCoord(lngNum)}`;
 
-const AREA_STABILITY_DISTANCE_M = 200;
+const AREA_STABILITY_DISTANCE_M = 100;
 
 function haversineMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
