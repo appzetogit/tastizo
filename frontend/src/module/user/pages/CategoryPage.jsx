@@ -691,7 +691,7 @@ export default function CategoryPage() {
   return (
     <div className={`min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Sticky Header */}
-      <div className="sticky top-0 z-20 bg-white dark:bg-[#1a1a1a] shadow-sm">
+      <div className={`${isFilterOpen ? 'hidden' : 'sticky'} top-0 z-20 bg-white dark:bg-[#1a1a1a] shadow-sm`}>
         {/* Spacer to avoid the sticky search area covering the categories row */}
         <div className="h-2 bg-white dark:bg-[#1a1a1a]" aria-hidden />
         <div className="max-w-7xl mx-auto">
@@ -780,7 +780,7 @@ export default function CategoryPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800">
+      <div className={`${isFilterOpen ? 'hidden' : 'block'} bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800`}>
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row md:flex-wrap gap-2 px-4 md:px-6 py-3">
             {/* Row 1 */}
@@ -1124,7 +1124,7 @@ export default function CategoryPage() {
         createPortal(
           <AnimatePresence>
             {isFilterOpen && (
-              <div className="fixed inset-0 z-[100]">
+              <div className="fixed inset-0 z-[100000]">
                 {/* Backdrop */}
                 <div
                   className="absolute inset-0 bg-black/50"
@@ -1132,7 +1132,7 @@ export default function CategoryPage() {
                 />
 
                 {/* Modal Content */}
-                <div className="absolute bottom-0 left-0 right-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-4xl bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl max-h-[85vh] md:max-h-[90vh] flex flex-col animate-[slideUp_0.3s_ease-out]">
+                <div className="absolute bottom-0 left-0 right-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-4xl z-[100001] bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl max-h-[85vh] md:max-h-[90vh] flex flex-col overflow-hidden isolate animate-[slideUp_0.3s_ease-out]">
                   {/* Header */}
                   <div className="flex items-center justify-between px-4 md:px-6 py-4 border-b border-gray-200 dark:border-gray-800">
                     <h2 className="text-lg md:text-xl font-bold text-gray-900 dark:text-white">Filters and sorting</h2>
@@ -1149,9 +1149,9 @@ export default function CategoryPage() {
                   </div>
 
                   {/* Body */}
-                  <div className="flex flex-1 overflow-hidden">
+                  <div className="flex flex-1 min-h-0 overflow-hidden bg-white dark:bg-[#1a1a1a]">
                     {/* Left Sidebar - Tabs */}
-                    <div className="w-24 sm:w-28 md:w-32 bg-gray-50 dark:bg-[#0a0a0a] border-r border-gray-200 dark:border-gray-800 flex flex-col">
+                    <div className="w-24 sm:w-28 md:w-32 shrink-0 bg-gray-50 dark:bg-[#0a0a0a] border-r border-gray-200 dark:border-gray-800 flex flex-col">
                       {[
                         { id: 'sort', label: 'Sort By', icon: ArrowDownUp },
                         { id: 'time', label: 'Time', icon: Timer },
@@ -1188,7 +1188,7 @@ export default function CategoryPage() {
                     </div>
 
                     {/* Right Content Area - Scrollable */}
-                    <div ref={rightContentRef} className="flex-1 overflow-y-auto p-4 md:p-6">
+                    <div ref={rightContentRef} className="flex-1 min-w-0 min-h-0 overflow-y-auto bg-white dark:bg-[#1a1a1a] p-4 md:p-6">
                       {/* Sort By Tab */}
                       <div
                         ref={el => filterSectionRefs.current['sort'] = el}

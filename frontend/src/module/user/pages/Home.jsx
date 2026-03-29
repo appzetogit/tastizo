@@ -852,6 +852,17 @@ export default function Home() {
     return () => observer.disconnect()
   }, [isFilterOpen])
 
+  useEffect(() => {
+    if (!isFilterOpen) return undefined
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isFilterOpen])
+
   // Fetch restaurants from API with filters (no extra /health round-trip — saves latency)
   const fetchRestaurants = useCallback(async (filters = {}) => {
     const filtersKey = serializeHomeFilters(filters)
@@ -1889,7 +1900,7 @@ export default function Home() {
       <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-4 sm:pt-5 lg:pt-8">
           {/* Sticky Section - Food Categories and Filters */}
           <motion.div
-            className="sticky z-[999] bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5 pb-2 sm:pb-3"
+            className={`${isFilterOpen ? 'hidden' : 'sticky'} z-[999] bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5 pb-2 sm:pb-3`}
             style={{ top: isDesktop ? "4.5rem" : `${mobileStickyHeaderHeight}px` }}
           >
           {/* Food Categories - Horizontal Scroll */}
@@ -2426,7 +2437,7 @@ export default function Home() {
       {/* Filter Modal - Bottom Sheet */}
       <AnimatePresence>
         {isFilterOpen && (
-          <div className="fixed inset-0 z-[100]">
+          <div className="fixed inset-0 z-[100000]">
             {/* Backdrop */}
             <motion.div
               className="absolute inset-0 bg-black/50"
@@ -2439,7 +2450,7 @@ export default function Home() {
 
             {/* Modal Content */}
             <motion.div
-              className="absolute bottom-0 left-0 right-0 bg-white dark:bg-[#1a1a1a] rounded-t-3xl max-h-[85vh] flex flex-col"
+              className="absolute bottom-0 left-0 right-0 z-[100001] bg-white dark:bg-[#1a1a1a] rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden isolate"
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
@@ -2466,9 +2477,9 @@ export default function Home() {
               </div>
 
               {/* Body */}
-              <div className="flex flex-1 overflow-hidden">
+              <div className="flex flex-1 min-h-0 overflow-hidden bg-white dark:bg-[#1a1a1a]">
                 {/* Left Sidebar - Tabs */}
-                <div className="w-24 sm:w-28 bg-gray-50 dark:bg-[#0a0a0a] border-r dark:border-gray-800 flex flex-col">
+                <div className="w-24 sm:w-28 shrink-0 bg-gray-50 dark:bg-[#0a0a0a] border-r dark:border-gray-800 flex flex-col">
                   {[
                     { id: 'sort', label: 'Sort By', icon: ArrowDownUp },
                     { id: 'time', label: 'Time', icon: Timer },
@@ -2505,7 +2516,7 @@ export default function Home() {
                 </div>
 
                 {/* Right Content Area - Scrollable */}
-                <div ref={rightContentRef} className="flex-1 overflow-y-auto p-4">
+                <div ref={rightContentRef} className="flex-1 min-w-0 min-h-0 overflow-y-auto bg-white dark:bg-[#1a1a1a] p-4">
                   {/* Sort By Tab */}
                   <div
                     ref={el => filterSectionRefs.current['sort'] = el}

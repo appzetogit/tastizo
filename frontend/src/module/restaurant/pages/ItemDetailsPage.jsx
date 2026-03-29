@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Trash2,
   Check,
+  Flame,
   ChevronDown,
   Edit as EditIcon,
   Plus,
@@ -43,6 +44,7 @@ export default function ItemDetailsPage() {
   const [itemSizeUnit, setItemSizeUnit] = useState("piece")
   const [itemDescription, setItemDescription] = useState("")
   const [foodType, setFoodType] = useState("Non-Veg")
+  const [isSpicy, setIsSpicy] = useState(false)
   const [basePrice, setBasePrice] = useState("0")
   const [preparationTime, setPreparationTime] = useState("")
   const [gst, setGst] = useState("5.0")
@@ -124,6 +126,7 @@ export default function ItemDetailsPage() {
         setItemSizeUnit(item.itemSizeUnit || "piece")
         setItemDescription(item.description || "")
         setFoodType(item.foodType === "Veg" ? "Veg" : (item.foodType === "Egg" ? "Egg" : "Non-Veg"))
+        setIsSpicy(item.isSpicy === true)
         setBasePrice(item.price?.toString() || "0")
         setPreparationTime(item.preparationTime || "")
         setGst(item.gst?.toString() || "5.0")
@@ -221,6 +224,7 @@ export default function ItemDetailsPage() {
             setItemSizeUnit(foundItem.itemSizeUnit || "piece")
             setItemDescription(foundItem.description || "")
             setFoodType(foundItem.foodType === "Veg" ? "Veg" : (foundItem.foodType === "Egg" ? "Egg" : "Non-Veg"))
+            setIsSpicy(foundItem.isSpicy === true)
             setBasePrice(foundItem.price?.toString() || "0")
             setPreparationTime(foundItem.preparationTime || "")
             setGst(foundItem.gst?.toString() || "5.0")
@@ -711,6 +715,7 @@ export default function ItemDetailsPage() {
         discount: null,
         originalPrice: null,
         foodType: foodType === "Egg" ? "Non-Veg" : foodType, // Menu model only supports Veg/Non-Veg
+        isSpicy: isSpicy,
         availabilityTimeStart: "12:01 AM",
         availabilityTimeEnd: "11:57 PM",
         description: itemDescription.trim(),
@@ -1108,6 +1113,20 @@ export default function ItemDetailsPage() {
               >
                 {foodType === "Egg" && <Check className="w-4 h-4" />}
                 <span>Egg</span>
+              </button>
+            </div>
+
+            <div className="mt-3">
+              <button
+                onClick={() => setIsSpicy(!isSpicy)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isSpicy
+                    ? "border-red-600 border-2 text-red-600 bg-red-50"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                <Flame className="w-4 h-4" />
+                <span>Spicy</span>
               </button>
             </div>
           </div>

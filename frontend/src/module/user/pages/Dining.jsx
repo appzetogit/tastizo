@@ -82,6 +82,17 @@ export default function Dining() {
   const [diningHeroBanner, setDiningHeroBanner] = useState(null)
 
   useEffect(() => {
+    if (!isFilterOpen) return undefined
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isFilterOpen])
+
+  useEffect(() => {
     const fetchDiningHeroBanner = async () => {
       try {
         const response = await api.get('/hero-banners/dining/public')
@@ -377,7 +388,7 @@ export default function Dining() {
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-6 sm:pt-8 md:pt-10 lg:pt-10 pb-6 md:pb-8 lg:pb-10">
+      <div className={`${isFilterOpen ? 'hidden' : 'block'} max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-6 sm:pt-8 md:pt-10 lg:pt-10 pb-6 md:pb-8 lg:pb-10`}>
         {/* Categories Section */}
         <div className="mb-6 lg:mb-12">
           <div className="mb-4 px-1 lg:text-center lg:max-w-2xl lg:mx-auto lg:mb-8">
@@ -602,7 +613,7 @@ export default function Dining() {
 
       {/* Filter Modal */}
       {isFilterOpen && (
-        <div className="fixed inset-0 z-[100]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+        <div className="fixed inset-0 z-[100000]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/50"
@@ -610,7 +621,7 @@ export default function Dining() {
           />
 
           {/* Modal Content */}
-          <div className="absolute bottom-0 left-0 right-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-4xl bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl max-h-[85vh] md:max-h-[90vh] flex flex-col animate-[slideUp_0.3s_ease-out]">
+          <div className="absolute bottom-0 left-0 right-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-4xl z-[100001] bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl max-h-[85vh] md:max-h-[90vh] flex flex-col overflow-hidden isolate animate-[slideUp_0.3s_ease-out]">
             {/* Header */}
             <div className="flex items-center justify-between px-4 md:px-6 py-4 md:py-5 border-b dark:border-gray-800">
               <h2 className="text-lg md:text-xl font-bold text-gray-900 dark:text-white">Filters and sorting</h2>
@@ -627,9 +638,9 @@ export default function Dining() {
             </div>
 
             {/* Body */}
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 min-h-0 overflow-hidden bg-white dark:bg-[#1a1a1a]">
               {/* Left Sidebar - Tabs */}
-              <div className="w-24 sm:w-28 md:w-32 bg-gray-50 dark:bg-[#0a0a0a] border-r dark:border-gray-800 flex flex-col">
+              <div className="w-24 sm:w-28 md:w-32 shrink-0 bg-gray-50 dark:bg-[#0a0a0a] border-r dark:border-gray-800 flex flex-col">
                 {[
                   { id: 'sort', label: 'Sort By', icon: ArrowDownUp },
                   { id: 'time', label: 'Time', icon: Timer },
@@ -658,7 +669,7 @@ export default function Dining() {
               </div>
 
               {/* Right Content Area - Scrollable */}
-              <div ref={rightContentRef} className="flex-1 overflow-y-auto p-4 md:p-6">
+              <div ref={rightContentRef} className="flex-1 min-w-0 min-h-0 overflow-y-auto bg-white dark:bg-[#1a1a1a] p-4 md:p-6">
                 {/* Sort By Tab */}
                 {activeFilterTab === 'sort' && (
                   <div className="space-y-4 mb-8">

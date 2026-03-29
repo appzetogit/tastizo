@@ -1269,6 +1269,7 @@ export default function RestaurantDetails() {
                         const quantity = quantities[item.id] || 0
                         // Determine veg/non-veg based on foodType
                         const isVeg = item.foodType === "Veg"
+                        const isEgg = item.foodType === "Egg"
 
                         // Debug: Log preparationTime for troubleshooting
                         if (item.preparationTime) {
@@ -1288,6 +1289,10 @@ export default function RestaurantDetails() {
                                 {isVeg ? (
                                   <div className="w-4 h-4 border-2 border-green-600 flex items-center justify-center rounded-sm flex-shrink-0">
                                     <div className="w-2 h-2 bg-green-600 rounded-full"></div>
+                                  </div>
+                                ) : isEgg ? (
+                                  <div className="w-4 h-4 border-2 border-amber-700 flex items-center justify-center rounded-sm flex-shrink-0">
+                                    <div className="w-2 h-2 bg-amber-700 rounded-full"></div>
                                   </div>
                                 ) : (
                                   <div className="w-4 h-4 border-2 border-orange-600 flex items-center justify-center rounded-sm flex-shrink-0">
@@ -1487,6 +1492,7 @@ export default function RestaurantDetails() {
                                   const quantity = quantities[item.id] || 0
                                   // Determine veg/non-veg based on foodType
                                   const isVeg = item.foodType === "Veg"
+                                  const isEgg = item.foodType === "Egg"
 
                                   // Debug: Log preparationTime for troubleshooting
                                   if (item.preparationTime) {
@@ -1506,6 +1512,10 @@ export default function RestaurantDetails() {
                                           {isVeg ? (
                                             <div className="w-4 h-4 border-2 border-green-600 flex items-center justify-center rounded-sm flex-shrink-0">
                                               <div className="w-2 h-2 bg-green-600 rounded-full"></div>
+                                            </div>
+                                          ) : isEgg ? (
+                                            <div className="w-4 h-4 border-2 border-amber-700 flex items-center justify-center rounded-sm flex-shrink-0">
+                                              <div className="w-2 h-2 bg-amber-700 rounded-full"></div>
                                             </div>
                                           ) : (
                                             <div className="w-4 h-4 border-2 border-orange-600 flex items-center justify-center rounded-sm flex-shrink-0">
