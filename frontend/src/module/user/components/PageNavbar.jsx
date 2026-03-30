@@ -835,8 +835,9 @@ export default function PageNavbar({
   const mainLocationName = navLines.main || "Select"
   const subLocationName = navLines.sub || ""
 
-  const handleLocationClick = () => {
-    // Open location selector overlay
+  const handleLocationClick = (e) => {
+    e?.preventDefault?.()
+    e?.stopPropagation?.()
     openLocationSelector()
   }
 
@@ -856,6 +857,7 @@ export default function PageNavbar({
         <div className="flex md:hidden items-center gap-3 sm:gap-4 min-w-0">
           {/* Location Button */}
           <Button
+            type="button"
             variant="ghost"
             onClick={handleLocationClick}
             disabled={loading}

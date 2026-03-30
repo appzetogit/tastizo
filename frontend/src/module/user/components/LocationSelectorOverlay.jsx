@@ -3296,10 +3296,6 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             ref={inputRef}
             value={searchValue}
             onClick={handleAddAddress}
-            onFocus={(e) => {
-              e.target.blur()
-              handleAddAddress()
-            }}
             readOnly
             placeholder="Search for area, street name..."
             className="pl-12 pr-4 h-12 w-full bg-gray-50 dark:bg-[#2a2a2a] border-gray-200 dark:border-gray-700 focus:border-primary-orange dark:focus:border-primary-orange rounded-xl text-base dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
