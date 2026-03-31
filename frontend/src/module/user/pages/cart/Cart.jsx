@@ -2101,7 +2101,7 @@ export default function Cart() {
 
       {/* Placing Order Modal */}
       {showPlacingOrder && (
-        <div className="fixed inset-0 z-[60] h-screen w-full max-w-full overflow-hidden">
+        <div className="fixed inset-0 z-[60] h-screen w-screen overflow-hidden">
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
 
@@ -2191,7 +2191,7 @@ export default function Cart() {
       {/* Order Success Celebration Page */}
       {showOrderSuccess && (
         <div
-          className="fixed inset-0 z-[70] bg-white flex flex-col items-center justify-center h-screen w-full max-w-full overflow-hidden"
+          className="fixed inset-0 z-[70] bg-white flex flex-col items-center justify-center h-screen w-screen overflow-hidden"
           style={{ animation: 'fadeIn 0.3s ease-out' }}
         >
           {/* Confetti Background */}

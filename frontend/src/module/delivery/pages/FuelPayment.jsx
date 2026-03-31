@@ -95,7 +95,7 @@ export default function TipsStatement() {
       </div>
 
       {/* Main Content */}
-      <div className="flex mt-64 text-center flex-col w-full max-w-full min-h-screen content-center align-center overflow-x-hidden">
+      <div className="flex mt-64 text-center flex-col w-screen h-screen content-center  align-center ">
         <div className="mx-auto">
           <Wallet className="w-24 h-24 mx-auto text-black" />
         </div>
