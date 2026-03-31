@@ -160,7 +160,7 @@ html:focus, body:focus, #root:focus {
 /* Prevent horizontal page drift/white edge without affecting sticky containers */
 html,
 body {
-  overflow-x: hidden !important;
+  overflow-x: clip !important;
   overscroll-behavior-x: none;
 }
 
@@ -168,15 +168,11 @@ body {
 
 @layer utilities {
   .scrollbar-hide {
-    -ms-overflow-style: none !important; /* IE and Edge */
-    scrollbar-width: none !important; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
   }
   .scrollbar-hide::-webkit-scrollbar {
-    display: none !important; /* Chrome, Safari, Opera */
-    width: 0 !important;
-    height: 0 !important;
-    -webkit-appearance: none !important;
-    background: transparent !important;
+    display: none; /* Chrome, Safari, Opera */
   }
 
   @keyframes scroll {
