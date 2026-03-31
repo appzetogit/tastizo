@@ -407,7 +407,7 @@ export default function GoogleMapsTracking({
   }, [deliveryLocation]);
 
   const containerClasses = isFullScreen
-    ? "fixed inset-0 z-[100] bg-white w-screen h-screen flex flex-col"
+    ? "fixed inset-0 z-[100] bg-white w-full max-w-full h-full overflow-hidden flex flex-col"
     : "relative mx-4 mt-4 rounded-lg overflow-hidden shadow-sm";
 
   if (loadError) {
@@ -590,4 +590,3 @@ export default function GoogleMapsTracking({
     </div>
   )
 }
-
