@@ -939,7 +939,7 @@ export default function RestaurantDetails() {
     return (
     <AnimatedPage
       id="scrollingelement"
-      className={`min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col transition-all duration-300 ${shouldShowGrayscale ? 'grayscale opacity-75' : ''
+      className={`min-h-screen pt-2 bg-white dark:bg-[#0a0a0a] flex flex-col transition-all duration-300 ${shouldShowGrayscale ? 'grayscale opacity-75' : ''
         }`}
     >
       {loadingRestaurant ? (
