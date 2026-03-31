@@ -19,7 +19,7 @@ const menuItemSchema = new mongoose.Schema({
   stock: { type: mongoose.Schema.Types.Mixed, default: 'Unlimited' },
   discount: { type: mongoose.Schema.Types.Mixed, default: null }, // Can be number, string, or null
   originalPrice: { type: Number, default: null },
-  foodType: { type: String, enum: ['Veg', 'Non-Veg'], default: 'Non-Veg' },
+  foodType: { type: String, enum: ['Veg', 'Non-Veg', 'Egg'], default: 'Non-Veg' },
   availabilityTimeStart: { type: String, default: '12:01 AM' },
   availabilityTimeEnd: { type: String, default: '11:57 PM' },
   description: { type: String, default: '' },

@@ -1297,8 +1297,8 @@ export default function RestaurantDetails() {
                                     <div className="w-2 h-2 bg-green-600 rounded-full"></div>
                                   </div>
                                 ) : isEgg ? (
-                                  <div className="w-4 h-4 border-2 border-amber-700 flex items-center justify-center rounded-sm flex-shrink-0">
-                                    <div className="w-2 h-2 bg-amber-700 rounded-full"></div>
+                                  <div className="w-4 h-4 border-2 border-[#795548] flex items-center justify-center rounded-sm flex-shrink-0">
+                                    <div className="w-2 h-2 bg-[#795548] rounded-full"></div>
                                   </div>
                                 ) : (
                                   <div className="w-4 h-4 border-2 border-orange-600 flex items-center justify-center rounded-sm flex-shrink-0">
@@ -1520,8 +1520,8 @@ export default function RestaurantDetails() {
                                               <div className="w-2 h-2 bg-green-600 rounded-full"></div>
                                             </div>
                                           ) : isEgg ? (
-                                            <div className="w-4 h-4 border-2 border-amber-700 flex items-center justify-center rounded-sm flex-shrink-0">
-                                              <div className="w-2 h-2 bg-amber-700 rounded-full"></div>
+                                            <div className="w-4 h-4 border-2 border-[#795548] flex items-center justify-center rounded-sm flex-shrink-0">
+                                              <div className="w-2 h-2 bg-[#795548] rounded-full"></div>
                                             </div>
                                           ) : (
                                             <div className="w-4 h-4 border-2 border-orange-600 flex items-center justify-center rounded-sm flex-shrink-0">

@@ -74,6 +74,7 @@ export default function FoodsList() {
                       _id: item._id,
                       name: item.name || "Unnamed Item",
                       image: item.image || item.images?.[0] || null,
+                      description: item.description || "",
                       priority: "Normal", // Default priority
                       status: item.isAvailable !== false && item.approvalStatus !== 'rejected',
                       restaurantId: restaurantId,
@@ -97,6 +98,7 @@ export default function FoodsList() {
                           _id: item._id,
                           name: item.name || "Unnamed Item",
                           image: item.image || item.images?.[0] || null,
+                          description: item.description || "",
                           priority: "Normal", // Default priority
                           status: item.isAvailable !== false && item.approvalStatus !== 'rejected',
                           restaurantId: restaurantId,
@@ -263,6 +265,12 @@ export default function FoodsList() {
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   Title
                 </th>
+                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  Price
+                </th>
+                <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  Status
+                </th>
                 <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   Action
                 </th>
@@ -271,7 +279,7 @@ export default function FoodsList() {
             <tbody className="bg-white divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-20 text-center">
+                  <td colSpan={6} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
                       <p className="text-sm text-slate-500">Loading foods from restaurants...</p>
@@ -280,7 +288,7 @@ export default function FoodsList() {
                 </tr>
               ) : filteredFoods.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-20 text-center">
+                  <td colSpan={6} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
                       <p className="text-sm text-slate-500">No food items match your search</p>
@@ -308,7 +316,27 @@ export default function FoodsList() {
                             {food.restaurantName}
                           </span>
                         )}
+                        {food.description && (
+                          <span className="text-xs text-slate-500 mt-0.5">
+                            {food.description}
+                          </span>
+                        )}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-sm font-medium text-slate-900">
+                        ₹{Number(food.price || 0).toFixed(2)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${food.approvalStatus === 'approved'
+                        ? 'bg-green-100 text-green-700'
+                        : food.approvalStatus === 'rejected'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                        {food.approvalStatus || 'pending'}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <button

@@ -714,7 +714,7 @@ export default function ItemDetailsPage() {
         stock: "Unlimited",
         discount: null,
         originalPrice: null,
-        foodType: foodType === "Egg" ? "Non-Veg" : foodType, // Menu model only supports Veg/Non-Veg
+        foodType: foodType, // Allowing Egg as it is now supported in the model
         isSpicy: isSpicy,
         availabilityTimeStart: "12:01 AM",
         availabilityTimeEnd: "11:57 PM",

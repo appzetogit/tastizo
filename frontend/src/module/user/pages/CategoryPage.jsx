@@ -11,7 +11,6 @@ import { toast } from "sonner"
 // Import shared food images - prevents duplication
 import { foodImages } from "@/constants/images"
 import api from "@/lib/api"
-import offerImage from "@/assets/offerimage.png"
 import { restaurantAPI, adminAPI } from "@/lib/api"
 import { useProfile } from "../context/ProfileContext"
 import { useLocation } from "../hooks/useLocation"
@@ -73,7 +72,7 @@ export default function CategoryPage() {
 
           // Transform API categories to match expected format
           const transformedCategories = [
-            { id: 'all', name: "All", image: offerImage, slug: 'all' },
+            { id: 'all', name: "All", image: null, slug: 'all' },
             ...categoriesArray.map((cat) => ({
               id: cat.slug || cat.id,
               name: cat.name,
@@ -99,12 +98,12 @@ export default function CategoryPage() {
           setCategoryKeywords(keywordsMap)
         } else {
           // Keep default "All" category on error
-          setCategories([{ id: 'all', name: "All", image: foodImages[7] || foodImages[0], slug: 'all' }])
+          setCategories([{ id: 'all', name: "All", image: null, slug: 'all' }])
         }
       } catch (error) {
         console.error('Error fetching categories:', error)
         // Keep default "All" category on error
-        setCategories([{ id: 'all', name: "All", image: foodImages[7] || foodImages[0], slug: 'all' }])
+        setCategories([{ id: 'all', name: "All", image: null, slug: 'all' }])
       } finally {
         setLoadingCategories(false)
       }
@@ -679,11 +678,10 @@ export default function CategoryPage() {
   const handleCategorySelect = (category) => {
     const categorySlug = category.slug || category.id
     setSelectedCategory(categorySlug)
-    // Update URL to reflect category change
-    if (categorySlug === 'all') {
-      navigate('/user/category/all')
-    } else {
-      navigate(`/user/category/${categorySlug}`)
+    if (typeof window !== "undefined") {
+      const nextUrl =
+        categorySlug === 'all' ? '/user/category/all' : `/user/category/${categorySlug}`
+      window.history.replaceState(window.history.state, "", nextUrl)
     }
   }
 
@@ -735,7 +733,7 @@ export default function CategoryPage() {
                 <span className="text-sm text-gray-600 dark:text-gray-400">Loading categories...</span>
               </div>
             ) : (
-              categories && categories.length > 0 ? categories.map((cat) => {
+              categories && categories.length > 0 ? categories.filter((cat) => (cat.slug || cat.id) !== 'all').map((cat) => {
                 const categorySlug = cat.slug || cat.id
                 const isSelected = selectedCategory === categorySlug || selectedCategory === cat.id
                 return (
@@ -759,7 +757,7 @@ export default function CategoryPage() {
                           }}
                         />
                       </div>
-                    ) : (
+                    ) : categorySlug === 'all' ? null : (
                       <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center border-2 transition-all ${isSelected ? 'border-green-600 shadow-lg bg-green-50 dark:bg-green-900/20' : 'border-transparent'
                         }`}>
                         <span className="text-xl md:text-2xl">🍽️</span>
