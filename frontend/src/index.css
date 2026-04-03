@@ -192,8 +192,8 @@ body {
   }
 
   /* Bottom nav bars used across user/delivery/restaurant/usermain mobile screens */
-  [class*="md:hidden fixed bottom-0 left-0 right-0 bg-white"][class*="border-t border-gray-200"][class*="shadow-lg z-50"] {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+  .md\:hidden.fixed.bottom-0.left-0.right-0.border-t.border-gray-200.z-50.shadow-lg {
+    padding-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 8px), 16px);
   }
 
   /* Fixed bottom sheets / CTA containers anchored to viewport bottom */
@@ -206,7 +206,7 @@ body {
   /* CSS-only auto hide/reveal for bottom nav during page scroll.
      If scroll-driven animations are unsupported, nav remains visible. */
   @supports (animation-timeline: scroll(root block)) {
-    [class*="md:hidden fixed bottom-0 left-0 right-0 bg-white"][class*="border-t border-gray-200"][class*="shadow-lg z-50"] {
+    .md\:hidden.fixed.bottom-0.left-0.right-0.border-t.border-gray-200.z-50.shadow-lg {
       will-change: transform;
       animation-name: mobile-bottom-nav-autohide;
       animation-timing-function: linear;
