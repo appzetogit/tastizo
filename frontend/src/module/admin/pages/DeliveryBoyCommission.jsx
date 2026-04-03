@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react"
-import { Search, Edit, Trash2, IndianRupee, Settings, Check, Columns, MapPin, Loader2 } from "lucide-react"
+import { Search, Edit, Trash2, IndianRupee, Settings, Check, Columns, MapPin, Loader2, Plus } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { adminAPI } from "@/lib/api"
 import { API_BASE_URL } from "@/lib/api/config"
@@ -34,6 +34,12 @@ export default function DeliveryBoyCommission() {
     actions: true,
   })
 
+  const withSerialNumbers = (items = []) =>
+    (Array.isArray(items) ? items : []).map((item, index) => ({
+      ...item,
+      sl: index + 1,
+    }))
+
   const filteredCommissions = useMemo(() => {
     if (!searchQuery.trim()) {
       return commissions
@@ -41,7 +47,7 @@ export default function DeliveryBoyCommission() {
     
     const query = searchQuery.toLowerCase().trim()
     return commissions.filter(commission =>
-      commission.name.toLowerCase().includes(query) ||
+      (commission.name || "").toLowerCase().includes(query) ||
       commission.minDistance.toString().includes(query) ||
       (commission.maxDistance !== null && commission.maxDistance.toString().includes(query))
     )
@@ -76,7 +82,7 @@ export default function DeliveryBoyCommission() {
   const fetchCommissionRules = async () => {
     try {
       setLoading(true)
-      const response = await adminAPI.getCommissionRules({ status: true })
+      const response = await adminAPI.getCommissionRules()
       
       // Handle different response structures
       let commissionsData = null
@@ -89,12 +95,7 @@ export default function DeliveryBoyCommission() {
       }
       
       if (commissionsData && Array.isArray(commissionsData)) {
-        // Add serial numbers based on array index
-        const commissionsWithSl = commissionsData.map((commission, index) => ({
-          ...commission,
-          sl: index + 1
-        }))
-        setCommissions(commissionsWithSl)
+        setCommissions(withSerialNumbers(commissionsData))
       } else {
         setCommissions([])
       }
@@ -135,9 +136,9 @@ export default function DeliveryBoyCommission() {
     try {
       const newStatus = !commission.status
       await adminAPI.toggleCommissionRuleStatus(commission._id, newStatus)
-      setCommissions(commissions.map(c =>
+      setCommissions(withSerialNumbers(commissions.map(c =>
         c._id === commission._id ? { ...c, status: newStatus } : c
-      ))
+      )))
       toast.success('Commission rule status updated successfully')
     } catch (error) {
       console.error('Error toggling status:', error)
@@ -173,18 +174,14 @@ export default function DeliveryBoyCommission() {
   const confirmDelete = async () => {
     if (!selectedCommission) return
     
-    // Prevent deletion if it's the only rule - always keep at least one rule
-    if (commissions.length <= 1) {
-      toast.error('Cannot delete the only commission rule. At least one rule must exist.')
-      setIsDeleteOpen(false)
-      setSelectedCommission(null)
-      return
-    }
-    
     try {
       setDeleting(true)
       await adminAPI.deleteCommissionRule(selectedCommission._id)
-      setCommissions(commissions.filter(commission => commission._id !== selectedCommission._id))
+      setCommissions(
+        withSerialNumbers(
+          commissions.filter((commission) => commission._id !== selectedCommission._id)
+        )
+      )
       setIsDeleteOpen(false)
       setSelectedCommission(null)
       toast.success('Commission rule deleted successfully')
@@ -247,19 +244,13 @@ export default function DeliveryBoyCommission() {
             ...commission,
             sl: selectedCommission.sl
           }
-          setCommissions(commissions.map(c =>
+          setCommissions(withSerialNumbers(commissions.map(c =>
             c._id === selectedCommission._id ? updatedCommission : c
-          ))
+          )))
           toast.success('Commission rule updated successfully')
         }
       } else {
-        // Only allow one commission rule - check if one already exists
-        if (commissions.length > 0) {
-          toast.error('Only one commission rule is allowed. Please edit the existing rule instead.')
-          return
-        }
-        
-        // Create new commission (only if no existing rule)
+        // Create new commission rule
         const response = await adminAPI.createCommissionRule(commissionData)
         let commission = null
         if (response?.data?.success && response?.data?.data?.commission) {
@@ -271,11 +262,8 @@ export default function DeliveryBoyCommission() {
         }
         
         if (commission) {
-          const newCommission = {
-            ...commission,
-            sl: 1
-          }
-          setCommissions([newCommission])
+          const newCommission = { ...commission }
+          setCommissions((prev) => withSerialNumbers([...prev, newCommission]))
           toast.success('Commission rule created successfully')
         }
       }
@@ -400,6 +388,13 @@ export default function DeliveryBoyCommission() {
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleAdd}
+                className="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                Add Rule
+              </button>
               <button 
                 onClick={() => setIsSettingsOpen(true)}
                 className="p-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-all"
@@ -548,15 +543,13 @@ export default function DeliveryBoyCommission() {
                             >
                               <Edit className="w-4 h-4" />
                             </button>
-                            {commissions.length > 1 && (
-                              <button
-                                onClick={() => handleDelete(commission)}
-                                className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleDelete(commission)}
+                              className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </td>
                       )}
