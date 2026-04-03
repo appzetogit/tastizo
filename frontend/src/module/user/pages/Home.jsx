@@ -1928,7 +1928,7 @@ export default function Home() {
       <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-4 sm:pt-5 lg:pt-8">
           {/* Sticky Section - Food Categories and Filters */}
           <motion.div
-            className={`${isFilterOpen ? 'hidden' : 'sticky'} relative z-[999] bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5 pb-2 sm:pb-3`}
+            className={`${isFilterOpen ? 'hidden' : 'sticky'} relative z-[999] bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5 pb-2 sm:pb-3 overflow-hidden`}
             style={{ top: isDesktop ? "4.5rem" : "0rem" }}
           >
           <div className="pointer-events-none absolute -top-3 inset-x-0 h-3 bg-white dark:bg-[#0a0a0a]" />
