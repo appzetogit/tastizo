@@ -138,6 +138,7 @@
   body {
     @apply bg-background text-foreground m-0 min-h-screen;
     min-height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     scrollbar-width: none !important;
     -ms-overflow-style: none !important;
   }
@@ -180,6 +181,48 @@ body {
   body {
     overflow-x: hidden !important;
     max-width: 100%;
+  }
+}
+
+/* Mobile WebView bottom safe-area handling:
+   keep fixed bottom UI above OS nav buttons without adding desktop gaps. */
+@media (max-width: 767px) and (hover: none) and (pointer: coarse) {
+  body {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+  }
+
+  /* Bottom nav bars used across user/delivery/restaurant/usermain mobile screens */
+  [class*="md:hidden fixed bottom-0 left-0 right-0 bg-white"][class*="border-t border-gray-200"][class*="shadow-lg z-50"] {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+  }
+
+  /* Fixed bottom sheets / CTA containers anchored to viewport bottom */
+  [class*="fixed bottom-0 left-0 right-0"][class*="rounded-t-"],
+  [class*="fixed bottom-0 left-0 w-full"],
+  [class*="fixed inset-x-0 bottom-0"] {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
+  }
+
+  /* CSS-only auto hide/reveal for bottom nav during page scroll.
+     If scroll-driven animations are unsupported, nav remains visible. */
+  @supports (animation-timeline: scroll(root block)) {
+    [class*="md:hidden fixed bottom-0 left-0 right-0 bg-white"][class*="border-t border-gray-200"][class*="shadow-lg z-50"] {
+      will-change: transform;
+      animation-name: mobile-bottom-nav-autohide;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 120px;
+    }
+  }
+}
+
+@keyframes mobile-bottom-nav-autohide {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(100% + env(safe-area-inset-bottom, 0px) + 8px));
   }
 }
 
