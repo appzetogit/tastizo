@@ -188,19 +188,19 @@ body {
    keep fixed bottom UI above OS nav buttons without adding desktop gaps. */
 @media (max-width: 767px) and (hover: none) and (pointer: coarse) {
   body {
-    padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 20px);
   }
 
   /* Bottom nav bars used across user/delivery/restaurant/usermain mobile screens */
   .md\:hidden.fixed.bottom-0.left-0.right-0.border-t.border-gray-200.z-50.shadow-lg {
-    padding-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 8px), 16px);
+    padding-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 8px), 24px);
   }
 
   /* Fixed bottom sheets / CTA containers anchored to viewport bottom */
   [class*="fixed bottom-0 left-0 right-0"][class*="rounded-t-"],
   [class*="fixed bottom-0 left-0 w-full"],
   [class*="fixed inset-x-0 bottom-0"] {
-    padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
   }
 
   /* CSS-only auto hide/reveal for bottom nav during page scroll.
