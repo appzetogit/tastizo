@@ -1496,7 +1496,7 @@ export const adminAPI = {
 
   // Get refund requests
   getRefundRequests: (params = {}) => {
-    return apiClient.get("/api/admin/refund-requests", { params });
+    return apiClient.get("/admin/refund-requests", { params });
   },
 
   // Process refund (supports both old and new endpoints)

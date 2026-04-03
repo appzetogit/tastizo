@@ -1580,7 +1580,7 @@ export const getRefundRequests = asyncHandler(async (req, res) => {
       restaurant,
     } = req.query;
     // Build query for restaurant cancelled orders with pending refunds
-    const query = {
+    let query = {
       status: "cancelled",
       cancellationReason: {
         $regex:
