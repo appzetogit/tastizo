@@ -164,6 +164,15 @@ body {
   overscroll-behavior-x: none;
 }
 
+/* WebView fallback: some engines ignore `overflow-x: clip` and allow 1px horizontal drift */
+@supports not (overflow: clip) {
+  html,
+  body {
+    overflow-x: hidden !important;
+    max-width: 100%;
+  }
+}
+
 
 
 @layer utilities {

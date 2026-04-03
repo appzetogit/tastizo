@@ -16,7 +16,8 @@ const offerSchema = new mongoose.Schema(
     restaurant: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Restaurant',
-      required: true,
+      required: false,
+      default: null,
       index: true,
     },
     goalId: {

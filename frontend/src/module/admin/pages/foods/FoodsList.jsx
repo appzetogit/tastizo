@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react"
 import { Search, Trash2, Loader2 } from "lucide-react"
-import { adminAPI, restaurantAPI } from "@/lib/api"
+import { adminAPI } from "@/lib/api"
 import { toast } from "sonner"
 
 function FoodImage({ src, name }) {
@@ -41,91 +41,15 @@ export default function FoodsList() {
     const fetchAllFoods = async () => {
       try {
         setLoading(true)
-        
-        // First, fetch all restaurants
-        const restaurantsResponse = await adminAPI.getRestaurants({ limit: 1000 })
-        const restaurants = restaurantsResponse?.data?.data?.restaurants || 
-                          restaurantsResponse?.data?.restaurants || 
-                          []
-        
-        if (restaurants.length === 0) {
-          setFoods([])
-          setLoading(false)
-          return
-        }
-
-        // Fetch menu for each restaurant and extract all food items
-        const allFoods = []
-        
-        for (const restaurant of restaurants) {
-          try {
-            const restaurantId = restaurant._id || restaurant.id
-            const menuResponse = await restaurantAPI.getMenuByRestaurantId(restaurantId)
-            const menu = menuResponse?.data?.data?.menu || menuResponse?.data?.menu
-            
-            if (menu && menu.sections) {
-              // Extract items from sections and subsections
-              menu.sections.forEach((section) => {
-                // Items directly in section
-                if (section.items && Array.isArray(section.items)) {
-                  section.items.forEach((item) => {
-                    allFoods.push({
-                      id: item.id || `${restaurantId}-${section.id}-${item.name}`,
-                      _id: item._id,
-                      name: item.name || "Unnamed Item",
-                      image: item.image || item.images?.[0] || null,
-                      description: item.description || "",
-                      priority: "Normal", // Default priority
-                      status: item.isAvailable !== false && item.approvalStatus !== 'rejected',
-                      restaurantId: restaurantId,
-                      restaurantName: restaurant.name || "Unknown Restaurant",
-                      sectionName: section.name || "Unknown Section",
-                      price: item.price || 0,
-                      foodType: item.foodType || "Non-Veg",
-                      approvalStatus: item.approvalStatus || 'pending',
-                      originalItem: item // Keep original item data
-                    })
-                  })
-                }
-                
-                // Items in subsections
-                if (section.subsections && Array.isArray(section.subsections)) {
-                  section.subsections.forEach((subsection) => {
-                    if (subsection.items && Array.isArray(subsection.items)) {
-                      subsection.items.forEach((item) => {
-                        allFoods.push({
-                          id: item.id || `${restaurantId}-${section.id}-${subsection.id}-${item.name}`,
-                          _id: item._id,
-                          name: item.name || "Unnamed Item",
-                          image: item.image || item.images?.[0] || null,
-                          description: item.description || "",
-                          priority: "Normal", // Default priority
-                          status: item.isAvailable !== false && item.approvalStatus !== 'rejected',
-                          restaurantId: restaurantId,
-                          restaurantName: restaurant.name || "Unknown Restaurant",
-                          sectionName: section.name || "Unknown Section",
-                          subsectionName: subsection.name || "Unknown Subsection",
-                          price: item.price || 0,
-                          foodType: item.foodType || "Non-Veg",
-                          approvalStatus: item.approvalStatus || 'pending',
-                          originalItem: item // Keep original item data
-                        })
-                      })
-                    }
-                  })
-                }
-              })
-            }
-          } catch (error) {
-            // Silently skip restaurants that don't have menus or have errors
-            console.warn(`Failed to fetch menu for restaurant ${restaurant._id || restaurant.id}:`, error.message)
-          }
-        }
-        
-        setFoods(allFoods)
+        const response = await adminAPI.getFoods()
+        const list =
+          response?.data?.data?.foods ||
+          response?.data?.foods ||
+          []
+        setFoods(Array.isArray(list) ? list : [])
       } catch (error) {
         console.error("Error fetching foods:", error)
-        toast.error("Failed to load foods from restaurants")
+        toast.error("Failed to load foods")
         setFoods([])
       } finally {
         setLoading(false)

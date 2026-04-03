@@ -31,6 +31,8 @@ import {
   updateRestaurantDiningSettings,
   updateRestaurantDiningCommission,
   getAllOffers,
+  createAdminOffer,
+  getAllFoods,
   getRestaurantAnalytics,
   getCustomerWalletReport,
 } from "../controllers/adminController.js";
@@ -421,12 +423,14 @@ router.put("/restaurant-complaints/:id/status", updateComplaintStatus);
 router.put("/restaurant-complaints/:id/notes", updateInternalNotes);
 
 // Food Approval Management
+router.get("/foods", getAllFoods);
 router.get("/food-approvals", getPendingFoodApprovals);
 router.post("/food-approvals/:id/approve", approveFoodItem);
 router.post("/food-approvals/:id/reject", rejectFoodItem);
 
 // Offers Management
 router.get("/offers", getAllOffers);
+router.post("/offers", createAdminOffer);
 
 // Zone Management
 router.use("/zones", zoneRoutes);

@@ -16,6 +16,11 @@ const adminCategoryManagementSchema = new mongoose.Schema(
       trim: true,
       enum: ['Starters', 'Main course', 'Desserts', 'Beverages', 'Varieties'],
     },
+    dietType: {
+      type: String,
+      enum: ['Veg', 'Non-Veg', 'Both'],
+      default: 'Both',
+    },
     priority: {
       type: String,
       enum: ['High', 'Normal', 'Low'],

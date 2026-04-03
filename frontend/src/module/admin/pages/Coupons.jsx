@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { Search } from "lucide-react"
 import { adminAPI } from "@/lib/api"
+import { Link } from "react-router-dom"
 
 export default function Coupons() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -53,12 +54,12 @@ export default function Coupons() {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
             <h1 className="text-2xl font-bold text-slate-900">Restaurant Offers & Coupons</h1>
-            <a
-              href="/admin/dining-coupons"
+            <Link
+              to="/admin/coupons/new"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
             >
               ADD COUPON
-            </a>
+            </Link>
           </div>
           
           {/* Search Bar */}

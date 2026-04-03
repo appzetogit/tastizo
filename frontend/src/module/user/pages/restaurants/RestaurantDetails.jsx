@@ -97,12 +97,12 @@ export default function RestaurantDetails() {
   const [highlightedSection, setHighlightedSection] = useState(null)
   const [filters, setFilters] = useState({
     sortBy: null, // "low-to-high" | "high-to-low"
-    vegNonVeg: null, // "veg" | "non-veg"
+    vegNonVeg: null, // "veg" | "non-veg" | "egg"
   })
 
-  // When global Veg Mode is enabled, ensure local filter is never set to "non-veg"
+  // When global Veg Mode is enabled, ensure local filter is never set to non-veg/egg.
   useEffect(() => {
-    if (vegMode && filters.vegNonVeg === "non-veg") {
+    if (vegMode && (filters.vegNonVeg === "non-veg" || filters.vegNonVeg === "egg")) {
       setFilters((prev) => ({
         ...prev,
         vegNonVeg: null,
@@ -807,13 +807,13 @@ export default function RestaurantDetails() {
       }
 
       // VegMode filter - when vegMode is ON and no local override is selected,
-      // show only Veg items. If user explicitly selects Veg/Non-veg filter,
+      // show only Veg items. If user explicitly selects Veg/Non-veg/Egg filter,
       // that local choice takes precedence over global vegMode.
       if (vegMode === true && !filters.vegNonVeg) {
         if (item.foodType !== "Veg") return false
       }
 
-      // Veg/Non-veg filter (local filter override - has higher priority)
+      // Veg/Non-veg/Egg filter (local filter override - has higher priority)
       if (filters.vegNonVeg === "veg") {
         // Show only veg items
         if (item.foodType !== "Veg") return false
@@ -821,6 +821,10 @@ export default function RestaurantDetails() {
       if (filters.vegNonVeg === "non-veg") {
         // Show only non-veg items
         if (item.foodType !== "Non-Veg") return false
+      }
+      if (filters.vegNonVeg === "egg") {
+        // Show only egg items
+        if (item.foodType !== "Egg") return false
       }
 
 
@@ -1150,6 +1154,26 @@ export default function RestaurantDetails() {
                   <div className="h-3 w-3 rounded-full bg-amber-700" />
                   Non-veg
                   {filters.vegNonVeg === "non-veg" && (
+                    <X className="h-3 w-3 text-gray-600" />
+                  )}
+                </Button>
+              )}
+              {!vegMode && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`flex items-center gap-1.5 whitespace-nowrap border-gray-300 bg-white rounded-full ${filters.vegNonVeg === "egg" ? "border-[#795548] bg-amber-50" : ""
+                    }`}
+                  onClick={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      vegNonVeg: prev.vegNonVeg === "egg" ? null : "egg",
+                    }))
+                  }
+                >
+                  <div className="h-3 w-3 rounded-full bg-[#795548]" />
+                  Egg
+                  {filters.vegNonVeg === "egg" && (
                     <X className="h-3 w-3 text-gray-600" />
                   )}
                 </Button>
@@ -1857,9 +1881,9 @@ export default function RestaurantDetails() {
                       </div>
                     </div>
 
-                    {/* Veg/Non-veg preference */}
+                    {/* Veg/Non-veg/Egg preference */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Veg/Non-veg preference:</h3>
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Veg/Non-veg/Egg preference:</h3>
                       <div className="flex gap-2">
                         <button
                           onClick={() =>
@@ -1891,6 +1915,23 @@ export default function RestaurantDetails() {
                           >
                             <div className="h-4 w-4 rounded-full bg-amber-700 dark:bg-amber-600" />
                             <span className="font-medium">Non-veg</span>
+                          </button>
+                        )}
+                        {!vegMode && (
+                          <button
+                            onClick={() =>
+                              setFilters((prev) => ({
+                                ...prev,
+                                vegNonVeg: prev.vegNonVeg === "egg" ? null : "egg",
+                              }))
+                            }
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all flex-1 ${filters.vegNonVeg === "egg"
+                              ? "border-[#795548] dark:border-amber-500 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                              : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
+                              }`}
+                          >
+                            <div className="h-4 w-4 rounded-full bg-[#795548] dark:bg-amber-500" />
+                            <span className="font-medium">Egg</span>
                           </button>
                         )}
                       </div>

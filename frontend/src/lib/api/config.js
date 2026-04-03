@@ -405,6 +405,7 @@ export const API_ENDPOINTS = {
     RESTAURANT_COMPLAINT_STATUS: "/admin/restaurant-complaints/:id/status",
     RESTAURANT_COMPLAINT_NOTES: "/admin/restaurant-complaints/:id/notes",
     FOOD_APPROVALS: "/admin/food-approvals",
+    FOODS: "/admin/foods",
     FOOD_APPROVAL_APPROVE: "/admin/food-approvals/:id/approve",
     FOOD_APPROVAL_REJECT: "/admin/food-approvals/:id/reject",
     OFFERS: "/admin/offers",

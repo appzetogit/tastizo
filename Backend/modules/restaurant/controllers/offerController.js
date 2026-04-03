@@ -1,8 +1,34 @@
 import Offer from '../models/Offer.js';
 import Restaurant from '../models/Restaurant.js';
+import Menu from '../models/Menu.js';
 import mongoose from 'mongoose';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import asyncHandler from '../../../shared/middleware/asyncHandler.js';
+
+const UNIVERSAL_ITEM_ID = "__ALL__";
+
+const findMenuItemById = (menu, itemId) => {
+  if (!menu || !Array.isArray(menu.sections) || !itemId) {
+    return null;
+  }
+  const normalizedItemId = String(itemId);
+
+  for (const section of menu.sections) {
+    if (Array.isArray(section.items)) {
+      const item = section.items.find((entry) => String(entry.id) === normalizedItemId);
+      if (item) return item;
+    }
+    if (Array.isArray(section.subsections)) {
+      for (const subsection of section.subsections) {
+        if (!Array.isArray(subsection.items)) continue;
+        const item = subsection.items.find((entry) => String(entry.id) === normalizedItemId);
+        if (item) return item;
+      }
+    }
+  }
+
+  return null;
+};
 
 // Create/Activate offer
 export const createOffer = asyncHandler(async (req, res) => {
@@ -178,7 +204,7 @@ export const getCouponsByItemId = asyncHandler(async (req, res) => {
   const now = new Date();
   // Debug: Check all offers for this restaurant
   const allRestaurantOffers = await Offer.find({
-    restaurant: restaurantId,
+    $or: [{ restaurant: restaurantId }, { restaurant: null }],
     status: 'active',
   })
     .select('items discountType minOrderValue startDate endDate status')
@@ -190,9 +216,9 @@ export const getCouponsByItemId = asyncHandler(async (req, res) => {
 
   // Find all active offers that include this item
   const allOffers = await Offer.find({
-    restaurant: restaurantId,
+    $or: [{ restaurant: restaurantId }, { restaurant: null }],
     status: 'active',
-    'items.itemId': itemId,
+    'items.itemId': { $in: [itemId, UNIVERSAL_ITEM_ID] },
   })
     .select('items discountType minOrderValue startDate endDate status')
     .lean();
@@ -213,14 +239,32 @@ export const getCouponsByItemId = asyncHandler(async (req, res) => {
   });
   // Extract coupons for this specific item
   const coupons = [];
+  const menu = await Menu.findOne({ restaurant: restaurantId }).select("sections").lean();
+  const currentMenuItem = findMenuItemById(menu, itemId);
+  const currentItemPrice = Number(currentMenuItem?.price || 0);
   validOffers.forEach(offer => {
-    offer.items.forEach((item, idx) => {
-      if (item.itemId === itemId) {
+    offer.items.forEach((item) => {
+      const isUniversal = item.itemId === UNIVERSAL_ITEM_ID;
+      if (item.itemId === itemId || isUniversal) {
+        let original = Number(item.originalPrice || 0);
+        let discounted = Number(item.discountedPrice || 0);
+
+        if (isUniversal && currentItemPrice > 0) {
+          original = currentItemPrice;
+          if (offer.discountType === "percentage") {
+            const percentage = Number(item.discountPercentage || 0);
+            discounted = Number((original * (1 - percentage / 100)).toFixed(2));
+          } else {
+            const flatOffAmount = Math.max(0, Number(item.originalPrice || 0) - Number(item.discountedPrice || 0));
+            discounted = Math.max(0, Number((original - flatOffAmount).toFixed(2)));
+          }
+        }
+
         const coupon = {
           couponCode: item.couponCode,
           discountPercentage: item.discountPercentage,
-          originalPrice: item.originalPrice,
-          discountedPrice: item.discountedPrice,
+          originalPrice: original,
+          discountedPrice: discounted,
           minOrderValue: offer.minOrderValue || 0,
           discountType: offer.discountType,
           startDate: offer.startDate,
@@ -279,9 +323,9 @@ export const getCouponsByItemIdPublic = asyncHandler(async (req, res) => {
 
   // Find all active offers that include this item for this restaurant
   const allOffers = await Offer.find({
-    restaurant: restaurantObjectId,
+    $or: [{ restaurant: restaurantObjectId }, { restaurant: null }],
     status: 'active',
-    'items.itemId': itemId,
+    'items.itemId': { $in: [itemId, UNIVERSAL_ITEM_ID] },
   })
     .select('items discountType minOrderValue startDate endDate status')
     .lean();
@@ -299,14 +343,32 @@ export const getCouponsByItemIdPublic = asyncHandler(async (req, res) => {
   });
   // Extract coupons for this specific item
   const coupons = [];
+  const menu = await Menu.findOne({ restaurant: restaurantObjectId }).select("sections").lean();
+  const currentMenuItem = findMenuItemById(menu, itemId);
+  const currentItemPrice = Number(currentMenuItem?.price || 0);
   validOffers.forEach(offer => {
     offer.items.forEach(item => {
-      if (item.itemId === itemId) {
+      const isUniversal = item.itemId === UNIVERSAL_ITEM_ID;
+      if (item.itemId === itemId || isUniversal) {
+        let original = Number(item.originalPrice || 0);
+        let discounted = Number(item.discountedPrice || 0);
+
+        if (isUniversal && currentItemPrice > 0) {
+          original = currentItemPrice;
+          if (offer.discountType === "percentage") {
+            const percentage = Number(item.discountPercentage || 0);
+            discounted = Number((original * (1 - percentage / 100)).toFixed(2));
+          } else {
+            const flatOffAmount = Math.max(0, Number(item.originalPrice || 0) - Number(item.discountedPrice || 0));
+            discounted = Math.max(0, Number((original - flatOffAmount).toFixed(2)));
+          }
+        }
+
         coupons.push({
           couponCode: item.couponCode,
           discountPercentage: item.discountPercentage,
-          originalPrice: item.originalPrice,
-          discountedPrice: item.discountedPrice,
+          originalPrice: original,
+          discountedPrice: discounted,
           minOrderValue: offer.minOrderValue || 0,
           discountType: offer.discountType,
           startDate: offer.startDate,

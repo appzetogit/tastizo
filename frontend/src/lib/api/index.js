@@ -1271,6 +1271,11 @@ export const adminAPI = {
     return apiClient.get(API_ENDPOINTS.ADMIN.OFFERS, { params });
   },
 
+  // Create restaurant offer (admin)
+  createOffer: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.OFFERS, data);
+  },
+
   // Restaurant Commission Management
   getRestaurantCommissions: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION, { params });
@@ -1888,6 +1893,10 @@ export const adminAPI = {
   },
 
   // Food Approval
+  getFoods: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.FOODS, { params });
+  },
+
   getPendingFoodApprovals: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.FOOD_APPROVALS, { params });
   },

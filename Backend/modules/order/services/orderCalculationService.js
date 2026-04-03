@@ -3,6 +3,8 @@ import Offer from '../../restaurant/models/Offer.js';
 import FeeSettings from '../../admin/models/FeeSettings.js';
 import mongoose from 'mongoose';
 
+const UNIVERSAL_ITEM_ID = '__ALL__';
+
 /**
  * Get active fee settings from database
  * Returns default values if no settings found
@@ -214,45 +216,82 @@ export const calculateOrderPricing = async ({
         if (restaurantObjectId) {
           const now = new Date();
           
-          // Find active offer with this coupon code for this restaurant
-          const offer = await Offer.findOne({
-            restaurant: restaurantObjectId,
+          // Find active offer with this coupon code, preferring restaurant-scoped first and then global.
+          const offers = await Offer.find({
+            $or: [{ restaurant: restaurantObjectId }, { restaurant: null }],
             status: 'active',
             'items.couponCode': couponCode,
             startDate: { $lte: now },
-            $or: [
-              { endDate: { $gte: now } },
-              { endDate: null }
+            $and: [
+              {
+                $or: [
+                  { endDate: { $gte: now } },
+                  { endDate: null }
+                ]
+              }
             ]
           }).lean();
+          const offer =
+            offers.find((entry) => String(entry.restaurant) === String(restaurantObjectId)) ||
+            offers.find((entry) => entry.restaurant === null) ||
+            null;
 
           if (offer) {
-            // Find the specific item coupon
-            const couponItem = offer.items.find(item => item.couponCode === couponCode);
+            // Prefer exact item coupon; fallback to universal coupon.
+            const cartItemIds = items.map((item) => String(item.itemId));
+            const exactCouponItem = offer.items.find(
+              (item) =>
+                item.couponCode === couponCode &&
+                item.itemId &&
+                cartItemIds.includes(String(item.itemId)),
+            );
+            const universalCouponItem = offer.items.find(
+              (item) =>
+                item.couponCode === couponCode &&
+                String(item.itemId) === UNIVERSAL_ITEM_ID,
+            );
+            const couponItem = exactCouponItem || universalCouponItem;
             
             if (couponItem) {
+              const isUniversalCoupon = String(couponItem.itemId) === UNIVERSAL_ITEM_ID;
               // Check if coupon is valid for items in cart
-              const cartItemIds = items.map(item => item.itemId);
-              const isValidForCart = couponItem.itemId && cartItemIds.includes(couponItem.itemId);
+              const isValidForCart = isUniversalCoupon || (couponItem.itemId && cartItemIds.includes(String(couponItem.itemId)));
               
               // Check minimum order value
               const minOrderMet = !offer.minOrderValue || subtotal >= offer.minOrderValue;
               
               if (isValidForCart && minOrderMet) {
                 // Calculate discount based on offer type
-                const itemInCart = items.find(item => item.itemId === couponItem.itemId);
-                if (itemInCart) {
-                  const itemQuantity = itemInCart.quantity || 1;
-                  
-                  // Calculate discount per item
-                  const discountPerItem = couponItem.originalPrice - couponItem.discountedPrice;
-                  
-                  // Apply discount to all quantities of this item
-                  discount = Math.round(discountPerItem * itemQuantity);
-                  
-                  // Ensure discount doesn't exceed item subtotal
-                  const itemSubtotal = (itemInCart.price || 0) * itemQuantity;
-                  discount = Math.min(discount, itemSubtotal);
+                if (isUniversalCoupon) {
+                  if (offer.discountType === 'percentage') {
+                    const percentage = Number(couponItem.discountPercentage || 0);
+                    discount = Math.round((subtotal * percentage) / 100);
+                  } else {
+                    // Universal flat coupon: stored as fixed amount OFF.
+                    discount = Math.round(
+                      Math.max(
+                        0,
+                        Number(couponItem.originalPrice || 0) -
+                          Number(couponItem.discountedPrice || 0),
+                      ),
+                    );
+                  }
+                  discount = Math.min(discount, Math.round(subtotal));
+                } else {
+                  const itemInCart = items.find(item => String(item.itemId) === String(couponItem.itemId));
+                  if (itemInCart) {
+                    const itemQuantity = itemInCart.quantity || 1;
+                    
+                    // Calculate discount per item
+                    const discountPerItem = couponItem.originalPrice - couponItem.discountedPrice;
+                    
+                    // Apply discount to all quantities of this item
+                    discount = Math.round(discountPerItem * itemQuantity);
+                    
+                    // Ensure discount doesn't exceed item subtotal
+                    const itemSubtotal = (itemInCart.price || 0) * itemQuantity;
+                    discount = Math.min(discount, itemSubtotal);
+                  }
                 }
                 
                 appliedCoupon = {
@@ -262,7 +301,7 @@ export const calculateOrderPricing = async ({
                   minOrder: offer.minOrderValue || 0,
                   type: offer.discountType === 'percentage' ? 'percentage' : 'flat',
                   itemId: couponItem.itemId,
-                  itemName: couponItem.itemName,
+                  itemName: couponItem.itemName || (isUniversalCoupon ? 'All Dishes' : ''),
                   originalPrice: couponItem.originalPrice,
                   discountedPrice: couponItem.discountedPrice,
                 };

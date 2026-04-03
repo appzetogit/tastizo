@@ -225,6 +225,7 @@ export default function Home() {
   const mobileStickySearchRef = useRef(null)
   const mobileStickySentinelRef = useRef(null)
   const desktopStickySearchRef = useRef(null)
+  const ENABLE_STICKY_SEARCH = false
   const [isStickySearch, setIsStickySearch] = useState(false)
   const [isStickySearchSolid, setIsStickySearchSolid] = useState(false)
   const [mobileStickyBgOpacity, setMobileStickyBgOpacity] = useState(0)
@@ -239,7 +240,7 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    if (isDesktop) return
+    if (isDesktop || !ENABLE_STICKY_SEARCH) return
     const el = mobileStickySearchRef.current
     if (!el) return
 
@@ -264,6 +265,13 @@ export default function Home() {
 
   // Detect when the sticky search has reached its sticky threshold so categories can shift down smoothly.
   useEffect(() => {
+    if (!ENABLE_STICKY_SEARCH) {
+      setIsStickySearch(false)
+      setIsStickySearchSolid(false)
+      setMobileStickyBgOpacity(0)
+      return
+    }
+
     let raf = 0
     const last = { stuck: false, solid: false, opacity: -1 }
 
@@ -1519,7 +1527,7 @@ export default function Home() {
             <motion.div
               className="flex h-full transform-gpu"
               animate={{
-                x: `-${currentBannerIndex * 100}vw`
+                x: `-${(currentBannerIndex * 100) / Math.max(heroBannerImages.length, 1)}%`
               }}
               transition={
                 prefersReducedMotion
@@ -1531,7 +1539,7 @@ export default function Home() {
                     }
               }
               style={{
-                width: `${heroBannerImages.length * 100}vw`,
+                width: `${heroBannerImages.length * 100}%`,
                 willChange: "transform",
               }}
             >
@@ -1544,7 +1552,10 @@ export default function Home() {
                   <div
                     key={index}
                     className="h-full flex-shrink-0 sm:px-4 lg:px-6"
-                    style={{ width: '100vw', cursor: hasLinkedRestaurants ? 'pointer' : 'default' }}
+                    style={{
+                      width: `${100 / Math.max(heroBannerImages.length, 1)}%`,
+                      cursor: hasLinkedRestaurants ? "pointer" : "default",
+                    }}
                     onClick={() => {
                       if (hasLinkedRestaurants) {
                         // Redirect to first linked restaurant
@@ -1586,7 +1597,7 @@ export default function Home() {
             <motion.div
               className="flex h-full transform-gpu"
               animate={{
-                x: `-${currentBannerIndex * 100}vw`,
+                x: `-${(currentBannerIndex * 100) / Math.max(heroBannerImages.length, 1)}%`,
               }}
               transition={
                 prefersReducedMotion
@@ -1598,7 +1609,7 @@ export default function Home() {
                     }
               }
               style={{
-                width: `${heroBannerImages.length * 100}vw`,
+                width: `${heroBannerImages.length * 100}%`,
                 willChange: "transform",
               }}
             >
@@ -1615,7 +1626,10 @@ export default function Home() {
                   <div
                     key={`desktop-${index}`}
                     className="h-full flex-shrink-0 lg:px-6"
-                    style={{ width: "100vw", cursor: hasLinkedRestaurants ? "pointer" : "default" }}
+                    style={{
+                      width: `${100 / Math.max(heroBannerImages.length, 1)}%`,
+                      cursor: hasLinkedRestaurants ? "pointer" : "default",
+                    }}
                     onClick={() => {
                       if (hasLinkedRestaurants) {
                         const firstRestaurant = linkedRestaurants[0]
@@ -1914,12 +1928,14 @@ export default function Home() {
       <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-4 sm:pt-5 lg:pt-8">
           {/* Sticky Section - Food Categories and Filters */}
           <motion.div
-            className={`${isFilterOpen ? 'hidden' : 'sticky'} z-[999] bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5 pb-2 sm:pb-3`}
-            style={{ top: isDesktop ? "4.5rem" : `${mobileStickyHeaderHeight}px` }}
+            className={`${isFilterOpen ? 'hidden' : 'sticky'} relative z-[999] bg-white dark:bg-[#0a0a0a] pt-4 sm:pt-5 pb-2 sm:pb-3`}
+            style={{ top: isDesktop ? "4.5rem" : "0rem" }}
           >
+          <div className="pointer-events-none absolute -top-3 inset-x-0 h-3 bg-white dark:bg-[#0a0a0a]" />
+          <div className="pointer-events-none absolute inset-0 bg-white dark:bg-[#0a0a0a]" />
           {/* Food Categories - Horizontal Scroll */}
           <motion.section
-            className="space-y-0"
+            className="relative z-10 space-y-0 bg-white dark:bg-[#0a0a0a] pt-2"
             initial={{ opacity: 1, y: 0 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0 }}
@@ -1975,6 +1991,25 @@ export default function Home() {
                       </Link>
                     </motion.div>
                   ))}
+                  {realCategories.length > 10 && (
+                    <motion.div
+                      className="flex-shrink-0"
+                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.3, delay: 0.25 }}
+                      whileHover={{ scale: 1.05, y: -5 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      <Link to="/user/category/all" className="flex flex-col items-center gap-2 group">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-800 relative bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                          <UtensilsCrossed className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 dark:text-green-400" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 text-center whitespace-nowrap max-w-[80px] truncate">
+                          See all
+                        </span>
+                      </Link>
+                    </motion.div>
+                  )}
                 </>
               ) : landingCategories.length > 0 ? (
                 <>
@@ -2003,6 +2038,25 @@ export default function Home() {
                       </Link>
                     </div>
                   ))}
+                  {landingCategories.length > 10 && (
+                    <motion.div
+                      className="flex-shrink-0"
+                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.3, delay: 0.25 }}
+                      whileHover={{ scale: 1.05, y: -5 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      <Link to="/user/category/all" className="flex flex-col items-center gap-2 group">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-800 relative bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                          <UtensilsCrossed className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 dark:text-green-400" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 text-center whitespace-nowrap max-w-[80px] truncate">
+                          See all
+                        </span>
+                      </Link>
+                    </motion.div>
+                  )}
                 </>
               ) : (
                 // No categories available from API
@@ -2015,7 +2069,7 @@ export default function Home() {
 
           {/* Filters */}
           <motion.section
-            className="mt-3 sm:mt-4 pt-0 pb-0"
+            className="relative z-10 mt-3 sm:mt-4 pt-0 pb-0 bg-white dark:bg-[#0a0a0a]"
             initial={{ opacity: 1, y: 0 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0 }}

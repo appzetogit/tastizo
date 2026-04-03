@@ -33,6 +33,7 @@ export default function SearchResults() {
   const navigate = useNavigate()
   const { location } = useLocation()
   const { zoneId, isOutOfService, loading: zoneLoading } = useZone(location)
+  const { vegMode } = useProfile()
   const [searchQuery, setSearchQuery] = useState(query)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [activeFilters, setActiveFilters] = useState(new Set())
@@ -41,10 +42,24 @@ export default function SearchResults() {
   const [restaurantsData, setRestaurantsData] = useState([])
   const [loadingRestaurants, setLoadingRestaurants] = useState(true)
   const [categories, setCategories] = useState([
-    { id: 'all', name: "All", image: offerImage }
+    { id: 'all', name: "All", image: offerImage, dietType: 'Both' }
   ])
   const [loadingCategories, setLoadingCategories] = useState(true)
   const [categoryKeywords, setCategoryKeywords] = useState({})
+  const visibleCategories = useMemo(() => {
+    return categories.filter((cat) => {
+      const categoryId = (cat.slug || cat.id || "").toLowerCase()
+      if (categoryId === 'all') return true
+      if (vegMode && cat.dietType === 'Non-Veg') return false
+      return true
+    })
+  }, [categories, vegMode])
+  const visibleNonAllCategories = useMemo(() => {
+    return visibleCategories.filter((cat) => {
+      const categoryId = (cat.slug || cat.id || "").toLowerCase()
+      return categoryId !== 'all'
+    })
+  }, [visibleCategories])
 
   // Fetch categories from admin API
   useEffect(() => {
@@ -58,12 +73,13 @@ export default function SearchResults() {
 
           // Transform API categories to match expected format
           const transformedCategories = [
-            { id: 'all', name: "All", image: offerImage },
+            { id: 'all', name: "All", image: offerImage, dietType: 'Both' },
             ...categoriesArray.map((cat) => ({
               id: cat.slug || cat.id,
               name: cat.name,
               image: cat.image || foodImages[0],
               type: cat.type,
+              dietType: cat.dietType || 'Both',
             }))
           ]
 
@@ -98,6 +114,21 @@ export default function SearchResults() {
   useEffect(() => {
     setSearchQuery(query)
   }, [query])
+
+  useEffect(() => {
+    if (!vegMode || selectedCategory === 'all') return
+    if (!categories || categories.length === 0) return
+
+    const normalizedSelected = selectedCategory.toLowerCase()
+    const currentCategory = categories.find((cat) => {
+      const catId = (cat.slug || cat.id || "").toLowerCase()
+      return catId === normalizedSelected
+    })
+
+    if (currentCategory?.dietType === 'Non-Veg') {
+      setSelectedCategory('all')
+    }
+  }, [vegMode, selectedCategory, categories])
 
   // Helper function to check if menu has dishes matching category keywords
   const checkCategoryInMenu = (menu, categoryId) => {
@@ -714,7 +745,7 @@ export default function SearchResults() {
               msOverflowStyle: "none",
             }}
           >
-            {categories.map((cat) => {
+            {visibleNonAllCategories.length > 0 ? visibleNonAllCategories.map((cat) => {
               const isSelected = selectedCategory === cat.id
               return (
                 <button
@@ -744,7 +775,11 @@ export default function SearchResults() {
                   </span>
                 </button>
               )
-            })}
+            }) : (
+              <div className="flex items-center justify-center py-4">
+                <span className="text-sm text-gray-600 dark:text-gray-400">No categories available</span>
+              </div>
+            )}
           </div>
 
           {/* Filters */}

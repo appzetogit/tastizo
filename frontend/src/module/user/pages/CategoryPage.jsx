@@ -60,6 +60,15 @@ export default function CategoryPage() {
   const [loadingRestaurants, setLoadingRestaurants] = useState(true)
   const [categoryKeywords, setCategoryKeywords] = useState({})
 
+  const visibleCategories = useMemo(() => {
+    return categories.filter((cat) => {
+      const categoryId = (cat.slug || cat.id || "").toLowerCase()
+      if (categoryId === 'all') return true
+      if (vegMode && cat.dietType === 'Non-Veg') return false
+      return true
+    })
+  }, [categories, vegMode])
+
   // Fetch categories from admin API
   useEffect(() => {
     const fetchCategories = async () => {
@@ -72,13 +81,14 @@ export default function CategoryPage() {
 
           // Transform API categories to match expected format
           const transformedCategories = [
-            { id: 'all', name: "All", image: null, slug: 'all' },
+            { id: 'all', name: "All", image: null, slug: 'all', dietType: 'Both' },
             ...categoriesArray.map((cat) => ({
               id: cat.slug || cat.id,
               name: cat.name,
               image: cat.image || foodImages[0],
               slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, '-'),
               type: cat.type,
+              dietType: cat.dietType || 'Both',
             }))
           ]
 
@@ -98,12 +108,12 @@ export default function CategoryPage() {
           setCategoryKeywords(keywordsMap)
         } else {
           // Keep default "All" category on error
-          setCategories([{ id: 'all', name: "All", image: null, slug: 'all' }])
+          setCategories([{ id: 'all', name: "All", image: null, slug: 'all', dietType: 'Both' }])
         }
       } catch (error) {
         console.error('Error fetching categories:', error)
         // Keep default "All" category on error
-        setCategories([{ id: 'all', name: "All", image: null, slug: 'all' }])
+          setCategories([{ id: 'all', name: "All", image: null, slug: 'all', dietType: 'Both' }])
       } finally {
         setLoadingCategories(false)
       }
@@ -111,6 +121,21 @@ export default function CategoryPage() {
 
     fetchCategories()
   }, [])
+
+  useEffect(() => {
+    if (!vegMode || selectedCategory === 'all') return
+    if (!categories || categories.length === 0) return
+
+    const normalizedSelected = selectedCategory.toLowerCase()
+    const currentCategory = categories.find((cat) => {
+      const catId = (cat.slug || cat.id || "").toLowerCase()
+      return catId === normalizedSelected
+    })
+
+    if (currentCategory?.dietType === 'Non-Veg') {
+      setSelectedCategory('all')
+    }
+  }, [vegMode, selectedCategory, categories])
 
   // When a category is selected (including from homepage redirect),
   // auto-scroll the horizontal list so the selected category appears first in view.
@@ -688,6 +713,11 @@ export default function CategoryPage() {
   // Check if should show grayscale (user out of service)
   const shouldShowGrayscale = isOutOfService
 
+  const visibleNonAllCategories = visibleCategories.filter((cat) => {
+    const categoryId = (cat.slug || cat.id || "").toLowerCase()
+    return categoryId !== 'all'
+  })
+
   return (
     <div className={`min-h-screen pt-2 bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Sticky Header */}
@@ -733,7 +763,7 @@ export default function CategoryPage() {
                 <span className="text-sm text-gray-600 dark:text-gray-400">Loading categories...</span>
               </div>
             ) : (
-              categories && categories.length > 0 ? categories.filter((cat) => (cat.slug || cat.id) !== 'all').map((cat) => {
+              visibleNonAllCategories.length > 0 ? visibleNonAllCategories.map((cat) => {
                 const categorySlug = cat.slug || cat.id
                 const isSelected = selectedCategory === categorySlug || selectedCategory === cat.id
                 return (

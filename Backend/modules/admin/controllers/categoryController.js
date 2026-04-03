@@ -13,6 +13,7 @@ const logger = winston.createLogger({
     })
   ]
 });
+const DIET_TYPES = ['Veg', 'Non-Veg', 'Both'];
 
 /**
  * Get All Categories (Public - for user frontend)
@@ -22,7 +23,7 @@ export const getPublicCategories = asyncHandler(async (req, res) => {
   try {
     // Only get active categories for public access
     const categories = await AdminCategoryManagement.find({ status: true })
-      .select('name image _id type')
+      .select('name image _id type dietType')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -31,6 +32,7 @@ export const getPublicCategories = asyncHandler(async (req, res) => {
       name: category.name,
       image: category.image,
       type: category.type || null,
+      dietType: category.dietType || 'Both',
       slug: category.name.toLowerCase().replace(/\s+/g, '-')
     }));
 
@@ -133,11 +135,15 @@ export const getCategoryById = asyncHandler(async (req, res) => {
  */
 export const createCategory = asyncHandler(async (req, res) => {
   try {
-    const { name, image, status, type } = req.body;
+    const { name, image, status, type, dietType } = req.body;
 
     // Validation
     if (!name || !name.trim()) {
       return errorResponse(res, 400, 'Category name is required');
+    }
+
+    if (dietType && !DIET_TYPES.includes(dietType)) {
+      return errorResponse(res, 400, 'Invalid diet type');
     }
 
     // Check if category with same name already exists
@@ -179,6 +185,7 @@ export const createCategory = asyncHandler(async (req, res) => {
       name: name.trim(),
       image: imageUrl,
       type: type && type.trim() ? type.trim() : undefined,
+      dietType: dietType && dietType.trim() ? dietType.trim() : 'Both',
       priority: 'Normal', // Default priority
       status: status !== undefined ? status : true,
       description: '',
@@ -217,7 +224,7 @@ export const createCategory = asyncHandler(async (req, res) => {
 export const updateCategory = asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, image, status, type } = req.body;
+    const { name, image, status, type, dietType } = req.body;
 
     const category = await AdminCategoryManagement.findById(id);
 
@@ -262,11 +269,18 @@ export const updateCategory = asyncHandler(async (req, res) => {
       imageUrl = image.trim();
     }
 
+    if (dietType !== undefined && dietType && !DIET_TYPES.includes(dietType)) {
+      return errorResponse(res, 400, 'Invalid diet type');
+    }
+
     // Update fields
     if (name !== undefined) category.name = name.trim();
     if (imageUrl !== undefined) category.image = imageUrl;
     if (type !== undefined) category.type = type && type.trim() ? type.trim() : undefined;
     if (status !== undefined) category.status = status;
+    if (dietType !== undefined) {
+      category.dietType = dietType && dietType.trim() ? dietType.trim() : 'Both';
+    }
     category.updatedBy = req.user._id;
 
     await category.save();
