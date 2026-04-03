@@ -1399,7 +1399,7 @@ export default function Home() {
   )
 
   return (
-    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a] pb-28 md:pb-24 overflow-x-clip">
+    <div className="relative min-h-screen min-h-[100dvh] bg-white dark:bg-[#0a0a0a] pb-28 md:pb-24 overflow-x-clip">
       {/* Unified Background for Entire Page - Vibrant Food Theme */}
       <div className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none overflow-hidden z-0">
         {/* Main Background */}

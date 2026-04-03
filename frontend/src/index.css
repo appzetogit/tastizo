@@ -137,8 +137,13 @@
 
   body {
     @apply bg-background text-foreground m-0 min-h-screen;
+    min-height: 100dvh;
     scrollbar-width: none !important;
     -ms-overflow-style: none !important;
+  }
+
+  #root {
+    min-height: 100dvh;
   }
 }
 

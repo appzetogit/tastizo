@@ -205,7 +205,7 @@ export default function UserLayout() {
     : [showBottomNav && "md:pt-[4.5rem]"].filter(Boolean).join(" ")
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] transition-colors duration-200">
+    <div className="min-h-screen min-h-[100dvh] bg-[#f5f5f5] dark:bg-[#0a0a0a] transition-colors duration-200">
       <CartProvider>
         <ProfileProvider>
           <OrdersProvider>
