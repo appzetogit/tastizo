@@ -78,6 +78,14 @@ export default function HubMenu() {
   const restaurantExpertise = restaurantData?.cuisines?.length > 0
     ? restaurantData.cuisines.join(", ")
     : ""
+  const hasZoneSetup =
+    !!restaurantData?.location &&
+    Array.isArray(restaurantData.location.coordinates) &&
+    restaurantData.location.coordinates.length >= 2
+
+  const blockAddFoodUntilZoneSetup = () => {
+    toast.error("Complete zone setup first before adding food items.")
+  }
 
   // Handle scroll to change title
   useEffect(() => {
@@ -841,6 +849,11 @@ export default function HubMenu() {
   }
 
   const handleContinueSubCategory = () => {
+    if (!hasZoneSetup) {
+      blockAddFoodUntilZoneSetup()
+      return
+    }
+
     if (!subCategoryName.trim() || !selectedGroupForSubCategory) return
 
     // Navigate to new item page with sub-category info
@@ -866,6 +879,11 @@ export default function HubMenu() {
   }
 
   const handleContinueAddCategory = async () => {
+    if (!hasZoneSetup) {
+      blockAddFoodUntilZoneSetup()
+      return
+    }
+
     if (!newCategoryName.trim()) {
       toast.error('Please enter a category name')
       return
@@ -1431,6 +1449,10 @@ export default function HubMenu() {
               <div className="px-4 py-4 space-y-2">
                 <button
                   onClick={() => {
+                    if (!hasZoneSetup) {
+                      blockAddFoodUntilZoneSetup()
+                      return
+                    }
                     navigate(`/restaurant/hub-menu/item/new`)
                   }}
                   className="w-full py-3 px-4 text-left rounded-lg hover:bg-gray-50 transition-colors"
@@ -1565,7 +1587,13 @@ export default function HubMenu() {
         {activeTab !== "add-ons" && (
           <motion.button
             whileTap={{ scale: 0.96 }}
-            onClick={() => setIsAddPopupOpen(true)}
+            onClick={() => {
+              if (!hasZoneSetup) {
+                blockAddFoodUntilZoneSetup()
+                return
+              }
+              setIsAddPopupOpen(true)
+            }}
             className="px-4 py-2 border bg-black text-white border-gray-800 rounded-lg text-sm font-bold"
           >
             + ADD

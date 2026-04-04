@@ -17,6 +17,99 @@ const networkErrorState = {
   TOAST_COOLDOWN_PERIOD: 60000, // 60 seconds cooldown for toast notifications
 };
 
+function isAdminAuthRoute(path) {
+  return (
+    path === "/admin/login" ||
+    path === "/admin/signup" ||
+    path === "/admin/forgot-password"
+  );
+}
+
+function isRestaurantAuthRoute(path) {
+  return (
+    path === "/restaurant/login" ||
+    path === "/restaurant/signup" ||
+    path === "/restaurant/signup-email" ||
+    path === "/restaurant/forgot-password" ||
+    path === "/restaurant/otp" ||
+    path === "/restaurant/welcome" ||
+    path === "/restaurant/auth/sign-in" ||
+    path === "/restaurant/auth/google-callback" ||
+    path.startsWith("/restaurant/auth/")
+  );
+}
+
+function isDeliveryAuthRoute(path) {
+  return (
+    path === "/delivery/sign-in" ||
+    path === "/delivery/signup" ||
+    path === "/delivery/otp" ||
+    path === "/delivery/welcome" ||
+    path.startsWith("/delivery/signup/") ||
+    path === "/delivery/terms" ||
+    path === "/delivery/privacy"
+  );
+}
+
+function isAnyAuthRoute(path) {
+  return (
+    isAdminAuthRoute(path) ||
+    isRestaurantAuthRoute(path) ||
+    isDeliveryAuthRoute(path) ||
+    path.startsWith("/user/auth/")
+  );
+}
+
+function getCurrentModuleToken(path) {
+  if (path.startsWith("/admin")) return localStorage.getItem("admin_accessToken");
+  if (path.startsWith("/delivery")) return localStorage.getItem("delivery_accessToken");
+  if (path.startsWith("/restaurant") && !path.startsWith("/restaurants")) {
+    return localStorage.getItem("restaurant_accessToken");
+  }
+  return getModuleToken("user") || localStorage.getItem("accessToken");
+}
+
+function shouldSuppressGlobalErrorToast(error) {
+  const currentPath = window.location.pathname || "";
+  const status = error?.response?.status;
+  const requestUrl = String(error?.config?.url || "").toLowerCase();
+  const message = String(
+    error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      error?.message ||
+      "",
+  ).toLowerCase();
+
+  // Suppress noisy auth/background errors on restaurant module while account is pending/restricted.
+  if (currentPath.startsWith("/restaurant")) {
+    if (
+      message.includes("user not found") ||
+      message.includes("restaurant not found") ||
+      message.includes("restaurant account is under verification") ||
+      message.includes("inactive")
+    ) {
+      return true;
+    }
+
+    if (
+      (status === 401 || status === 403 || status === 404) &&
+      (requestUrl.includes("/restaurant/") || requestUrl.includes("/auth/me"))
+    ) {
+      return true;
+    }
+  }
+
+  if (
+    isAnyAuthRoute(currentPath) &&
+    status === 401 &&
+    (requestUrl.includes("/refresh-token") || requestUrl.includes("/user/location"))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 // Validate API base URL on import
 if (import.meta.env.DEV) {
   const backendUrl = API_BASE_URL.replace("/api", "");
@@ -150,38 +243,13 @@ apiClient.interceptors.request.use(
           requestUrl.match(/\/restaurant\/[^/]+\/inventory/) ||
           requestUrl.match(/\/restaurant\/[^/]+\/offers/)));
 
-    const isAdminAuthRoute =
-      path === "/admin/login" ||
-      path === "/admin/signup" ||
-      path === "/admin/forgot-password";
-
-    const isRestaurantAuthRoute =
-      path === "/restaurant/login" ||
-      path === "/restaurant/signup" ||
-      path === "/restaurant/signup-email" ||
-      path === "/restaurant/forgot-password" ||
-      path === "/restaurant/otp" ||
-      path === "/restaurant/welcome" ||
-      path === "/restaurant/auth/sign-in" ||
-      path === "/restaurant/auth/google-callback" ||
-      path.startsWith("/restaurant/auth/");
-
-    const isDeliveryAuthRoute =
-      path === "/delivery/sign-in" ||
-      path === "/delivery/signup" ||
-      path === "/delivery/otp" ||
-      path === "/delivery/welcome" ||
-      path.startsWith("/delivery/signup/") ||
-      path === "/delivery/terms" ||
-      path === "/delivery/privacy";
-
     const isAuthenticatedRoute =
-      ((path.startsWith("/admin") && !isAdminAuthRoute) ||
+      ((path.startsWith("/admin") && !isAdminAuthRoute(path)) ||
         (path.startsWith("/restaurant") &&
           !path.startsWith("/restaurants") &&
-          !isRestaurantAuthRoute &&
+          !isRestaurantAuthRoute(path) &&
           !isPublicRestaurantRoute) ||
-        (path.startsWith("/delivery") && !isDeliveryAuthRoute) ||
+        (path.startsWith("/delivery") && !isDeliveryAuthRoute(path)) ||
         path.startsWith("/user") ||
         path.startsWith("/usermain") ||
         path.startsWith("/orders")) &&
@@ -381,13 +449,19 @@ apiClient.interceptors.response.use(
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !isAuthFlowRequest
+      !isAuthFlowRequest &&
+      !isAnyAuthRoute(window.location.pathname || "")
     ) {
+      const currentPath = window.location.pathname || "";
+      const moduleToken = getCurrentModuleToken(currentPath);
+      if (!moduleToken || moduleToken === "null" || moduleToken === "undefined") {
+        return Promise.reject(error);
+      }
+
       originalRequest._retry = true;
 
       try {
         // Determine which module's refresh endpoint to use based on current route
-        const currentPath = window.location.pathname;
         let refreshEndpoint = "/auth/refresh-token"; // default to user auth
 
         if (currentPath.startsWith("/admin")) {
@@ -511,11 +585,7 @@ apiClient.interceptors.response.use(
             localStorage.removeItem("admin_accessToken");
             localStorage.removeItem("admin_authenticated");
             localStorage.removeItem("admin_user");
-            const isAdminAuthRoute =
-              currentPath === "/admin/login" ||
-              currentPath === "/admin/signup" ||
-              currentPath === "/admin/forgot-password";
-            if (!isAdminAuthRoute) {
+            if (!isAdminAuthRoute(currentPath)) {
               window.location.href = "/admin/login";
             }
           } else if (
@@ -526,17 +596,7 @@ apiClient.interceptors.response.use(
             localStorage.removeItem("restaurant_accessToken");
             localStorage.removeItem("restaurant_authenticated");
             localStorage.removeItem("restaurant_user");
-            const isRestaurantAuthRoute =
-              currentPath === "/restaurant/login" ||
-              currentPath === "/restaurant/signup" ||
-              currentPath === "/restaurant/signup-email" ||
-              currentPath === "/restaurant/forgot-password" ||
-              currentPath === "/restaurant/otp" ||
-              currentPath === "/restaurant/welcome" ||
-              currentPath === "/restaurant/auth/sign-in" ||
-              currentPath === "/restaurant/auth/google-callback" ||
-              currentPath.startsWith("/restaurant/auth/");
-            if (!isRestaurantAuthRoute) {
+            if (!isRestaurantAuthRoute(currentPath)) {
               window.location.href = "/restaurant/login";
             }
           } else if (currentPath.startsWith("/delivery")) {
@@ -544,13 +604,7 @@ apiClient.interceptors.response.use(
             localStorage.removeItem("delivery_authenticated");
             localStorage.removeItem("delivery_user");
             // Avoid hard-reload loops when already on delivery auth screens.
-            const isDeliveryAuthRoute =
-              currentPath === "/delivery/sign-in" ||
-              currentPath === "/delivery/signup" ||
-              currentPath === "/delivery/otp" ||
-              currentPath === "/delivery/welcome" ||
-              currentPath.startsWith("/delivery/signup/");
-            if (!isDeliveryAuthRoute) {
+            if (!isDeliveryAuthRoute(currentPath)) {
               window.location.href = "/delivery/sign-in";
             }
           } else {
@@ -725,6 +779,10 @@ apiClient.interceptors.response.use(
           // These are expected to fail if restaurant doesn't exist in DB
         }
       }
+      return Promise.reject(error);
+    }
+
+    if (shouldSuppressGlobalErrorToast(error)) {
       return Promise.reject(error);
     }
 

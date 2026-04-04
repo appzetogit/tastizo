@@ -5,6 +5,41 @@ import {
 } from "../../../shared/utils/response.js";
 import { createRestaurantFromOnboarding } from "./restaurantController.js";
 
+const normalizeImageObject = (value) => {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const url = value.trim();
+    if (!url) return null;
+    return { url };
+  }
+  if (typeof value === "object") {
+    const url = typeof value.url === "string" ? value.url.trim() : "";
+    if (!url) return null;
+    return {
+      url,
+      ...(value.publicId ? { publicId: value.publicId } : {}),
+    };
+  }
+  return null;
+};
+
+const normalizeStep2Payload = (step2) => {
+  if (!step2 || typeof step2 !== "object") return step2;
+
+  const normalizedMenuImageUrls = Array.isArray(step2.menuImageUrls)
+    ? step2.menuImageUrls
+        .map((img) => normalizeImageObject(img))
+        .filter(Boolean)
+    : [];
+  const normalizedProfileImage = normalizeImageObject(step2.profileImageUrl);
+
+  return {
+    ...step2,
+    menuImageUrls: normalizedMenuImageUrls,
+    profileImageUrl: normalizedProfileImage,
+  };
+};
+
 // Get current restaurant's onboarding data
 export const getOnboarding = async (req, res) => {
   try {
@@ -35,7 +70,8 @@ export const getOnboarding = async (req, res) => {
 export const upsertOnboarding = async (req, res) => {
   try {
     const restaurantId = req.restaurant._id;
-    const { step1, step2, step3, step4, completedSteps } = req.body;
+    const { step1, step3, step4, completedSteps } = req.body;
+    const step2 = normalizeStep2Payload(req.body?.step2);
 
     // Get existing restaurant data to merge if needed
     const existingRestaurant = await Restaurant.findById(restaurantId).lean();

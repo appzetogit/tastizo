@@ -73,6 +73,8 @@ const tableBookingSchema = new mongoose.Schema(
   },
 );
 
+tableBookingSchema.index({ restaurant: 1, date: 1, timeSlot: 1, status: 1 });
+
 // Generate a random 8-character booking ID before saving
 tableBookingSchema.pre("save", async function (next) {
   if (!this.bookingId) {

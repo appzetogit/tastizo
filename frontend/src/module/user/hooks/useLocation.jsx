@@ -26,6 +26,16 @@ const LOCATION_MODE_KEY = "userLocationMode"
 const LOCATION_MODE_MANUAL = "manual"
 const LOCATION_MODE_GPS = "gps"
 
+function isUserFacingRoute(pathname) {
+  if (!pathname || pathname === "/") return true
+  if (pathname.startsWith("/user") || pathname.startsWith("/usermain")) return true
+  if (pathname.startsWith("/restaurants")) return true
+  if (pathname.startsWith("/admin")) return false
+  if (pathname.startsWith("/delivery")) return false
+  if (pathname.startsWith("/restaurant")) return false
+  return true
+}
+
 function getStoredLocationMode() {
   if (typeof window === "undefined") return LOCATION_MODE_GPS
   try {
@@ -1511,6 +1521,16 @@ function useUserGeoLocationEngine() {
   /* ===================== INIT ===================== */
   useEffect(() => {
     let cancelled = false
+    const currentPath = window.location?.pathname || "/"
+    const shouldRunUserLocationEngine = isUserFacingRoute(currentPath)
+
+    if (!shouldRunUserLocationEngine) {
+      setLoading(false)
+      return () => {
+        cancelled = true
+        stopWatchingLocation()
+      }
+    }
 
     const loadingTimeout = setTimeout(() => {
       setLoading((currentLoading) => {

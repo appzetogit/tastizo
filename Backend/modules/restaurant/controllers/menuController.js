@@ -73,6 +73,32 @@ function getRestaurantCoordinates(restaurant) {
   return null;
 }
 
+function hasCompletedZoneSetup(restaurant) {
+  const coords = getRestaurantCoordinates(restaurant);
+  if (!coords) return false;
+
+  const { lat, lng } = coords;
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
+function ensureZoneSetupBeforeMenuChanges(req, res) {
+  if (hasCompletedZoneSetup(req.restaurant)) return true;
+
+  errorResponse(
+    res,
+    403,
+    'Please complete zone setup before adding or updating food items.',
+  );
+  return false;
+}
+
 // Get menu for a restaurant
 export const getMenu = asyncHandler(async (req, res) => {
   // Restaurant is attached by authenticate middleware
@@ -101,6 +127,8 @@ export const getMenu = asyncHandler(async (req, res) => {
 
 // Update menu (upsert)
 export const updateMenu = asyncHandler(async (req, res) => {
+  if (!ensureZoneSetupBeforeMenuChanges(req, res)) return;
+
   // Restaurant is attached by authenticate middleware
   const restaurantId = req.restaurant._id;
   const { sections } = req.body;
@@ -335,6 +363,8 @@ export const updateMenu = asyncHandler(async (req, res) => {
 
 // Add a new section (category)
 export const addSection = asyncHandler(async (req, res) => {
+  if (!ensureZoneSetupBeforeMenuChanges(req, res)) return;
+
   const restaurantId = req.restaurant._id;
   const { name } = req.body;
 
@@ -386,6 +416,8 @@ export const addSection = asyncHandler(async (req, res) => {
 
 // Add a new item to a section
 export const addItemToSection = asyncHandler(async (req, res) => {
+  if (!ensureZoneSetupBeforeMenuChanges(req, res)) return;
+
   const restaurantId = req.restaurant._id;
   const { sectionId, item } = req.body;
 
@@ -471,6 +503,8 @@ export const addItemToSection = asyncHandler(async (req, res) => {
 
 // Add a subsection to a section
 export const addSubsectionToSection = asyncHandler(async (req, res) => {
+  if (!ensureZoneSetupBeforeMenuChanges(req, res)) return;
+
   const restaurantId = req.restaurant._id;
   const { sectionId, name } = req.body;
 
@@ -525,6 +559,8 @@ export const addSubsectionToSection = asyncHandler(async (req, res) => {
 
 // Add a new item to a subsection
 export const addItemToSubsection = asyncHandler(async (req, res) => {
+  if (!ensureZoneSetupBeforeMenuChanges(req, res)) return;
+
   const restaurantId = req.restaurant._id;
   const { sectionId, subsectionId, item } = req.body;
 

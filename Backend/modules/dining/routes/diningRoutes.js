@@ -10,6 +10,7 @@ import {
   getOfferBanners,
   getStories,
   createBooking,
+  getSlotAvailability,
   getUserBookings,
   getRestaurantBookings,
   updateBookingStatus,
@@ -35,6 +36,7 @@ router.get("/offer-banners", getOfferBanners);
 router.get("/stories", getStories);
 
 // Booking Routes
+router.get("/bookings/availability", getSlotAvailability);
 router.post("/bookings", authenticateUser, createBooking);
 router.get("/bookings/my", authenticateUser, getUserBookings);
 router.get(

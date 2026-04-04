@@ -464,6 +464,7 @@ export const API_ENDPOINTS = {
     MUST_TRIES: "/dining/must-tries",
     OFFER_BANNERS: "/dining/offer-banners",
     STORIES: "/dining/stories",
+    BOOKING_AVAILABILITY: "/dining/bookings/availability",
     BOOKING_CREATE: "/dining/bookings",
     BOOKING_MY: "/dining/bookings/my",
     BOOKING_RESTAURANT: "/dining/bookings/restaurant/:restaurantId",

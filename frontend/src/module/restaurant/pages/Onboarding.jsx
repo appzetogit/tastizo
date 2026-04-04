@@ -882,7 +882,12 @@ export default function RestaurantOnboarding() {
           }
         }
         // If menuImages already have URLs (from previous save), include them
-        const existingMenuUrls = step2.menuImages.filter((img) => !(img instanceof File) && (img?.url || (typeof img === 'string' && img.startsWith('http'))))
+        const existingMenuUrls = step2.menuImages
+          .filter((img) => !(img instanceof File) && (img?.url || (typeof img === 'string' && img.startsWith('http'))))
+          .map((img) => {
+            if (typeof img === "string") return { url: img }
+            return img
+          })
         const allMenuUrls = [...existingMenuUrls, ...menuUploads]
 
         // Verify we have at least one menu image
@@ -1113,8 +1118,9 @@ export default function RestaurantOnboarding() {
         }, 800)
       }
     } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
+      const msg = err?.code === "ERR_NETWORK"
+        ? "Cannot connect to backend server. Please start backend and try again."
+        : err?.response?.data?.message ||
         err?.response?.data?.error ||
         err?.message ||
         "Failed to save onboarding data"
@@ -2027,7 +2033,7 @@ export default function RestaurantOnboarding() {
             <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <div className="text-sm font-bold text-black tracking-tight">Tastizo Backend</div>
+            <div className="text-sm font-bold text-black tracking-tight">Tastizo Onboarding</div>
           </div>
           <div className="flex items-center gap-3">
             {import.meta.env.DEV && (

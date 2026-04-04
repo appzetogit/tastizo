@@ -12,12 +12,35 @@ import Restaurant from "../../restaurant/models/Restaurant.js";
 import RestaurantDiningOffer from "../../restaurant/models/RestaurantDiningOffer.js";
 import RestaurantWallet from "../../restaurant/models/RestaurantWallet.js";
 import Zone from "../../admin/models/Zone.js";
+import mongoose from "mongoose";
 import emailService from "../../auth/services/emailService.js";
 import {
   createOrder as createRazorpayOrder,
   verifyPayment as verifyRazorpayPayment,
 } from "../../payment/services/razorpayService.js";
 import { getRazorpayCredentials } from "../../../shared/utils/envService.js";
+
+const MAX_BOOKINGS_PER_SLOT = 4;
+const BLOCKING_SLOT_STATUSES = [
+  "pending",
+  "confirmed",
+  "checked-in",
+  "completed",
+  "dining_completed",
+];
+
+function getDayRange(dateInput) {
+  const parsed = new Date(dateInput);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const dayStart = new Date(parsed);
+  dayStart.setHours(0, 0, 0, 0);
+
+  const dayEnd = new Date(parsed);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  return { dayStart, dayEnd };
+}
 
 function isPointInZone(lat, lng, zoneCoordinates = []) {
   if (!zoneCoordinates || zoneCoordinates.length < 3) return false;
@@ -305,6 +328,38 @@ export const createBooking = async (req, res) => {
     const { restaurant, guests, date, timeSlot, specialRequest } = req.body;
     const userId = req.user._id;
 
+    if (!restaurant || !guests || !date || !timeSlot) {
+      return res.status(400).json({
+        success: false,
+        message: "Restaurant, guests, date and time slot are required",
+      });
+    }
+
+    const dayRange = getDayRange(date);
+    if (!dayRange) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid booking date",
+      });
+    }
+
+    const slotCount = await TableBooking.countDocuments({
+      restaurant,
+      timeSlot,
+      date: {
+        $gte: dayRange.dayStart,
+        $lte: dayRange.dayEnd,
+      },
+      status: { $in: BLOCKING_SLOT_STATUSES },
+    });
+
+    if (slotCount >= MAX_BOOKINGS_PER_SLOT) {
+      return res.status(409).json({
+        success: false,
+        message: "This time slot is fully booked. Please choose another slot.",
+      });
+    }
+
     const booking = await TableBooking.create({
       restaurant,
       user: userId,
@@ -350,6 +405,77 @@ export const createBooking = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to create booking",
+      error: error.message,
+    });
+  }
+};
+
+// Get booked counts for restaurant slots on a specific date
+export const getSlotAvailability = async (req, res) => {
+  try {
+    const { restaurantId, date } = req.query;
+
+    if (!restaurantId || !date) {
+      return res.status(400).json({
+        success: false,
+        message: "restaurantId and date are required",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(restaurantId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid restaurantId",
+      });
+    }
+
+    const dayRange = getDayRange(date);
+    if (!dayRange) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid date",
+      });
+    }
+
+    const rows = await TableBooking.aggregate([
+      {
+        $match: {
+          restaurant: new mongoose.Types.ObjectId(restaurantId),
+          date: { $gte: dayRange.dayStart, $lte: dayRange.dayEnd },
+          status: { $in: BLOCKING_SLOT_STATUSES },
+        },
+      },
+      {
+        $group: {
+          _id: "$timeSlot",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const availability = {};
+    for (const row of rows) {
+      const count = row?.count || 0;
+      availability[row._id] = {
+        bookedCount: count,
+        remaining: Math.max(MAX_BOOKINGS_PER_SLOT - count, 0),
+        isBooked: count >= MAX_BOOKINGS_PER_SLOT,
+      };
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        date,
+        restaurantId,
+        maxBookingsPerSlot: MAX_BOOKINGS_PER_SLOT,
+        availability,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch slot availability",
       error: error.message,
     });
   }

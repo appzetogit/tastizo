@@ -53,7 +53,7 @@ export const getOrders = asyncHandler(async (req, res) => {
     } else {
       // By default, exclude delivered and cancelled orders unless explicitly requested
       if (includeDelivered !== "true" && includeDelivered !== true) {
-        baseFilters.status = { $nin: ["delivered", "cancelled"] };
+        baseFilters.status = { $nin: ["pending", "delivered", "cancelled"] };
         // Also exclude orders with completed delivery phase
         baseFilters.$or = [
           { "deliveryState.currentPhase": { $ne: "completed" } },

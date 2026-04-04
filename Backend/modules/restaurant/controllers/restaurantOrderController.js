@@ -9,6 +9,15 @@ import { notifyDeliveryBoyNewOrder, notifyMultipleDeliveryBoys, broadcastNewOrde
 import mongoose from 'mongoose';
 import { removeActiveOrder } from '../../../services/firebaseRealtimeService.js';
 
+const isAwaitingPaymentApproval = (order) => {
+  if (!order || order.status !== 'pending') return false;
+  const paymentMethod = order.payment?.method;
+  const paymentStatus = order.payment?.status;
+  // COD/cash orders can proceed with pending payment status.
+  if (paymentMethod === 'cash' || paymentMethod === 'cod') return false;
+  return paymentStatus !== 'completed';
+};
+
 /**
  * Get all orders for restaurant
  * GET /api/restaurant/orders
@@ -57,10 +66,23 @@ export const getRestaurantOrders = asyncHandler(async (req, res) => {
     // Build query - search for orders with any matching restaurantId variation
     // Use $in for multiple variations and also try direct match as fallback
     const query = {
-      $or: [
-        { restaurantId: { $in: restaurantIdVariations } },
-        // Direct match fallback
-        { restaurantId: restaurantIdString }
+      $and: [
+        {
+          $or: [
+            { restaurantId: { $in: restaurantIdVariations } },
+            // Direct match fallback
+            { restaurantId: restaurantIdString }
+          ]
+        },
+        {
+          // Hide online unpaid pending orders from restaurant until payment approval.
+          $or: [
+            { status: { $ne: 'pending' } },
+            { 'payment.method': 'cash' },
+            { 'payment.method': 'cod' },
+            { 'payment.status': 'completed' }
+          ]
+        }
       ]
     };
 
@@ -165,6 +187,14 @@ export const getRestaurantOrderById = asyncHandler(async (req, res) => {
       return errorResponse(res, 404, 'Order not found');
     }
 
+    if (isAwaitingPaymentApproval(order)) {
+      return errorResponse(
+        res,
+        404,
+        'Order not found',
+      );
+    }
+
     return successResponse(res, 200, 'Order retrieved successfully', {
       order
     });
@@ -209,6 +239,14 @@ export const acceptOrder = asyncHandler(async (req, res) => {
 
     if (!order) {
       return errorResponse(res, 404, 'Order not found');
+    }
+
+    if (isAwaitingPaymentApproval(order)) {
+      return errorResponse(
+        res,
+        403,
+        'Order payment is pending approval. You can accept this order only after payment confirmation.',
+      );
     }
 
     // Allow accepting orders with status 'pending' or 'confirmed'
@@ -351,6 +389,14 @@ export const rejectOrder = asyncHandler(async (req, res) => {
       });
       return errorResponse(res, 404, 'Order not found');
     }
+    if (isAwaitingPaymentApproval(order)) {
+      return errorResponse(
+        res,
+        403,
+        'Order payment is pending approval. Wait for confirmation before taking restaurant actions.',
+      );
+    }
+
     // Allow rejecting/cancelling orders with status 'pending', 'confirmed', or 'preparing'
     if (!['pending', 'confirmed', 'preparing'].includes(order.status)) {
       return errorResponse(res, 400, `Order cannot be cancelled. Current status: ${order.status}`);
@@ -430,6 +476,14 @@ export const markOrderPreparing = asyncHandler(async (req, res) => {
 
     if (!order) {
       return errorResponse(res, 404, 'Order not found');
+    }
+
+    if (isAwaitingPaymentApproval(order)) {
+      return errorResponse(
+        res,
+        403,
+        'Order payment is pending approval. You can mark preparing only after payment confirmation.',
+      );
     }
 
     // Allow marking as preparing if status is 'confirmed', 'pending', or already 'preparing'.

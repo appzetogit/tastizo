@@ -37,9 +37,8 @@ export const authenticate = async (req, res, next) => {
       return errorResponse(res, 401, 'Restaurant not found');
     }
 
-    // Allow inactive restaurants to access onboarding and profile routes
-    // They need to complete onboarding even if not yet approved by admin
-    // Only block inactive restaurants from accessing other restricted routes
+    // Allow inactive restaurants to access only onboarding + verification status routes.
+    // Everything else must wait until admin approval.
     const requestPath = req.originalUrl || req.url || '';
     const reqPath = req.path || '';
     const baseUrl = req.baseUrl || '';
@@ -47,43 +46,29 @@ export const authenticate = async (req, res, next) => {
     // Check for onboarding routes (can be /onboarding or /api/restaurant/onboarding)
     const isOnboardingRoute = requestPath.includes('/onboarding') || reqPath === '/onboarding' || reqPath.includes('onboarding');
     
-    // Check for profile/auth routes
-    // Note: /auth/me and /auth/reverify are handled by restaurantAuthRoutes mounted at /auth, so:
-    // - Full path: /api/restaurant/auth/me or /api/restaurant/auth/reverify
-    // - reqPath: /me or /reverify (relative to /auth mount point)
-    // - baseUrl: /auth (if mounted)
-    // /owner/me is directly under /api/restaurant, so reqPath would be /owner/me
-    const isProfileRoute = requestPath.includes('/auth/me') || requestPath.includes('/auth/reverify') || 
-                          requestPath.includes('/owner/me') || 
-                          reqPath === '/me' || reqPath === '/reverify' || reqPath === '/owner/me' ||
-                          (baseUrl.includes('/auth') && (reqPath === '/me' || reqPath === '/reverify'));
-    
-    // Check for menu routes - restaurants need to access menu even when inactive
-    // They might need to set up menu during onboarding or after approval
-    // Routes: /api/restaurant/menu, /api/restaurant/menu/section, /api/restaurant/menu/item/schedule, etc.
-    const isMenuRoute = requestPath.includes('/menu') || 
-                       reqPath === '/menu' || 
-                       reqPath.startsWith('/menu/') ||
-                       baseUrl.includes('/menu');
-    
-    // Check for inventory routes - restaurants need to manage inventory even when inactive
-    // Routes: /api/restaurant/inventory
-    const isInventoryRoute = requestPath.includes('/inventory') || 
-                            reqPath === '/inventory' ||
-                            reqPath.startsWith('/inventory/');
+    // Check for verification routes:
+    // - /api/restaurant/auth/me
+    // - /api/restaurant/auth/reverify
+    // - /api/restaurant/owner/me
+    const isVerificationRoute =
+      requestPath.includes('/auth/me') ||
+      requestPath.includes('/auth/reverify') ||
+      requestPath.includes('/owner/me') ||
+      reqPath === '/me' ||
+      reqPath === '/reverify' ||
+      reqPath === '/owner/me' ||
+      (baseUrl.includes('/auth') && (reqPath === '/me' || reqPath === '/reverify'));
     
     // Debug logging for inactive restaurants
     if (!restaurant.isActive) {
     }
     
-    // Allow access to onboarding, profile, menu, and inventory routes even if inactive
-    // These are essential for restaurant setup and management
-    // Also allow access to getCurrentRestaurant endpoint (used to check status)
-    if (!restaurant.isActive && !isOnboardingRoute && !isProfileRoute && !isMenuRoute && !isInventoryRoute) {
+    if (!restaurant.isActive && !isOnboardingRoute && !isVerificationRoute) {
       console.error('❌ Restaurant account is inactive - access denied:', {
         restaurantId: restaurant._id,
         restaurantName: restaurant.name,
         isActive: restaurant.isActive,
+        rejectionReason: restaurant.rejectionReason || null,
         requestPath,
         reqPath,
         baseUrl,
@@ -91,12 +76,14 @@ export const authenticate = async (req, res, next) => {
         url: req.url,
         routeChecks: {
           isOnboardingRoute,
-          isProfileRoute,
-          isMenuRoute,
-          isInventoryRoute
+          isVerificationRoute,
         }
       });
-      return errorResponse(res, 401, 'Restaurant account is inactive. Please wait for admin approval.');
+      const rejectionReason = (restaurant.rejectionReason || '').trim();
+      const message = rejectionReason
+        ? `Restaurant verification rejected by admin. Reason: ${rejectionReason}`
+        : 'Restaurant account is under verification. Please wait for admin approval.';
+      return errorResponse(res, 403, message);
     }
 
     // Attach restaurant to request

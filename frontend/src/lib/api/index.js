@@ -2069,6 +2069,12 @@ export const diningAPI = {
   getStories: () => {
     return apiClient.get(API_ENDPOINTS.DINING.STORIES);
   },
+  // Get slot availability for a restaurant/date
+  getBookingAvailability: (restaurantId, date) => {
+    return apiClient.get(API_ENDPOINTS.DINING.BOOKING_AVAILABILITY, {
+      params: { restaurantId, date },
+    });
+  },
   // Create a new table booking
   createBooking: (bookingData) => {
     return apiClient.post(API_ENDPOINTS.DINING.BOOKING_CREATE, bookingData);

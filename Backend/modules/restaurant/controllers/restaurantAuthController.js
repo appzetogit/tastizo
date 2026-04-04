@@ -186,9 +186,8 @@ export const verifyOTP = asyncHandler(async (req, res) => {
       // Set owner name from restaurant name if not provided separately
       restaurantData.ownerName = name;
 
-      // Set isActive to false - restaurant needs admin approval before becoming active
-      // Auto-approve in development
-      restaurantData.isActive = process.env.NODE_ENV === "development";
+      // Always require admin approval before restaurant can access protected actions
+      restaurantData.isActive = false;
 
       try {
         // For phone signups, use $unset to ensure email field is not saved
@@ -470,9 +469,8 @@ export const verifyOTP = asyncHandler(async (req, res) => {
 
         restaurantData.ownerName = name;
 
-        // Set isActive to false - restaurant needs admin approval before becoming active
-        // Auto-approve in development
-        restaurantData.isActive = process.env.NODE_ENV === "development";
+        // Always require admin approval before restaurant can access protected actions
+        restaurantData.isActive = false;
 
         try {
           // For phone signups, ensure email field is not included
@@ -746,9 +744,8 @@ export const register = asyncHandler(async (req, res) => {
     ownerName: ownerName || name,
     ownerEmail: (ownerEmail || email).toLowerCase().trim(),
     signupMethod: "email",
-    // Set isActive to false - restaurant needs admin approval before becoming active
-    // Auto-approve in development
-    isActive: process.env.NODE_ENV === "development",
+    // Always require admin approval before restaurant can access protected actions
+    isActive: false,
   };
 
   // Only include phone if provided (don't set to null)
@@ -814,14 +811,7 @@ export const login = asyncHandler(async (req, res) => {
     return errorResponse(res, 401, "Invalid email or password");
   }
 
-  // Allow login if active OR in development mode
-  if (!restaurant.isActive && process.env.NODE_ENV !== "development") {
-    return errorResponse(
-      res,
-      401,
-      "Restaurant account is inactive. Please contact support.",
-    );
-  }
+  // Keep login allowed; route-level middleware controls unapproved account access.
 
   // Check if restaurant has a password set
   if (!restaurant.password) {
@@ -1179,9 +1169,8 @@ export const firebaseGoogleLogin = asyncHandler(async (req, res) => {
         profileImage: picture ? { url: picture } : null,
         ownerName: name.trim(),
         ownerEmail: email.toLowerCase().trim(),
-        // Set isActive to false - restaurant needs admin approval before becoming active
-        // Auto-approve in development
-        isActive: process.env.NODE_ENV === "development",
+        // Always require admin approval before restaurant can access protected actions
+        isActive: false,
       };
 
       try {
@@ -1229,18 +1218,7 @@ export const firebaseGoogleLogin = asyncHandler(async (req, res) => {
       }
     }
 
-    // Ensure restaurant is active (allow in development)
-    if (!restaurant.isActive && process.env.NODE_ENV !== "development") {
-      logger.warn("Inactive restaurant attempted login", {
-        restaurantId: restaurant._id,
-        email,
-      });
-      return errorResponse(
-        res,
-        403,
-        "Your restaurant account has been deactivated. Please contact support.",
-      );
-    }
+    // Keep login allowed; route-level middleware controls unapproved account access.
 
     // Generate JWT tokens for our app (email may be null for phone signups)
     const tokens = jwtService.generateTokens({
