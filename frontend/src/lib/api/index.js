@@ -1276,6 +1276,16 @@ export const adminAPI = {
     return apiClient.post(API_ENDPOINTS.ADMIN.OFFERS, data);
   },
 
+  // Update offer row (admin)
+  updateOffer: (id, data) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.OFFER_BY_ID.replace(":id", id), data);
+  },
+
+  // Delete offer row (admin)
+  deleteOffer: (id, params = {}) => {
+    return apiClient.delete(API_ENDPOINTS.ADMIN.OFFER_BY_ID.replace(":id", id), { params });
+  },
+
   // Restaurant Commission Management
   getRestaurantCommissions: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION, { params });

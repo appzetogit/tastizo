@@ -2230,6 +2230,55 @@ export const updateRestaurant = asyncHandler(async (req, res) => {
  * GET /api/admin/offers
  * Query params: page, limit, search, status, restaurantId
  */
+const UNIVERSAL_ITEM_ID = "__ALL__";
+
+const normalizeOfferDiscount = (discountType, discountValue, originalPrice) => {
+  const numericDiscountValue = Number(discountValue);
+  const numericOriginalPrice = Number(originalPrice || 0);
+
+  if (!Number.isFinite(numericDiscountValue) || numericDiscountValue < 0) {
+    throw new Error("discountValue must be a valid non-negative number");
+  }
+
+  if (discountType === "percentage") {
+    if (numericDiscountValue > 100) {
+      throw new Error(
+        "For percentage discount, discountValue must be between 0 and 100",
+      );
+    }
+    const discountedPrice = Math.max(
+      0,
+      numericOriginalPrice * (1 - numericDiscountValue / 100),
+    );
+    return {
+      originalPrice: Number(numericOriginalPrice.toFixed(2)),
+      discountPercentage: Number(numericDiscountValue.toFixed(2)),
+      discountedPrice: Number(discountedPrice.toFixed(2)),
+    };
+  }
+
+  const discountedPrice = Number(numericDiscountValue.toFixed(2));
+  if (discountedPrice > numericOriginalPrice) {
+    throw new Error(
+      "For flat-price discount, discounted price cannot exceed originalPrice",
+    );
+  }
+  const discountPercentage =
+    numericOriginalPrice > 0
+      ? Number(
+          (
+            ((numericOriginalPrice - discountedPrice) / numericOriginalPrice) *
+            100
+          ).toFixed(2),
+        )
+      : 0;
+  return {
+    originalPrice: Number(numericOriginalPrice.toFixed(2)),
+    discountPercentage,
+    discountedPrice,
+  };
+};
+
 export const getAllOffers = asyncHandler(async (req, res) => {
   try {
     const { page = 1, limit = 50, search, status, restaurantId } = req.query;
@@ -2248,27 +2297,44 @@ export const getAllOffers = asyncHandler(async (req, res) => {
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Fetch offers with restaurant details
+    // Fetch offers
     const offers = await Offer.find(query)
-      .populate("restaurant", "name restaurantId")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
       .lean();
+
+    const restaurantObjectIds = offers
+      .map((offer) => offer.restaurant)
+      .filter(Boolean);
+
+    const restaurants = restaurantObjectIds.length
+      ? await Restaurant.find({ _id: { $in: restaurantObjectIds } })
+          .select("name restaurantId")
+          .lean()
+      : [];
+    const restaurantMap = new Map(
+      restaurants.map((restaurant) => [String(restaurant._id), restaurant]),
+    );
 
     // Get total count
     const total = await Offer.countDocuments(query);
 
     // Flatten offers to show each item separately
     const offerItems = [];
-    offers.forEach((offer, offerIndex) => {
+    offers.forEach((offer) => {
+      const hasRestaurantScope = Boolean(offer.restaurant);
+      const restaurantMeta = hasRestaurantScope
+        ? restaurantMap.get(String(offer.restaurant))
+        : null;
+
       if (offer.items && offer.items.length > 0) {
         offer.items.forEach((item, itemIndex) => {
           // Apply search filter if provided
           if (search) {
             const searchLower = search.toLowerCase();
             const matchesSearch =
-              offer.restaurant?.name?.toLowerCase().includes(searchLower) ||
+              restaurantMeta?.name?.toLowerCase().includes(searchLower) ||
               item.itemName?.toLowerCase().includes(searchLower) ||
               item.couponCode?.toLowerCase().includes(searchLower);
 
@@ -2280,21 +2346,30 @@ export const getAllOffers = asyncHandler(async (req, res) => {
           offerItems.push({
             sl: skip + offerItems.length + 1,
             offerId: offer._id.toString(),
-            restaurantName: offer.restaurant?.name || "All Restaurants (Universal)",
+            restaurantName: hasRestaurantScope
+              ? restaurantMeta?.name || "Unknown Restaurant"
+              : "All Restaurants (Universal)",
             restaurantId:
-              offer.restaurant?.restaurantId ||
-              offer.restaurant?._id?.toString() ||
+              restaurantMeta?.restaurantId ||
+              (hasRestaurantScope ? String(offer.restaurant) : null) ||
               "ALL",
+            restaurantObjectId: hasRestaurantScope
+              ? String(offer.restaurant)
+              : null,
             dishName: item.itemName || "Unknown Dish",
             dishId: item.itemId || "N/A",
+            itemIndex,
             couponCode: item.couponCode || "N/A",
             discountType: offer.discountType || "percentage",
             discountPercentage: item.discountPercentage || 0,
             originalPrice: item.originalPrice || 0,
             discountedPrice: item.discountedPrice || 0,
+            minOrderValue: offer.minOrderValue || 0,
             status: offer.status || "active",
             startDate: offer.startDate || null,
             endDate: offer.endDate || null,
+            scopeType: hasRestaurantScope ? "restaurant" : "universal",
+            appliesToAllDishes: String(item.itemId) === UNIVERSAL_ITEM_ID,
             createdAt: offer.createdAt || new Date(),
           });
         });
@@ -2515,6 +2590,203 @@ export const createAdminOffer = asyncHandler(async (req, res) => {
       error: error.stack,
     });
     return errorResponse(res, 500, "Failed to create offer");
+  }
+});
+
+/**
+ * Update an offer row (admin)
+ * PUT /api/admin/offers/:id
+ */
+export const updateAdminOffer = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      itemId,
+      itemIndex,
+      couponCode,
+      discountType,
+      discountValue,
+      minOrderValue,
+      startDate,
+      endDate,
+      status,
+    } = req.body;
+
+    const offer = await Offer.findById(id);
+    if (!offer) {
+      return errorResponse(res, 404, "Offer not found");
+    }
+
+    const validStatuses = ["draft", "active", "paused", "expired", "cancelled"];
+    if (status !== undefined) {
+      if (!validStatuses.includes(status)) {
+        return errorResponse(res, 400, "Invalid status value");
+      }
+      offer.status = status;
+    }
+
+    if (startDate !== undefined) {
+      offer.startDate = startDate ? new Date(startDate) : null;
+    }
+    if (endDate !== undefined) {
+      offer.endDate = endDate ? new Date(endDate) : null;
+    }
+    if (minOrderValue !== undefined) {
+      const numericMinOrderValue = Number(minOrderValue);
+      if (!Number.isFinite(numericMinOrderValue) || numericMinOrderValue < 0) {
+        return errorResponse(
+          res,
+          400,
+          "minOrderValue must be a valid non-negative number",
+        );
+      }
+      offer.minOrderValue = numericMinOrderValue;
+    }
+
+    const resolvedItemIndex =
+      Number.isInteger(itemIndex) && itemIndex >= 0
+        ? itemIndex
+        : offer.items.findIndex((it) => String(it.itemId) === String(itemId));
+
+    if (resolvedItemIndex < 0 || resolvedItemIndex >= offer.items.length) {
+      return errorResponse(res, 404, "Offer item not found");
+    }
+
+    const currentItem = offer.items[resolvedItemIndex];
+    const nextDiscountType = discountType || offer.discountType;
+    if (!["percentage", "flat-price"].includes(nextDiscountType)) {
+      return errorResponse(
+        res,
+        400,
+        "discountType must be percentage or flat-price",
+      );
+    }
+
+    if (couponCode !== undefined) {
+      const normalizedCouponCode = String(couponCode || "").trim().toUpperCase();
+      if (!normalizedCouponCode) {
+        return errorResponse(res, 400, "couponCode cannot be empty");
+      }
+      currentItem.couponCode = normalizedCouponCode;
+    }
+
+    if (discountType !== undefined) {
+      offer.discountType = nextDiscountType;
+    }
+
+    if (discountValue !== undefined || discountType !== undefined) {
+      const isUniversalDishCoupon =
+        String(currentItem.itemId) === UNIVERSAL_ITEM_ID;
+      if (isUniversalDishCoupon) {
+        if (!Number.isFinite(Number(discountValue))) {
+          return errorResponse(
+            res,
+            400,
+            "discountValue is required for universal offer update",
+          );
+        }
+
+        if (nextDiscountType === "percentage") {
+          const pct = Number(discountValue);
+          if (pct < 0 || pct > 100) {
+            return errorResponse(
+              res,
+              400,
+              "For percentage discount, discountValue must be between 0 and 100",
+            );
+          }
+          currentItem.originalPrice = 100;
+          currentItem.discountPercentage = Number(pct.toFixed(2));
+          currentItem.discountedPrice = Number((100 - pct).toFixed(2));
+        } else {
+          const flatOff = Number(discountValue);
+          if (flatOff < 0) {
+            return errorResponse(
+              res,
+              400,
+              "discountValue must be a valid non-negative number",
+            );
+          }
+          currentItem.originalPrice = Number(flatOff.toFixed(2));
+          currentItem.discountPercentage = 0;
+          currentItem.discountedPrice = 0;
+        }
+      } else {
+        const currentOriginalPrice = Number(currentItem.originalPrice || 0);
+        const targetDiscountValue =
+          discountValue !== undefined
+            ? Number(discountValue)
+            : nextDiscountType === "percentage"
+              ? Number(currentItem.discountPercentage || 0)
+              : Number(currentItem.discountedPrice || 0);
+
+        if (!Number.isFinite(targetDiscountValue) || targetDiscountValue < 0) {
+          return errorResponse(
+            res,
+            400,
+            "discountValue must be a valid non-negative number",
+          );
+        }
+
+        const normalized = normalizeOfferDiscount(
+          nextDiscountType,
+          targetDiscountValue,
+          currentOriginalPrice,
+        );
+        currentItem.originalPrice = normalized.originalPrice;
+        currentItem.discountPercentage = normalized.discountPercentage;
+        currentItem.discountedPrice = normalized.discountedPrice;
+      }
+    }
+
+    await offer.save();
+    return successResponse(res, 200, "Offer updated successfully", { offer });
+  } catch (error) {
+    logger.error(`Error updating admin offer: ${error.message}`, {
+      error: error.stack,
+    });
+    return errorResponse(res, 500, "Failed to update offer");
+  }
+});
+
+/**
+ * Delete an offer row (admin)
+ * DELETE /api/admin/offers/:id
+ * Query params: itemId, itemIndex
+ */
+export const deleteAdminOffer = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { itemId, itemIndex } = req.query;
+
+    const offer = await Offer.findById(id);
+    if (!offer) {
+      return errorResponse(res, 404, "Offer not found");
+    }
+
+    const resolvedItemIndex =
+      itemIndex !== undefined
+        ? Number(itemIndex)
+        : offer.items.findIndex((it) => String(it.itemId) === String(itemId));
+
+    const hasValidItemIndex =
+      Number.isInteger(resolvedItemIndex) &&
+      resolvedItemIndex >= 0 &&
+      resolvedItemIndex < offer.items.length;
+
+    if (hasValidItemIndex && offer.items.length > 1) {
+      offer.items.splice(resolvedItemIndex, 1);
+      await offer.save();
+      return successResponse(res, 200, "Offer item deleted successfully");
+    }
+
+    await Offer.findByIdAndDelete(id);
+    return successResponse(res, 200, "Offer deleted successfully");
+  } catch (error) {
+    logger.error(`Error deleting admin offer: ${error.message}`, {
+      error: error.stack,
+    });
+    return errorResponse(res, 500, "Failed to delete offer");
   }
 });
 

@@ -32,6 +32,8 @@ import {
   updateRestaurantDiningCommission,
   getAllOffers,
   createAdminOffer,
+  updateAdminOffer,
+  deleteAdminOffer,
   getAllFoods,
   getRestaurantAnalytics,
   getCustomerWalletReport,
@@ -431,6 +433,8 @@ router.post("/food-approvals/:id/reject", rejectFoodItem);
 // Offers Management
 router.get("/offers", getAllOffers);
 router.post("/offers", createAdminOffer);
+router.put("/offers/:id", updateAdminOffer);
+router.delete("/offers/:id", deleteAdminOffer);
 
 // Zone Management
 router.use("/zones", zoneRoutes);
