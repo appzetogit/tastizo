@@ -4,6 +4,10 @@ import { toast } from "sonner"
 import VariantPickerModal from "../components/VariantPickerModal"
 import ReplaceCartModal from "../components/ReplaceCartModal"
 
+const CART_META_STORAGE_KEY = "cart_meta"
+const ZONE_CHANGE_CART_MESSAGE =
+  "Your location has changed. Please add items from restaurants in your current area."
+
 // Build cart item from (item, restaurant, variation?). Used for add-to-cart and variant flow.
 function buildCartItem(item, restaurant, variation = null) {
   const validRestaurantId = restaurant?.restaurantId || restaurant?._id || restaurant?.id
@@ -63,6 +67,29 @@ const defaultCartContext = {
 
 const CartContext = createContext(defaultCartContext)
 
+function readCartMeta() {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = localStorage.getItem(CART_META_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function writeCartMeta(meta) {
+  if (typeof window === "undefined") return
+  try {
+    if (!meta) {
+      localStorage.removeItem(CART_META_STORAGE_KEY)
+      return
+    }
+    localStorage.setItem(CART_META_STORAGE_KEY, JSON.stringify(meta))
+  } catch {
+    // ignore storage failures
+  }
+}
+
 export function CartProvider({ children }) {
   // Safe init (works with SSR and bad JSON)
   const [cart, setCart] = useState(() => {
@@ -85,6 +112,7 @@ export function CartProvider({ children }) {
 
   // Replace cart modal: when user adds from different restaurant, show confirm dialog
   const [replaceCartPending, setReplaceCartPending] = useState(null)
+  const [cartMeta, setCartMeta] = useState(() => readCartMeta())
 
   const openVariantPicker = useCallback((item, restaurant) => {
     if (item?.variations?.length) {
@@ -163,6 +191,26 @@ export function CartProvider({ children }) {
     }
   }, [cart])
 
+  useEffect(() => {
+    if (cart.length === 0) {
+      setCartMeta(null)
+      writeCartMeta(null)
+      return
+    }
+
+    const firstItem = cart[0] || {}
+    const currentZoneId =
+      typeof window !== "undefined" ? localStorage.getItem("userZoneId") : null
+    const nextMeta = {
+      zoneId: currentZoneId || null,
+      restaurantId: firstItem.restaurantId || null,
+      restaurantName: firstItem.restaurant || null,
+      updatedAt: Date.now(),
+    }
+    setCartMeta(nextMeta)
+    writeCartMeta(nextMeta)
+  }, [cart])
+
   // Clear cart when user logs out so new account gets empty cart
   useEffect(() => {
     const onLogout = () => setCart([])
@@ -177,12 +225,62 @@ export function CartProvider({ children }) {
     return () => window.removeEventListener("userAuthChanged", onAuthChanged)
   }, [])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const currentZoneId = localStorage.getItem("userZoneId")
+    if (
+      cart.length > 0 &&
+      cartMeta?.zoneId &&
+      currentZoneId &&
+      cartMeta.zoneId !== currentZoneId
+    ) {
+      setCart([])
+      setCartMeta(null)
+      writeCartMeta(null)
+    }
+  }, [cart.length, cartMeta?.zoneId])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handleZoneChanged = (event) => {
+      const message = event?.detail?.message || ZONE_CHANGE_CART_MESSAGE
+      setReplaceCartPending(null)
+      setVariantPicker({ item: null, restaurant: null })
+      setCart((prev) => {
+        if (prev.length > 0) {
+          toast.error(message)
+        }
+        return []
+      })
+      setCartMeta(null)
+      writeCartMeta(null)
+    }
+
+    window.addEventListener("userZoneChanged", handleZoneChanged)
+    return () => window.removeEventListener("userZoneChanged", handleZoneChanged)
+  }, [])
+
   const addToCart = (item, sourcePosition = null) => {
+    const currentZoneId =
+      typeof window !== "undefined" ? localStorage.getItem("userZoneId") : null
+    let activeCart = cart
+    if (cartMeta?.zoneId && currentZoneId && cartMeta.zoneId !== currentZoneId) {
+      setReplaceCartPending(null)
+      closeVariantPicker()
+      setCart([])
+      setCartMeta(null)
+      writeCartMeta(null)
+      toast.error(ZONE_CHANGE_CART_MESSAGE)
+      activeCart = []
+    }
+
     // Check restaurant mismatch BEFORE setCart (to show Replace modal instead of throwing)
-    if (cart.length > 0) {
-      const firstItemRestaurantName = cart[0]?.restaurant;
+    if (activeCart.length > 0) {
+      const firstItemRestaurantName = activeCart[0]?.restaurant;
       const newItemRestaurantName = item?.restaurant;
-      const firstItemRestaurantId = cart[0]?.restaurantId;
+      const firstItemRestaurantId = activeCart[0]?.restaurantId;
       const newItemRestaurantId = item?.restaurantId;
 
       const normalizeName = (name) => name ? name.trim().toLowerCase() : '';
@@ -330,7 +428,11 @@ export function CartProvider({ children }) {
     return cart.find((i) => lineKey(i) === targetKey)
   }
 
-  const clearCart = () => setCart([])
+  const clearCart = () => {
+    setCart([])
+    setCartMeta(null)
+    writeCartMeta(null)
+  }
 
   const confirmReplaceCart = useCallback(() => {
     if (!replaceCartPending) return
@@ -338,6 +440,16 @@ export function CartProvider({ children }) {
     setReplaceCartPending(null)
     closeVariantPicker()
     setCart([item])
+    const currentZoneId =
+      typeof window !== "undefined" ? localStorage.getItem("userZoneId") : null
+    const nextMeta = {
+      zoneId: currentZoneId || null,
+      restaurantId: item?.restaurantId || null,
+      restaurantName: item?.restaurant || null,
+      updatedAt: Date.now(),
+    }
+    setCartMeta(nextMeta)
+    writeCartMeta(nextMeta)
     if (sourcePosition) {
       setLastAddEvent({
         product: { id: item.id, name: item.name, imageUrl: item.image || item.imageUrl },
@@ -392,6 +504,16 @@ export function CartProvider({ children }) {
       
       return cleanedCart;
     });
+    const currentZoneId =
+      typeof window !== "undefined" ? localStorage.getItem("userZoneId") : null
+    const nextMeta = {
+      zoneId: currentZoneId || null,
+      restaurantId: restaurantId || null,
+      restaurantName: restaurantName || null,
+      updatedAt: Date.now(),
+    }
+    setCartMeta(nextMeta)
+    writeCartMeta(nextMeta)
   }
 
   // Validate and clean cart on mount/load to prevent multiple restaurant items

@@ -71,7 +71,7 @@ export default function RestaurantDetails() {
     toggleItemInCollection
   } = useProfile()
   const { location: userLocation } = useLocation() // Get user's current location
-  const { zoneId, zone, loading: loadingZone, isOutOfService } = useZone(userLocation) // Get user's zone for zone-based filtering
+  const { zoneId, currentLocation, locationRefreshKey, loading: loadingZone, isOutOfService } = useZone() // Get user's zone for zone-based filtering
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [highlightIndex, setHighlightIndex] = useState(0)
   const [quantities, setQuantities] = useState({})
@@ -121,23 +121,27 @@ export default function RestaurantDetails() {
     const fetchRestaurant = async () => {
       if (!slug) return
 
-      // Prevent redundant fetches
-      if (fetchedRestaurantRef.current && restaurant && restaurant.slug === slug) {
-        if (zoneId && !loadingZone) return
-      }
-
       try {
         setLoadingRestaurant(true)
         setRestaurantError(null)
 
         console.log('Fetching restaurant with slug:', slug)
         let apiRestaurant = null
+        const requestParams = {
+          ...(zoneId ? { zoneId } : {}),
+          ...(currentLocation?.latitude && currentLocation?.longitude
+            ? {
+                lat: currentLocation.latitude,
+                lng: currentLocation.longitude,
+              }
+            : {}),
+        }
 
         // Try to get restaurant by slug
         try {
           const response = await diningAPI.getRestaurantBySlug(
             slug,
-            zoneId ? { zoneId } : {},
+            requestParams,
           )
           if (response.data?.success) {
             apiRestaurant = response.data.data
@@ -149,7 +153,7 @@ export default function RestaurantDetails() {
         // Fallback to search
               if (!apiRestaurant) {
           try {
-            const searchRes = await diningAPI.searchRestaurants({ q: slug })
+            const searchRes = await diningAPI.searchRestaurants({ q: slug, ...requestParams })
             if (searchRes.data?.success && searchRes.data.data?.restaurants) {
               apiRestaurant = searchRes.data.data.restaurants.find(r => r.slug === slug)
               }
@@ -187,7 +191,7 @@ export default function RestaurantDetails() {
               const [menuRes, inventoryRes] = await Promise.allSettled([
                 restaurantAPI.getMenuByRestaurantId(
                   restaurantId,
-                  zoneId ? { zoneId } : {},
+                  requestParams,
                 ),
                 restaurantAPI.getInventoryByRestaurantId(restaurantId)
               ])
@@ -263,7 +267,14 @@ export default function RestaurantDetails() {
     }
 
     if (!loadingZone) fetchRestaurant()
-  }, [slug, zoneId, loadingZone, restaurant?.slug])
+  }, [
+    currentLocation?.latitude,
+    currentLocation?.longitude,
+    loadingZone,
+    locationRefreshKey,
+    slug,
+    zoneId,
+  ])
 
 
   // Track previous values to prevent unnecessary recalculations

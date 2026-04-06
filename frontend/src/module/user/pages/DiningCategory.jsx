@@ -27,7 +27,7 @@ export default function DiningCategory() {
   const rightContentRef = useRef(null)
   const { openLocationSelector } = useLocationSelector()
   const { location } = useLocationHook()
-  const { zoneId } = useZone(location)
+  const { zoneId, currentLocation, locationRefreshKey } = useZone()
   const { addFavorite, removeFavorite, isFavorite } = useProfile()
   const cityName = location?.city || "Select"
 
@@ -42,6 +42,10 @@ export default function DiningCategory() {
         }
         if (zoneId) {
           params.zoneId = zoneId
+        }
+        if (currentLocation?.latitude && currentLocation?.longitude) {
+          params.lat = currentLocation.latitude
+          params.lng = currentLocation.longitude
         }
         const response = await restaurantAPI.getRestaurants(params)
         if (response.data && response.data.success) {
@@ -75,7 +79,7 @@ export default function DiningCategory() {
       }
     }
     fetchRestaurants()
-  }, [category, zoneId])
+  }, [category, currentLocation?.latitude, currentLocation?.longitude, locationRefreshKey, zoneId])
 
   // Category headings mapping
   const categoryHeadings = {

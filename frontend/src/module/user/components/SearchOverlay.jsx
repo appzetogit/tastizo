@@ -20,7 +20,7 @@ const MAX_HISTORY_ITEMS = 10
 export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchChange }) {
   const navigate = useNavigate()
   const { location } = useLocation()
-  const { zoneId } = useZone(location)
+  const { zoneId, currentLocation, locationRefreshKey } = useZone()
   const inputRef = useRef(null)
   const recognitionRef = useRef(null)
   const [allFoods, setAllFoods] = useState([])
@@ -83,6 +83,11 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     }
   }, [isOpen])
 
+  useEffect(() => {
+    setAllFoods([])
+    setFilteredFoods([])
+  }, [locationRefreshKey, zoneId])
+
   // Load restaurants + menu dishes so search matches food names
   useEffect(() => {
     if (!isOpen || allFoods.length > 0 || loadingFoods) return
@@ -96,6 +101,10 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
         }
         const params = { limit: 50 }
         params.zoneId = zoneId
+        if (currentLocation?.latitude && currentLocation?.longitude) {
+          params.lat = currentLocation.latitude
+          params.lng = currentLocation.longitude
+        }
         const response = await restaurantAPI.getRestaurants(params)
         const restaurants = response?.data?.data?.restaurants || []
 
@@ -139,7 +148,7 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
             try {
               const id = restaurant._id || restaurant.restaurantId
               if (!id) return
-              const menuRes = await restaurantAPI.getMenuByRestaurantId(id)
+              const menuRes = await restaurantAPI.getMenuByRestaurantId(id, params)
               const menu = menuRes?.data?.data?.menu || menuRes?.data?.menu
               if (!menu || !menu.sections || !Array.isArray(menu.sections)) return
 
@@ -198,7 +207,15 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     }
 
     loadFoods()
-  }, [isOpen, allFoods.length, loadingFoods, zoneId])
+  }, [
+    allFoods.length,
+    currentLocation?.latitude,
+    currentLocation?.longitude,
+    isOpen,
+    loadingFoods,
+    locationRefreshKey,
+    zoneId,
+  ])
 
   useEffect(() => {
     if (isOpen) return

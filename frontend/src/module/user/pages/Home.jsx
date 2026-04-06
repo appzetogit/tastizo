@@ -37,6 +37,7 @@ import offerImage from "@/assets/offerimage.png"
 import api, { restaurantAPI } from "@/lib/api"
 import OptimizedImage from "@/components/OptimizedImage"
 import {
+  clearHomeDiscoveryCache,
   getHomeDiscoveryCache,
   patchHomeDiscoveryCache,
   serializeHomeFilters,
@@ -768,7 +769,17 @@ export default function Home() {
   } = profileContext
   const { addToCart, cart } = useCart()
   const { location, loading, requestLocation } = useLocation()
-  const { zoneId, zoneStatus, isInService, isOutOfService, loading: zoneLoading } = useZone(location)
+  const {
+    zoneId,
+    zoneStatus,
+    isInService,
+    isOutOfService,
+    loading: zoneLoading,
+    currentLocation,
+    lastFetchedLocation,
+    locationRefreshKey,
+    accuracyWarning,
+  } = useZone()
   const [showToast, setShowToast] = useState(false)
   const [showManageCollections, setShowManageCollections] = useState(false)
   const [selectedRestaurantSlug, setSelectedRestaurantSlug] = useState(null)
@@ -874,11 +885,15 @@ export default function Home() {
   // Fetch restaurants from API with filters (no extra /health round-trip — saves latency)
   const fetchRestaurants = useCallback(async (filters = {}) => {
     const filtersKey = serializeHomeFilters(filters)
+    const locationKey = lastFetchedLocation
+      ? `${Number(lastFetchedLocation.latitude).toFixed(4)},${Number(lastFetchedLocation.longitude).toFixed(4)}`
+      : "no-location"
     const disc = getHomeDiscoveryCache()
     if (
       disc?.restaurantsLoaded &&
       disc.restaurantsZoneId === zoneId &&
       disc.restaurantsFiltersKey === filtersKey &&
+      disc.restaurantsLocationKey === locationKey &&
       Array.isArray(disc.restaurantsData)
     ) {
       if (homeMountRef.current) {
@@ -953,6 +968,10 @@ export default function Home() {
       if (zoneId) {
         params.zoneId = zoneId
       }
+      if (currentLocation?.latitude && currentLocation?.longitude) {
+        params.lat = currentLocation.latitude
+        params.lng = currentLocation.longitude
+      }
 
       if (zoneLoading) return
       if (!zoneId) {
@@ -960,6 +979,7 @@ export default function Home() {
           restaurantsLoaded: true,
           restaurantsZoneId: null,
           restaurantsFiltersKey: filtersKey,
+          restaurantsLocationKey: locationKey,
           restaurantsData: [],
         })
         if (homeMountRef.current) {
@@ -979,6 +999,7 @@ export default function Home() {
             restaurantsLoaded: true,
             restaurantsZoneId: zoneId,
             restaurantsFiltersKey: filtersKey,
+            restaurantsLocationKey: locationKey,
             restaurantsData: [],
           })
           if (homeMountRef.current) {
@@ -1142,6 +1163,7 @@ export default function Home() {
           restaurantsLoaded: true,
           restaurantsZoneId: zoneId,
           restaurantsFiltersKey: filtersKey,
+          restaurantsLocationKey: locationKey,
           restaurantsData: transformedRestaurants,
         })
         if (homeMountRef.current) {
@@ -1152,6 +1174,7 @@ export default function Home() {
           restaurantsLoaded: true,
           restaurantsZoneId: zoneId,
           restaurantsFiltersKey: filtersKey,
+          restaurantsLocationKey: locationKey,
           restaurantsData: [],
         })
         if (homeMountRef.current) {
@@ -1168,12 +1191,12 @@ export default function Home() {
         setLoadingRestaurants(false)
       }
     }
-  }, [zoneId, zoneLoading])
+  }, [currentLocation?.latitude, currentLocation?.longitude, lastFetchedLocation, zoneId, zoneLoading])
 
   // Fetch restaurants when appliedFilters change
   useEffect(() => {
     fetchRestaurants(appliedFilters)
-  }, [appliedFilters, fetchRestaurants])
+  }, [appliedFilters, fetchRestaurants, locationRefreshKey])
 
   // Recalculate distances when user location updates
   useEffect(() => {

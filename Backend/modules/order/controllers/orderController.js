@@ -31,6 +31,45 @@ const logger = winston.createLogger({
   ],
 });
 
+function isPointInZone(lat, lng, zoneCoordinates = []) {
+  if (!zoneCoordinates || zoneCoordinates.length < 3) return false;
+
+  let inside = false;
+  for (let i = 0, j = zoneCoordinates.length - 1; i < zoneCoordinates.length; j = i++) {
+    const coordI = zoneCoordinates[i];
+    const coordJ = zoneCoordinates[j];
+    const xi = typeof coordI === "object" ? coordI.latitude || coordI.lat : null;
+    const yi = typeof coordI === "object" ? coordI.longitude || coordI.lng : null;
+    const xj = typeof coordJ === "object" ? coordJ.latitude || coordJ.lat : null;
+    const yj = typeof coordJ === "object" ? coordJ.longitude || coordJ.lng : null;
+
+    if (xi === null || yi === null || xj === null || yj === null) continue;
+
+    const intersect =
+      yi > lng !== yj > lng && lat < ((xj - xi) * (lng - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
+async function resolveRestaurantZone(restaurant) {
+  const restaurantLat =
+    restaurant?.location?.latitude || restaurant?.location?.coordinates?.[1];
+  const restaurantLng =
+    restaurant?.location?.longitude || restaurant?.location?.coordinates?.[0];
+
+  if (!restaurantLat || !restaurantLng) {
+    return null;
+  }
+
+  const activeZones = await Zone.find({ isActive: true }).lean();
+  return (
+    activeZones.find((zone) => isPointInZone(restaurantLat, restaurantLng, zone.coordinates || [])) ||
+    null
+  );
+}
+
 // Helper to process settlement and escrow for confirmed orders
 const confirmOrderSettlement = async (order, userId) => {
   try {
@@ -1307,7 +1346,7 @@ export const cancelOrder = async (req, res) => {
  */
 export const calculateOrder = async (req, res) => {
   try {
-    const { items, restaurantId, deliveryAddress, couponCode, deliveryFleet } =
+    const { items, restaurantId, deliveryAddress, couponCode, deliveryFleet, zoneId } =
       req.body;
 
     // Validate required fields
@@ -1315,6 +1354,48 @@ export const calculateOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Order must have at least one item",
+      });
+    }
+
+    if (!restaurantId) {
+      return res.status(400).json({
+        success: false,
+        message: "Restaurant ID is required",
+      });
+    }
+
+    const restaurant = await Restaurant.findOne({
+      $or: [
+        { restaurantId },
+        { slug: restaurantId },
+        ...(mongoose.Types.ObjectId.isValid(restaurantId)
+          ? [{ _id: restaurantId }]
+          : []),
+      ],
+      isActive: true,
+    }).lean();
+
+    if (!restaurant) {
+      return res.status(404).json({
+        success: false,
+        message: "Restaurant not found",
+      });
+    }
+
+    const restaurantZone = await resolveRestaurantZone(restaurant);
+    if (!restaurantZone) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "This restaurant is not available in your area. Please choose a restaurant from an active delivery zone.",
+      });
+    }
+
+    if (zoneId && restaurantZone._id.toString() !== String(zoneId)) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "This restaurant is not available in your current zone. Please add items from restaurants in your current area.",
       });
     }
 
@@ -1331,6 +1412,11 @@ export const calculateOrder = async (req, res) => {
       success: true,
       data: {
         pricing,
+        zone: {
+          _id: restaurantZone._id.toString(),
+          name: restaurantZone.name || restaurantZone.zoneName || "Zone",
+          zoneName: restaurantZone.zoneName || restaurantZone.name || "Zone",
+        },
       },
     });
   } catch (error) {

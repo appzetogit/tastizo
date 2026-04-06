@@ -1,4 +1,5 @@
 import Restaurant from "../models/Restaurant.js";
+import Zone from "../../admin/models/Zone.js";
 import otpService from "../../auth/services/otpService.js";
 import jwtService from "../../auth/services/jwtService.js";
 import firebaseAuthService from "../../auth/services/firebaseAuthService.js";
@@ -51,6 +52,53 @@ const logger = winston.createLogger({
     }),
   ],
 });
+
+function isPointInZone(lat, lng, zoneCoordinates = []) {
+  if (!zoneCoordinates || zoneCoordinates.length < 3) return false;
+
+  let inside = false;
+  for (let i = 0, j = zoneCoordinates.length - 1; i < zoneCoordinates.length; j = i++) {
+    const coordI = zoneCoordinates[i];
+    const coordJ = zoneCoordinates[j];
+    const xi = typeof coordI === "object" ? (coordI.latitude || coordI.lat) : null;
+    const yi = typeof coordI === "object" ? (coordI.longitude || coordI.lng) : null;
+    const xj = typeof coordJ === "object" ? (coordJ.latitude || coordJ.lat) : null;
+    const yj = typeof coordJ === "object" ? (coordJ.longitude || coordJ.lng) : null;
+
+    if (xi === null || yi === null || xj === null || yj === null) continue;
+
+    const intersect =
+      yi > lng !== yj > lng && lat < ((xj - xi) * (lng - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
+async function getRestaurantZone(location) {
+  const lat = Number(location?.latitude ?? location?.coordinates?.[1]);
+  const lng = Number(location?.longitude ?? location?.coordinates?.[0]);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const activeZones = await Zone.find({ isActive: true })
+    .select("_id name zoneName country unit coordinates")
+    .lean();
+
+  const matchedZone = activeZones.find((zone) =>
+    isPointInZone(lat, lng, zone.coordinates || []),
+  );
+
+  if (!matchedZone) return null;
+
+  return {
+    _id: matchedZone._id.toString(),
+    name: matchedZone.name || matchedZone.zoneName || "Zone",
+    zoneName: matchedZone.zoneName || matchedZone.name || "Zone",
+    country: matchedZone.country || "",
+    unit: matchedZone.unit || "kilometer",
+  };
+}
 
 /**
  * Send OTP for restaurant phone number or email
@@ -994,6 +1042,8 @@ export const logout = asyncHandler(async (req, res) => {
  */
 export const getCurrentRestaurant = asyncHandler(async (req, res) => {
   // Restaurant is attached by authenticate middleware
+  const zone = await getRestaurantZone(req.restaurant.location);
+
   return successResponse(res, 200, "Restaurant retrieved successfully", {
     restaurant: {
       id: req.restaurant._id,
@@ -1022,6 +1072,7 @@ export const getCurrentRestaurant = asyncHandler(async (req, res) => {
       rejectionReason: req.restaurant.rejectionReason || null,
       approvedAt: req.restaurant.approvedAt || null,
       rejectedAt: req.restaurant.rejectedAt || null,
+      zone,
     },
   });
 });

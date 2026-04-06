@@ -89,7 +89,7 @@ export default function Cart() {
   const { createOrder } = useOrders()
   const { openLocationSelector } = useLocationSelector()
   const { location: currentLocation } = useUserLocation() // Get live location address
-  const { zoneId } = useZone(currentLocation) // Get user's zone
+  const { zoneId } = useZone() // Get user's zone
 
   const [showCoupons, setShowCoupons] = useState(false)
   const [appliedCoupon, setAppliedCoupon] = useState(null)
@@ -623,6 +623,7 @@ export default function Cart() {
           restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || null,
           deliveryAddress: defaultAddress,
           couponCode: appliedCoupon?.code || couponCode || null,
+          zoneId: zoneId || null,
           deliveryFleet: deliveryFleet || 'standard'
         })
 
@@ -829,6 +830,7 @@ export default function Cart() {
             restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || null,
             deliveryAddress: defaultAddress,
             couponCode: coupon.code,
+            zoneId: zoneId || null,
             deliveryFleet: deliveryFleet || 'standard'
           })
 
@@ -865,6 +867,7 @@ export default function Cart() {
           restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || null,
           deliveryAddress: defaultAddress,
           couponCode: null,
+          zoneId: zoneId || null,
           deliveryFleet: deliveryFleet || 'standard'
         })
 

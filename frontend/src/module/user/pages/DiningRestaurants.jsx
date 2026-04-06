@@ -116,7 +116,7 @@ export default function DiningRestaurants() {
   const { openSearch, closeSearch, setSearchValue } = useSearchOverlay()
   const { openLocationSelector } = useLocationSelector()
   const { location, loading } = useLocationHook()
-  const { zoneId } = useZone(location)
+  const { zoneId, currentLocation, locationRefreshKey } = useZone()
   const { addFavorite, removeFavorite, isFavorite } = useProfile()
   const { main: cityName, sub: stateName } = pickNavbarLocationLines(location)
   const [restaurantResults, setRestaurantResults] = useState([])
@@ -134,6 +134,10 @@ export default function DiningRestaurants() {
         }
         if (zoneId) {
           params.zoneId = zoneId
+        }
+        if (currentLocation?.latitude && currentLocation?.longitude) {
+          params.lat = currentLocation.latitude
+          params.lng = currentLocation.longitude
         }
 
         const response = await diningAPI.getRestaurants(params)
@@ -168,7 +172,13 @@ export default function DiningRestaurants() {
     }
 
     fetchRestaurants()
-  }, [location?.city, location?.latitude, location?.longitude, zoneId])
+  }, [
+    currentLocation?.latitude,
+    currentLocation?.longitude,
+    location?.city,
+    locationRefreshKey,
+    zoneId,
+  ])
 
   const toggleFilter = (filterId) => {
     setActiveFilters(prev => {

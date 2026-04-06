@@ -293,6 +293,9 @@ export const locationAPI = {
 
 // Export zone API helper functions
 export const zoneAPI = {
+  getActiveZones: () => {
+    return apiClient.get(API_ENDPOINTS.ZONE.ACTIVE);
+  },
   // Detect user's zone based on location
   detectZone: (lat, lng) => {
     return apiClient.get(API_ENDPOINTS.ZONE.DETECT, {
@@ -646,8 +649,7 @@ export const restaurantAPI = {
   },
 
   // Get restaurants with dishes under ₹250
-  getRestaurantsUnder250: (zoneId) => {
-    const params = zoneId ? { zoneId } : {};
+  getRestaurantsUnder250: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.UNDER_250, { params });
   },
 

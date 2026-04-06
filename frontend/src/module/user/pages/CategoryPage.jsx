@@ -35,7 +35,13 @@ export default function CategoryPage() {
   const navigate = useNavigate()
   const { vegMode } = useProfile()
   const { location } = useLocation()
-  const { zoneId, isOutOfService, loading: zoneLoading } = useZone(location)
+  const {
+    zoneId,
+    currentLocation,
+    locationRefreshKey,
+    isOutOfService,
+    loading: zoneLoading,
+  } = useZone()
   const { addToCart, updateQuantity, getCartItem, cart, addItemOrAskVariant } = useCart()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState(category?.toLowerCase() || 'all')
@@ -260,6 +266,10 @@ export default function CategoryPage() {
           return
         }
         const params = { zoneId }
+        if (currentLocation?.latitude && currentLocation?.longitude) {
+          params.lat = currentLocation.latitude
+          params.lng = currentLocation.longitude
+        }
         const response = await restaurantAPI.getRestaurants(params)
 
         if (response.data && response.data.success && response.data.data && response.data.data.restaurants) {
@@ -363,7 +373,10 @@ export default function CategoryPage() {
           // Fetch menus for all restaurants
           const menuPromises = restaurantsWithIds.map(async (restaurant) => {
             try {
-              const menuResponse = await restaurantAPI.getMenuByRestaurantId(restaurant.restaurantId)
+              const menuResponse = await restaurantAPI.getMenuByRestaurantId(
+                restaurant.restaurantId,
+                params,
+              )
               if (menuResponse.data && menuResponse.data.success && menuResponse.data.data && menuResponse.data.data.menu) {
                 const menu = menuResponse.data.data.menu
                 const hasPaneer = checkCategoryInMenu(menu, 'paneer-tikka')
@@ -428,7 +441,14 @@ export default function CategoryPage() {
     }
 
     fetchRestaurants()
-  }, [zoneId, isOutOfService, zoneLoading])
+  }, [
+    currentLocation?.latitude,
+    currentLocation?.longitude,
+    isOutOfService,
+    locationRefreshKey,
+    zoneId,
+    zoneLoading,
+  ])
 
   // Update selected category when URL changes
   useEffect(() => {

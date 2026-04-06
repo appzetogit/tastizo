@@ -25,7 +25,15 @@ export default function Under250() {
   const { location, loading: geoLoading } = useLocation()
   const { openLocationSelector } = useLocationSelector()
   const { main: desktopLocMain, sub: desktopLocSub } = pickNavbarLocationLines(location)
-  const { zoneId, zoneStatus, isInService, isOutOfService, loading: zoneLoading } = useZone(location)
+  const {
+    zoneId,
+    currentLocation,
+    locationRefreshKey,
+    zoneStatus,
+    isInService,
+    isOutOfService,
+    loading: zoneLoading,
+  } = useZone()
   const navigate = useNavigate()
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart, openVariantPicker } = useCart()
   const { addDishFavorite, removeDishFavorite, isDishFavorite } = useProfile()
@@ -246,7 +254,12 @@ export default function Under250() {
         if (!zoneId) {
           return
         }
-        const response = await restaurantAPI.getRestaurantsUnder250(zoneId)
+        const params = zoneId ? { zoneId } : {}
+        if (currentLocation?.latitude && currentLocation?.longitude) {
+          params.lat = currentLocation.latitude
+          params.lng = currentLocation.longitude
+        }
+        const response = await restaurantAPI.getRestaurantsUnder250(params)
         if (response.data.success && response.data.data.restaurants) {
           setUnder250Restaurants(response.data.data.restaurants)
         } else {
@@ -261,7 +274,14 @@ export default function Under250() {
     }
 
     fetchRestaurantsUnder250()
-  }, [zoneId, isOutOfService, zoneLoading])
+  }, [
+    currentLocation?.latitude,
+    currentLocation?.longitude,
+    isOutOfService,
+    locationRefreshKey,
+    zoneId,
+    zoneLoading,
+  ])
 
   // Fetch categories from admin API
   useEffect(() => {

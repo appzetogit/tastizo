@@ -13,7 +13,7 @@ export default function TableBooking() {
     const location = useLocation()
     const navigate = useNavigate()
     const { location: userLocation } = useUserLocation()
-    const { zoneId } = useZone(userLocation)
+    const { zoneId, currentLocation, locationRefreshKey } = useZone()
     const [restaurant, setRestaurant] = useState(null)
     const [loading, setLoading] = useState(true)
 
@@ -29,20 +29,30 @@ export default function TableBooking() {
             if (!slug) return
             try {
                 // Try fetch by ID/Slug using restaurantAPI which seems more robust in other components
-                const response = await restaurantAPI.getRestaurantById(
-                    slug,
-                    zoneId ? { zoneId } : {},
-                )
+                const response = await restaurantAPI.getRestaurantById(slug, {
+                    ...(zoneId ? { zoneId } : {}),
+                    ...(currentLocation?.latitude && currentLocation?.longitude
+                        ? {
+                            lat: currentLocation.latitude,
+                            lng: currentLocation.longitude,
+                        }
+                        : {}),
+                })
                 if (response.data && response.data.success) {
                     const apiRestaurant = response.data.data
                     const actualRestaurant = apiRestaurant?.restaurant || apiRestaurant
                     setRestaurant(actualRestaurant)
                 } else {
                     // Try diningAPI as backup
-                    const diningResponse = await diningAPI.getRestaurantBySlug(
-                        slug,
-                        zoneId ? { zoneId } : {},
-                    )
+                    const diningResponse = await diningAPI.getRestaurantBySlug(slug, {
+                        ...(zoneId ? { zoneId } : {}),
+                        ...(currentLocation?.latitude && currentLocation?.longitude
+                            ? {
+                                lat: currentLocation.latitude,
+                                lng: currentLocation.longitude,
+                            }
+                            : {}),
+                    })
                     if (diningResponse.data && diningResponse.data.success) {
                         const apiRestaurant = diningResponse.data.data
                         const actualRestaurant = apiRestaurant?.restaurant || apiRestaurant
@@ -55,7 +65,15 @@ export default function TableBooking() {
                 console.error("Error fetching restaurant:", error)
                 // FAILSAFE: Try to get list and find match
                 try {
-                    const params = zoneId ? { zoneId } : {}
+                    const params = {
+                        ...(zoneId ? { zoneId } : {}),
+                        ...(currentLocation?.latitude && currentLocation?.longitude
+                            ? {
+                                lat: currentLocation.latitude,
+                                lng: currentLocation.longitude,
+                            }
+                            : {}),
+                    }
                     const listResp = await restaurantAPI.getRestaurants(params)
                     if (listResp.data?.data?.restaurants) {
                         const match = listResp.data.data.restaurants.find(r =>
@@ -87,7 +105,7 @@ export default function TableBooking() {
             }
         }
         fetchRestaurant()
-    }, [slug, zoneId])
+    }, [currentLocation?.latitude, currentLocation?.longitude, locationRefreshKey, slug, zoneId])
 
     // Generate next 7 days (only future dates - start from today)
     const dates = useMemo(() => {

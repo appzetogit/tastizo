@@ -32,7 +32,13 @@ export default function SearchResults() {
   const query = searchParams.get("q") || ""
   const navigate = useNavigate()
   const { location } = useLocation()
-  const { zoneId, isOutOfService, loading: zoneLoading } = useZone(location)
+  const {
+    zoneId,
+    currentLocation,
+    locationRefreshKey,
+    isOutOfService,
+    loading: zoneLoading,
+  } = useZone()
   const { vegMode } = useProfile()
   const [searchQuery, setSearchQuery] = useState(query)
   const [selectedCategory, setSelectedCategory] = useState('all')
@@ -213,6 +219,10 @@ export default function SearchResults() {
           return
         }
         const params = { zoneId }
+        if (currentLocation?.latitude && currentLocation?.longitude) {
+          params.lat = currentLocation.latitude
+          params.lng = currentLocation.longitude
+        }
         const response = await restaurantAPI.getRestaurants(params)
 
         console.log('📦 Full API Response:', response)
@@ -348,7 +358,10 @@ export default function SearchResults() {
           // Fetch menus for all restaurants in parallel
           const menuPromises = restaurantsWithIds.map(async (restaurant) => {
             try {
-              const menuResponse = await restaurantAPI.getMenuByRestaurantId(restaurant.restaurantId)
+              const menuResponse = await restaurantAPI.getMenuByRestaurantId(
+                restaurant.restaurantId,
+                params,
+              )
               if (menuResponse.data && menuResponse.data.success && menuResponse.data.data && menuResponse.data.data.menu) {
                 const menu = menuResponse.data.data.menu
 
@@ -430,7 +443,14 @@ export default function SearchResults() {
     }
 
     fetchRestaurants()
-  }, [zoneId, isOutOfService, zoneLoading])
+  }, [
+    currentLocation?.latitude,
+    currentLocation?.longitude,
+    isOutOfService,
+    locationRefreshKey,
+    zoneId,
+    zoneLoading,
+  ])
 
   // Update search query when URL changes
   useEffect(() => {

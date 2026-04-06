@@ -69,7 +69,7 @@ export default function Dining() {
   const { openSearch, closeSearch, setSearchValue } = useSearchOverlay()
   const { openLocationSelector } = useLocationSelector()
   const { location, loading: locationLoading } = useLocationHook()
-  const { zoneId } = useZone(location)
+  const { zoneId, currentLocation, locationRefreshKey } = useZone()
   const { main: desktopLocMain, sub: desktopLocSub } = pickNavbarLocationLines(location)
   const { addFavorite, removeFavorite, isFavorite } = useProfile()
 
@@ -121,6 +121,10 @@ export default function Dining() {
         if (zoneId) {
           restaurantParams.zoneId = zoneId
         }
+        if (currentLocation?.latitude && currentLocation?.longitude) {
+          restaurantParams.lat = currentLocation.latitude
+          restaurantParams.lng = currentLocation.longitude
+        }
 
         const [cats, limes, tries, rests, offers] = await Promise.all([
           diningAPI.getCategories(),
@@ -144,7 +148,13 @@ export default function Dining() {
       }
     }
     fetchDiningData()
-  }, [location?.city, location?.latitude, location?.longitude, zoneId])
+  }, [
+    currentLocation?.latitude,
+    currentLocation?.longitude,
+    location?.city,
+    locationRefreshKey,
+    zoneId,
+  ])
 
   const toggleFilter = (filterId) => {
     setActiveFilters(prev => {

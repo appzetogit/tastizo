@@ -26,7 +26,7 @@ export default function DiningRestaurantDetails() {
     const navigate = useNavigate()
     const { addFavorite, removeFavorite, isFavorite } = useProfile()
     const { location } = useLocation()
-    const { zoneId } = useZone(location)
+    const { zoneId, currentLocation, locationRefreshKey } = useZone()
     const isFav = isFavorite(slug)
 
     const [restaurant, setRestaurant] = useState(null)
@@ -62,10 +62,15 @@ export default function DiningRestaurantDetails() {
             try {
                 setLoading(true)
                 // Try fetch by ID/Slug
-                const response = await diningAPI.getRestaurantBySlug(
-                    slug,
-                    zoneId ? { zoneId } : {},
-                )
+                const response = await diningAPI.getRestaurantBySlug(slug, {
+                    ...(zoneId ? { zoneId } : {}),
+                    ...(currentLocation?.latitude && currentLocation?.longitude
+                        ? {
+                            lat: currentLocation.latitude,
+                            lng: currentLocation.longitude,
+                        }
+                        : {}),
+                })
 
                 if (response.data && response.data.success) {
                     const apiRestaurant = response.data.data
@@ -85,7 +90,15 @@ export default function DiningRestaurantDetails() {
                 // FAILSAFE: If API by slug fails, let's try to get list and find match (temporary fix for development if slug isn't unique ID)
                 // In a real app, backend should support slug lookup reliably.
                 try {
-                    const params = zoneId ? { zoneId } : {}
+                    const params = {
+                        ...(zoneId ? { zoneId } : {}),
+                        ...(currentLocation?.latitude && currentLocation?.longitude
+                            ? {
+                                lat: currentLocation.latitude,
+                                lng: currentLocation.longitude,
+                            }
+                            : {}),
+                    }
                     const listResp = await restaurantAPI.getRestaurants(params)
                     if (listResp.data?.data?.restaurants) {
                         const match = listResp.data.data.restaurants.find(r =>
@@ -108,7 +121,7 @@ export default function DiningRestaurantDetails() {
             }
         }
         fetchRestaurant()
-    }, [slug, zoneId])
+    }, [currentLocation?.latitude, currentLocation?.longitude, locationRefreshKey, slug, zoneId])
 
     // Fetch this restaurant's dining offers (pre-book & walk-in) by slug
     useEffect(() => {
@@ -133,10 +146,15 @@ export default function DiningRestaurantDetails() {
         if (!restaurant?._id) return
         const fetchMenu = async () => {
             try {
-                const res = await restaurantAPI.getMenuByRestaurantId(
-                    restaurant._id,
-                    zoneId ? { zoneId } : {},
-                )
+                const res = await restaurantAPI.getMenuByRestaurantId(restaurant._id, {
+                    ...(zoneId ? { zoneId } : {}),
+                    ...(currentLocation?.latitude && currentLocation?.longitude
+                        ? {
+                            lat: currentLocation.latitude,
+                            lng: currentLocation.longitude,
+                        }
+                        : {}),
+                })
                 const data = res?.data?.data || res?.data
                 setDiningMenu(data?.menu || data || null)
             } catch {
@@ -144,7 +162,7 @@ export default function DiningRestaurantDetails() {
             }
         }
         fetchMenu()
-    }, [restaurant?._id])
+    }, [currentLocation?.latitude, currentLocation?.longitude, restaurant?._id, zoneId])
 
     if (loading) {
         return (

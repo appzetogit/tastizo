@@ -233,6 +233,10 @@ export default function RestaurantOnboarding() {
   })
 
   const [step3Errors, setStep3Errors] = useState({})
+  const menuGalleryInputRef = useRef(null)
+  const menuCameraInputRef = useRef(null)
+  const profileGalleryInputRef = useRef(null)
+  const profileCameraInputRef = useRef(null)
 
   const validateStep3Field = (field, value, allStep3 = step3) => {
     const s = { ...allStep3, [field]: value }
@@ -306,6 +310,80 @@ export default function RestaurantOnboarding() {
   const handleStep3Blur = (field) => {
     const err = validateStep3Field(field, step3[field])
     setStep3Errors((prev) => ({ ...prev, [field]: err || null }))
+  }
+
+  const appendMenuImages = (files = []) => {
+    if (!files.length) return
+    setStep2((prev) => ({
+      ...prev,
+      menuImages: [...(prev.menuImages || []), ...files],
+    }))
+  }
+
+  const handleMenuGallerySelection = (e) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    console.log("Menu images selected from gallery:", files.length)
+    appendMenuImages(files)
+    e.target.value = ""
+  }
+
+  const handleMenuCameraSelection = async () => {
+    if (hasFlutterCameraBridge()) {
+      const { success, file } = await openCameraViaFlutter()
+      if (success && file) {
+        appendMenuImages([file])
+      }
+      return
+    }
+
+    menuCameraInputRef.current?.click()
+  }
+
+  const handleMenuCameraInputChange = (e) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    console.log("Menu images captured from camera:", files.length)
+    appendMenuImages(files)
+    e.target.value = ""
+  }
+
+  const setProfileImageFile = (file) => {
+    if (!file) return
+    setStep2((prev) => ({
+      ...prev,
+      profileImage: file,
+    }))
+  }
+
+  const handleProfileGallerySelection = (e) => {
+    const file = e.target.files?.[0] || null
+    if (file) {
+      console.log("Profile image selected from gallery:", file.name)
+      setProfileImageFile(file)
+    }
+    e.target.value = ""
+  }
+
+  const handleProfileCameraSelection = async () => {
+    if (hasFlutterCameraBridge()) {
+      const { success, file } = await openCameraViaFlutter()
+      if (success && file) {
+        setProfileImageFile(file)
+      }
+      return
+    }
+
+    profileCameraInputRef.current?.click()
+  }
+
+  const handleProfileCameraInputChange = (e) => {
+    const file = e.target.files?.[0] || null
+    if (file) {
+      console.log("Profile image captured from camera:", file.name)
+      setProfileImageFile(file)
+    }
+    e.target.value = ""
   }
 
   // Load from localStorage on mount and check URL parameter
@@ -1333,29 +1411,47 @@ export default function RestaurantOnboarding() {
                   }
                 }
               }}
-              className="inline-flex justify-center items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white text-black  border-black text-xs font-medium cursor-pointer     w-full items-center"
+              className="hidden"
             >
-              <Upload className="w-4.5 h-4.5" />
-              <span>Choose files</span>
             </label>
             <input
               id="menuImagesInput"
+              ref={menuGalleryInputRef}
               type="file"
               multiple
               accept="image/*"
               className="hidden"
-              onChange={(e) => {
-                const files = Array.from(e.target.files || [])
-                if (!files.length) return
-                console.log('📸 Menu images selected:', files.length, 'files')
-                setStep2((prev) => ({
-                  ...prev,
-                  menuImages: [...(prev.menuImages || []), ...files], // Append new files to existing ones
-                }))
-                // Reset input to allow selecting same file again
-                e.target.value = ''
-              }}
+              onChange={handleMenuGallerySelection}
             />
+            <input
+              ref={menuCameraInputRef}
+              type="file"
+              multiple
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleMenuCameraInputChange}
+            />
+            <div className="grid w-full grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-center gap-1.5"
+                onClick={() => menuGalleryInputRef.current?.click()}
+              >
+                <Upload className="w-4.5 h-4.5" />
+                <span>Gallery</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-center gap-1.5"
+                onClick={handleMenuCameraSelection}
+              >
+                <Camera className="w-4.5 h-4.5" />
+                <span>Camera</span>
+              </Button>
+            </div>
           </div>
 
           {/* Menu image previews */}
@@ -1461,29 +1557,45 @@ export default function RestaurantOnboarding() {
                 }
               }
             }}
-            className="inline-flex justify-center items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white text-black  border-black text-xs font-medium cursor-pointer     w-full items-center"
+            className="hidden"
           >
-            <Upload className="w-4.5 h-4.5" />
-            <span>Upload</span>
           </label>
           <input
             id="profileImageInput"
+            ref={profileGalleryInputRef}
             type="file"
             accept="image/*"
             className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0] || null
-              if (file) {
-                console.log('📸 Profile image selected:', file.name)
-                setStep2((prev) => ({
-                  ...prev,
-                  profileImage: file,
-                }))
-              }
-              // Reset input to allow selecting same file again
-              e.target.value = ''
-            }}
+            onChange={handleProfileGallerySelection}
           />
+          <input
+            ref={profileCameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleProfileCameraInputChange}
+          />
+          <div className="grid w-full grid-cols-2 gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full justify-center gap-1.5"
+              onClick={() => profileGalleryInputRef.current?.click()}
+            >
+              <Upload className="w-4.5 h-4.5" />
+              <span>Gallery</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full justify-center gap-1.5"
+              onClick={handleProfileCameraSelection}
+            >
+              <Camera className="w-4.5 h-4.5" />
+              <span>Camera</span>
+            </Button>
+          </div>
         </div>
       </section>
 

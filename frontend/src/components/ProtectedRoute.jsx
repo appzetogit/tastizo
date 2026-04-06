@@ -33,28 +33,17 @@ export default function ProtectedRoute({ children, requiredRole, loginPath }) {
   useEffect(() => {
     if (!isRestaurantRoute) return;
 
-    try {
-      const cachedRestaurantRaw = localStorage.getItem("restaurant_user");
-      if (cachedRestaurantRaw) {
-        const cachedRestaurant = JSON.parse(cachedRestaurantRaw);
-        if (cachedRestaurant && typeof cachedRestaurant.isActive === "boolean") {
-          setVerificationState({
-            checked: true,
-            isActive: !!cachedRestaurant.isActive,
-            rejectionReason: cachedRestaurant.rejectionReason || "",
-          });
-        }
-      }
-    } catch {
-      // ignore invalid cache
-    }
-
     let isMounted = true;
     const loadVerificationState = async () => {
       try {
         const response = await restaurantAPI.getCurrentRestaurant();
         const restaurant = response?.data?.data?.restaurant;
         if (!isMounted || !restaurant) return;
+        try {
+          localStorage.setItem("restaurant_user", JSON.stringify(restaurant));
+        } catch {
+          // ignore storage failures
+        }
         setVerificationState({
           checked: true,
           isActive: !!restaurant.isActive,
@@ -70,7 +59,7 @@ export default function ProtectedRoute({ children, requiredRole, loginPath }) {
     return () => {
       isMounted = false;
     };
-  }, [isRestaurantRoute, location.pathname]);
+  }, [isRestaurantRoute]);
 
   const shouldShowVerificationPopup = useMemo(() => {
     if (!isRestaurantRoute) return false;
