@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react"
+import { createPortal } from "react-dom"
 import { MapPin, X } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -86,10 +87,10 @@ export default function LocationPrompt() {
     }
   }, [])
 
-  if (!showPrompt) return null
+  if (!showPrompt || typeof document === "undefined") return null
 
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10060] flex items-center justify-center p-4" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0 }}>
       <Card
         ref={cardRef}
         className="w-full max-w-md border-2 border-gray-200 shadow-2xl mx-auto my-auto"
@@ -139,7 +140,7 @@ export default function LocationPrompt() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </div>,
+    document.body
   )
 }
-
