@@ -57,7 +57,7 @@ export default function Gourmet() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0a0a0a]">
+    <div className="min-h-screen pt-2 bg-white dark:bg-[#0a0a0a]">
       {/* Banner Section */}
       <div className="relative w-full overflow-hidden min-h-[25vh] md:min-h-[30vh]">
         {/* Back Button */}

@@ -170,7 +170,7 @@ export default function TableBookingConfirmation() {
     const formattedDate = new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 
     return (
-        <AnimatedPage className="bg-slate-50 min-h-screen pb-24">
+        <AnimatedPage className="bg-slate-50 min-h-screen pt-2 pb-24">
             {/* Header */}
             {/* Header */}
             <div className="bg-white text-gray-900 px-4 py-4 sticky top-0 z-50 shadow-sm border-b border-slate-100">

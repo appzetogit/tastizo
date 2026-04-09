@@ -261,7 +261,7 @@ export default function DiningRestaurantDetails() {
     return (
         <div className="min-h-screen bg-white pb-20 relative">
             {/* Sticky Header / Back Button */}
-            <div className="fixed top-0 left-0 w-full z-50 p-4 flex justify-between items-center bg-gradient-to-b from-black/50 to-transparent pointer-events-none">
+            <div className="fixed top-0 left-0 w-full z-50 px-4 pt-6 pb-4 flex justify-between items-center bg-gradient-to-b from-black/50 to-transparent pointer-events-none">
                 <button
                     onClick={() => navigate(-1)}
                     className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white pointer-events-auto hover:bg-black/60 transition-colors"

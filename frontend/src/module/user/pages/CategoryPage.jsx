@@ -739,7 +739,7 @@ export default function CategoryPage() {
   })
 
   return (
-    <div className={`min-h-screen pt-2 bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
+    <div className={`min-h-screen pt-3 bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Sticky Header */}
       <div className={`${isFilterOpen ? 'hidden' : 'sticky'} top-0 z-20 bg-white dark:bg-[#1a1a1a] shadow-sm`}>
         {/* Spacer to avoid the sticky search area covering the categories row */}

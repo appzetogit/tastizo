@@ -167,7 +167,7 @@ export default function DiningCategory() {
   }, [openLocationSelector])
 
   return (
-    <AnimatedPage className="min-h-screen pt-2 bg-[#2B9C64]">
+    <AnimatedPage className="min-h-screen pt-4 bg-[#2B9C64]">
       {/* Header with Back Button and Location */}
       <div className="relative w-full z-20 px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
         <div className="flex items-center justify-start gap-3 sm:gap-4">

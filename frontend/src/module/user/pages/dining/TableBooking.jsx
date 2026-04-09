@@ -280,7 +280,7 @@ export default function TableBooking() {
     }
 
     return (
-        <AnimatedPage className="bg-slate-50 min-h-screen pb-24">
+        <AnimatedPage className="bg-slate-50 min-h-screen pt-2 pb-24">
             {/* Header */}
             <div className="bg-white px-4 pt-4 pb-12 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-[#2B9C64]/5 rounded-full blur-3xl opacity-50 -mr-20 -mt-20"></div>
