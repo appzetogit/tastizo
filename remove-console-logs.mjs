@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendSrc = path.join(__dirname, 'frontend', 'src');
 
+// Removes top-level console.log calls while preserving surrounding code.
 function removeConsoleLogs(content) {
   let result = '';
   let i = 0;
