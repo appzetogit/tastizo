@@ -1,5 +1,9 @@
 const isCallable = (fn) => typeof fn === "function"
 
+const isFlutterShareEnvironment = () =>
+  isCallable(window?.flutter_inappwebview?.callHandler) ||
+  isCallable(window?.ShareChannel?.postMessage)
+
 const tryFlutterShare = async (payload) => {
   try {
     if (isCallable(window?.flutter_inappwebview?.callHandler)) {
@@ -28,8 +32,37 @@ const tryFlutterShare = async (payload) => {
 
 const tryWebShare = async (payload) => {
   if (!isCallable(navigator?.share)) return false
-  await navigator.share(payload)
-  return true
+
+  // Some browsers reject richer payloads even when basic URL/text sharing works.
+  const candidates = [
+    payload,
+    { title: payload.title, url: payload.url },
+    { text: payload.text, url: payload.url },
+    { url: payload.url },
+    { text: payload.text },
+    { title: payload.title, text: payload.text },
+  ].filter((candidate) => Object.values(candidate).some(Boolean))
+
+  for (const candidate of candidates) {
+    if (isCallable(navigator?.canShare)) {
+      try {
+        if (!navigator.canShare(candidate)) continue
+      } catch {
+        // Ignore canShare issues and let navigator.share decide.
+      }
+    }
+
+    try {
+      await navigator.share(candidate)
+      return true
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error
+      }
+    }
+  }
+
+  return false
 }
 
 const copyText = async (text) => {
@@ -62,6 +95,19 @@ export const shareWithFallback = async ({ title = "", text = "", url = "" }) => 
   const payload = { title, text, url }
   const copyPayload = [text, url].filter(Boolean).join("\n")
 
+  // Preserve the original click/tap activation for browsers by calling
+  // Web Share first unless we're clearly inside the Flutter bridge.
+  if (!isFlutterShareEnvironment()) {
+    try {
+      const webShared = await tryWebShare(payload)
+      if (webShared) return { method: "web", copied: false }
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return { method: "cancelled", copied: false }
+      }
+    }
+  }
+
   try {
     const flutterShared = await tryFlutterShare(payload)
     if (flutterShared) return { method: "flutter", copied: false }
@@ -69,12 +115,14 @@ export const shareWithFallback = async ({ title = "", text = "", url = "" }) => 
     // Continue to next strategy
   }
 
-  try {
-    const webShared = await tryWebShare(payload)
-    if (webShared) return { method: "web", copied: false }
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      return { method: "cancelled", copied: false }
+  if (isFlutterShareEnvironment()) {
+    try {
+      const webShared = await tryWebShare(payload)
+      if (webShared) return { method: "web", copied: false }
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return { method: "cancelled", copied: false }
+      }
     }
   }
 
