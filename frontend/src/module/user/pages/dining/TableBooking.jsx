@@ -9,6 +9,7 @@ import { diningAPI, restaurantAPI } from "@/lib/api"
 import Loader from "@/components/Loader"
 
 export default function TableBooking() {
+    const maxGuestsPerBooking = 4
     const { slug } = useParams()
     const location = useLocation()
     const navigate = useNavigate()
@@ -251,6 +252,7 @@ export default function TableBooking() {
     if (adminMaxGuests != null && maxGuests > adminMaxGuests) {
         maxGuests = adminMaxGuests
     }
+    maxGuests = Math.min(maxGuests, maxGuestsPerBooking)
     const selectedSlotInfo = selectedSlot ? slotAvailability[selectedSlot.time] : null
     const selectedSlotIsBooked = selectedSlot
         ? (selectedSlotInfo?.bookedCount || 0) >= maxBookingsPerSlot

@@ -21,6 +21,7 @@ import {
 import { getRazorpayCredentials } from "../../../shared/utils/envService.js";
 
 const MAX_BOOKINGS_PER_SLOT = 4;
+const MAX_GUESTS_PER_BOOKING = 4;
 const BLOCKING_SLOT_STATUSES = [
   "pending",
   "confirmed",
@@ -335,6 +336,13 @@ export const createBooking = async (req, res) => {
       });
     }
 
+    if (!Number.isInteger(Number(guests)) || Number(guests) < 1 || Number(guests) > MAX_GUESTS_PER_BOOKING) {
+      return res.status(400).json({
+        success: false,
+        message: `A dining slot can be booked for 1 to ${MAX_GUESTS_PER_BOOKING} guests only`,
+      });
+    }
+
     const dayRange = getDayRange(date);
     if (!dayRange) {
       return res.status(400).json({
@@ -468,6 +476,7 @@ export const getSlotAvailability = async (req, res) => {
       data: {
         date,
         restaurantId,
+        maxGuestsPerBooking: MAX_GUESTS_PER_BOOKING,
         maxBookingsPerSlot: MAX_BOOKINGS_PER_SLOT,
         availability,
       },
