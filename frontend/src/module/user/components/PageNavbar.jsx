@@ -18,6 +18,8 @@ export default function PageNavbar({
   zIndex = 20,
   showProfile = false,
   showBrandLogo = true,
+  showLocation = true,
+  brandOnLeftMobile = false,
   onNavClick
 }) {
   const { location, loading, requestLocation } = useLocation()
@@ -855,53 +857,69 @@ export default function PageNavbar({
       <div className="flex items-center justify-between gap-2 sm:gap-3 md:gap-4 lg:gap-6 max-w-7xl mx-auto">
         {/* Left: Location - Hidden on desktop, shown on mobile */}
         <div className="flex md:hidden items-center gap-3 sm:gap-4 min-w-0">
-          {/* Location Button */}
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleLocationClick}
-            disabled={loading}
-            className="h-auto px-0 py-0 hover:bg-transparent transition-colors flex-shrink-0"
-          >
-            {loading ? (
-              <span className={`text-sm font-bold ${textColorClass} ${textColor === "white" ? "drop-shadow-lg" : ""}`}>
-                Loading...
-              </span>
-            ) : (
-              <div className="flex flex-col items-start min-w-0">
-                <div className="flex items-center gap-1.5">
-                  {(showLocationIcon || transitionCtx?.phase === "transitioning") && (
-                    <motion.div
-                      ref={transitionCtx?.registerNavbarIconRef}
-                      initial={showLocationIcon ? false : { opacity: 0 }}
-                      animate={{ opacity: showLocationIcon ? 1 : 0 }}
-                      transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-                      className="flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center"
-                      style={{
-                        visibility: showLocationIcon ? "visible" : "hidden",
-                      }}
-                    >
-                      {showLocationIcon && <TbLocation className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${textColorClass} ${textColor === "white" ? "drop-shadow-lg" : ""}`} />}
-                    </motion.div>
+          {showLocation ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={handleLocationClick}
+              disabled={loading}
+              className="h-auto px-0 py-0 hover:bg-transparent transition-colors flex-shrink-0"
+            >
+              {loading ? (
+                <span className={`text-sm font-bold ${textColorClass} ${textColor === "white" ? "drop-shadow-lg" : ""}`}>
+                  Loading...
+                </span>
+              ) : (
+                <div className="flex flex-col items-start min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    {(showLocationIcon || transitionCtx?.phase === "transitioning") && (
+                      <motion.div
+                        ref={transitionCtx?.registerNavbarIconRef}
+                        initial={showLocationIcon ? false : { opacity: 0 }}
+                        animate={{ opacity: showLocationIcon ? 1 : 0 }}
+                        transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                        className="flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center"
+                        style={{
+                          visibility: showLocationIcon ? "visible" : "hidden",
+                        }}
+                      >
+                        {showLocationIcon && <TbLocation className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${textColorClass} ${textColor === "white" ? "drop-shadow-lg" : ""}`} />}
+                      </motion.div>
+                    )}
+                    <span className={`text-md sm:text-lg font-bold ${textColorClass} whitespace-nowrap ${textColor === "white" ? "drop-shadow-lg" : ""}`}>
+                      {mainLocationName}
+                    </span>
+                    <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 ${textColorClass} flex-shrink-0 ${textColor === "white" ? "drop-shadow-lg" : ""}`} strokeWidth={2.5} />
+                  </div>
+                  {subLocationName && (
+                    <span className={`text-xs font-bold ${textColorClass}${textColor === "white" ? "/90" : ""} whitespace-nowrap mt-0.5 ${textColor === "white" ? "drop-shadow-md" : ""}`}>
+                      {subLocationName}
+                    </span>
                   )}
-                  <span className={`text-md sm:text-lg font-bold ${textColorClass} whitespace-nowrap ${textColor === "white" ? "drop-shadow-lg" : ""}`}>
-                    {mainLocationName}
-                  </span>
-                  <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 ${textColorClass} flex-shrink-0 ${textColor === "white" ? "drop-shadow-lg" : ""}`} strokeWidth={2.5} />
                 </div>
-                {/* Show sub location (city, state) in second line */}
-                {subLocationName && (
-                  <span className={`text-xs font-bold ${textColorClass}${textColor === "white" ? "/90" : ""} whitespace-nowrap mt-0.5 ${textColor === "white" ? "drop-shadow-md" : ""}`}>
-                    {subLocationName}
-                  </span>
-                )}
-              </div>
-            )}
-          </Button>
+              )}
+            </Button>
+          ) : brandOnLeftMobile && showBrandLogo ? (
+            <Link to="/" className="flex items-center justify-start pl-5">
+              {logoUrl && logoUrl !== DEFAULT_LOGO_PLACEHOLDER && (
+                <img
+                  src={logoUrl}
+                  alt="Company Logo"
+                  className="h-12 w-20 object-contain"
+                  crossOrigin="anonymous"
+                  onError={(e) => {
+                    e.target.style.display = "none"
+                  }}
+                />
+              )}
+            </Link>
+          ) : (
+            <div className="w-16 sm:w-20" aria-hidden />
+          )}
         </div>
 
         {/* Center: Company Logo */}
-        {showBrandLogo ? (
+        {showBrandLogo && !brandOnLeftMobile ? (
           <Link to="/" className="flex items-center justify-center">
             {logoUrl && logoUrl !== DEFAULT_LOGO_PLACEHOLDER && (
               <img
