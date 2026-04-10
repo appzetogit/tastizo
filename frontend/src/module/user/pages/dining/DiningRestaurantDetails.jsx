@@ -45,14 +45,11 @@ export default function DiningRestaurantDetails() {
         const shareUrl = window.location.href
         const shareTitle = `${restaurant.name || "Dining"} - Tastizo`
         const shareText = `Book your table at ${restaurant.name || "this restaurant"} on Tastizo.`
-        const result = await shareWithFallback({
+        await shareWithFallback({
             title: shareTitle,
             text: shareText,
             url: shareUrl,
         })
-        if (result.method === "copy") toast.success("Link copied to clipboard!")
-        else if (result.method === "web" || result.method === "flutter") toast.success("Shared")
-        else if (result.method === "failed") toast.error("Failed to share link")
     }
 
     // Fetch data

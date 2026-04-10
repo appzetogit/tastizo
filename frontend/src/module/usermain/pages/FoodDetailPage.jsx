@@ -39,13 +39,11 @@ export default function FoodDetailPage() {
 
   // Handle share functionality
   const handleShare = async () => {
-    const result = await shareWithFallback({
+    await shareWithFallback({
       title: foodData.name,
       text: `Check out this ${foodData.name} on Tastizo!`,
       url: window.location.href,
     })
-    if (result.method === "copy") showToast("Link copied to clipboard!")
-    else if (result.method === "failed") showToast("Failed to share link")
   }
 
   // Mock food data - in real app, fetch based on id

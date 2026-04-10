@@ -1393,12 +1393,9 @@ export default function Cart() {
                   const companyName = await getCompanyNameAsync()
                   const text = `${restaurantName} on ${companyName} – ${cart.length} item(s). Order from the app.`
                   const url = window.location.href
-                  const result = await shareWithFallback({ title: restaurantName, text, url })
-                  if (result.method === "copy") toast.success("Link copied to clipboard")
-                  else if (result.method === "web" || result.method === "flutter") toast.success("Shared")
-                  else if (result.method === "failed") toast.error("Share failed")
+                  await shareWithFallback({ title: restaurantName, text, url })
                 } catch (e) {
-                  if (e?.name !== "AbortError") toast.error("Share failed")
+                  // Share fallback handles browser/app behavior silently.
                 }
               }}
             >

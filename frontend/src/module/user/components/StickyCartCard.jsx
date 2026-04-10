@@ -89,7 +89,7 @@ export default function StickyCartCard() {
     <AnimatePresence>
       {isVisible && (
         <motion.div
-          className={`fixed ${bottomPosition} md:bottom-6 left-0 right-0 md:left-auto md:right-6 z-50 px-4 md:px-0 pb-4 md:pb-0 pointer-events-none`}
+          className={`fixed ${bottomPosition} md:bottom-6 left-0 right-0 md:left-auto md:right-6 z-50 px-4 md:px-0 pb-2 pointer-events-none`}
           initial="initial"
           animate="animate"
           exit="exit"

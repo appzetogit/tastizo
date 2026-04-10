@@ -244,10 +244,7 @@ export default function RestaurantInfoPage() {
               onClick={async () => {
                 const url = window.location.href
                 const title = restaurant?.name ? `${restaurant.name} - ${companyName}` : companyName
-                const result = await shareWithFallback({ title, url })
-                if (result.method === "copy") toast.success("Link copied to clipboard")
-                else if (result.method === "web" || result.method === "flutter") toast.success("Shared")
-                else if (result.method === "failed") toast.error("Could not share")
+                await shareWithFallback({ title, url })
               }}
               aria-label="Share"
             >

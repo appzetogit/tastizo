@@ -700,14 +700,11 @@ export default function RestaurantDetails() {
     const shareUrl = `${window.location.origin}/user/restaurants/${restaurantSlug}`
     const shareText = `Check out ${restaurantName} on ${companyName}! ${shareUrl}`
 
-    const result = await shareWithFallback({
+    await shareWithFallback({
       title: restaurantName,
       text: shareText,
       url: shareUrl,
     })
-    if (result.method === "copy") toast.success("Link copied to clipboard!")
-    else if (result.method === "web" || result.method === "flutter") toast.success("Restaurant shared successfully")
-    else if (result.method === "failed") toast.error("Failed to share link")
     setShowMenuOptionsSheet(false)
   }
 
@@ -723,14 +720,11 @@ export default function RestaurantDetails() {
     const shareUrl = `${window.location.origin}/user/restaurants/${restaurantSlug}?dish=${dishId}`
     const shareText = `Check out ${item.name} from ${restaurant?.name || "this restaurant"}! ${shareUrl}`
 
-    const result = await shareWithFallback({
+    await shareWithFallback({
       title: `${item.name} - ${restaurant?.name || ""}`,
       text: shareText,
       url: shareUrl,
     })
-    if (result.method === "copy") toast.success("Link copied to clipboard!")
-    else if (result.method === "web" || result.method === "flutter") toast.success("Dish shared successfully")
-    else if (result.method === "failed") toast.error("Failed to share link")
   }
 
   // Handle item card click

@@ -28,8 +28,32 @@ import { Input } from "@/components/ui/input"
 import { restaurantAPI } from "@/lib/api"
 import { toast } from "sonner"
 import { openCameraViaFlutter, openGalleryViaFlutter, hasFlutterCameraBridge } from "@/lib/utils/cameraBridge"
+import tastizoLogo from "@/assets/tastizologo.png"
 
 const CUISINES_STORAGE_KEY = "restaurant_cuisines"
+const DEFAULT_RESTAURANT_IMAGE = tastizoLogo
+
+const resolveProfileImageUrl = (restaurant) => {
+  if (!restaurant) return null
+
+  if (typeof restaurant.profileImage === "string" && restaurant.profileImage.trim()) {
+    return restaurant.profileImage
+  }
+
+  if (restaurant.profileImage?.url) {
+    return restaurant.profileImage.url
+  }
+
+  if (typeof restaurant.profileImageUrl === "string" && restaurant.profileImageUrl.trim()) {
+    return restaurant.profileImageUrl
+  }
+
+  if (restaurant.profileImageUrl?.url) {
+    return restaurant.profileImageUrl.url
+  }
+
+  return null
+}
 
 export default function OutletInfo() {
   const navigate = useNavigate()
@@ -40,8 +64,8 @@ export default function OutletInfo() {
   const [restaurantName, setRestaurantName] = useState("")
   const [cuisineTags, setCuisineTags] = useState("")
   const [address, setAddress] = useState("")
-  const [mainImage, setMainImage] = useState("https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&h=400&fit=crop")
-  const [thumbnailImage, setThumbnailImage] = useState("https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=200&h=200&fit=crop")
+  const [mainImage, setMainImage] = useState(DEFAULT_RESTAURANT_IMAGE)
+  const [thumbnailImage, setThumbnailImage] = useState(DEFAULT_RESTAURANT_IMAGE)
   const [coverImages, setCoverImages] = useState([]) // Array of cover images (separate from menu images)
   const [showEditNameDialog, setShowEditNameDialog] = useState(false)
   const [editNameValue, setEditNameValue] = useState("")
@@ -54,6 +78,7 @@ export default function OutletInfo() {
   const [imageActionTarget, setImageActionTarget] = useState(null) // 'profile' | 'cover'
   const profileImageInputRef = useRef(null)
   const menuImageInputRef = useRef(null)
+  const hasCustomProfileImage = thumbnailImage && thumbnailImage !== DEFAULT_RESTAURANT_IMAGE
 
   // Format address from location object
   const formatAddress = (location) => {
@@ -119,8 +144,11 @@ export default function OutletInfo() {
           }
           
           // Set images
-          if (data.profileImage?.url) {
-            setThumbnailImage(data.profileImage.url)
+          const resolvedProfileImage = resolveProfileImageUrl(data)
+          if (resolvedProfileImage) {
+            setThumbnailImage(resolvedProfileImage)
+          } else {
+            setThumbnailImage(DEFAULT_RESTAURANT_IMAGE)
           }
           // Use coverImages if available, otherwise fallback to menuImages for backward compatibility
           if (data.coverImages && Array.isArray(data.coverImages) && data.coverImages.length > 0) {
@@ -141,6 +169,7 @@ export default function OutletInfo() {
             setMainImage(data.menuImages[0].url)
           } else {
             setCoverImages([])
+            setMainImage(DEFAULT_RESTAURANT_IMAGE)
           }
         }
       } catch (error) {
@@ -243,8 +272,9 @@ export default function OutletInfo() {
         const data = response?.data?.data?.restaurant || response?.data?.restaurant
         if (data) {
           setRestaurantData(data)
-          if (data.profileImage?.url) {
-            setThumbnailImage(data.profileImage.url)
+          const resolvedProfileImage = resolveProfileImageUrl(data)
+          if (resolvedProfileImage) {
+            setThumbnailImage(resolvedProfileImage)
           } else if (uploadedImage.url) {
             // Fallback to uploaded image URL
             setThumbnailImage(uploadedImage.url)
@@ -261,6 +291,53 @@ export default function OutletInfo() {
       setUploadingImage(false)
       setImageType(null)
       // Reset input
+      if (profileImageInputRef.current) {
+        profileImageInputRef.current.value = null
+      }
+    }
+  }
+
+  const handleRemoveProfilePhoto = async () => {
+    if (!hasCustomProfileImage || uploadingImage) return
+    if (!window.confirm("Are you sure you want to remove the profile photo?")) {
+      return
+    }
+
+    try {
+      setUploadingImage(true)
+      setImageType("profile")
+      setShowImageSourceDialog(false)
+
+      await restaurantAPI.updateProfile({ profileImage: null })
+
+      setThumbnailImage(DEFAULT_RESTAURANT_IMAGE)
+      setRestaurantData((prev) =>
+        prev
+          ? {
+              ...prev,
+              profileImage: null,
+              profileImageUrl: null,
+            }
+          : prev,
+      )
+
+      try {
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const data = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (data) {
+          setRestaurantData(data)
+          const resolvedProfileImage = resolveProfileImageUrl(data)
+          setThumbnailImage(resolvedProfileImage || DEFAULT_RESTAURANT_IMAGE)
+        }
+      } catch (refreshError) {
+        console.error("Error refreshing restaurant after removing profile image:", refreshError)
+      }
+    } catch (error) {
+      console.error("Error removing profile image:", error)
+      alert(error?.response?.data?.message || error?.message || "Failed to remove profile photo. Please try again.")
+    } finally {
+      setUploadingImage(false)
+      setImageType(null)
       if (profileImageInputRef.current) {
         profileImageInputRef.current.value = null
       }
@@ -528,7 +605,7 @@ export default function OutletInfo() {
         setMainImage(updatedImages[0].url)
       } else if (updatedImages.length === 0) {
         // If no images left, set default
-        setMainImage("https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&h=400&fit=crop")
+        setMainImage(DEFAULT_RESTAURANT_IMAGE)
       }
 
       // Update backend - convert coverImages back to menuImages format for API
@@ -724,7 +801,7 @@ export default function OutletInfo() {
         <img 
           src={mainImage}
           alt="Restaurant banner"
-          className="w-full h-full object-cover"
+          className={`w-full h-full ${mainImage === DEFAULT_RESTAURANT_IMAGE ? "object-contain bg-[#18a05e] p-6" : "object-cover"}`}
         />
         
         {/* Add Image Button - Black background with white text */}
@@ -791,7 +868,7 @@ export default function OutletInfo() {
             <img 
               src={thumbnailImage}
               alt="Restaurant thumbnail"
-              className="w-full h-full rounded-xl object-cover"
+              className={`w-full h-full rounded-xl ${thumbnailImage === DEFAULT_RESTAURANT_IMAGE ? "object-contain bg-white p-2" : "object-cover"}`}
             />
           </div>
           <button
@@ -1018,6 +1095,15 @@ export default function OutletInfo() {
             >
               Gallery
             </Button>
+            {imageActionTarget === "profile" && hasCustomProfileImage && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleRemoveProfilePhoto}
+              >
+                Remove photo
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

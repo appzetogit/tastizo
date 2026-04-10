@@ -411,19 +411,19 @@ export default function Dining() {
           </div>
 
           {/* Category grid — desktop: fewer, larger Swiggy-style tiles */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-5 lg:max-w-6xl lg:mx-auto">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-5 lg:max-w-5xl lg:mx-auto">
             {categories.map((category, index) => (
               <Link
                 key={category._id || category.id}
                 to={`/user/dining/${category.name.toLowerCase().replace(/\s+/g, '-')}`}
               >
                 <motion.div
-                  className="group relative rounded-2xl lg:rounded-3xl overflow-hidden bg-gray-100 cursor-pointer h-[110px] sm:h-[120px] md:h-[130px] lg:h-[168px] shadow-sm hover:shadow-md lg:hover:shadow-lg transition-all duration-300"
+                  className="group relative overflow-hidden rounded-[18px] sm:rounded-[22px] lg:rounded-[26px] bg-gray-100 cursor-pointer aspect-[1.35/1] min-h-[84px] sm:min-h-[98px] md:min-h-[112px] lg:min-h-[132px] shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:shadow-md lg:hover:shadow-lg"
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-50px" }}
                   transition={{ duration: 0.4, delay: index * 0.05 }}
-                  whileHover={{ y: -6, scale: 1.03 }}
+                  whileHover={{ y: -4, scale: 1.02 }}
                 >
                   {/* Full-size image */}
                   <OptimizedImage
@@ -437,11 +437,12 @@ export default function Dining() {
                   />
 
                   {/* Subtle overlay for readability */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80 group-hover:opacity-90 transition-opacity duration-300" />
+                  <div className="absolute inset-0 bg-black/22 transition-colors duration-300 group-hover:bg-black/28" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/38 via-black/10 to-white/5 opacity-90" />
 
                   {/* Category name */}
-                  <div className="absolute inset-x-2 bottom-2 sm:bottom-2.5 flex items-end">
-                    <p className="w-full text-xs sm:text-sm font-semibold text-white text-center leading-tight drop-shadow-md">
+                  <div className="absolute inset-0 flex items-center justify-center px-3">
+                    <p className="max-w-[85%] text-center text-sm sm:text-base lg:text-lg font-sans font-extrabold tracking-tight text-white leading-tight drop-shadow-md">
                       {category.name}
                     </p>
                   </div>

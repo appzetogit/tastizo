@@ -522,14 +522,11 @@ export default function Under250() {
     const shareUrl = `${window.location.origin}/restaurants/${slug}?dish=${dishId}`
     const title = `${item.name}${item.restaurantName ? ` — ${item.restaurantName}` : ""}`
 
-    const result = await shareWithFallback({
+    await shareWithFallback({
       title,
       text: `Check out ${item.name}!`,
       url: shareUrl,
     })
-    if (result.method === "copy") toast.success("Link copied to clipboard!")
-    else if (result.method === "web" || result.method === "flutter") toast.success("Dish shared successfully")
-    else if (result.method === "failed") toast.error("Could not share link")
   }
 
   // Check if should show grayscale (only when user is out of service)
@@ -539,7 +536,7 @@ export default function Under250() {
 
     <div className={`relative min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Banner Section with Navbar */}
-      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[min(48vh,520px)] pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:pt-0 lg:rounded-b-none">
+      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[min(48vh,520px)] pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:pt-0 rounded-b-3xl sm:rounded-b-[2rem] lg:rounded-b-none">
         {/* Banner — phones / tablets only */}
         {bannerImage && (
           <div className="absolute top-0 left-0 right-0 bottom-0 z-0 lg:hidden">
@@ -569,7 +566,7 @@ export default function Under250() {
 
         {/* Navbar (without profile avatar on this page) */}
         <div className="relative z-20 pt-2 sm:pt-3 lg:pt-4">
-          <PageNavbar textColor="white" zIndex={20} showProfile={false} />
+          <PageNavbar textColor="white" zIndex={20} showProfile={false} showBrandLogo={false} />
         </div>
 
         {/* Desktop headline + location */}
@@ -608,9 +605,9 @@ export default function Under250() {
         {/* Sticky Header: Categories and Filters */}
         <div
           ref={under250StickyHeaderRef}
-          className={`sticky top-0 md:top-16 z-30 bg-white dark:bg-[#0a0a0a] -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8 xl:-mx-12 xl:px-12 shadow-sm transition-[padding-top] duration-300 ease-in-out ${isUnder250HeaderStuck ? "pt-8" : "pt-0"}`}
+          className="sticky top-0 md:top-16 z-30 bg-white dark:bg-[#0a0a0a] -mx-3 px-3 pt-5 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8 xl:-mx-12 xl:px-12 transition-[padding-top] duration-300 ease-in-out"
         >
-          <section className="pb-1">
+          <section className="pt-5">
             <div
               className="flex gap-3 sm:gap-4 md:gap-5 lg:gap-6 overflow-x-auto md:overflow-x-hidden md:flex-wrap md:justify-center scrollbar-hide scroll-smooth px-2 sm:px-3 pt-0.5 pb-2 sm:pt-1 sm:pb-2 md:pt-1 md:pb-2"
               style={{
@@ -671,7 +668,7 @@ export default function Under250() {
             </div>
           </section>
 
-          <section className="py-2 sm:py-2 md:py-2.5 border-t dark:border-gray-800/50">
+          <section className="py-2 sm:py-2 md:py-2.5">
             <div className="flex items-center gap-2 md:gap-3 lg:justify-center">
               <Button
                 variant="outline"
@@ -813,23 +810,25 @@ export default function Under250() {
                       </div>
                     </div>
 
-                    <div className="relative w-32 h-32 flex-shrink-0 lg:w-full lg:h-48 lg:rounded-t-2xl lg:rounded-b-none overflow-hidden">
-                      {item.image ? (
-                        <OptimizedImage
-                          src={item.image}
-                          alt={item.name}
-                          className="w-full h-full rounded-2xl shadow-sm lg:rounded-none lg:rounded-t-2xl"
-                          objectFit="cover"
-                          sizes="128px"
-                          placeholder="blur"
-                          priority={itemIndex < 6}
-                          observerRootMargin="200px"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gray-200 dark:bg-gray-700 rounded-2xl lg:rounded-none lg:rounded-t-2xl flex items-center justify-center shadow-sm">
-                          <span className="text-xs text-gray-400">No image</span>
-                        </div>
-                      )}
+                    <div className="relative w-32 h-32 flex-shrink-0 lg:w-full lg:h-48 overflow-visible">
+                      <div className="w-full h-full rounded-2xl lg:rounded-none lg:rounded-t-2xl overflow-hidden">
+                        {item.image ? (
+                          <OptimizedImage
+                            src={item.image}
+                            alt={item.name}
+                            className="w-full h-full rounded-2xl shadow-sm lg:rounded-none lg:rounded-t-2xl"
+                            objectFit="cover"
+                            sizes="128px"
+                            placeholder="blur"
+                            priority={itemIndex < 6}
+                            observerRootMargin="200px"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gray-200 dark:bg-gray-700 rounded-2xl lg:rounded-none lg:rounded-t-2xl flex items-center justify-center shadow-sm">
+                            <span className="text-xs text-gray-400">No image</span>
+                          </div>
+                        )}
+                      </div>
 
                       {quantity > 0 && !shouldShowGrayscale ? (
                         <motion.div

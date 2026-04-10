@@ -392,12 +392,10 @@ Location: ${location || "Location not available"}
 Order again from this restaurant in the ${companyName} app.`
 
     try {
-      const result = await shareWithFallback({
+      await shareWithFallback({
         title: order.restaurant,
         text: shareText,
       })
-      if (result.method === "copy") toast.success("Restaurant details copied to clipboard")
-      else if (result.method === "failed") toast.error("Failed to share restaurant")
     } finally {
       setActiveMenuOrderId(null)
     }

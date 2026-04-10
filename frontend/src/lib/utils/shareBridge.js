@@ -93,7 +93,6 @@ const copyText = async (text) => {
 
 export const shareWithFallback = async ({ title = "", text = "", url = "" }) => {
   const payload = { title, text, url }
-  const copyPayload = [text, url].filter(Boolean).join("\n")
 
   // Preserve the original click/tap activation for browsers by calling
   // Web Share first unless we're clearly inside the Flutter bridge.
@@ -126,7 +125,6 @@ export const shareWithFallback = async ({ title = "", text = "", url = "" }) => 
     }
   }
 
-  const copied = await copyText(copyPayload || url || text)
-  return { method: copied ? "copy" : "failed", copied }
+  return { method: "failed", copied: false }
 }
 

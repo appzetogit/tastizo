@@ -641,10 +641,7 @@ export default function OrderTracking() {
       url: window.location.href,
     };
 
-    const result = await shareWithFallback(shareData)
-    if (result.method === "copy") toast.success("Link copied to clipboard")
-    else if (result.method === "web" || result.method === "flutter") toast.success("Shared successfully")
-    else if (result.method === "failed") toast.error("Failed to share")
+    await shareWithFallback(shareData)
   };
 
   const handleCallRestaurant = async () => {

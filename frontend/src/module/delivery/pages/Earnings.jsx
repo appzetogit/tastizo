@@ -516,12 +516,10 @@ export default function Earnings() {
 
   // Handle share
   const handleShare = async () => {
-    const result = await shareWithFallback({
+    await shareWithFallback({
       title: "My Earnings",
       text: `My earnings for ${formatDateDisplay(selectedDate)}: ${formatCurrency(earningsData.totalEarnings)}`,
     })
-    if (result.method === "copy") toast.success("Earnings copied to clipboard!")
-    else if (result.method === "failed") toast.error("Failed to share earnings")
   }
 
   if (isLoading) {

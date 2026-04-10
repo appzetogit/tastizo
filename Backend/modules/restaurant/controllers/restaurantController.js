@@ -889,9 +889,23 @@ export const updateRestaurantProfile = asyncHandler(async (req, res) => {
 
     const updateData = {};
 
-    // Update profile image if provided
-    if (profileImage) {
-      updateData.profileImage = profileImage;
+    // Update profile image if provided, including explicit removal
+    if (profileImage !== undefined) {
+      if (profileImage === null || profileImage === "") {
+        if (restaurant.profileImage?.publicId) {
+          try {
+            await deleteFromCloudinary(restaurant.profileImage.publicId);
+          } catch (deleteError) {
+            console.error(
+              "Error deleting restaurant profile image from Cloudinary:",
+              deleteError,
+            );
+          }
+        }
+        updateData.profileImage = null;
+      } else {
+        updateData.profileImage = profileImage;
+      }
     }
 
     // Update menu images if provided
