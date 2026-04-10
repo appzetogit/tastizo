@@ -196,12 +196,14 @@ export const updateDiningConfig = asyncHandler(async (req, res) => {
         .trim()
         .replace(/[^a-z0-9-]/g, "-")
         .replace(/(^-|-$)/g, "");
-      const existing = await Restaurant.findOne({
-        slug,
-        _id: { $ne: restaurantId },
-      });
-      if (existing)
-        return errorResponse(res, 400, "This dining slug is already taken");
+      if (slug) {
+        const existing = await Restaurant.findOne({
+          slug,
+          _id: { $ne: restaurantId },
+        });
+        if (existing)
+          return errorResponse(res, 400, "This dining slug is already taken");
+      }
       restaurant.slug = slug || restaurant.slug;
       restaurant.diningConfig.pageControls.diningSlug = slug || restaurant.slug;
     }
