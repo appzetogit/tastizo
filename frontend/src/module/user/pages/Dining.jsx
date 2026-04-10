@@ -23,8 +23,6 @@ const diningCard4 = "https://images.unsplash.com/photo-1414235077428-338989a2e8c
 const diningCard5 = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=300&fit=crop"
 const diningCard6 = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=300&fit=crop"
 
-// Using placeholder for dining banner
-const diningBanner = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&h=400&fit=crop"
 // Using placeholders for dining page images
 const upto50off = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=200&fit=crop"
 const nearAndTopRated = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=200&fit=crop"
@@ -99,11 +97,11 @@ export default function Dining() {
         if (response.data.success && response.data.data.banners && response.data.data.banners.length > 0) {
           setDiningHeroBanner(response.data.data.banners[0])
         } else {
-          setDiningHeroBanner(diningBanner)
+          setDiningHeroBanner(null)
         }
       } catch (error) {
         console.error("Failed to fetch dining hero banner", error)
-        setDiningHeroBanner(diningBanner)
+        setDiningHeroBanner(null)
       }
     }
     fetchDiningHeroBanner()
@@ -331,6 +329,9 @@ export default function Dining() {
                   priority={true}
                   sizes="(max-width: 640px) 100vw, 420px"
                 />
+              )}
+              {!diningHeroBanner && (
+                <div className="h-full w-full bg-gradient-to-br from-[#6b4b3e] via-[#3f2a22] to-[#1f1612]" />
               )}
             </div>
             <div className="absolute inset-0 bg-gradient-to-t from-[#2f1c14]/85 via-[#40271d]/35 to-black/35" />

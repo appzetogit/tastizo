@@ -7,6 +7,36 @@ import {
 } from "../../../shared/utils/response.js";
 import { asyncHandler } from "../../../shared/middleware/asyncHandler.js";
 
+async function ensureUniqueRestaurantSlug(restaurant, excludeId) {
+  if (restaurant.slug) return restaurant.slug;
+
+  let baseSlug = String(restaurant.name || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+  if (!baseSlug) {
+    baseSlug = `restaurant-${restaurant.restaurantId || excludeId}`;
+  }
+
+  let slug = baseSlug;
+  let counter = 1;
+
+  while (
+    await Restaurant.findOne({
+      slug,
+      _id: { $ne: excludeId },
+    })
+  ) {
+    slug = `${baseSlug}-${counter}`;
+    counter += 1;
+  }
+
+  restaurant.slug = slug;
+  return slug;
+}
+
 /**
  * Get dining config for current restaurant (restaurant auth)
  * GET /api/restaurant/dining-config
@@ -196,7 +226,13 @@ export const updateDiningConfig = asyncHandler(async (req, res) => {
         .trim()
         .replace(/[^a-z0-9-]/g, "-")
         .replace(/(^-|-$)/g, "");
-      if (slug) {
+      const currentSlug = String(
+        restaurant.diningConfig?.pageControls?.diningSlug || restaurant.slug || "",
+      )
+        .toLowerCase()
+        .trim();
+
+      if (slug && slug !== currentSlug) {
         const existing = await Restaurant.findOne({
           slug,
           _id: { $ne: restaurantId },
@@ -214,6 +250,8 @@ export const updateDiningConfig = asyncHandler(async (req, res) => {
       ? body.categories
       : [];
   }
+
+  await ensureUniqueRestaurantSlug(restaurant, restaurantId);
 
   await restaurant.save();
   return successResponse(res, 200, "Dining config updated", {

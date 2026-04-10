@@ -84,6 +84,7 @@ export default function DiningManagement() {
 
   const [uploadingCover, setUploadingCover] = useState(false)
   const [uploadingGallery, setUploadingGallery] = useState(false)
+  const [savingCategory, setSavingCategory] = useState(false)
   const [offerForm, setOfferForm] = useState({ type: "prebook", title: "", description: "", discountType: "percentage", discountValue: "", validFrom: "", validTo: "", isActive: true })
 
   useEffect(() => {
@@ -196,6 +197,13 @@ export default function DiningManagement() {
   const saveDiningConfig = async () => {
     try {
       setSaving(true)
+      setError(null)
+      const initialPageControls = config?.pageControls || {}
+      const pageControlsChanged =
+        (form.pageControls?.reviewsEnabled ?? true) !== (initialPageControls?.reviewsEnabled ?? true) ||
+        (form.pageControls?.shareEnabled ?? true) !== (initialPageControls?.shareEnabled ?? true) ||
+        String(form.pageControls?.diningSlug || "").trim() !== String(initialPageControls?.diningSlug || "").trim()
+
       const payload = {
         enabled: form.enabled,
         basicDetails: form.basicDetails,
@@ -206,7 +214,7 @@ export default function DiningManagement() {
             ? null
             : Number(form.seatingCapacity),
         categories: form.categories,
-        pageControls: form.pageControls,
+        ...(pageControlsChanged ? { pageControls: form.pageControls } : {}),
       }
       await restaurantAPI.updateDiningConfig(payload)
       setConfig((prev) => ({ ...prev, ...payload }))
@@ -309,14 +317,27 @@ export default function DiningManagement() {
   }
 
   // Allow only a single dining category selection
-  const toggleCategory = (categoryId) => {
-    setForm(prev => {
-      const current = prev.categories || [];
-      const isSelected = current.includes(categoryId);
-      // If already selected, clear category; otherwise set as the only category
-      const updated = isSelected ? [] : [categoryId];
-      return { ...prev, categories: updated };
-    });
+  const toggleCategory = async (categoryId) => {
+    if (savingCategory) return
+
+    const previousCategories = form.categories || []
+    const isSelected = previousCategories.some((id) => String(id) === String(categoryId))
+    const updatedCategories = isSelected ? [] : [categoryId]
+
+    setForm((prev) => ({ ...prev, categories: updatedCategories }))
+    setSavingCategory(true)
+    setError(null)
+
+    try {
+      await restaurantAPI.updateDiningConfig({ categories: updatedCategories })
+      setConfig((prev) => ({ ...prev, categories: updatedCategories }))
+      toast.success("Dining category updated")
+    } catch (e) {
+      setForm((prev) => ({ ...prev, categories: previousCategories }))
+      setError(e.response?.data?.message || "Failed to update dining category")
+    } finally {
+      setSavingCategory(false)
+    }
   }
 
   const handleRequestEnable = async () => {
@@ -596,12 +617,13 @@ export default function DiningManagement() {
                   </div>
                 ) : (
                   allDiningCategories.map((category) => {
-                    const isSelected = form.categories?.includes(category._id);
+                    const isSelected = (form.categories || []).some((id) => String(id) === String(category._id));
                     return (
                       <button
                         key={category._id}
                         type="button"
                         onClick={() => toggleCategory(category._id)}
+                        disabled={savingCategory}
                         className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${isSelected
                           ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500"
                           : "border-slate-200 hover:border-emerald-200 hover:bg-slate-50"
