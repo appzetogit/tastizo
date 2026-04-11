@@ -1,16 +1,64 @@
 const isCallable = (fn) => typeof fn === "function"
 
+const FLUTTER_SHARE_CHANNEL_NAMES = [
+  "ShareChannel",
+  "FlutterShare",
+  "NativeShare",
+  "Share",
+  "shareChannel",
+]
+
+const FLUTTER_SHARE_HANDLER_NAMES = [
+  "share",
+  "nativeShare",
+  "onShare",
+  "shareContent",
+]
+
+const getFlutterShareChannels = () => {
+  if (typeof window === "undefined") return []
+  return FLUTTER_SHARE_CHANNEL_NAMES.map((name) => window[name]).filter((channel) =>
+    isCallable(channel?.postMessage),
+  )
+}
+
 const isFlutterShareEnvironment = () =>
-  isCallable(window?.flutter_inappwebview?.callHandler) ||
-  isCallable(window?.ShareChannel?.postMessage)
+  typeof window !== "undefined" &&
+  (isCallable(window?.flutter_inappwebview?.callHandler) || getFlutterShareChannels().length > 0)
+
+const createShareMessage = ({ title = "", text = "", url = "" }) =>
+  [title, text, url].filter(Boolean).join("\n")
 
 const tryFlutterShare = async (payload) => {
   try {
     if (isCallable(window?.flutter_inappwebview?.callHandler)) {
-      const handlers = ["share", "nativeShare", "onShare", "shareContent"]
-      for (const name of handlers) {
+      const message = createShareMessage(payload)
+      for (const name of FLUTTER_SHARE_HANDLER_NAMES) {
         try {
           const result = await window.flutter_inappwebview.callHandler(name, payload)
+          if (result !== false) {
+            return true
+          }
+        } catch {
+          // Try next handler name
+        }
+
+        try {
+          const result = await window.flutter_inappwebview.callHandler(
+            name,
+            payload.title,
+            payload.text,
+            payload.url,
+          )
+          if (result !== false) {
+            return true
+          }
+        } catch {
+          // Try next payload shape
+        }
+
+        try {
+          const result = await window.flutter_inappwebview.callHandler(name, message)
           if (result !== false) {
             return true
           }
@@ -20,8 +68,11 @@ const tryFlutterShare = async (payload) => {
       }
     }
 
-    if (isCallable(window?.ShareChannel?.postMessage)) {
-      window.ShareChannel.postMessage(JSON.stringify(payload))
+    const channels = getFlutterShareChannels()
+    if (channels.length > 0) {
+      const message = createShareMessage(payload)
+      const serializedPayload = JSON.stringify({ ...payload, message })
+      channels[0].postMessage(serializedPayload)
       return true
     }
   } catch {
@@ -93,6 +144,7 @@ const copyText = async (text) => {
 
 export const shareWithFallback = async ({ title = "", text = "", url = "" }) => {
   const payload = { title, text, url }
+  const fallbackText = createShareMessage(payload)
 
   // Preserve the original click/tap activation for browsers by calling
   // Web Share first unless we're clearly inside the Flutter bridge.
@@ -124,6 +176,9 @@ export const shareWithFallback = async ({ title = "", text = "", url = "" }) => 
       }
     }
   }
+
+  const copied = await copyText(fallbackText)
+  if (copied) return { method: "copy", copied: true }
 
   return { method: "failed", copied: false }
 }
