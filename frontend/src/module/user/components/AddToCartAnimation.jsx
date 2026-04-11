@@ -44,6 +44,29 @@ export default function AddToCartAnimation({
   const isAccountPage = location.pathname === '/account';
   const shouldHidePill = hideOnPages && (iscartPage || isOrderPage || isAccountPage);
 
+  const getPillCenter = () => {
+    if (!linkRef.current) return null;
+
+    const pillRect = linkRef.current.getBoundingClientRect();
+    const wrapper = linkRef.current.closest('[data-cart-pill-wrapper]');
+    const transform = wrapper ? window.getComputedStyle(wrapper).transform : 'none';
+    let transformX = 0;
+    let transformY = 0;
+
+    if (transform && transform !== 'none') {
+      const matrix = new DOMMatrixReadOnly(transform);
+      transformX = matrix.m41 || 0;
+      transformY = matrix.m42 || 0;
+    }
+
+    return {
+      x: pillRect.left + pillRect.width / 2 - transformX,
+      y: pillRect.top + pillRect.height / 2 - transformY,
+      thumbnailX: pillRect.left + 16 - transformX,
+      thumbnailY: pillRect.top + pillRect.height / 2 - transformY,
+    };
+  };
+
   // Handle removal animation when product is removed
   useEffect(() => {
     if (lastRemoveEvent && lastRemoveEvent.sourcePosition && linkRef.current) {
@@ -59,11 +82,10 @@ export default function AddToCartAnimation({
       setTimeout(() => {
         if (removedThumbnailRef.current && linkRef.current) {
           const thumbnail = removedThumbnailRef.current;
-          // Get fresh position of the pill (viewport-relative)
-          const pillRect = linkRef.current.getBoundingClientRect();
-          // Start position: center of the pill (where thumbnails are)
-          const startX = pillRect.left + 16; // Approximate position of first thumbnail
-          const startY = pillRect.top + pillRect.height / 2; // Vertical center of pill
+          const pillCenter = getPillCenter();
+          if (!pillCenter) return;
+          const startX = pillCenter.thumbnailX;
+          const startY = pillCenter.thumbnailY;
 
           // Calculate current viewport position accounting for scroll changes
           // Check multiple sources to get accurate scroll position
@@ -198,11 +220,10 @@ export default function AddToCartAnimation({
       setTimeout(() => {
         if (flyingThumbnailRef.current && linkRef.current) {
           const thumbnail = flyingThumbnailRef.current;
-          // Get fresh position after pill animation completes
-          const pillRect = linkRef.current.getBoundingClientRect();
-          // Target position: center of the pill (viewport-relative)
-          const endX = pillRect.left + pillRect.width / 2; // Horizontal center of pill
-          const endY = pillRect.top + pillRect.height / 2; // Vertical center of pill
+          const pillCenter = getPillCenter();
+          if (!pillCenter) return;
+          const endX = pillCenter.x;
+          const endY = pillCenter.y;
 
           // Calculate current viewport position accounting for scroll changes
           // Check multiple sources to get accurate scroll position
@@ -374,6 +395,12 @@ export default function AddToCartAnimation({
           ref={removedThumbnailRef}
           className="w-8 h-8 rounded-full border-2 border-white overflow-hidden bg-white flex-shrink-0 shadow-lg"
           style={{
+            position: 'fixed',
+            left: '-9999px',
+            top: '-9999px',
+            zIndex: 1000,
+            opacity: 0,
+            pointerEvents: 'none',
             borderRadius: '50%',
             objectFit: 'cover',
           }}
@@ -398,6 +425,12 @@ export default function AddToCartAnimation({
           ref={flyingThumbnailRef}
           className="w-8 h-8 rounded-full border-2 border-white overflow-hidden bg-white flex-shrink-0 shadow-lg"
           style={{
+            position: 'fixed',
+            left: flyingProduct.startPos?.viewportX !== undefined ? `${flyingProduct.startPos.viewportX - 16}px` : '-9999px',
+            top: flyingProduct.startPos?.viewportY !== undefined ? `${flyingProduct.startPos.viewportY - 16}px` : '-9999px',
+            zIndex: 1000,
+            opacity: 0,
+            pointerEvents: 'none',
             borderRadius: '50%',
             objectFit: 'cover',
           }}
@@ -419,6 +452,7 @@ export default function AddToCartAnimation({
       {/* View cart pill: show whenever cart has items (portaled to body so it floats above Menu button) */}
       {itemCount > 0 && !shouldHidePill && typeof document !== 'undefined' && createPortal(
           <motion.div
+            data-cart-pill-wrapper
             initial={{ y: 100, opacity: 0 }}
             animate={{
               y: 0,

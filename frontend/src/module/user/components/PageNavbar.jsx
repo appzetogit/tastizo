@@ -38,13 +38,23 @@ export default function PageNavbar({
       setShowLocationIcon(true)
       return
     }
+    if (transitionCtx?.phase === "transitioning") {
+      setShowLocationIcon(false)
+      return
+    }
+    if (transitionCtx?.phase === "done") return
+
     const onSplashEnded = () => {
       if (transitionCtx?.phase === "idle" || transitionCtx?.phase === "splash") {
         setShowLocationIcon(true)
       }
     }
     window.addEventListener("splashEnded", onSplashEnded)
-    const fallback = setTimeout(() => setShowLocationIcon(true), 3000)
+    const fallback = setTimeout(() => {
+      if (transitionCtx?.phase === "idle" || transitionCtx?.phase === "splash") {
+        setShowLocationIcon(true)
+      }
+    }, 3000)
     return () => {
       window.removeEventListener("splashEnded", onSplashEnded)
       clearTimeout(fallback)
@@ -874,7 +884,6 @@ export default function PageNavbar({
                   <div className="flex items-center gap-1.5">
                     {(showLocationIcon || transitionCtx?.phase === "transitioning") && (
                       <motion.div
-                        ref={transitionCtx?.registerNavbarIconRef}
                         initial={showLocationIcon ? false : { opacity: 0 }}
                         animate={{ opacity: showLocationIcon ? 1 : 0 }}
                         transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
@@ -883,7 +892,12 @@ export default function PageNavbar({
                           visibility: showLocationIcon ? "visible" : "hidden",
                         }}
                       >
-                        {showLocationIcon && <TbLocation className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${textColorClass} ${textColor === "white" ? "drop-shadow-lg" : ""}`} />}
+                        <span
+                          ref={transitionCtx?.registerNavbarIconRef}
+                          className="flex h-3.5 w-3.5 sm:h-4 sm:w-4 items-center justify-center"
+                        >
+                          {showLocationIcon && <TbLocation className={`h-full w-full ${textColorClass} ${textColor === "white" ? "drop-shadow-lg" : ""}`} />}
+                        </span>
                       </motion.div>
                     )}
                     <span className={`text-md sm:text-lg font-bold ${textColorClass} whitespace-nowrap ${textColor === "white" ? "drop-shadow-lg" : ""}`}>

@@ -1,8 +1,28 @@
 import { Link, useLocation } from "react-router-dom"
 import { UtensilsCrossed, Tag, User, Truck } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 
 export default function BottomNavigation() {
   const location = useLocation()
+  const [isHidden, setIsHidden] = useState(false)
+  const lastScrollY = useRef(0)
+
+  useEffect(() => {
+    lastScrollY.current = window.scrollY || 0
+
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY || 0
+      const scrollDelta = currentScrollY - lastScrollY.current
+
+      if (Math.abs(scrollDelta) < 8) return
+
+      setIsHidden(currentScrollY > 24 && scrollDelta > 0)
+      lastScrollY.current = currentScrollY
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [])
 
   // Check active routes - support both /user/* and /* paths
   const isDining = location.pathname === "/dining" || location.pathname === "/user/dining"
@@ -12,7 +32,7 @@ export default function BottomNavigation() {
 
   return (
     <div
-      className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-gray-800 z-50 shadow-lg pb-1"
+      className={`md:hidden fixed bottom-[-1px] left-0 right-0 bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-gray-800 z-50 shadow-lg pb-2 transition-transform duration-300 ease-in-out ${isHidden ? "translate-y-full" : "translate-y-0"}`}
     >
       <div className="flex items-center justify-around h-auto px-4 sm:px-6">
         {/* Delivery Tab */}

@@ -4,8 +4,18 @@ import { TbLocation } from "react-icons/tb"
 import { useLocationIconTransition } from "@/context/LocationIconTransitionContext"
 
 const MOBILE_BREAKPOINT = 768
-const DURATION_MS = 950
-const WAVE_AMPLITUDE_PX = -100 // strong wave, opposite direction
+const DURATION_MS = 1600
+const ICON_SIZE = 16
+const POSITION_EPSILON = 0.5
+const LANDING_PULLBACK_PX = 45
+
+const areRectsClose = (a, b) =>
+  a &&
+  b &&
+  Math.abs(a.top - b.top) <= POSITION_EPSILON &&
+  Math.abs(a.left - b.left) <= POSITION_EPSILON &&
+  Math.abs(a.width - b.width) <= POSITION_EPSILON &&
+  Math.abs(a.height - b.height) <= POSITION_EPSILON
 
 export default function LocationIconTransition() {
   const ctx = useLocationIconTransition()
@@ -25,7 +35,7 @@ export default function LocationIconTransition() {
     return () => window.removeEventListener("resize", check)
   }, [])
 
-  // Each new splash→navbar handoff must be allowed to animate (phase was "done" before).
+  // Each new splash->navbar handoff must be allowed to animate (phase was "done" before).
   useEffect(() => {
     if (phase === "transitioning") {
       hasAnimated.current = false
@@ -37,6 +47,8 @@ export default function LocationIconTransition() {
     if (phase !== "transitioning") return
     let cancelled = false
     const start = Date.now()
+    let lastRect = null
+    let stableFrames = 0
     // Navbar icon can mount after a small delay during splash->content transition.
     // Keep transitioning alive so the animation can still resolve the target rect.
     const MAX_WAIT_MS = 2500
@@ -48,24 +60,40 @@ export default function LocationIconTransition() {
       if (el) {
         try {
           const rect = el.getBoundingClientRect()
-          setTargetRect({
+          const nextRect = {
             top: rect.top,
             left: rect.left,
-            width: Math.max(rect.width, 24),
-            height: Math.max(rect.height, 24),
-          })
+            width: rect.width,
+            height: rect.height,
+          }
+
+          if (areRectsClose(nextRect, lastRect)) {
+            stableFrames += 1
+          } else {
+            stableFrames = 0
+            lastRect = nextRect
+          }
+
+          if (stableFrames >= 3) {
+            setTargetRect(nextRect)
+            return
+          }
         } catch {
+          setPhaseDone()
+          return
+        }
+      }
+
+      if (Date.now() - start > MAX_WAIT_MS) {
+        if (lastRect) {
+          setTargetRect(lastRect)
+        } else {
           setPhaseDone()
         }
         return
       }
 
-      if (Date.now() - start > MAX_WAIT_MS) {
-        setPhaseDone()
-        return
-      }
-
-      setTimeout(tryResolveTargetRect, 50)
+      requestAnimationFrame(tryResolveTargetRect)
     }
 
     tryResolveTargetRect()
@@ -78,8 +106,16 @@ export default function LocationIconTransition() {
   useEffect(() => {
     if (!targetRect || !splashIconRect || hasAnimated.current) return
     hasAnimated.current = true
-    const deltaX = targetRect.left - splashIconRect.left
-    const deltaY = targetRect.top - splashIconRect.top
+    const sourceCenterX = splashIconRect.left + splashIconRect.width / 2
+    const sourceCenterY = splashIconRect.top + splashIconRect.height / 2
+    const targetCenterX = targetRect.left + targetRect.width / 2
+    const targetCenterY = targetRect.top + targetRect.height / 2
+    const rawDeltaX = targetCenterX - sourceCenterX
+    const rawDeltaY = targetCenterY - sourceCenterY
+    const distance = Math.hypot(rawDeltaX, rawDeltaY)
+    const pullback = Math.min(LANDING_PULLBACK_PX, distance)
+    const deltaX = distance ? rawDeltaX - (rawDeltaX / distance) * pullback : rawDeltaX
+    const deltaY = distance ? rawDeltaY - (rawDeltaY / distance) * pullback : rawDeltaY
     deltaRef.current = { x: deltaX, y: deltaY }
 
     const el = elRef.current
@@ -90,35 +126,23 @@ export default function LocationIconTransition() {
       return
     }
 
-    // Compositor-driven keyframe animation (smooth, avoids per-frame JS)
-    const len = Math.hypot(deltaX, deltaY) || 1
-    const nx = -deltaY / len
-    const ny = deltaX / len
-
-    const k = (t, w) => ({
-      transform: `translate3d(${deltaX * t + nx * w}px, ${deltaY * t + ny * w}px, 0)`,
-    })
-
-    // Multi-keyframe "wave" that dies out before the end to avoid flicker
+    // Direct path to the exact navbar icon location. No side offset, so it cannot leave the screen and snap back.
     const keyframes = [
-      k(0, 0),
-      k(0.25, WAVE_AMPLITUDE_PX),
-      k(0.5, WAVE_AMPLITUDE_PX * -0.6),
-      k(0.75, WAVE_AMPLITUDE_PX * 0.35),
-      k(0.9, 0),
-      k(1, 0),
+      { transform: "translate3d(0px, 0px, 0)" },
+      { transform: `translate3d(${deltaX}px, ${deltaY}px, 0)` },
     ]
 
     animRef.current = el.animate(keyframes, {
       duration: DURATION_MS,
-      easing: "cubic-bezier(0.22, 1, 0.36, 1)", // smooth, slightly ease-out
+      easing: "ease-out",
       fill: "forwards",
     })
 
     animRef.current.onfinish = () => {
       // Ensure final transform is exact
       el.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`
-      requestAnimationFrame(() => setPhaseDone())
+      el.style.opacity = "0"
+      setPhaseDone()
     }
 
     return () => {
@@ -146,13 +170,16 @@ export default function LocationIconTransition() {
   if (phase === "transitioning" && !splashIconRect) return null
   if (typeof document === "undefined" || !document.body) return null
 
+  const movingWidth = targetRect?.width || splashIconRect?.width || ICON_SIZE
+  const movingHeight = targetRect?.height || splashIconRect?.height || ICON_SIZE
+
   const baseStyle = splashIconRect
     ? {
         position: "fixed",
-        top: splashIconRect.top,
-        left: splashIconRect.left,
-        width: Math.max(splashIconRect.width, 24),
-        height: Math.max(splashIconRect.height, 24),
+        top: splashIconRect.top + splashIconRect.height / 2 - movingHeight / 2,
+        left: splashIconRect.left + splashIconRect.width / 2 - movingWidth / 2,
+        width: movingWidth,
+        height: movingHeight,
         zIndex: 10000,
         pointerEvents: "none",
         transform: "translate3d(0px, 0px, 0)",
@@ -168,7 +195,7 @@ export default function LocationIconTransition() {
       className="flex items-center justify-center rounded-lg"
       style={baseStyle}
     >
-      <TbLocation className="h-4 w-4 text-white flex-shrink-0" />
+      <TbLocation className="h-full w-full text-white flex-shrink-0" />
     </div>,
     document.body
   )

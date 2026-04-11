@@ -56,6 +56,7 @@ export default function RestaurantDetails() {
   const initialSearchQuery = searchParams.get('q') || ""
   const categoryFromUrl = searchParams.get('q') || ""
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart, openVariantPicker, addItemOrAskVariant } = useCart()
+  const hasCartItems = cart.some((item) => (item.quantity || 0) > 0)
   const {
     vegMode,
     addDishFavorite,
@@ -1706,7 +1707,7 @@ export default function RestaurantDetails() {
 
       {/* Menu Button - Sticky at page bottom right (z-40 so View cart floats above it) */}
       {!showFilterSheet && !showMenuSheet && !showMenuOptionsSheet && (
-        <div className="sticky dark:bg-[#1a1a1a] bottom-4 flex justify-end px-4 z-40 mt-auto">
+        <div className={`sticky dark:bg-[#1a1a1a] ${hasCartItems ? "bottom-32" : "bottom-4"} flex justify-end px-4 z-40 mt-auto transition-[bottom] duration-300 ease-in-out`}>
           <Button
             className="bg-gray-800 hover:bg-gray-900 text-white flex items-center gap-2 shadow-lg px-6 py-2.5 rounded-lg"
             size="lg"

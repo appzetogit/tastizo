@@ -314,13 +314,14 @@ export default function MobileSplashScreen() {
                       }}
                     >
                       <motion.div
-                        ref={registerSplashIconRef}
                         className="flex items-center justify-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5"
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: 0.05, duration: 0.3 }}
                       >
-                        <TbLocation className="h-4 w-4 text-white flex-shrink-0" />
+                        <span ref={registerSplashIconRef} className="flex h-4 w-4 items-center justify-center flex-shrink-0">
+                          <TbLocation className="h-full w-full text-white" />
+                        </span>
                       </motion.div>
                       <motion.div
                         className="flex items-center justify-center gap-2"
