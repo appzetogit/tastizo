@@ -44,8 +44,6 @@ export default function Under250() {
   const [showItemDetail, setShowItemDetail] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
   const [quantities, setQuantities] = useState({})
-  const [viewCartButtonBottom, setViewCartButtonBottom] = useState("bottom-20")
-  const lastScrollY = useRef(0)
   const under250StickyHeaderRef = useRef(null)
   const [isUnder250HeaderStuck, setIsUnder250HeaderStuck] = useState(false)
   const [categories, setCategories] = useState([])
@@ -332,33 +330,6 @@ export default function Under250() {
     })
     setQuantities(cartQuantities)
   }, [cart])
-
-  // Scroll detection for view cart button positioning
-  useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY
-      const scrollDifference = Math.abs(currentScrollY - lastScrollY.current)
-
-      // Only update if scroll difference is significant (avoid flickering)
-      if (scrollDifference < 5) {
-        return
-      }
-
-      // Scroll down -> bottom-0, Scroll up -> bottom-20
-      if (currentScrollY > lastScrollY.current) {
-        // Scrolling down
-        setViewCartButtonBottom("bottom-0")
-      } else if (currentScrollY < lastScrollY.current) {
-        // Scrolling up
-        setViewCartButtonBottom("bottom-20")
-      }
-
-      lastScrollY.current = currentScrollY
-    }
-
-    window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
 
   // Helper function to update item quantity in bothlocal state and cart
   const updateItemQuantity = (item, newQuantity, event = null, restaurantName = null) => {
@@ -1272,7 +1243,7 @@ export default function Under250() {
       </AnimatePresence>
 
       {/* Add to Cart Animation */}
-      <AddToCartAnimation dynamicBottom={viewCartButtonBottom} />
+      <AddToCartAnimation dynamicBottom="bottom-20" />
 
       {/* All Categories Modal */}
       <AnimatePresence>
