@@ -32,7 +32,7 @@ export default function BottomNavigation() {
 
   return (
     <div
-      className={`md:hidden fixed bottom-[-1px] left-0 right-0 bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-gray-800 z-50 shadow-lg pb-2 transition-transform duration-300 ease-in-out ${isHidden ? "translate-y-full" : "translate-y-0"}`}
+      className={`md:hidden fixed bottom-[-1px] left-0 right-0 bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-gray-800 z-50 shadow-lg pb-4 transition-transform duration-300 ease-in-out ${isHidden ? "translate-y-full" : "translate-y-0"}`}
     >
       <div className="flex items-center justify-around h-auto px-4 sm:px-6">
         {/* Delivery Tab */}

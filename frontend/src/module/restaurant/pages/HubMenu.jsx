@@ -932,7 +932,10 @@ export default function HubMenu() {
       // Remove section from menuData and update backend
       const updatedSections = menuData.filter(section => section.id !== selectedCategory.id)
 
-      await restaurantAPI.updateMenu({ sections: updatedSections })
+      await restaurantAPI.updateMenu({
+        sections: updatedSections,
+        allowFullReplace: true,
+      })
 
       // Update local state
       setMenuData(updatedSections)

@@ -99,6 +99,150 @@ function ensureZoneSetupBeforeMenuChanges(req, res) {
   return false;
 }
 
+const toPlainMenuPart = (value) => {
+  if (!value) return value;
+  if (typeof value.toObject === 'function') {
+    return value.toObject({ depopulate: true });
+  }
+  return value;
+};
+
+const collectItemIds = (sections = []) => {
+  const ids = new Set();
+
+  sections.forEach((section) => {
+    (section.items || []).forEach((item) => {
+      if (item?.id != null) ids.add(String(item.id));
+    });
+
+    (section.subsections || []).forEach((subsection) => {
+      (subsection.items || []).forEach((item) => {
+        if (item?.id != null) ids.add(String(item.id));
+      });
+    });
+  });
+
+  return ids;
+};
+
+const mergeItemsPreservingMissing = (
+  existingItems = [],
+  incomingItems = [],
+  incomingMenuItemIds,
+  allowRemovals,
+) => {
+  if (allowRemovals) return incomingItems;
+
+  const incomingHereIds = new Set(
+    incomingItems
+      .map((item) => (item?.id != null ? String(item.id) : null))
+      .filter(Boolean),
+  );
+
+  const preservedItems = existingItems
+    .map(toPlainMenuPart)
+    .filter((item) => {
+      if (!item?.id) return false;
+      const id = String(item.id);
+      return !incomingHereIds.has(id) && !incomingMenuItemIds.has(id);
+    });
+
+  return [...incomingItems, ...preservedItems];
+};
+
+const mergeSubsectionsPreservingMissing = (
+  existingSubsections = [],
+  incomingSubsections = [],
+  incomingMenuItemIds,
+  allowRemovals,
+) => {
+  if (allowRemovals) return incomingSubsections;
+
+  const incomingById = new Map(
+    incomingSubsections.map((subsection) => [String(subsection.id), subsection]),
+  );
+  const merged = [];
+
+  existingSubsections.forEach((existingSubsection) => {
+    const plainExisting = toPlainMenuPart(existingSubsection);
+    const incomingSubsection = incomingById.get(String(plainExisting.id));
+
+    if (!incomingSubsection) {
+      const preservedItems = (plainExisting.items || []).filter(
+        (item) => item?.id == null || !incomingMenuItemIds.has(String(item.id)),
+      );
+
+      if (preservedItems.length > 0) {
+        merged.push({
+          ...plainExisting,
+          items: preservedItems,
+        });
+      }
+      return;
+    }
+
+    merged.push({
+      ...incomingSubsection,
+      items: mergeItemsPreservingMissing(
+        plainExisting.items || [],
+        incomingSubsection.items || [],
+        incomingMenuItemIds,
+        allowRemovals,
+      ),
+    });
+    incomingById.delete(String(plainExisting.id));
+  });
+
+  incomingById.forEach((subsection) => merged.push(subsection));
+
+  return merged;
+};
+
+const mergeSectionsPreservingMissing = (
+  existingSections = [],
+  incomingSections = [],
+  allowRemovals = false,
+) => {
+  if (allowRemovals) return incomingSections;
+
+  const incomingMenuItemIds = collectItemIds(incomingSections);
+  const incomingById = new Map(
+    incomingSections.map((section) => [String(section.id), section]),
+  );
+  const merged = [];
+
+  existingSections.forEach((existingSection) => {
+    const plainExisting = toPlainMenuPart(existingSection);
+    const incomingSection = incomingById.get(String(plainExisting.id));
+
+    if (!incomingSection) {
+      merged.push(plainExisting);
+      return;
+    }
+
+    merged.push({
+      ...incomingSection,
+      items: mergeItemsPreservingMissing(
+        plainExisting.items || [],
+        incomingSection.items || [],
+        incomingMenuItemIds,
+        allowRemovals,
+      ),
+      subsections: mergeSubsectionsPreservingMissing(
+        plainExisting.subsections || [],
+        incomingSection.subsections || [],
+        incomingMenuItemIds,
+        allowRemovals,
+      ),
+    });
+    incomingById.delete(String(plainExisting.id));
+  });
+
+  incomingById.forEach((section) => merged.push(section));
+
+  return merged;
+};
+
 // Get menu for a restaurant
 export const getMenu = asyncHandler(async (req, res) => {
   // Restaurant is attached by authenticate middleware
@@ -131,7 +275,7 @@ export const updateMenu = asyncHandler(async (req, res) => {
 
   // Restaurant is attached by authenticate middleware
   const restaurantId = req.restaurant._id;
-  const { sections } = req.body;
+  const { sections, allowFullReplace = false } = req.body;
   // CRITICAL: Get existing menu FIRST to preserve approval status fields
   const existingMenu = await Menu.findOne({ restaurant: restaurantId });
   if (existingMenu) {
@@ -314,6 +458,11 @@ export const updateMenu = asyncHandler(async (req, res) => {
 
   // Find or create menu
   let menu = await Menu.findOne({ restaurant: restaurantId });
+  const sectionsToSave = mergeSectionsPreservingMissing(
+    existingMenu?.sections || [],
+    normalizedSections,
+    allowFullReplace === true,
+  );
   
   // Debug: Log normalized sections before saving
   normalizedSections.forEach((section, sIdx) => {
@@ -326,12 +475,12 @@ export const updateMenu = asyncHandler(async (req, res) => {
   if (!menu) {
     menu = new Menu({
       restaurant: restaurantId,
-      sections: normalizedSections,
+      sections: sectionsToSave,
       isActive: true,
     });
   } else {
     // Use set method to ensure Mongoose properly tracks changes
-    menu.set('sections', normalizedSections);
+    menu.set('sections', sectionsToSave);
     // Mark sections as modified to ensure Mongoose saves nested arrays properly
     // This is CRITICAL for nested arrays in Mongoose
     menu.markModified('sections');
