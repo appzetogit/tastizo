@@ -739,14 +739,14 @@ export default function CategoryPage() {
   })
 
   return (
-    <div className={`min-h-screen pt-3 bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
+    <div className={`min-h-screen pt-1.5 bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Sticky Header */}
       <div className={`${isFilterOpen ? 'hidden' : 'sticky'} top-0 z-20 bg-white dark:bg-[#1a1a1a] shadow-sm`}>
         {/* Spacer to avoid the sticky search area covering the categories row */}
-        <div className="h-2 bg-white dark:bg-[#1a1a1a]" aria-hidden />
+        <div className="h-1 bg-white dark:bg-[#1a1a1a]" aria-hidden />
         <div className="max-w-7xl mx-auto">
           {/* Search Bar with Back Button */}
-          <div className="flex items-center gap-2 px-3 md:px-6 py-3 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2 px-3 md:px-6 py-2 md:py-3 border-b border-gray-100 dark:border-gray-800">
             <button
               onClick={() => navigate('/user')}
               className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors flex-shrink-0"
@@ -771,7 +771,7 @@ export default function CategoryPage() {
           {/* Browse Category Section */}
           <div
             ref={categoryScrollRef}
-            className="flex gap-4 md:gap-6 overflow-x-auto scrollbar-hide px-4 md:px-6 py-3 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800"
+            className="flex gap-4 md:gap-6 overflow-x-auto scrollbar-hide px-4 md:px-6 py-2 md:py-3 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800"
             style={{
               scrollbarWidth: "none",
               msOverflowStyle: "none",
@@ -832,7 +832,7 @@ export default function CategoryPage() {
       {/* Filters */}
       <div className={`${isFilterOpen ? 'hidden' : 'block'} bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800`}>
         <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row md:flex-wrap gap-2 px-4 md:px-6 py-3">
+          <div className="flex flex-col md:flex-row md:flex-wrap gap-2 px-4 md:px-6 py-2 md:py-3">
             {/* Row 1 */}
             <div
               className="flex items-center gap-2 overflow-x-auto md:overflow-x-visible scrollbar-hide pb-1 md:pb-0"
@@ -910,7 +910,7 @@ export default function CategoryPage() {
       </div>
 
       {/* Content */}
-      <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 sm:py-6 md:py-8 lg:py-10 space-y-6 md:space-y-8 lg:space-y-10">
+      <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-2 sm:py-3 md:py-8 lg:py-10 space-y-3 sm:space-y-4 md:space-y-8 lg:space-y-10">
         <div className="max-w-7xl mx-auto">
           {/* ALL RESTAURANTS Section */}
           <section className="relative">

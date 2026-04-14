@@ -2,7 +2,6 @@ import { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 import {
-  ArrowLeft,
   ChevronRight,
   Wallet,
   Tag,
@@ -26,7 +25,6 @@ import {
 
 import AnimatedPage from "../../components/AnimatedPage"
 import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { useProfile } from "../../context/ProfileContext"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useCompanyName } from "@/lib/hooks/useCompanyName"
@@ -242,17 +240,8 @@ export default function Profile() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] max-md:pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 sm:py-6 md:py-8 lg:py-10">
-        {/* Back Arrow */}
-        <div className="mb-4">
-          <Link to="/user">
-            <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
-              <ArrowLeft className="h-5 w-5 text-black dark:text-white" />
-            </Button>
-          </Link>
-        </div>
-
+    <AnimatedPage className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] max-md:pt-[max(0.375rem,env(safe-area-inset-top,0px))]">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-6 pb-4 sm:pt-7 sm:pb-6 md:py-8 lg:py-10">
         {/* Profile Info Card - tap to edit profile */}
         <Card
           className="bg-white dark:bg-[#1a1a1a] rounded-2xl py-0 pt-1 shadow-sm mb-0 border-0 dark:border-gray-800 overflow-hidden cursor-pointer"

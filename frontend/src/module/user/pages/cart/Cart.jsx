@@ -1343,7 +1343,7 @@ export default function Cart() {
   if (cart.length === 0 && !showOrderSuccess && !showPlacingOrder) {
     return (
       <AnimatedPage className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] max-md:pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
-        <div className="bg-white dark:bg-[#1a1a1a] border-b dark:border-gray-800 sticky top-0 z-10 pt-[calc(0.75rem+env(safe-area-inset-top,0px))]">
+        <div className="bg-white dark:bg-[#1a1a1a] border-b dark:border-gray-800 sticky top-0 z-10 pt-[calc(env(safe-area-inset-top,0px))]">
           <div className="flex items-center gap-3 px-4 py-3">
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(-1)}>
               <ArrowLeft className="h-4 w-4" />
@@ -1351,7 +1351,7 @@ export default function Cart() {
             <span className="font-semibold text-gray-800 dark:text-white">Cart</span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center py-20 px-4">
+        <div className="flex flex-col items-center justify-center pt-2 pb-20 px-4">
           <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
             <Utensils className="h-10 w-10 text-gray-400" />
           </div>
