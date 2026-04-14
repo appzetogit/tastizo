@@ -1,13 +1,14 @@
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { TbLocation } from "react-icons/tb"
+import { gsap } from "gsap"
 import { useLocationIconTransition } from "@/context/LocationIconTransitionContext"
 
 const MOBILE_BREAKPOINT = 768
-const DURATION_MS = 1600
+const DURATION_MS = 1400
 const ICON_SIZE = 16
 const POSITION_EPSILON = 0.5
-const LANDING_PULLBACK_PX = 45
+const TARGET_STABLE_FRAMES = 12
 
 const areRectsClose = (a, b) =>
   a &&
@@ -17,16 +18,43 @@ const areRectsClose = (a, b) =>
   Math.abs(a.width - b.width) <= POSITION_EPSILON &&
   Math.abs(a.height - b.height) <= POSITION_EPSILON
 
+const readRect = (el) => {
+  if (!el) return null
+  const rect = el.getBoundingClientRect()
+  return {
+    top: rect.top,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height,
+  }
+}
+
+const getCubicBezierPoint = (t, control1X, control1Y, control2X, control2Y, endX, endY) => {
+  const inv = 1 - t
+  const invSquared = inv * inv
+  const tSquared = t * t
+  return {
+    x:
+      3 * invSquared * t * control1X +
+      3 * inv * tSquared * control2X +
+      tSquared * t * endX,
+    y:
+      3 * invSquared * t * control1Y +
+      3 * inv * tSquared * control2Y +
+      tSquared * t * endY,
+  }
+}
+
 export default function LocationIconTransition() {
   const ctx = useLocationIconTransition()
   if (!ctx) return null
+
   const { phase, splashIconRect, navbarIconRef, setPhaseDone } = ctx
-  const [targetRect, setTargetRect] = useState(null)
   const [isMobile, setIsMobile] = useState(false)
+  const [canAnimate, setCanAnimate] = useState(false)
   const hasAnimated = useRef(false)
-  const deltaRef = useRef(null)
   const elRef = useRef(null)
-  const animRef = useRef(null)
+  const tweenRef = useRef(null)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
@@ -35,134 +63,155 @@ export default function LocationIconTransition() {
     return () => window.removeEventListener("resize", check)
   }, [])
 
-  // Each new splash->navbar handoff must be allowed to animate (phase was "done" before).
   useEffect(() => {
     if (phase === "transitioning") {
       hasAnimated.current = false
-      setTargetRect(null)
+      setCanAnimate(false)
     }
   }, [phase])
 
   useEffect(() => {
     if (phase !== "transitioning") return
+
+    const handleSplashEnded = () => setCanAnimate(true)
+    window.addEventListener("splashEnded", handleSplashEnded)
+
+    // Fallback in case the event is missed for any reason.
+    const fallbackId = setTimeout(() => {
+      setCanAnimate(true)
+    }, 450)
+
+    return () => {
+      window.removeEventListener("splashEnded", handleSplashEnded)
+      clearTimeout(fallbackId)
+    }
+  }, [phase])
+
+  useEffect(() => {
+    if (phase !== "transitioning" || !canAnimate || !splashIconRect || hasAnimated.current) return
+    hasAnimated.current = true
+
+    const el = elRef.current
+    if (!el) {
+      setPhaseDone()
+      return
+    }
+
     let cancelled = false
-    const start = Date.now()
+    let frameId = null
+    const startedAt = Date.now()
     let lastRect = null
     let stableFrames = 0
-    // Navbar icon can mount after a small delay during splash->content transition.
-    // Keep transitioning alive so the animation can still resolve the target rect.
-    const MAX_WAIT_MS = 2500
+    const MAX_WAIT_MS = 3000
+    const movingWidth = splashIconRect.width || ICON_SIZE
+    const movingHeight = splashIconRect.height || ICON_SIZE
 
-    const tryResolveTargetRect = () => {
+    const sourceLeft = splashIconRect.left + splashIconRect.width / 2 - movingWidth / 2
+    const sourceTop = splashIconRect.top + splashIconRect.height / 2 - movingHeight / 2
+
+    const startTweenToRect = (finalRect) => {
+      if (cancelled || !finalRect) return
+
+      const targetLeft = finalRect.left + finalRect.width / 2 - movingWidth / 2 + 24
+      const targetTop = finalRect.top + finalRect.height / 4 - movingHeight / 3 + 34
+      const deltaX = targetLeft - sourceLeft
+      const deltaY = targetTop - sourceTop
+      const phoneLeftEstimate = Math.max(finalRect.left - 18, 0)
+      const upperOutsideX = phoneLeftEstimate - sourceLeft - movingWidth - 6
+      const lowerOutsideX = upperOutsideX - 8
+      const lowerOutsideY = 6
+      const upperOutsideY = deltaY
+
+      gsap.killTweensOf(el)
+      gsap.set(el, {
+        x: 0,
+        y: 0,
+        opacity: 1,
+        force3D: true,
+      })
+
+      const pathState = { progress: 0 }
+      tweenRef.current = gsap.to(pathState, {
+        progress: 1,
+        duration: DURATION_MS / 1000,
+        ease: "power2.inOut",
+        overwrite: true,
+        onUpdate: () => {
+          // Exact 2-point outside path:
+          // A -> lower outside point -> upper outside point -> B.
+          const point = getCubicBezierPoint(
+            pathState.progress,
+            lowerOutsideX,
+            lowerOutsideY,
+            upperOutsideX,
+            upperOutsideY,
+            deltaX,
+            deltaY,
+          )
+          gsap.set(el, {
+            x: point.x,
+            y: point.y,
+            force3D: true,
+          })
+        },
+        onComplete: () => {
+          gsap.set(el, {
+            x: deltaX,
+            y: deltaY,
+            opacity: 0,
+            force3D: true,
+          })
+          setPhaseDone()
+        },
+      })
+    }
+
+    const resolveAndStart = () => {
       if (cancelled) return
 
-      const el = navbarIconRef?.current
-      if (el) {
-        try {
-          const rect = el.getBoundingClientRect()
-          const nextRect = {
-            top: rect.top,
-            left: rect.left,
-            width: rect.width,
-            height: rect.height,
-          }
+      const nextRect = readRect(navbarIconRef?.current)
+      if (nextRect) {
+        if (areRectsClose(nextRect, lastRect)) {
+          stableFrames += 1
+        } else {
+          stableFrames = 0
+          lastRect = nextRect
+        }
 
-          if (areRectsClose(nextRect, lastRect)) {
-            stableFrames += 1
-          } else {
-            stableFrames = 0
-            lastRect = nextRect
-          }
-
-          if (stableFrames >= 3) {
-            setTargetRect(nextRect)
-            return
-          }
-        } catch {
-          setPhaseDone()
+        if (stableFrames >= TARGET_STABLE_FRAMES) {
+          startTweenToRect(nextRect)
           return
         }
       }
 
-      if (Date.now() - start > MAX_WAIT_MS) {
+      if (Date.now() - startedAt > MAX_WAIT_MS) {
         if (lastRect) {
-          setTargetRect(lastRect)
+          startTweenToRect(lastRect)
         } else {
           setPhaseDone()
         }
         return
       }
 
-      requestAnimationFrame(tryResolveTargetRect)
+      frameId = requestAnimationFrame(resolveAndStart)
     }
 
-    tryResolveTargetRect()
+    resolveAndStart()
 
     return () => {
       cancelled = true
-    }
-  }, [phase, navbarIconRef, setPhaseDone])
-
-  useEffect(() => {
-    if (!targetRect || !splashIconRect || hasAnimated.current) return
-    hasAnimated.current = true
-    const sourceCenterX = splashIconRect.left + splashIconRect.width / 2
-    const sourceCenterY = splashIconRect.top + splashIconRect.height / 2
-    const targetCenterX = targetRect.left + targetRect.width / 2
-    const targetCenterY = targetRect.top + targetRect.height / 2
-    const rawDeltaX = targetCenterX - sourceCenterX
-    const rawDeltaY = targetCenterY - sourceCenterY
-    const distance = Math.hypot(rawDeltaX, rawDeltaY)
-    const pullback = Math.min(LANDING_PULLBACK_PX, distance)
-    const deltaX = distance ? rawDeltaX - (rawDeltaX / distance) * pullback : rawDeltaX
-    const deltaY = distance ? rawDeltaY - (rawDeltaY / distance) * pullback : rawDeltaY
-    deltaRef.current = { x: deltaX, y: deltaY }
-
-    const el = elRef.current
-    if (!el || typeof el.animate !== "function") {
-      // Fallback: no WAAPI support, just jump (very rare on modern browsers)
-      el && (el.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`)
-      setPhaseDone()
-      return
-    }
-
-    // Direct path to the exact navbar icon location. No side offset, so it cannot leave the screen and snap back.
-    const keyframes = [
-      { transform: "translate3d(0px, 0px, 0)" },
-      { transform: `translate3d(${deltaX}px, ${deltaY}px, 0)` },
-    ]
-
-    animRef.current = el.animate(keyframes, {
-      duration: DURATION_MS,
-      easing: "ease-out",
-      fill: "forwards",
-    })
-
-    animRef.current.onfinish = () => {
-      // Ensure final transform is exact
-      el.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`
-      el.style.opacity = "0"
-      setPhaseDone()
-    }
-
-    return () => {
-      try {
-        animRef.current?.cancel?.()
-      } catch {
-        // ignore
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId)
       }
-      animRef.current = null
+      tweenRef.current?.kill()
+      tweenRef.current = null
     }
-  }, [targetRect, splashIconRect, setPhaseDone])
+  }, [phase, canAnimate, splashIconRect, navbarIconRef, setPhaseDone])
 
   useEffect(() => {
     return () => {
-      try {
-        animRef.current?.cancel?.()
-      } catch {
-        // ignore
-      }
-      animRef.current = null
+      tweenRef.current?.kill()
+      tweenRef.current = null
     }
   }, [])
 
@@ -170,8 +219,8 @@ export default function LocationIconTransition() {
   if (phase === "transitioning" && !splashIconRect) return null
   if (typeof document === "undefined" || !document.body) return null
 
-  const movingWidth = targetRect?.width || splashIconRect?.width || ICON_SIZE
-  const movingHeight = targetRect?.height || splashIconRect?.height || ICON_SIZE
+  const movingWidth = splashIconRect?.width || ICON_SIZE
+  const movingHeight = splashIconRect?.height || ICON_SIZE
 
   const baseStyle = splashIconRect
     ? {
@@ -197,6 +246,6 @@ export default function LocationIconTransition() {
     >
       <TbLocation className="h-full w-full text-white flex-shrink-0" />
     </div>,
-    document.body
+    document.body,
   )
 }

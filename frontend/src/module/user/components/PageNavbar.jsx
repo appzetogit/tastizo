@@ -888,15 +888,12 @@ export default function PageNavbar({
                         animate={{ opacity: showLocationIcon ? 1 : 0 }}
                         transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
                         className="flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center"
-                        style={{
-                          visibility: showLocationIcon ? "visible" : "hidden",
-                        }}
                       >
                         <span
                           ref={transitionCtx?.registerNavbarIconRef}
                           className="flex h-3.5 w-3.5 sm:h-4 sm:w-4 items-center justify-center"
                         >
-                          {showLocationIcon && <TbLocation className={`h-full w-full ${textColorClass} ${textColor === "white" ? "drop-shadow-lg" : ""}`} />}
+                          <TbLocation className={`h-full w-full ${textColorClass} ${textColor === "white" ? "drop-shadow-lg" : ""}`} />
                         </span>
                       </motion.div>
                     )}
