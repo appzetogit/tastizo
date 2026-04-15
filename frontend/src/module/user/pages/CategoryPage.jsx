@@ -7,6 +7,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
+import { getCompanyNameAsync } from "@/lib/utils/businessSettings"
+import { shareWithFallback } from "@/lib/utils/shareBridge"
 
 // Import shared food images - prevents duplication
 import { foodImages } from "@/constants/images"
@@ -527,6 +529,27 @@ export default function CategoryPage() {
     })
   }
 
+  const handleRestaurantShare = async (restaurant) => {
+    const restaurantSlug =
+      restaurant?.slug || restaurant?.name?.toLowerCase()?.replace(/\s+/g, "-") || ""
+
+    if (!restaurantSlug) {
+      toast.error("Restaurant link is not available")
+      return
+    }
+
+    const companyName = await getCompanyNameAsync().catch(() => "Tastizo")
+    const shareUrl = `${window.location.origin}/user/restaurants/${restaurantSlug}`
+    const shareTitle = restaurant?.name || "Restaurant"
+    const shareText = `Check out ${shareTitle} on ${companyName}`
+
+    await shareWithFallback({
+      title: shareTitle,
+      text: shareText,
+      url: shareUrl,
+    })
+  }
+
   // Sync local quantities from cart (per dish/restaurant card)
   const [quantities, setQuantities] = useState({})
 
@@ -1015,6 +1038,7 @@ export default function CategoryPage() {
                               onClick={(e) => {
                                 e.preventDefault()
                                 e.stopPropagation()
+                                handleRestaurantShare(restaurant)
                               }}
                             >
                               <Share2 className="h-4 w-4 text-gray-600 dark:text-gray-400" />
