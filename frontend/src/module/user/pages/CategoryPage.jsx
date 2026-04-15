@@ -739,14 +739,14 @@ export default function CategoryPage() {
   })
 
   return (
-    <div className={`min-h-screen pt-7 bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
+    <div className={`min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Sticky Header */}
       <div className={`${isFilterOpen ? 'hidden' : 'sticky'} top-0 z-20 bg-white dark:bg-[#1a1a1a] shadow-sm`}>
         {/* Spacer to avoid the sticky search area covering the categories row */}
         <div className="h-1 bg-white dark:bg-[#1a1a1a]" aria-hidden />
         <div className="max-w-7xl mx-auto">
           {/* Search Bar with Back Button */}
-          <div className="flex items-center gap-2 px-3 md:px-6 py-2 md:py-3 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2 px-3 md:px-6 pt-9 py-2 md:pt-5 md:py-3 border-b border-gray-100 dark:border-gray-800">
             <button
               onClick={() => navigate('/user')}
               className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors flex-shrink-0"
