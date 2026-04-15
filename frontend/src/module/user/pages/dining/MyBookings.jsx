@@ -379,7 +379,7 @@ export default function MyBookings() {
                 <button onClick={() => navigate("/profile")}>
                     <ArrowLeft className="w-6 h-6 text-gray-700 cursor-pointer" />
                 </button>
-                <h1 className="ml-4 text-xl font-semibold text-gray-800">My Table Bookings</h1>
+                <h1 className="ml-4 pt-4 text-xl font-semibold text-gray-800">My Table Bookings</h1>
             </div>
 
             <div className="p-4 space-y-4">
