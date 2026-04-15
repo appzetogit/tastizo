@@ -109,7 +109,7 @@ function readPreviousSplashLocation() {
 
 export default function MobileSplashScreen() {
   const location = useLocation()
-  const { registerSplashIconRef, captureSplashIconAndStartExit, setPhaseSplash } = useLocationIconTransition() || {}
+  const { registerSplashIconRef, setPhaseSplash } = useLocationIconTransition() || {}
   const [isMobile, setIsMobile] = useState(false)
   const [isVisible, setIsVisible] = useState(true)
   const [splashLocation, setSplashLocation] = useState(null)
@@ -147,12 +147,11 @@ export default function MobileSplashScreen() {
       const elapsed = Date.now() - showStartedAt.current
       const remaining = Math.max(0, SPLASH_MIN_DISPLAY_LOGGED_IN_MS - elapsed)
       const id = setTimeout(() => {
-        if (captureSplashIconAndStartExit) captureSplashIconAndStartExit()
         setIsVisible(false)
       }, remaining)
       return () => clearTimeout(id)
     }
-  }, [isMobile, location.pathname, isLoggedIn, locationLoading, captureSplashIconAndStartExit])
+  }, [isMobile, location.pathname, isLoggedIn, locationLoading])
 
   // Fetch location only when logged in
   useEffect(() => {

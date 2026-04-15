@@ -739,7 +739,7 @@ export default function CategoryPage() {
   })
 
   return (
-    <div className={`min-h-screen pt-1.5 bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
+    <div className={`min-h-screen pt-7 bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Sticky Header */}
       <div className={`${isFilterOpen ? 'hidden' : 'sticky'} top-0 z-20 bg-white dark:bg-[#1a1a1a] shadow-sm`}>
         {/* Spacer to avoid the sticky search area covering the categories row */}
@@ -910,7 +910,7 @@ export default function CategoryPage() {
       </div>
 
       {/* Content */}
-      <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-2 sm:py-3 md:py-8 lg:py-10 space-y-3 sm:space-y-4 md:space-y-8 lg:space-y-10">
+      <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-2 pb-2 sm:pt-5 sm:pb-3 md:py-8 lg:py-10 space-y-3 sm:space-y-4 md:space-y-8 lg:space-y-10">
         <div className="max-w-7xl mx-auto">
           {/* ALL RESTAURANTS Section */}
           <section className="relative">
