@@ -653,7 +653,28 @@ function initializeScheduledTasks() {
       });
     })
     .catch((error) => {
-      console.error("❌ Failed to initialize auto-reject service:", error);
+      console.error("Failed to initialize auto-reject service:", error);
+    });
+
+  // Initialize assignment services
+  import("./modules/order/services/assignmentCleanupService.js")
+    .then((assignmentCleanupService) => {
+      // Start periodic cleanup service
+      assignmentCleanupService.startPeriodicCleanup();
+      console.log("Assignment cleanup service started");
+    })
+    .catch((error) => {
+      console.error("Failed to initialize assignment cleanup service:", error);
+    });
+
+  import("./modules/order/services/orderAssignmentTriggerService.js")
+    .then((orderAssignmentTriggerService) => {
+      // Start periodic assignment checker
+      orderAssignmentTriggerService.startPeriodicAssignmentChecker();
+      console.log("Order assignment trigger service started");
+    })
+    .catch((error) => {
+      console.error("Failed to initialize order assignment trigger service:", error);
     });
 }
 

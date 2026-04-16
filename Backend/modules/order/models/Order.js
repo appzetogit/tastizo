@@ -358,6 +358,39 @@ const orderSchema = new mongoose.Schema(
         method: String, // 'osrm', 'dijkstra', 'haversine'
       },
     },
+    // Delivery assignment tracking
+    assignmentStatus: {
+      type: String,
+      enum: ["pending_assignment", "assigned", "accepted", "rejected", "expired", "reassigned"],
+      default: "pending_assignment",
+    },
+    assignmentTimings: {
+      firstAssignedAt: Date,
+      lastAssignedAt: Date,
+      acceptedAt: Date,
+      expiresAt: Date,
+      totalAttempts: {
+        type: Number,
+        default: 0,
+      },
+      currentAttempt: {
+        type: Number,
+        default: 0,
+      },
+    },
+    // Lock to prevent multiple delivery boys accepting same order
+    assignmentLock: {
+      isLocked: {
+        type: Boolean,
+        default: false,
+      },
+      lockedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Delivery",
+      },
+      lockedAt: Date,
+      lockExpiresAt: Date,
+    },
   },
   {
     timestamps: true,
@@ -381,8 +414,9 @@ orderSchema.pre("save", async function (next) {
 });
 
 // Update tracking when status changes
-orderSchema.pre("save", function (next) {
+orderSchema.pre("save", async function (next) {
   const now = new Date();
+  const previousStatus = this._originalStatus || this.status;
 
   if (this.isModified("status")) {
     switch (this.status) {
@@ -420,7 +454,34 @@ orderSchema.pre("save", function (next) {
     }
   }
 
+  // Store original status for next save
+  this._originalStatus = this.status;
+
   next();
+});
+
+// Post-save middleware to trigger assignment when status changes to preparing or ready
+orderSchema.post("save", async function (doc) {
+  try {
+    // Trigger assignment if order moved to 'preparing' or 'ready' status
+    const assignmentTriggerStatuses = ['preparing', 'ready'];
+    
+    if (assignmentTriggerStatuses.includes(doc.status)) {
+      // Import the trigger service dynamically to avoid circular dependencies
+      const { default: orderAssignmentTriggerService } = await import('./services/orderAssignmentTriggerService.js');
+      
+      // Trigger assignment asynchronously (don't wait for it to complete)
+      setImmediate(async () => {
+        try {
+          await orderAssignmentTriggerService.triggerAssignment(doc._id.toString(), 'status_change');
+        } catch (error) {
+          console.error(`Error in post-save assignment trigger for order ${doc.orderId}:`, error);
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error in order post-save middleware:', error);
+  }
 });
 
 export default mongoose.model("Order", orderSchema);

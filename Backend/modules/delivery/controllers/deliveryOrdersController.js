@@ -253,11 +253,14 @@ export const acceptOrder = asyncHandler(async (req, res) => {
       !orderId ||
       (typeof orderId !== "string" && typeof orderId !== "object")
     ) {
-      console.error(`❌ Invalid orderId provided: ${orderId}`);
+      console.error(`Invalid orderId provided: ${orderId}`);
       return errorResponse(res, 400, "Invalid order ID");
     }
+
+    // Import the new assignment controller
+    const { default: orderAssignmentController } = await import("../../order/services/orderAssignmentController.js");
+
     // Find order - try both by _id and orderId
-    // First check if order exists (without deliveryPartnerId filter)
     let order = await Order.findOne({
       $or: [{ _id: orderId }, { orderId: orderId }],
     })
@@ -266,151 +269,81 @@ export const acceptOrder = asyncHandler(async (req, res) => {
       .lean();
 
     if (!order) {
-      console.error(`❌ Order ${orderId} not found in database`);
+      console.error(`Order ${orderId} not found in database`);
       return errorResponse(res, 404, "Order not found");
     }
 
-    // Check if order is assigned to this delivery partner
-    const orderDeliveryPartnerId = order.deliveryPartnerId?.toString();
     const currentDeliveryId = delivery._id.toString();
+    const orderDeliveryPartnerId = order.deliveryPartnerId?.toString();
 
-    // If order is not assigned, check if this delivery boy was notified (priority-based system)
-    // Also allow acceptance if order is in valid status (preparing/ready) - more permissive
-    if (!orderDeliveryPartnerId) {
-      // Check if this delivery boy was in the priority or expanded notification list
-      const assignmentInfo = order.assignmentInfo || {};
-      const priorityIds = assignmentInfo.priorityDeliveryPartnerIds || [];
-      const expandedIds = assignmentInfo.expandedDeliveryPartnerIds || [];
+    // Check if order is already accepted by someone else
+    if (order.assignmentStatus === 'accepted' && orderDeliveryPartnerId !== currentDeliveryId) {
+      return errorResponse(res, 409, "Order was already accepted by another delivery partner");
+    }
 
-      // Helper function to normalize ID for comparison
-      const normalizeId = (id) => {
-        if (!id) return null;
-        if (typeof id === "string") return id;
-        if (id.toString) return id.toString();
-        return String(id);
-      };
+    // CRITICAL: Check if this delivery partner previously rejected this order
+    const hasPreviousRejection = await OrderAssignmentHistory.findOne({
+      orderId: order._id,
+      deliveryPartnerId: currentDeliveryId,
+      assignmentStatus: { $in: ["rejected", "expired"] }
+    });
 
-      // Normalize all IDs to strings for comparison
-      const normalizedCurrentId = normalizeId(currentDeliveryId);
-      const normalizedPriorityIds = priorityIds
-        .map(normalizeId)
-        .filter(Boolean);
-      const normalizedExpandedIds = expandedIds
-        .map(normalizeId)
-        .filter(Boolean);
-      const wasNotified =
-        normalizedPriorityIds.includes(normalizedCurrentId) ||
-        normalizedExpandedIds.includes(normalizedCurrentId);
+    if (hasPreviousRejection) {
+      return errorResponse(res, 403, "You cannot accept an order you have previously rejected or expired");
+    }
 
-      // Also allow if order is in valid status (preparing/ready) - more permissive for unassigned orders
-      const isValidStatus =
-        order.status === "preparing" || order.status === "ready";
-
-      if (!wasNotified && !isValidStatus) {
-        console.error(
-          `❌ Order ${order.orderId} is not assigned, delivery partner ${currentDeliveryId} was not notified, and order status is ${order.status}`,
-        );
-        console.error(`❌ Full order details:`, {
-          orderId: order.orderId,
-          orderStatus: order.status,
-          deliveryPartnerId: order.deliveryPartnerId,
-          assignmentInfo: JSON.stringify(order.assignmentInfo),
-          priorityIds: normalizedPriorityIds,
-          expandedIds: normalizedExpandedIds,
-          currentDeliveryId: normalizedCurrentId,
-        });
-        return errorResponse(
-          res,
-          403,
-          "This order is not available for you. It may have been assigned to another delivery partner or you were not notified about it.",
-        );
-      }
-
-      // Allow acceptance if delivery boy was notified OR order is in valid status
-      if (wasNotified) {
-      } else if (isValidStatus) {
-      }
-
-      // Proceed with assignment: atomic update to prevent multiple delivery boys accepting the same order
-      const orderMongoIdForAssign = order._id;
-      const assignmentUpdate = {
-        deliveryPartnerId: delivery._id,
-        assignmentInfo: {
-          ...(order.assignmentInfo || {}),
-          deliveryPartnerId: currentDeliveryId,
-          assignedAt: new Date(),
-          assignedBy: "delivery_accept",
-          acceptedFromNotification: true,
-        },
-      };
-
-      const assignFilter = {
-        _id: orderMongoIdForAssign,
-        status: { $in: ["preparing", "ready"] },
-        $or: [
-          { deliveryPartnerId: null },
-          { deliveryPartnerId: { $exists: false } },
-        ],
-      };
-
-      let orderDoc = await Order.findOneAndUpdate(
-        assignFilter,
-        { $set: assignmentUpdate },
-        { new: true },
+    // Use the new assignment system for acceptance
+    try {
+      const acceptResult = await orderAssignmentController.acceptOrderAssignment(
+        order._id.toString(),
+        currentDeliveryId
       );
 
-      if (!orderDoc) {
-        console.error(
-          `❌ Order ${order.orderId} was already accepted by another delivery partner (atomic check failed)`,
-        );
-        return errorResponse(
-          res,
-          409,
-          "Order was accepted by another delivery partner. Please try another order.",
-        );
+      if (!acceptResult.success) {
+        return errorResponse(res, 400, acceptResult.message || "Failed to accept order");
       }
-      // Reload order with populated data
-      try {
-        order = await Order.findOne({
-          $or: [{ _id: orderDoc._id }, { orderId: orderId }],
-        })
-          .populate("restaurantId", "name location address phone ownerPhone")
-          .populate("userId", "name phone")
-          .lean();
 
-        if (!order) {
-          console.error(`❌ Order not found after assignment: ${orderDoc._id}`);
-          return errorResponse(
-            res,
-            500,
-            "Order not found after assignment. Please try again.",
-          );
+      // Reload the updated order
+      order = acceptResult.order;
+    } catch (acceptError) {
+      console.error("Error in assignment acceptance:", acceptError);
+      
+      // Fallback to legacy logic if new system fails
+      if (orderDeliveryPartnerId && orderDeliveryPartnerId !== currentDeliveryId) {
+        return errorResponse(res, 403, "Order is assigned to another delivery partner");
+      }
+
+      // For unassigned orders, check if this delivery boy was notified
+      if (!orderDeliveryPartnerId) {
+        const assignmentInfo = order.assignmentInfo || {};
+        const priorityIds = assignmentInfo.priorityDeliveryPartnerIds || [];
+        const expandedIds = assignmentInfo.expandedDeliveryPartnerIds || [];
+
+        const normalizeId = (id) => {
+          if (!id) return null;
+          if (typeof id === "string") return id;
+          if (id.toString) return id.toString();
+          return String(id);
+        };
+
+        const normalizedCurrentId = normalizeId(currentDeliveryId);
+        const normalizedPriorityIds = priorityIds.map(normalizeId).filter(Boolean);
+        const normalizedExpandedIds = expandedIds.map(normalizeId).filter(Boolean);
+        const wasNotified = normalizedPriorityIds.includes(normalizedCurrentId) ||
+                           normalizedExpandedIds.includes(normalizedCurrentId);
+
+        const isValidStatus = order.status === "preparing" || order.status === "ready";
+
+        if (!wasNotified && !isValidStatus) {
+          return errorResponse(res, 403, "This order is not available for you");
         }
-      } catch (reloadError) {
-        console.error(
-          `❌ Error reloading order after assignment: ${reloadError.message}`,
-        );
-        return errorResponse(
-          res,
-          500,
-          "Error reloading order. Please try again.",
-        );
       }
-    } else if (orderDeliveryPartnerId !== currentDeliveryId) {
-      console.error(
-        `❌ Order ${order.orderId} is assigned to ${orderDeliveryPartnerId}, but current delivery partner is ${currentDeliveryId}`,
-      );
-      return errorResponse(
-        res,
-        403,
-        "Order is assigned to another delivery partner",
-      );
-    } else {
     }
     // Check if order is in valid state to accept
     const validStatuses = ["preparing", "ready"];
     if (!validStatuses.includes(order.status)) {
       console.warn(
+        `Order ${order.orderId} cannot be accepted. Current status: ${order.status}, Valid statuses: ${validStatuses.join(", ")}`,
         `⚠️ Order ${order.orderId} cannot be accepted. Current status: ${order.status}, Valid statuses: ${validStatuses.join(", ")}`,
       );
       return errorResponse(
@@ -867,6 +800,95 @@ export const acceptOrder = asyncHandler(async (req, res) => {
       deliveryId: req.delivery?._id,
     });
     return errorResponse(res, 500, error.message || "Failed to accept order");
+  }
+});
+
+/**
+ * Reject Order Assignment (Delivery Boy rejects the assigned order)
+ * PATCH /api/delivery/orders/:orderId/reject
+ */
+export const rejectOrder = asyncHandler(async (req, res) => {
+  try {
+    const delivery = req.delivery;
+    const { orderId } = req.params;
+    const { reason } = req.body; // Optional rejection reason
+
+    // Validate orderId
+    if (!orderId || (typeof orderId !== "string" && typeof orderId !== "object")) {
+      console.error(`Invalid orderId provided: ${orderId}`);
+      return errorResponse(res, 400, "Invalid order ID");
+    }
+
+    // Import the new assignment controller
+    const { default: orderAssignmentController } = await import("../../order/services/orderAssignmentController.js");
+
+    // Find order - try both by _id and orderId
+    let order = await Order.findOne({
+      $or: [{ _id: orderId }, { orderId: orderId }],
+    })
+      .populate("restaurantId", "name location address phone ownerPhone")
+      .populate("userId", "name phone")
+      .lean();
+
+    if (!order) {
+      console.error(`Order ${orderId} not found in database`);
+      return errorResponse(res, 404, "Order not found");
+    }
+
+    const currentDeliveryId = delivery._id.toString();
+    const orderDeliveryPartnerId = order.deliveryPartnerId?.toString();
+
+    // Check if order is assigned to this delivery partner or they were notified
+    if (orderDeliveryPartnerId && orderDeliveryPartnerId !== currentDeliveryId) {
+      return errorResponse(res, 403, "Order is assigned to another delivery partner");
+    }
+
+    // Check if order is still in rejectable state
+    if (order.assignmentStatus === 'accepted') {
+      return errorResponse(res, 400, "Order has already been accepted and cannot be rejected");
+    }
+
+    // CRITICAL: Check if this delivery partner previously rejected this order
+    const hasPreviousRejection = await OrderAssignmentHistory.findOne({
+      orderId: order._id,
+      deliveryPartnerId: currentDeliveryId,
+      assignmentStatus: { $in: ["rejected", "expired"] }
+    });
+
+    if (hasPreviousRejection) {
+      return errorResponse(res, 403, "You cannot reject an order you have already rejected or expired");
+    }
+
+    // Use the new assignment system for rejection
+    try {
+      const rejectResult = await orderAssignmentController.rejectOrderAssignment(
+        order._id.toString(),
+        currentDeliveryId,
+        reason || 'rejected_by_delivery'
+      );
+
+      if (!rejectResult.success) {
+        return errorResponse(res, 400, rejectResult.message || "Failed to reject order");
+      }
+
+      return successResponse(res, 200, "Order rejected successfully", {
+        message: "Order rejected and will be reassigned to another delivery partner",
+        orderId: order.orderId
+      });
+    } catch (rejectError) {
+      console.error("Error in assignment rejection:", rejectError);
+      return errorResponse(res, 500, "Failed to reject order assignment");
+    }
+  } catch (error) {
+    logger.error(`Error rejecting order: ${error.message}`);
+    console.error("Error rejecting order - Full error:", {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      orderId: req.params?.orderId,
+      deliveryId: req.delivery?._id,
+    });
+    return errorResponse(res, 500, error.message || "Failed to reject order");
   }
 });
 
