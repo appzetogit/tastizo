@@ -2378,8 +2378,8 @@ export default function RestaurantDetails() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                        <span className="text-sm text-gray-400">No image available</span>
+                      <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center">
+                        <Utensils className="w-12 h-12 text-gray-400 dark:text-gray-500" />
                       </div>
                     )}
                     {/* Bookmark and Share Icons Overlay */}

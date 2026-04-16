@@ -1,7 +1,7 @@
 import { useSearchParams, Link, useNavigate } from "react-router-dom"
 import React, { useRef, useEffect, useState, useMemo, useCallback } from "react"
 import { createPortal } from "react-dom"
-import { Star, Clock, MapPin, Heart, Search, Tag, Flame, ShoppingBag, ShoppingCart, Mic, SlidersHorizontal, CheckCircle2, Bookmark, BadgePercent, X, ArrowDownUp, Timer, CalendarClock, ShieldCheck, IndianRupee, UtensilsCrossed, Leaf, AlertCircle, Loader2, Plus, Check, Share2, ChevronDown, ArrowRight } from "lucide-react"
+import { Star, Clock, MapPin, Heart, Search, Tag, Flame, ShoppingBag, ShoppingCart, Mic, SlidersHorizontal, CheckCircle2, Bookmark, BadgePercent, X, ArrowDownUp, Timer, CalendarClock, ShieldCheck, IndianRupee, UtensilsCrossed, Leaf, AlertCircle, Loader2, Plus, Check, Share2, ChevronDown, ArrowRight, ImageOff } from "lucide-react"
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import Footer from "../components/Footer"
 import AddToCartButton from "../components/AddToCartButton"
@@ -87,16 +87,8 @@ const RestaurantImageCarousel = React.memo(({ restaurant, priority = false }) =>
 
   if (!images || images.length === 0) {
     return (
-      <div className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0 bg-gray-200">
-        <OptimizedImage
-          src={RESTAURANT_PLACEHOLDER_IMAGE}
-          alt={restaurant.name}
-          className="w-full h-full rounded-t-2xl sm:rounded-t-3xl"
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          objectFit="cover"
-          placeholder="blur"
-          priority={priority}
-        />
+      <div className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 flex flex-col items-center justify-center">
+        <Utensils className="w-12 h-12 text-gray-400 dark:text-gray-500" />
       </div>
     )
   }
@@ -142,7 +134,6 @@ const RestaurantImageCarousel = React.memo(({ restaurant, priority = false }) =>
 
   const currentSrc = images[currentIndex]
   const showPlaceholder = currentError || !currentSrc
-  const displaySrc = showPlaceholder ? RESTAURANT_PLACEHOLDER_IMAGE : currentSrc
 
   // Reset error when switching to another image in carousel
   useEffect(() => {
@@ -151,22 +142,29 @@ const RestaurantImageCarousel = React.memo(({ restaurant, priority = false }) =>
 
   return (
     <div
-      className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-2xl sm:rounded-t-3xl flex-shrink-0 group"
+      className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-2xl sm:rounded-t-3xl flex-shrink-0 group bg-gray-100 dark:bg-gray-800"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <div className="absolute inset-0 transition-transform duration-500 ease-out group-hover:scale-110">
-        <OptimizedImage
-          src={displaySrc}
-          alt={restaurant.featuredDish ? `${restaurant.name} - ${restaurant.featuredDish}` : `${restaurant.name} - Image ${currentIndex + 1}`}
-          className="w-full h-full rounded-t-2xl sm:rounded-t-3xl"
-          priority={priority && currentIndex === 0}
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          objectFit="cover"
-          placeholder="blur"
-          onError={() => setCurrentError(true)}
-        />
+      <div className={`absolute inset-0 transition-transform duration-500 ease-out group-hover:scale-110 ${showPlaceholder ? 'flex flex-col items-center justify-center' : ''}`}>
+        {showPlaceholder ? (
+          <div className="flex flex-col items-center justify-center">
+            <Utensils className="w-12 h-12 text-gray-400 dark:text-gray-500 mb-2" />
+            <span className="text-sm text-gray-400 dark:text-gray-500 font-medium">Image loading...</span>
+          </div>
+        ) : (
+          <OptimizedImage
+            src={currentSrc}
+            alt={restaurant.featuredDish ? `${restaurant.name} - ${restaurant.featuredDish}` : `${restaurant.name} - Image ${currentIndex + 1}`}
+            className="w-full h-full rounded-t-2xl sm:rounded-t-3xl"
+            priority={priority && currentIndex === 0}
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            objectFit="cover"
+            placeholder="blur"
+            onError={() => setCurrentError(true)}
+          />
+        )}
       </div>
 
       {/* Image Indicators - only show if more than 1 image */}
