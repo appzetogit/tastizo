@@ -5,6 +5,10 @@ import mongoose from 'mongoose';
 const CHAT_DISABLE_AFTER_DELIVERED_MINUTES = 30;
 const CHAT_ALLOWED_STATUSES = ['confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered'];
 
+function hasAssignedDeliveryPartner(order) {
+  return !!(order?.deliveryPartnerId?._id || order?.deliveryPartnerId);
+}
+
 /**
  * Resolve order by id (MongoDB _id or orderId string)
  * @param {string} orderIdParam - _id or orderId
@@ -31,6 +35,7 @@ export async function resolveOrder(orderIdParam) {
  */
 export function isChatAllowedForOrder(order) {
   if (!order) return false;
+  if (!hasAssignedDeliveryPartner(order)) return false;
   const status = order.status || '';
   if (!CHAT_ALLOWED_STATUSES.includes(status)) return false;
   if (status === 'delivered' && order.deliveredAt) {
@@ -68,11 +73,13 @@ export async function getChatForUser(orderIdParam, userId) {
   }
   const allowed = isChatAllowedForOrder(order);
   const orderMongoId = order._id;
-  const chat = await findOrCreateChat(
-    orderMongoId,
-    order.userId,
-    order.deliveryPartnerId ? order.deliveryPartnerId._id : null
-  );
+  const chat = allowed
+    ? await findOrCreateChat(
+        orderMongoId,
+        order.userId,
+        order.deliveryPartnerId ? order.deliveryPartnerId._id : null
+      )
+    : await OrderChat.findOne({ orderId: orderMongoId });
   return {
     order: {
       _id: order._id,
@@ -82,11 +89,11 @@ export async function getChatForUser(orderIdParam, userId) {
       deliveryPartnerId: order.deliveryPartnerId
     },
     chat: {
-      _id: chat._id,
-      orderId: chat.orderId,
-      messages: chat.messages,
-      isActive: allowed ? chat.isActive : false,
-      closedAt: chat.closedAt
+      _id: chat?._id,
+      orderId: chat?.orderId || orderMongoId,
+      messages: chat?.messages || [],
+      isActive: allowed ? !!chat?.isActive : false,
+      closedAt: chat?.closedAt
     },
     allowed
   };

@@ -73,6 +73,25 @@ const AnimatedCheckmark = ({ delay = 0 }) => (
   </motion.svg>
 )
 
+const getRestaurantPhone = (restaurant) => {
+  if (!restaurant || typeof restaurant !== "object") return "";
+  return (
+    restaurant.primaryContactNumber ||
+    restaurant.contactNumber ||
+    restaurant.phone ||
+    restaurant.ownerPhone ||
+    ""
+  );
+};
+
+const hasAssignedDeliveryPartner = (order) => {
+  return !!(
+    order?.deliveryPartnerId ||
+    order?.deliveryPartner?._id ||
+    order?.assignmentInfo?.deliveryPartnerId
+  );
+};
+
 // Real Delivery Map Component with User Live Location
 const DeliveryMap = ({ orderId, order, isVisible }) => {
   const { location: userLocation } = useUserLocation() // Get user's live location
@@ -416,6 +435,7 @@ export default function OrderTracking() {
             mongoId: apiOrder._id,
             restaurant: apiOrder.restaurantName || 'Restaurant',
             restaurantId: apiOrder.restaurantId || null, // Include restaurantId for location access
+            restaurantPhone: getRestaurantPhone(apiOrder.restaurantId) || getRestaurantPhone(apiOrder.restaurant) || apiOrder.restaurantPhone || "",
             userId: apiOrder.userId || null, // Include user data for phone number
             userName: apiOrder.userName || apiOrder.userId?.name || apiOrder.userId?.fullName || '',
             userPhone: apiOrder.userPhone || apiOrder.userId?.phone || '',
@@ -646,19 +666,17 @@ export default function OrderTracking() {
 
   const handleCallRestaurant = async () => {
     if (!order) return;
-    let restaurantPhone =
-      (typeof order.restaurantId === "object" &&
-        (order.restaurantId?.primaryContactNumber ||
-          order.restaurantId?.phone ||
-          order.restaurantId?.contactNumber)) ||
-      order.restaurantPhone ||
-      "";
-    if (!restaurantPhone && order.restaurantId && typeof order.restaurantId === "string") {
+    let restaurantPhone = getRestaurantPhone(order.restaurantId) || order.restaurantPhone || "";
+    const restaurantId =
+      typeof order.restaurantId === "string"
+        ? order.restaurantId
+        : order.restaurantId?._id || order.restaurantId?.id;
+
+    if (!restaurantPhone && restaurantId) {
       try {
-        const res = await restaurantAPI.getRestaurantById(order.restaurantId);
+        const res = await restaurantAPI.getRestaurantById(restaurantId);
         const r = res?.data?.data?.restaurant;
-        restaurantPhone =
-          r?.primaryContactNumber || r?.phone || r?.contactNumber || "";
+        restaurantPhone = getRestaurantPhone(r);
       } catch (e) {
         console.error("Error fetching restaurant for phone:", e);
       }
@@ -771,6 +789,7 @@ export default function OrderTracking() {
           mongoId: apiOrder._id,
           restaurant: apiOrder.restaurantName || 'Restaurant',
           restaurantId: apiOrder.restaurantId || null, // Include restaurantId for location access
+          restaurantPhone: getRestaurantPhone(apiOrder.restaurantId) || getRestaurantPhone(apiOrder.restaurant) || apiOrder.restaurantPhone || "",
           userId: apiOrder.userId || null, // Include user data for phone number
           userName: apiOrder.userName || apiOrder.userId?.name || apiOrder.userId?.fullName || '',
           userPhone: apiOrder.userPhone || apiOrder.userId?.phone || '',
@@ -801,6 +820,8 @@ export default function OrderTracking() {
             avatar: null
           } : null,
           tracking: apiOrder.tracking || {},
+          deliveryPartnerId: apiOrder.deliveryPartnerId?._id || apiOrder.deliveryPartnerId || apiOrder.assignmentInfo?.deliveryPartnerId || null,
+          assignmentInfo: apiOrder.assignmentInfo || null,
           deliveryState: apiOrder.deliveryState || null,
           deliveryInstructions: apiOrder.deliveryInstructions || "",
           deliveryAddress: apiOrder.deliveryAddress || undefined,
@@ -945,7 +966,7 @@ export default function OrderTracking() {
         animate={{ opacity: 1 }}
       >
         {/* Navigation bar */}
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center justify-between px-4 pt-6 pb-3">
           <Link to="/user/orders">
             <motion.button
               className="w-10 h-10 flex items-center justify-center"
@@ -1253,23 +1274,25 @@ export default function OrderTracking() {
         </motion.div>
 
         {/* Chat with delivery partner */}
-        <motion.button
-          onClick={() => navigate(`/orders/${orderId}/chat`)}
-          className="w-full bg-white rounded-xl p-4 shadow-sm flex items-center gap-3 text-left border-0"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.72 }}
-          whileTap={{ scale: 0.99 }}
-        >
-          <div className="w-10 h-10 rounded-full bg-[#ff8100]/10 flex items-center justify-center flex-shrink-0">
-            <MessageCircle className="w-5 h-5 text-[#ff8100]" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-gray-900">Chat with delivery partner</p>
-            <p className="text-sm text-gray-500">Message your delivery partner about this order</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
-        </motion.button>
+        {hasAssignedDeliveryPartner(order) && (
+          <motion.button
+            onClick={() => navigate(`/orders/${orderId}/chat`)}
+            className="w-full bg-white rounded-xl p-4 shadow-sm flex items-center gap-3 text-left border-0"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.72 }}
+            whileTap={{ scale: 0.99 }}
+          >
+            <div className="w-10 h-10 rounded-full bg-[#ff8100]/10 flex items-center justify-center flex-shrink-0">
+              <MessageCircle className="w-5 h-5 text-[#ff8100]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-gray-900">Chat with delivery partner</p>
+              <p className="text-sm text-gray-500">Message your delivery partner about this order</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+          </motion.button>
+        )}
 
         {/* Restaurant Section */}
         <motion.div

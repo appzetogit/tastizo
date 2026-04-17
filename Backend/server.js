@@ -107,13 +107,20 @@ if (missingEnvVars.length > 0) {
 const app = express();
 const httpServer = createServer(app);
 
+const configuredCorsOrigins = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 // Initialize Socket.IO with proper CORS configuration
 const allowedSocketOrigins = [
-  process.env.CORS_ORIGIN,
+  ...configuredCorsOrigins,
   "https://tastizo.com",
   "http://tastizo.com",
   "https://www.tastizo.com",
   "http://www.tastizo.com",
+  "https://foods.tastizo.com",
+  "http://foods.tastizo.com",
   "https://foozeto.tastizo.com",
   "http://foozeto.tastizo.com",
   "http://localhost:5173",
@@ -660,7 +667,7 @@ function initializeScheduledTasks() {
 
   // Initialize assignment services
   import("./modules/order/services/assignmentCleanupService.js")
-    .then((assignmentCleanupService) => {
+    .then(({ default: assignmentCleanupService }) => {
       // Start periodic cleanup service
       assignmentCleanupService.startPeriodicCleanup();
       console.log("Assignment cleanup service started");
@@ -670,7 +677,7 @@ function initializeScheduledTasks() {
     });
 
   import("./modules/order/services/orderAssignmentTriggerService.js")
-    .then((orderAssignmentTriggerService) => {
+    .then(({ default: orderAssignmentTriggerService }) => {
       // Start periodic assignment checker
       orderAssignmentTriggerService.startPeriodicAssignmentChecker();
       console.log("Order assignment trigger service started");

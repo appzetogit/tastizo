@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import io from 'socket.io-client';
 import { userAPI } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/api/config.js';
@@ -18,6 +18,10 @@ export function useOrderChat(orderId, options = {}) {
   const [chatAllowed, setChatAllowed] = useState(false);
   const [messages, setMessages] = useState([]);
   const socketRef = useRef(null);
+  const activeOrderRoomIds = useMemo(
+    () => Array.from(new Set([orderId, order?._id, order?.orderId].filter(Boolean).map(String))),
+    [orderId, order?._id, order?.orderId]
+  );
 
   const fetchChat = useCallback(async () => {
     if (!orderId || !enabled) return;
@@ -49,21 +53,47 @@ export function useOrderChat(orderId, options = {}) {
     fetchChat();
   }, [fetchChat]);
 
+  useEffect(() => {
+    if (!orderId || !enabled || !chatAllowed) return;
+
+    const intervalId = window.setInterval(() => {
+      if (!document.hidden) {
+        fetchChat();
+      }
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [orderId, enabled, chatAllowed, fetchChat]);
+
   // Socket: join order-chat room and listen for new messages
   useEffect(() => {
     if (!orderId || !enabled) return;
     const socket = io(backendUrl, {
       transports: ['websocket', 'polling'],
-      path: '/socket.io/'
+      path: '/socket.io/',
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000
     });
     socketRef.current = socket;
 
-    socket.on('connect', () => {
-      socket.emit('join-order-chat', orderId);
+    const joinChatRooms = () => {
+      activeOrderRoomIds.forEach((roomId) => socket.emit('join-order-chat', roomId));
+    };
+
+    socket.on('connect', joinChatRooms);
+    socket.io.on('reconnect', joinChatRooms);
+    socket.on('connect_error', (err) => {
+      console.warn('Order chat socket connection failed:', err?.message || err);
     });
 
     socket.on('chat_message', (payload) => {
-      if (!payload || (payload.orderMongoId !== orderId && payload.orderId !== orderId)) return;
+      const payloadOrderIds = [payload?.orderMongoId, payload?.orderId].filter(Boolean).map(String);
+      const isCurrentOrder = activeOrderRoomIds.some((roomId) => payloadOrderIds.includes(roomId));
+
+      if (!payload || !isCurrentOrder) return;
+
       setMessages((prev) => {
         const idMatch = payload._id && prev.some((m) => String(m._id) === String(payload._id));
         const contentMatch = prev.some(
@@ -86,11 +116,12 @@ export function useOrderChat(orderId, options = {}) {
     });
 
     return () => {
-      socket.emit('leave-order-chat', orderId);
+      activeOrderRoomIds.forEach((roomId) => socket.emit('leave-order-chat', roomId));
+      socket.io.off('reconnect', joinChatRooms);
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [orderId, enabled]);
+  }, [orderId, enabled, activeOrderRoomIds]);
 
   const sendMessage = useCallback(
     async (text) => {
@@ -111,7 +142,8 @@ export function useOrderChat(orderId, options = {}) {
 
       try {
         await userAPI.sendOrderChatMessage(orderId, trimmed);
-        // Real message will arrive via socket; duplicate guard will keep only one copy
+        // Real message usually arrives via socket; refresh covers production proxies that block it.
+        window.setTimeout(fetchChat, 800);
         return { success: true };
       } catch (err) {
         // Roll back optimistic message on failure
@@ -122,7 +154,7 @@ export function useOrderChat(orderId, options = {}) {
         };
       }
     },
-    [orderId, chatAllowed]
+    [orderId, chatAllowed, fetchChat]
   );
 
   return {

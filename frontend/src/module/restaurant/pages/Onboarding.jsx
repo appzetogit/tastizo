@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Image as ImageIcon, Upload, Clock, Calendar as CalendarIcon, Sparkles, ArrowLeft, Camera } from "lucide-react"
+import { Image as ImageIcon, Upload, Clock, Calendar as CalendarIcon, Sparkles, ArrowLeft, Camera, Trash2, X } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import {
@@ -115,6 +115,14 @@ const timeToString = (date) => {
   const hours = date.getHours().toString().padStart(2, "0")
   const minutes = date.getMinutes().toString().padStart(2, "0")
   return `${hours}:${minutes}`
+}
+
+const getUploadPreview = (upload, fallbackName = "Uploaded image") => {
+  if (!upload) return { url: null, name: fallbackName }
+  if (upload instanceof File) return { url: URL.createObjectURL(upload), name: upload.name || fallbackName }
+  if (upload?.url) return { url: upload.url, name: upload.name || fallbackName }
+  if (typeof upload === "string") return { url: upload, name: fallbackName }
+  return { url: null, name: upload.name || fallbackName }
 }
 
 function TimeSelector({ label, value, onChange }) {
@@ -318,6 +326,28 @@ export default function RestaurantOnboarding() {
       ...prev,
       menuImages: [...(prev.menuImages || []), ...files],
     }))
+  }
+
+  const removeMenuImage = (indexToRemove) => {
+    setStep2((prev) => ({
+      ...prev,
+      menuImages: (prev.menuImages || []).filter((_, index) => index !== indexToRemove),
+    }))
+  }
+
+  const removeProfileImage = () => {
+    setStep2((prev) => ({
+      ...prev,
+      profileImage: null,
+    }))
+  }
+
+  const removeStep3Image = (field) => {
+    setStep3((prev) => ({
+      ...prev,
+      [field]: null,
+    }))
+    setStep3Errors((prev) => ({ ...prev, [field]: null }))
   }
 
   const handleMenuGallerySelection = (e) => {
@@ -901,6 +931,36 @@ export default function RestaurantOnboarding() {
     </div>
   )
 
+  const UploadedImageSummary = ({ image, label, onRemove }) => {
+    if (!image) return null
+
+    const { url, name } = getUploadPreview(image, label)
+
+    return (
+      <div className="mt-2 flex items-center gap-3 rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-white flex items-center justify-center">
+          {url ? (
+            <img src={url} alt={label} className="h-full w-full object-cover" />
+          ) : (
+            <ImageIcon className="h-4 w-4 text-gray-500" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-medium text-gray-900">{name}</p>
+          <p className="text-[11px] text-gray-500">{label} selected</p>
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 hover:border-red-200 hover:text-red-600"
+          aria-label={`Remove ${label}`}
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    )
+  }
+
   const handleNext = async () => {
     setError("")
 
@@ -1458,27 +1518,21 @@ export default function RestaurantOnboarding() {
           {!!step2.menuImages.length && (
             <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
               {step2.menuImages.map((file, idx) => {
-                // Handle both File objects and URL objects
-                let imageUrl = null
-                let imageName = `Image ${idx + 1}`
-
-                if (file instanceof File) {
-                  imageUrl = URL.createObjectURL(file)
-                  imageName = file.name
-                } else if (file?.url) {
-                  // If it's an object with url property (from backend)
-                  imageUrl = file.url
-                  imageName = file.name || `Image ${idx + 1}`
-                } else if (typeof file === 'string') {
-                  // If it's a direct URL string
-                  imageUrl = file
-                }
+                const { url: imageUrl, name: imageName } = getUploadPreview(file, `Image ${idx + 1}`)
 
                 return (
                   <div
                     key={idx}
                     className="relative aspect-[4/5] rounded-md overflow-hidden bg-gray-100"
                   >
+                    <button
+                      type="button"
+                      onClick={() => removeMenuImage(idx)}
+                      className="absolute right-1.5 top-1.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md bg-black/75 text-white hover:bg-red-600 transition-colors"
+                      aria-label={`Remove menu image ${idx + 1}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                     {imageUrl ? (
                       <img
                         src={imageUrl}
@@ -1506,27 +1560,27 @@ export default function RestaurantOnboarding() {
         <div className="space-y-2">
           <Label className="text-xs font-medium text-gray-700">Restaurant profile image</Label>
           <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+            <div className="relative h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
               {step2.profileImage ? (
                 (() => {
-                  let imageSrc = null;
-
-                  if (step2.profileImage instanceof File) {
-                    imageSrc = URL.createObjectURL(step2.profileImage);
-                  } else if (step2.profileImage?.url) {
-                    // If it's an object with url property (from backend)
-                    imageSrc = step2.profileImage.url;
-                  } else if (typeof step2.profileImage === 'string') {
-                    // If it's a direct URL string
-                    imageSrc = step2.profileImage;
-                  }
+                  const { url: imageSrc } = getUploadPreview(step2.profileImage, "Restaurant profile")
 
                   return imageSrc ? (
-                    <img
-                      src={imageSrc}
-                      alt="Restaurant profile"
-                      className="w-full h-full object-cover"
-                    />
+                    <>
+                      <img
+                        src={imageSrc}
+                        alt="Restaurant profile"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={removeProfileImage}
+                        className="absolute right-0 top-0 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-white hover:bg-red-600 transition-colors"
+                        aria-label="Remove restaurant profile image"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </>
                   ) : (
                     <ImageIcon className="w-6 h-6 text-gray-500" />
                   );
@@ -1727,6 +1781,7 @@ export default function RestaurantOnboarding() {
                 onChange={(e) => {
                   setStep3({ ...step3, panImage: e.target.files?.[0] || null })
                   setStep3Errors((p) => ({ ...p, panImage: null }))
+                  e.target.value = ""
                 }}
               />
             </label>
@@ -1763,6 +1818,11 @@ export default function RestaurantOnboarding() {
               </button>
             </>
           </div>
+          <UploadedImageSummary
+            image={step3.panImage}
+            label="PAN image"
+            onRemove={() => removeStep3Image("panImage")}
+          />
           {step3Errors.panImage && <p className="text-xs text-red-500 mt-1">{step3Errors.panImage}</p>}
         </div>
       </section>
@@ -1839,6 +1899,7 @@ export default function RestaurantOnboarding() {
                   onChange={(e) => {
                     setStep3({ ...step3, gstImage: e.target.files?.[0] || null })
                     setStep3Errors((p) => ({ ...p, gstImage: null }))
+                    e.target.value = ""
                   }}
                   className="hidden"
                 />
@@ -1876,6 +1937,11 @@ export default function RestaurantOnboarding() {
                 </button>
               </>
             </div>
+            <UploadedImageSummary
+              image={step3.gstImage}
+              label="GST image"
+              onRemove={() => removeStep3Image("gstImage")}
+            />
             {step3Errors.gstImage && <p className="text-xs text-red-500 mt-1">{step3Errors.gstImage}</p>}
           </div>
         )}
@@ -1952,6 +2018,7 @@ export default function RestaurantOnboarding() {
               onChange={(e) => {
                 setStep3({ ...step3, fssaiImage: e.target.files?.[0] || null })
                 setStep3Errors((p) => ({ ...p, fssaiImage: null }))
+                e.target.value = ""
               }}
             />
           </label>
@@ -1988,6 +2055,11 @@ export default function RestaurantOnboarding() {
             </button>
           </>
         </div>
+        <UploadedImageSummary
+          image={step3.fssaiImage}
+          label="FSSAI image"
+          onRemove={() => removeStep3Image("fssaiImage")}
+        />
         {step3Errors.fssaiImage && <p className="text-xs text-red-500 mt-1">{step3Errors.fssaiImage}</p>}
       </section>
 

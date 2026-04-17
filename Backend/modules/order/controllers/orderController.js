@@ -1192,7 +1192,7 @@ export const getUserOrders = async (req, res) => {
       .select("-__v")
       .populate(
         "restaurantId",
-        "name slug profileImage address location phone ownerPhone",
+        "name slug profileImage address location phone ownerPhone primaryContactNumber contactNumber",
       )
       .populate("userId", "name phone email")
       .lean();
@@ -1242,6 +1242,10 @@ export const getOrderDetails = async (req, res) => {
         _id: id,
         userId,
       })
+        .populate(
+          "restaurantId",
+          "name slug profileImage address location phone ownerPhone primaryContactNumber contactNumber",
+        )
         .populate("deliveryPartnerId", "name email phone")
         .populate("userId", "name fullName phone email")
         .lean();
@@ -1253,6 +1257,10 @@ export const getOrderDetails = async (req, res) => {
         orderId: id,
         userId,
       })
+        .populate(
+          "restaurantId",
+          "name slug profileImage address location phone ownerPhone primaryContactNumber contactNumber",
+        )
         .populate("deliveryPartnerId", "name email phone")
         .populate("userId", "name fullName phone email")
         .lean();
