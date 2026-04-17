@@ -333,13 +333,6 @@ export default function Under250() {
 
   // Helper function to update item quantity in bothlocal state and cart
   const updateItemQuantity = (item, newQuantity, event = null, restaurantName = null) => {
-    // Check authentication
-    if (!isModuleAuthenticated('user')) {
-      toast.error("Please login to add items to cart")
-      navigate('/user/auth/sign-in', { state: { from: routerLocation.pathname } })
-      return
-    }
-
     // CRITICAL: Check if user is in service zone
     if (isOutOfService) {
       toast.error('You are outside the service zone. Please select a location within the service area.')

@@ -275,6 +275,23 @@ export const userAPI = {
   },
 };
 
+export const cartAPI = {
+  getCart: () => {
+    return apiClient.get(API_ENDPOINTS.CART.ROOT);
+  },
+
+  replaceCart: (cart) => {
+    return apiClient.put(API_ENDPOINTS.CART.ROOT, cart);
+  },
+
+  mergeGuestCart: ({ guestSessionId, guestCart }) => {
+    return apiClient.post(API_ENDPOINTS.CART.MERGE_GUEST, {
+      guestSessionId,
+      guestCart,
+    });
+  },
+};
+
 // Export location API helper functions
 export const locationAPI = {
   // Reverse geocode coordinates to address

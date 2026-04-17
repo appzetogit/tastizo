@@ -155,6 +155,10 @@ export const API_ENDPOINTS = {
     COMPLAINTS: "/user/complaints",
     COMPLAINT_BY_ID: "/user/complaints/:id",
   },
+  CART: {
+    ROOT: "/cart",
+    MERGE_GUEST: "/cart/merge-guest",
+  },
   // Location endpoints
   LOCATION: {
     REVERSE_GEOCODE: "/location/reverse",

@@ -27,6 +27,7 @@ import userRoutes from "./modules/user/index.js";
 import restaurantRoutes from "./modules/restaurant/index.js";
 import deliveryRoutes from "./modules/delivery/index.js";
 import orderRoutes from "./modules/order/index.js";
+import cartRoutes from "./modules/cart/index.js";
 import paymentRoutes from "./modules/payment/index.js";
 import menuRoutes from "./modules/menu/index.js";
 import campaignRoutes from "./modules/campaign/index.js";
@@ -388,6 +389,7 @@ app.get("/health", (req, res) => {
 
 // API routes
 app.use("/api", authRoutes);
+app.use("/api", cartRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/restaurant", restaurantRoutes);
 app.use("/api/delivery", deliveryRoutes);

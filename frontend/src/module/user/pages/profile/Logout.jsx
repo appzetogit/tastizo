@@ -8,6 +8,11 @@ import { authAPI } from "@/lib/api"
 import { firebaseAuth } from "@/lib/firebase"
 import { clearModuleAuth } from "@/lib/utils/auth"
 import { removeFcmTokenForLoggedInUser } from "@/lib/notifications/fcmWeb"
+import {
+  clearGuestCartState,
+  clearLegacyCartStorage,
+  clearUserCartCache,
+} from "@/module/user/context/cartPersistence"
 
 export default function Logout() {
   const navigate = useNavigate()
@@ -19,6 +24,10 @@ export default function Logout() {
     setError("")
 
     try {
+      const currentUser =
+        safeParseStorage(localStorage.getItem("user_user")) ||
+        safeParseStorage(sessionStorage.getItem("user_user"))
+
       // Remove FCM token from backend before clearing auth (so request is authenticated)
       try {
         await removeFcmTokenForLoggedInUser()
@@ -47,11 +56,15 @@ export default function Logout() {
       }
 
       // Clear user module auth (localStorage + sessionStorage when "Remember me" was off)
+      if (currentUser?.id || currentUser?._id) {
+        clearUserCartCache(currentUser.id || currentUser._id)
+      }
       clearModuleAuth("user")
       localStorage.removeItem("accessToken")
       localStorage.removeItem("userProfile")
       localStorage.removeItem("appzeto_user_profile")
-      localStorage.removeItem("cart")
+      clearLegacyCartStorage()
+      clearGuestCartState()
       sessionStorage.removeItem("userAuthData")
 
       // Dispatch auth change event to notify other components
@@ -65,13 +78,21 @@ export default function Logout() {
     } catch (err) {
       // Even if there's an error, we should still clear local data and logout
       console.error("Error during logout:", err)
-      
+
+      const currentUser =
+        safeParseStorage(localStorage.getItem("user_user")) ||
+        safeParseStorage(sessionStorage.getItem("user_user"))
+
       // Clear local data anyway
+      if (currentUser?.id || currentUser?._id) {
+        clearUserCartCache(currentUser.id || currentUser._id)
+      }
       clearModuleAuth("user")
       localStorage.removeItem("accessToken")
       localStorage.removeItem("userProfile")
       localStorage.removeItem("appzeto_user_profile")
-      localStorage.removeItem("cart")
+      clearLegacyCartStorage()
+      clearGuestCartState()
       sessionStorage.removeItem("userAuthData")
       window.dispatchEvent(new Event("userAuthChanged"))
       window.dispatchEvent(new Event("userLogout"))
@@ -172,5 +193,14 @@ export default function Logout() {
       </div>
     </AnimatedPage>
   )
+}
+
+function safeParseStorage(value) {
+  if (!value) return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
 }
 

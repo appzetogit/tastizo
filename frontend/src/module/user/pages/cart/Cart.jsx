@@ -15,6 +15,7 @@ import { useZone } from "../../hooks/useZone"
 import { orderAPI, restaurantAPI, adminAPI, userAPI, API_ENDPOINTS } from "@/lib/api"
 import { API_BASE_URL } from "@/lib/api/config"
 import { initRazorpayPayment } from "@/lib/utils/razorpay"
+import { isModuleAuthenticated } from "@/lib/utils/auth"
 import { toast } from "sonner"
 import { getCompanyNameAsync } from "@/lib/utils/businessSettings"
 import { shareWithFallback } from "@/lib/utils/shareBridge"
@@ -84,7 +85,17 @@ export default function Cart() {
     );
   }
 
-  const { cart, updateQuantity, addToCart, getCartCount, clearCart, cleanCartForRestaurant } = cartContext;
+  const {
+    cart,
+    updateQuantity,
+    addToCart,
+    getCartCount,
+    clearCart,
+    cleanCartForRestaurant,
+    isCartReady,
+    isCartSyncing,
+    isCartMerging,
+  } = cartContext;
   const { getDefaultAddress, getDefaultPaymentMethod, addresses, paymentMethods, userProfile } = useProfile()
   const { createOrder } = useOrders()
   const { openLocationSelector } = useLocationSelector()
@@ -882,6 +893,11 @@ export default function Cart() {
 
 
   const handlePlaceOrder = async () => {
+    if (!isModuleAuthenticated("user")) {
+      navigate("/user/auth/sign-in", { state: { from: "/user/cart" } })
+      return
+    }
+
     if (!defaultAddress) {
       alert("Please add a delivery address")
       return
@@ -935,6 +951,18 @@ export default function Cart() {
             variationName: item.selectedVariation.variationName,
             price: item.selectedVariation.price,
           },
+        }),
+        ...(item.selectedAddons?.length > 0 && {
+          selectedAddons: item.selectedAddons,
+        }),
+        ...(item.customizations && {
+          customizations: item.customizations,
+        }),
+        ...(item.specialInstructions && {
+          specialInstructions: item.specialInstructions,
+        }),
+        ...(item.pricingSnapshot && {
+          pricingSnapshot: item.pricingSnapshot,
         }),
       }))
 
@@ -1354,6 +1382,18 @@ export default function Cart() {
   const handleGoToOrders = () => {
     setShowOrderSuccess(false)
     navigate(`/user/orders/${placedOrderId}?confirmed=true`)
+  }
+
+  if (!isCartReady && !showOrderSuccess && !showPlacingOrder) {
+    return (
+      <AnimatedPage className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] max-md:pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
+        <div className="flex min-h-screen items-center justify-center px-4">
+          <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+            Loading your cart...
+          </p>
+        </div>
+      </AnimatedPage>
+    )
   }
 
   // Empty cart state - but don't show if order success or placing order modal is active
@@ -2101,6 +2141,8 @@ export default function Cart() {
                 <span className="font-bold text-base md:text-lg">
                   {isPlacingOrder
                     ? "Processing..."
+                    : !isModuleAuthenticated("user")
+                      ? "Login to Continue"
                     : selectedPaymentMethod === "razorpay"
                       ? "Select Payment"
                       : selectedPaymentMethod === "wallet"
@@ -2111,6 +2153,11 @@ export default function Cart() {
                 </span>
                 <ChevronRight className="h-5 w-5 md:h-6 md:w-6 ml-2" />
               </Button>
+              {(isCartSyncing || isCartMerging) && (
+                <p className="mt-2 text-xs text-center text-gray-500 dark:text-gray-400">
+                  {isCartMerging ? "Merging your cart..." : "Saving your cart..."}
+                </p>
+              )}
             </div>
           </div>
         </div>

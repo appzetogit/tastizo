@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowLeft, Star, Clock, Bookmark, BadgePercent, Loader2 } from "lucide-react"
+import { ArrowLeft, Star, Clock, Bookmark, BadgePercent, Loader2, ImageOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { heroBannerAPI } from "@/lib/api"
@@ -134,7 +134,7 @@ export default function Gourmet() {
                   ? coverImages[0]
                   : (menuImages.length > 0
                       ? menuImages[0]
-                      : (restaurant.profileImage?.url || restaurant.image || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"))
+                      : (restaurant.profileImage?.url || restaurant.image || null))
 
                 return (
                   <Link key={restaurantId} to={`/user/restaurants/${restaurantSlug}`}>
@@ -147,7 +147,7 @@ export default function Gourmet() {
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                           onError={(e) => {
                             // Fallback to placeholder if image fails
-                            e.target.src = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
+                            e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex';
                           }}
                         />
                         

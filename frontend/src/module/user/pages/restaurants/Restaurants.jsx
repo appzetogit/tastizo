@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom"
 
-import { ArrowLeft, Clock, MapPin, Heart, Star } from "lucide-react"
+import { ArrowLeft, Clock, MapPin, Heart, Star, ImageOff } from "lucide-react"
 import AnimatedPage from "../../components/AnimatedPage"
 import Footer from "../../components/Footer"
 import ScrollReveal from "../../components/ScrollReveal"
@@ -186,11 +186,21 @@ export default function Restaurants() {
                       
                       {/* Right Side - Image */}
                       <div className="w-36 sm:w-44 md:w-56 lg:w-64 xl:w-72 flex-shrink-0 relative overflow-hidden group/image">
-                        <img
-                          src={restaurant.image}
-                          alt={restaurant.name}
-                          className="w-full h-full object-cover"
-                        />
+                        {restaurant.image && !restaurant.image.includes('unsplash') ? (
+                          <img
+                            src={restaurant.image}
+                            alt={restaurant.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                               e.target.style.display = 'none';
+                               e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                        ) : null}
+                        <div className={`w-full h-full bg-gray-100 dark:bg-gray-800 flex-col items-center justify-center text-gray-400 dark:text-gray-500 ${!restaurant.image || restaurant.image.includes('unsplash') ? 'flex' : 'hidden'}`}>
+                           <ImageOff className="w-8 h-8 mb-2 opacity-50" />
+                           <span className="text-xs font-medium px-2 text-center text-wrap">No image</span>
+                        </div>
                         <div className="absolute inset-0 bg-gradient-to-l from-black/20 dark:from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowLeft, Star, Clock, Bookmark, BadgePercent, Trophy, Loader2 } from "lucide-react"
+import { ArrowLeft, Star, Clock, Bookmark, BadgePercent, Trophy, Loader2, ImageOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { heroBannerAPI } from "@/lib/api"
@@ -132,22 +132,28 @@ export default function Top10() {
                   ? coverImages[0]
                   : (menuImages.length > 0
                       ? menuImages[0]
-                      : (restaurant.profileImage?.url || restaurant.image || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"))
+                      : (restaurant.profileImage?.url || restaurant.image || null))
 
                 return (
                   <Link key={restaurantId} to={`/user/restaurants/${restaurantSlug}`}>
                     <Card className="overflow-hidden cursor-pointer border-0 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl mb-4">
                       {/* Image Section */}
                       <div className="relative h-44 sm:h-52 md:h-56 w-full overflow-hidden rounded-t-2xl">
-                        <img
-                          src={restaurantImage}
-                          alt={restaurant.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          onError={(e) => {
-                            // Fallback to placeholder if image fails
-                            e.target.src = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
-                          }}
-                        />
+                        {restaurantImage && !restaurantImage.includes('unsplash') ? (
+                          <img
+                            src={restaurantImage}
+                            alt={restaurant.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            onError={(e) => {
+                               e.target.style.display = 'none';
+                               e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                        ) : null}
+                        <div className={`w-full h-full bg-gray-100 dark:bg-gray-800 flex-col items-center justify-center text-gray-400 dark:text-gray-500 ${!restaurantImage || restaurantImage.includes('unsplash') ? 'flex' : 'hidden'}`}>
+                           <ImageOff className="w-8 h-8 mb-2 opacity-50" />
+                           <span className="text-xs font-medium">No image</span>
+                        </div>
                         
                         {/* Bookmark Icon - Top Right */}
                         <Button

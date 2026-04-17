@@ -363,7 +363,7 @@ export default function DiningExploreNear() {
                         alt={restaurant.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         onError={(e) => {
-                          e.target.src = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
+                          e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex';
                         }}
                       />
                       

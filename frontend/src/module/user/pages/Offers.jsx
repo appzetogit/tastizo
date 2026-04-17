@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowLeft, Star, Clock, Loader2 } from "lucide-react"
+import { ArrowLeft, Star, Clock, Loader2, ImageOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { restaurantAPI } from "@/lib/api"
@@ -107,11 +107,21 @@ export default function Offers() {
                       <div className="group">
                         {/* Image Container */}
                         <div className="relative h-32 sm:h-36 rounded-xl overflow-hidden mb-2">
-                          <img 
-                            src={dish.dishImage || dish.restaurantImage || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"} 
-                            alt={dish.dishName}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
+                          {(dish.dishImage || dish.restaurantImage) && !(dish.dishImage || dish.restaurantImage).includes('unsplash') ? (
+                            <img 
+                              src={dish.dishImage || dish.restaurantImage} 
+                              alt={dish.dishName}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              onError={(e) => {
+                                 e.target.style.display = 'none';
+                                 e.target.nextSibling.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          <div className={`w-full h-full bg-gray-100 dark:bg-gray-800 flex-col items-center justify-center text-gray-400 dark:text-gray-500 ${!(dish.dishImage || dish.restaurantImage) || (dish.dishImage || dish.restaurantImage).includes('unsplash') ? 'flex' : 'hidden'}`}>
+                             <ImageOff className="w-8 h-8 mb-2 opacity-50" />
+                             <span className="text-xs font-medium">No image</span>
+                          </div>
                           {/* Offer Badge */}
                           <div className="absolute top-2 left-2 bg-blue-600 text-white text-[10px] sm:text-xs font-semibold px-2 py-1 rounded">
                             {dish.offer}

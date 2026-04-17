@@ -35,6 +35,28 @@ const orderItemSchema = new mongoose.Schema(
       variationName: { type: String },
       price: { type: Number },
     },
+    selectedAddons: [
+      {
+        addonId: { type: String },
+        optionId: { type: String },
+        name: { type: String },
+        optionName: { type: String },
+        price: { type: Number, default: 0 },
+        quantity: { type: Number, default: 1 },
+      },
+    ],
+    customizations: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    specialInstructions: {
+      type: String,
+      default: "",
+    },
+    pricingSnapshot: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
     subCategory: {
       type: String,
       default: "",

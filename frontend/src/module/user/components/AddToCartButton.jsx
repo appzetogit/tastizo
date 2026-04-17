@@ -1,27 +1,16 @@
 import { Plus, Minus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useCart } from "../context/CartContext"
-import { isModuleAuthenticated } from "@/lib/utils/auth"
-import { useNavigate, useLocation } from "react-router-dom"
-import { toast } from "sonner"
 
 export default function AddToCartButton({ item, restaurant = null, className = "" }) {
   const { addItemOrAskVariant, isInCart, getCartItem, updateQuantity } = useCart()
   const inCart = isInCart(item.id)
   const cartItem = getCartItem(item.id)
-  const navigate = useNavigate()
-  const location = useLocation()
   const rest = restaurant || (item.restaurant ? { name: item.restaurant, restaurantId: item.restaurantId } : null)
 
   const handleAddToCart = (e) => {
     e.preventDefault()
     e.stopPropagation()
-
-    if (!isModuleAuthenticated('user')) {
-      toast.error("Please login to add items to cart")
-      navigate('/user/auth/sign-in', { state: { from: location.pathname } })
-      return
-    }
 
     addItemOrAskVariant(item, rest, e)
   }

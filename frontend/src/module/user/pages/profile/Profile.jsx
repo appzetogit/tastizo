@@ -39,6 +39,11 @@ import {
 import { authAPI } from "@/lib/api"
 import { firebaseAuth } from "@/lib/firebase"
 import { clearModuleAuth } from "@/lib/utils/auth"
+import {
+  clearGuestCartState,
+  clearLegacyCartStorage,
+  clearUserCartCache,
+} from "@/module/user/context/cartPersistence"
 
 export default function Profile() {
   const { userProfile, vegMode, setVegMode } = useProfile()
@@ -205,6 +210,9 @@ export default function Profile() {
       }
 
       // Clear user module authentication data using utility function
+      if (userProfile?.id || userProfile?._id) {
+        clearUserCartCache(userProfile.id || userProfile._id)
+      }
       clearModuleAuth("user")
 
       // Clear legacy token data for backward compatibility
@@ -212,9 +220,12 @@ export default function Profile() {
       localStorage.removeItem("user_authenticated")
       localStorage.removeItem("user_user")
       localStorage.removeItem("user")
+      clearLegacyCartStorage()
+      clearGuestCartState()
 
       // Dispatch auth change event to notify other components
       window.dispatchEvent(new Event("userAuthChanged"))
+      window.dispatchEvent(new Event("userLogout"))
 
       // Navigate to sign in page
       navigate("/user/auth/sign-in", { replace: true })
@@ -223,6 +234,9 @@ export default function Profile() {
       console.error("Error during logout:", err)
 
       // Clear local data anyway using utility function
+      if (userProfile?.id || userProfile?._id) {
+        clearUserCartCache(userProfile.id || userProfile._id)
+      }
       clearModuleAuth("user")
 
       // Clear legacy token data for backward compatibility
@@ -230,7 +244,10 @@ export default function Profile() {
       localStorage.removeItem("user_authenticated")
       localStorage.removeItem("user_user")
       localStorage.removeItem("user")
+      clearLegacyCartStorage()
+      clearGuestCartState()
       window.dispatchEvent(new Event("userAuthChanged"))
+      window.dispatchEvent(new Event("userLogout"))
 
       // Still navigate to login page
       navigate("/user/auth/sign-in", { replace: true })

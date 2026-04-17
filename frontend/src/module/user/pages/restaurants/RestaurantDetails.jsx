@@ -378,13 +378,6 @@ export default function RestaurantDetails() {
 
   // Helper function to update item quantity in both local state and cart
   const updateItemQuantity = (item, newQuantity, event = null) => {
-    // Check authentication
-    if (!isModuleAuthenticated('user')) {
-      toast.error("Please login to add items to cart")
-      navigate('/user/auth/sign-in', { state: { from: location.pathname } })
-      return
-    }
-
     // CRITICAL: Check if user is in service zone or restaurant is available
     if (isOutOfService) {
       toast.error('You are outside the service zone. Please select a location within the service area.');
@@ -2378,8 +2371,8 @@ export default function RestaurantDetails() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center">
-                        <Utensils className="w-12 h-12 text-gray-400 dark:text-gray-500" />
+                      <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                        <span className="text-sm text-gray-400">No image available</span>
                       </div>
                     )}
                     {/* Bookmark and Share Icons Overlay */}

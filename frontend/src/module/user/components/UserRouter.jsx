@@ -144,15 +144,7 @@ export default function UserRouter() {
           <Route path="/search" element={<SearchResults />} />
           <Route path="/product/:id" element={<ProductDetail />} />
 
-          {/* Cart - Protected */}
-          <Route
-            path="/cart"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
-                <Cart />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/cart" element={<Cart />} />
           <Route
             path="/cart/checkout"
             element={
@@ -445,4 +437,3 @@ export default function UserRouter() {
     </Suspense>
   )
 }
-

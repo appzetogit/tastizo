@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react"
 import { useParams, Link, useNavigate } from "react-router-dom"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeft, Star, Clock, Search, SlidersHorizontal, ChevronDown, Bookmark, BadgePercent, Mic, MapPin, ArrowDownUp, Timer, IndianRupee, UtensilsCrossed, ShieldCheck, X, Loader2, Share2, Plus, Minus } from "lucide-react"
+import { ArrowLeft, Star, Clock, Search, SlidersHorizontal, ChevronDown, Bookmark, BadgePercent, Mic, MapPin, ArrowDownUp, Timer, IndianRupee, UtensilsCrossed, ShieldCheck, X, Loader2, Share2, Plus, Minus, ImageOff } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,7 +18,6 @@ import { useProfile } from "../context/ProfileContext"
 import { useLocation } from "../hooks/useLocation"
 import { useZone } from "../hooks/useZone"
 import { useCart } from "../context/CartContext"
-import { isModuleAuthenticated } from "@/lib/utils/auth"
 import StickyCartCard from "../components/StickyCartCard"
 
 // Filter options
@@ -334,7 +333,7 @@ export default function CategoryPage() {
               // Filter and ensure at least one image
               allImages = allImages.filter(img => typeof img === 'string' && img.trim().length > 0)
               if (allImages.length === 0) {
-                allImages = ["https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"]
+                allImages = []
               }
 
               const image = allImages[0]
@@ -565,13 +564,6 @@ export default function CategoryPage() {
   const [showItemDetail, setShowItemDetail] = useState(false)
 
   const handleAddDishToCart = (restaurant, dish, event) => {
-    // Auth check
-    if (!isModuleAuthenticated("user")) {
-      toast.error("Please login to add items to cart")
-      navigate("/user/auth/sign-in", { state: { from: `/user/category/${category}` } })
-      return
-    }
-
     // Zone check
     if (isOutOfService) {
       toast.error("You are outside the service zone. Please select a location within the service area.")
@@ -1140,12 +1132,20 @@ export default function CategoryPage() {
                 return (
                   <>
                     {/* Image */}
-                    <div className="relative w-full h-56 sm:h-64 md:h-72 overflow-hidden rounded-t-3xl">
-                      <img
-                        src={dish.image || restaurant.image}
-                        alt={dish.name}
-                        className="w-full h-full object-cover"
-                      />
+                    <div className="relative w-full h-56 sm:h-64 md:h-72 overflow-hidden rounded-t-3xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-col">
+                      {(dish.image || restaurant.image) && !(dish.image || restaurant.image).includes('unsplash') ? (
+                        <img
+                          src={dish.image || restaurant.image}
+                          alt={dish.name}
+                          className="w-full h-full object-cover absolute inset-0 z-0"
+                          onError={(e) => { e.target.style.display = 'none' }}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 w-full h-full">
+                           <ImageOff className="w-10 h-10 mb-2 opacity-50" />
+                           <span className="text-sm font-medium">No image</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Content */}
