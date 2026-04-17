@@ -92,6 +92,13 @@ const confirmOrderSettlement = async (order, userId) => {
   }
 };
 
+const payableOrderVisibilityQuery = {
+  $or: [
+    { "payment.method": { $in: ["cash", "cod"] } },
+    { "payment.status": { $in: ["completed", "refunded"] } },
+  ],
+};
+
 /**
  * Create a new order and initiate Razorpay payment
  */
@@ -1061,6 +1068,77 @@ export const verifyOrderPayment = async (req, res) => {
   }
 };
 
+export const markOrderPaymentFailed = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { orderId, reason } = req.body;
+
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required",
+      });
+    }
+
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(orderId)) {
+      order = await Order.findOne({ _id: orderId, userId });
+    }
+    if (!order) {
+      order = await Order.findOne({ orderId, userId });
+    }
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (order.payment?.method === "cash" || order.payment?.method === "cod") {
+      return res.status(400).json({
+        success: false,
+        message: "Cash orders cannot be marked as payment failed",
+      });
+    }
+
+    if (order.payment?.status === "completed") {
+      return res.status(400).json({
+        success: false,
+        message: "Payment is already completed",
+      });
+    }
+
+    order.payment.status = "failed";
+    order.status = "pending";
+    order.cancellationReason = reason || "Online payment was not completed";
+    await order.save();
+
+    return res.json({
+      success: true,
+      message: "Order payment marked as failed",
+      data: {
+        order: {
+          id: order._id.toString(),
+          orderId: order.orderId,
+          status: order.status,
+          paymentStatus: order.payment.status,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error(`Error marking order payment failed: ${error.message}`, {
+      error: error.message,
+      stack: error.stack,
+    });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update payment status",
+    });
+  }
+};
+
+
 /**
  * Get user orders
  */
@@ -1080,28 +1158,25 @@ export const getUserOrders = async (req, res) => {
     // Build query - MongoDB should handle string/ObjectId conversion automatically
     // But we'll try both formats to be safe
     const mongoose = (await import("mongoose")).default;
-    const query = { userId };
+    let userMatch = { userId };
 
     // If userId is a string that looks like ObjectId, also try ObjectId format
     if (typeof userId === "string" && mongoose.Types.ObjectId.isValid(userId)) {
-      query.$or = [
+      userMatch = {
+        $or: [
         { userId: userId },
         { userId: new mongoose.Types.ObjectId(userId) },
-      ];
-      delete query.userId; // Remove direct userId since we're using $or
+        ],
+      };
     }
+
+    const query = {
+      $and: [userMatch, payableOrderVisibilityQuery],
+    };
 
     // Add status filter if provided
     if (status) {
-      if (query.$or) {
-        // Add status to each $or condition
-        query.$or = query.$or.map((condition) => ({ ...condition, status }));
-      } else {
-        query.status = status;
-      }
-    }
-    if (status) {
-      query.status = status;
+      query.$and.push({ status });
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);

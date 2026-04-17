@@ -1987,6 +1987,11 @@ export const orderAPI = {
     return apiClient.post(API_ENDPOINTS.ORDER.VERIFY_PAYMENT, paymentData);
   },
 
+  // Mark abandoned/failed online payment
+  markPaymentFailed: (paymentData) => {
+    return apiClient.post(API_ENDPOINTS.ORDER.PAYMENT_FAILED, paymentData);
+  },
+
   // Get user orders
   getOrders: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ORDER.LIST, { params });

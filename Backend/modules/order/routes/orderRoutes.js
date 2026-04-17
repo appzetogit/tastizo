@@ -2,6 +2,7 @@ import express from "express";
 import {
   createOrder,
   verifyOrderPayment,
+  markOrderPaymentFailed,
   getUserOrders,
   getOrderDetails,
   calculateOrder,
@@ -29,6 +30,9 @@ router.post("/", createOrder);
 
 // Verify payment
 router.post("/verify-payment", verifyOrderPayment);
+
+// Mark abandoned/failed online payment attempts
+router.post("/payment-failed", markOrderPaymentFailed);
 
 // Get user orders
 router.get("/", getUserOrders);

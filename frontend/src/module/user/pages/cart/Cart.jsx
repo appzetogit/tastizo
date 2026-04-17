@@ -1197,6 +1197,20 @@ export default function Cart() {
 
       // Get company name for Razorpay
       const companyName = await getCompanyNameAsync()
+      let paymentFinalized = false
+
+      const markPaymentFailed = async (reason) => {
+        if (paymentFinalized) return
+        paymentFinalized = true
+        try {
+          await orderAPI.markPaymentFailed({
+            orderId: order.id,
+            reason,
+          })
+        } catch (failureUpdateError) {
+          console.error("Failed to mark payment as failed:", failureUpdateError)
+        }
+      }
 
       // Initialize Razorpay payment
       await initRazorpayPayment({
@@ -1217,6 +1231,7 @@ export default function Cart() {
           restaurantId: restaurantId || "unknown"
         },
         handler: async (response) => {
+          paymentFinalized = true
           try {
             console.log("✅ Payment successful, verifying...", {
               razorpay_order_id: response.razorpay_order_id,
@@ -1253,8 +1268,9 @@ export default function Cart() {
             setIsPlacingOrder(false)
           }
         },
-        onError: (error) => {
+        onError: async (error) => {
           console.error("❌ Razorpay payment error:", error)
+          await markPaymentFailed(error?.description || error?.message || "Razorpay payment failed")
           // Don't show alert for user cancellation
           if (error?.code !== 'PAYMENT_CANCELLED' && error?.message !== 'PAYMENT_CANCELLED') {
             const errorMessage = error?.description || error?.message || "Payment failed. Please try again."
@@ -1262,8 +1278,9 @@ export default function Cart() {
           }
           setIsPlacingOrder(false)
         },
-        onClose: () => {
+        onClose: async () => {
           console.log("⚠️ Payment modal closed by user")
+          await markPaymentFailed("Payment modal closed before payment completion")
           setIsPlacingOrder(false)
         }
       })

@@ -16,7 +16,11 @@ export async function processAutoRejectOrders() {
     // Find all orders with status 'pending' or 'confirmed' that haven't been accepted yet
     // These are orders waiting for restaurant to accept
     const validPendingOrders = await Order.find({
-      status: { $in: ['pending', 'confirmed'] }
+      status: { $in: ['pending', 'confirmed'] },
+      $or: [
+        { 'payment.method': { $in: ['cash', 'cod'] } },
+        { 'payment.status': { $in: ['completed', 'refunded'] } },
+      ],
     }).lean();
 
     if (validPendingOrders.length === 0) {

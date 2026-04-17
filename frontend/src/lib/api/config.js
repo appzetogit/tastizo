@@ -425,6 +425,7 @@ export const API_ENDPOINTS = {
     UPDATE_STATUS: "/order/:id/status",
     UPDATE_DELIVERY_DETAILS: "/order/:id/update-delivery-details",
     VERIFY_PAYMENT: "/order/verify-payment",
+    PAYMENT_FAILED: "/order/payment-failed",
     CALCULATE: "/order/calculate",
     CANCEL: "/order/:id/cancel",
   },

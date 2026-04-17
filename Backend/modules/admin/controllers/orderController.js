@@ -6,6 +6,13 @@ import {
 import asyncHandler from "../../../shared/middleware/asyncHandler.js";
 import mongoose from "mongoose";
 
+const payableOrderVisibilityQuery = {
+  $or: [
+    { "payment.method": { $in: ["cash", "cod"] } },
+    { "payment.status": { $in: ["completed", "refunded"] } },
+  ],
+};
+
 /**
  * Get all orders for admin
  * GET /api/admin/orders
@@ -29,12 +36,16 @@ export const getOrders = asyncHandler(async (req, res) => {
 
     // Build query
     const query = {};
+    const andConditions = [];
 
     // Status filter
     if (status && status !== "all") {
       // Offline payments: filter by payment method = cash (COD/offline), not by order status
       if (status === "offline-payments") {
         query["payment.method"] = "cash";
+      } else if (status === "payment-failed") {
+        query["payment.method"] = { $nin: ["cash", "cod"] };
+        query["payment.status"] = "failed";
       } else {
         // Map frontend status keys to backend status values
         const statusMap = {
@@ -46,7 +57,6 @@ export const getOrders = asyncHandler(async (req, res) => {
           delivered: "delivered",
           canceled: "cancelled",
           "restaurant-cancelled": "cancelled", // Restaurant cancelled orders
-          "payment-failed": "pending", // Payment failed orders have pending status
           refunded: "cancelled", // Refunded orders might be cancelled
           "dine-in": "dine_in",
         };
@@ -81,6 +91,10 @@ export const getOrders = asyncHandler(async (req, res) => {
     // Payment status filter
     if (paymentStatus) {
       query["payment.status"] = paymentStatus.toLowerCase();
+    }
+
+    if (!paymentStatus && status !== "payment-failed") {
+      andConditions.push(payableOrderVisibilityQuery);
     }
 
     // Date range filter
@@ -193,6 +207,10 @@ export const getOrders = asyncHandler(async (req, res) => {
       }
     }
 
+    if (andConditions.length > 0) {
+      query.$and = [...(query.$and || []), ...andConditions];
+    }
+
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -267,6 +285,11 @@ export const getOrders = asyncHandler(async (req, res) => {
       // Map payment status
       const isCod =
         order.payment?.method === "cash" || order.payment?.method === "cod";
+      const isPaymentCollected =
+        isCod
+          ? order.status === "delivered"
+          : order.payment?.status === "completed" ||
+            order.payment?.status === "refunded";
       const paymentStatusMap = {
         completed: "Paid",
         pending: isCod ? "COD" : "Pending",
@@ -401,11 +424,7 @@ export const getOrders = asyncHandler(async (req, res) => {
           }
         })(),
         paymentCollectionStatus:
-          order.payment?.method === "cash" || order.payment?.method === "cod"
-            ? order.status === "delivered"
-              ? "Collected"
-              : "Not Collected"
-            : "Collected",
+          isPaymentCollected ? "Collected" : "Not Collected",
         orderStatus: orderStatusDisplay,
         status: order.status, // Backend status
         deliveryType: deliveryType,
@@ -988,7 +1007,7 @@ export const getTransactionReport = asyncHandler(async (req, res) => {
       toDate,
     } = req.query;
     // Build query for orders
-    const query = {};
+    const query = { $and: [payableOrderVisibilityQuery] };
 
     // Date range filter
     if (fromDate || toDate) {
@@ -1413,9 +1432,14 @@ export const getRestaurantReport = asyncHandler(async (req, res) => {
         // Build order query for this restaurant
         const orderQuery = {
           ...dateQuery,
-          $or: [
-            { restaurantId: restaurantId },
-            { restaurantId: restaurantIdField },
+          $and: [
+            {
+              $or: [
+                { restaurantId: restaurantId },
+                { restaurantId: restaurantIdField },
+              ],
+            },
+            payableOrderVisibilityQuery,
           ],
         };
 

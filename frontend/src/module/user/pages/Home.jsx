@@ -68,9 +68,6 @@ const placeholders = [
 
 const MOBILE_STICKY_SEARCH_HEIGHT = 60
 
-// Default placeholder for restaurant/dish when image is missing or invalid
-const RESTAURANT_PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
-
 // Restaurant Image Carousel Component
 const RestaurantImageCarousel = React.memo(({ restaurant, priority = false }) => {
   const images = useMemo(() => {
@@ -87,8 +84,9 @@ const RestaurantImageCarousel = React.memo(({ restaurant, priority = false }) =>
 
   if (!images || images.length === 0) {
     return (
-      <div className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 flex flex-col items-center justify-center">
-        <Utensils className="w-12 h-12 text-gray-400 dark:text-gray-500" />
+      <div className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0 bg-gray-100 dark:bg-gray-800 flex flex-col items-center justify-center">
+        <ImageOff className="w-10 h-10 text-gray-300 dark:text-gray-600 mb-2" />
+        <span className="text-sm text-gray-400 dark:text-gray-500 font-medium">No image available</span>
       </div>
     )
   }
@@ -149,10 +147,10 @@ const RestaurantImageCarousel = React.memo(({ restaurant, priority = false }) =>
     >
       <div className={`absolute inset-0 transition-transform duration-500 ease-out group-hover:scale-110 ${showPlaceholder ? 'flex flex-col items-center justify-center' : ''}`}>
         {showPlaceholder ? (
-          <div className="flex flex-col items-center justify-center">
-            <Utensils className="w-12 h-12 text-gray-400 dark:text-gray-500 mb-2" />
-            <span className="text-sm text-gray-400 dark:text-gray-500 font-medium">Image loading...</span>
-          </div>
+          <>
+            <ImageOff className="w-10 h-10 text-gray-300 dark:text-gray-600 mb-2" />
+            <span className="text-sm text-gray-400 dark:text-gray-500 font-medium">No image available</span>
+          </>
         ) : (
           <OptimizedImage
             src={currentSrc}
@@ -1096,13 +1094,8 @@ export default function Home() {
           // Filter out any invalid/undefined images
           allImages = allImages.filter(img => typeof img === 'string' && img.trim().length > 0)
           
-          // Ensure we have at least one image
-          if (allImages.length === 0) {
-            allImages = ["https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"]
-          }
-
           // Keep single image for backward compatibility
-          const image = allImages[0]
+          const image = allImages[0] || null
 
           const rawRating = typeof restaurant.rating === "number"
             ? restaurant.rating

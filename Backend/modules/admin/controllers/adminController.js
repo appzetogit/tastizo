@@ -26,6 +26,13 @@ const logger = winston.createLogger({
   ],
 });
 
+const payableOrderVisibilityQuery = {
+  $or: [
+    { "payment.method": { $in: ["cash", "cod"] } },
+    { "payment.status": { $in: ["completed", "refunded"] } },
+  ],
+};
+
 const extractFoodsFromMenus = (menus = []) => {
   const foods = [];
   const countedFoodIds = new Set();
@@ -252,7 +259,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     );
 
     // Get order statistics (with period and zone filter)
-    const orderStatsMatch = {};
+    const orderStatsMatch = { ...payableOrderVisibilityQuery };
     if (Object.keys(dateFilter).length > 0) {
       orderStatsMatch.createdAt = dateFilter;
     }
@@ -275,7 +282,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     });
 
     // Get total orders processed (with period and zone filter)
-    const totalOrdersMatch = { status: "delivered" };
+    const totalOrdersMatch = { status: "delivered", ...payableOrderVisibilityQuery };
     if (Object.keys(dateFilter).length > 0) {
       totalOrdersMatch.deliveredAt = dateFilter;
     }
@@ -396,6 +403,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const recentOrders = await Order.countDocuments({
       createdAt: { $gte: last24Hours },
+      ...payableOrderVisibilityQuery,
     });
     const recentRestaurants = await Restaurant.countDocuments({
       createdAt: { $gte: last24Hours },
@@ -436,6 +444,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       const monthOrderMatch = {
         status: "delivered",
         deliveredAt: { $gte: monthStart, $lte: monthEnd },
+        ...payableOrderVisibilityQuery,
       };
       if (Object.keys(zoneMatch).length > 0) {
         Object.assign(monthOrderMatch, zoneMatch);
