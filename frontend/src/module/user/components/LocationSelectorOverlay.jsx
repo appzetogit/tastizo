@@ -7,8 +7,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useLocation as useGeoLocation } from "../hooks/useLocation"
 import { useProfile } from "../context/ProfileContext"
+import { useCart } from "../context/CartContext"
 import { toast } from "sonner"
-import { locationAPI, userAPI } from "@/lib/api"
+import { locationAPI, userAPI, zoneAPI } from "@/lib/api"
 import {
   isUnpersistableLocation,
   dedupeFormattedAddressLine,
@@ -16,6 +17,7 @@ import {
   isLikelyPlusCodeOnlySegment,
 } from "@/lib/userLocationDisplay"
 import { Loader } from '@googlemaps/js-api-loader'
+import ReplaceCartModal from "./ReplaceCartModal"
 
 function cleanLocationDisplayLine(str) {
   if (!str || typeof str !== "string") return ""
@@ -57,6 +59,15 @@ const getAddressIcon = (address) => {
 function stripTrailingIndia(s) {
   if (!s || typeof s !== "string") return ""
   return s.replace(/,\s*India\s*$/i, "").trim()
+}
+
+function getStoredUserZoneId() {
+  if (typeof window === "undefined") return null
+  return window.localStorage?.getItem("userZoneId") || null
+}
+
+function getZoneDisplayName(zone) {
+  return zone?.name || zone?.zoneName || zone?.area || "Selected location"
 }
 
 /** Build one-line summary from backend reverse-geocode result (same shape as useLocation). */
@@ -275,6 +286,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const [searchValue, setSearchValue] = useState("")
   const { location, loading, requestLocation } = useGeoLocation()
   const { addresses = [], addAddress, setDefaultAddress, userProfile } = useProfile()
+  const { cart, itemCount, clearCart } = useCart()
   const [showAddressForm, setShowAddressForm] = useState(false)
   const [mapPosition, setMapPosition] = useState([22.7196, 75.8577]) // Default Indore coordinates [lat, lng]
   const [addressFormData, setAddressFormData] = useState({
@@ -308,6 +320,8 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const [selectedPlaceAddress, setSelectedPlaceAddress] = useState("") // Full address from dropdown selection (shown in Delivery details)
   const [GOOGLE_MAPS_API_KEY, setGOOGLE_MAPS_API_KEY] = useState(null)
   const [googleMapsAuthFailed, setGoogleMapsAuthFailed] = useState(false)
+  const [pendingLocationChange, setPendingLocationChange] = useState(null)
+  const pendingLocationApplyRef = useRef(null)
   /** Live GPS line for "Use current location" subtitle (not DB/saved Home). */
   const [gpsLiveLine, setGpsLiveLine] = useState("")
   /** idle = show saved/context address; no auto GPS on open (avoids "Detecting…" every time). */
@@ -331,6 +345,69 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     navigate(targetPath)
   }
 
+  const clearPendingLocationChange = useCallback(() => {
+    pendingLocationApplyRef.current = null
+    setPendingLocationChange(null)
+  }, [])
+
+  const maybeConfirmLocationChange = useCallback(
+    async ({ locationData, latitude, longitude, applyChange }) => {
+      const nextLat = Number(latitude)
+      const nextLng = Number(longitude)
+      const currentZoneId = getStoredUserZoneId()
+      const hasCartItems = cart.length > 0 && itemCount > 0
+
+      if (!hasCartItems || !currentZoneId || !Number.isFinite(nextLat) || !Number.isFinite(nextLng)) {
+        await applyChange()
+        return true
+      }
+
+      try {
+        const response = await zoneAPI.detectZone(nextLat, nextLng)
+        const data = response?.data?.data || {}
+        const nextZoneId = data?.zoneId || null
+        const nextZone =
+          data?.status === "IN_SERVICE" && nextZoneId
+            ? { ...(data.zone || {}), _id: nextZoneId }
+            : null
+
+        if (nextZoneId && nextZoneId !== currentZoneId) {
+          pendingLocationApplyRef.current = applyChange
+          setPendingLocationChange({
+            cartRestaurantName: cart[0]?.restaurant || "Restaurant",
+            itemCount,
+            currentZoneName: getZoneDisplayName(nextZone),
+            currentAddress:
+              locationData?.formattedAddress ||
+              locationData?.address ||
+              currentAddress ||
+              "Selected location",
+          })
+          return false
+        }
+      } catch (error) {
+        console.warn("Failed to detect zone before applying location change:", error)
+      }
+
+      await applyChange()
+      return true
+    },
+    [cart, currentAddress, itemCount],
+  )
+
+  const handleConfirmPendingLocationChange = useCallback(async () => {
+    const applyChange = pendingLocationApplyRef.current
+    clearPendingLocationChange()
+    clearCart()
+    if (applyChange) {
+      await applyChange()
+    }
+  }, [clearCart, clearPendingLocationChange])
+
+  const handleCancelPendingLocationChange = useCallback(() => {
+    clearPendingLocationChange()
+  }, [clearPendingLocationChange])
+
   // When opened from cart with a preferred label (Home/Office/Other),
   // initialize the address form with that label if present.
   useEffect(() => {
@@ -349,6 +426,11 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       // ignore storage errors
     }
   }, [isOpen])
+
+  useEffect(() => {
+    if (isOpen) return
+    clearPendingLocationChange()
+  }, [clearPendingLocationChange, isOpen])
 
   // Load Google Maps API key from backend
   useEffect(() => {
@@ -2105,7 +2187,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   }
 
   const handleMapMoveEnd = async (lat, lng, options = {}) => {
-    const { force = false } = options
+    const { force = false, suppressPersist = false } = options
     const roundedLat = parseFloat(Number(lat).toFixed(6))
     const roundedLng = parseFloat(Number(lng).toFixed(6))
 
@@ -2346,6 +2428,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
             const writeMerged = (merged) => {
               if (isUnpersistableLocation(merged)) return
+              if (suppressPersist) return
               localStorage.setItem("userLocation", JSON.stringify(merged))
               window.dispatchEvent(new CustomEvent("userLocationUpdated", { detail: merged }))
             }
@@ -2416,9 +2499,39 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           } catch {
             /* ignore */
           }
+
+          resolve({
+            latitude: roundedLat,
+            longitude: roundedLng,
+            city: city || "",
+            state: state || "",
+            area: area || "",
+            address: displayAddressForStore || formattedAddress || "",
+            formattedAddress: stripTrailingIndia(formattedAddress),
+            street: street || "",
+            streetNumber: streetNumber || "",
+            postalCode: postalCode || "",
+            pointOfInterest: pointOfInterest || "",
+            premise: premise || "",
+          })
         } else {
           console.warn("⚠️ No address data found from Google Maps or backend")
-          setCurrentAddress(`${roundedLat.toFixed(6)}, ${roundedLng.toFixed(6)}`)
+          const fallbackAddress = `${roundedLat.toFixed(6)}, ${roundedLng.toFixed(6)}`
+          setCurrentAddress(fallbackAddress)
+          resolve({
+            latitude: roundedLat,
+            longitude: roundedLng,
+            city: "",
+            state: "",
+            area: "",
+            address: fallbackAddress,
+            formattedAddress: fallbackAddress,
+            street: "",
+            streetNumber: "",
+            postalCode: "",
+            pointOfInterest: "",
+            premise: "",
+          })
         }
       } catch (error) {
         console.error("❌ Error reverse geocoding:", error)
@@ -2427,11 +2540,25 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           response: error.response?.data,
           status: error.response?.status
         })
-        setCurrentAddress(`${roundedLat.toFixed(6)}, ${roundedLng.toFixed(6)}`)
+        const fallbackAddress = `${roundedLat.toFixed(6)}, ${roundedLng.toFixed(6)}`
+        setCurrentAddress(fallbackAddress)
+        resolve({
+          latitude: roundedLat,
+          longitude: roundedLng,
+          city: "",
+          state: "",
+          area: "",
+          address: fallbackAddress,
+          formattedAddress: fallbackAddress,
+          street: "",
+          streetNumber: "",
+          postalCode: "",
+          pointOfInterest: "",
+          premise: "",
+        })
         // Don't show error toast, just use coordinates
       } finally {
         setLoadingAddress(false)
-        resolve()
       }
       }, debounceMs)
     })
@@ -2452,6 +2579,33 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       handleMapMoveEnd(lat, lng)
     }
   }
+
+  const applyCurrentLocationSelection = useCallback(
+    async (baseLocationData, resolvedLocationData) => {
+      const nextLocationData = {
+        ...baseLocationData,
+        ...resolvedLocationData,
+        latitude: resolvedLocationData?.latitude ?? baseLocationData?.latitude,
+        longitude: resolvedLocationData?.longitude ?? baseLocationData?.longitude,
+        formattedAddress:
+          resolvedLocationData?.formattedAddress ||
+          baseLocationData?.formattedAddress ||
+          resolvedLocationData?.address ||
+          baseLocationData?.address ||
+          "",
+        address:
+          resolvedLocationData?.address ||
+          baseLocationData?.address ||
+          resolvedLocationData?.formattedAddress ||
+          baseLocationData?.formattedAddress ||
+          "",
+      }
+
+      await persistRefinedLocationToBackend(nextLocationData)
+      toast.success("Location updated!", { id: "current-location" })
+    },
+    [],
+  )
 
   const handleUseCurrentLocationForAddress = async () => {
     setSelectedPlaceAddress('')
@@ -2589,11 +2743,19 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             console.log("✅ Created blue dot accuracy circle")
           }
 
-          // Wait for map to finish moving, then fetch address (reduced delay for faster response)
+          // Wait for map to finish moving, preview the address, then only commit after confirmation.
           setTimeout(async () => {
-            await handleMapMoveEnd(lat, lng, { force: true })
-            await persistRefinedLocationToBackend(locationData)
-            toast.success("Location updated!", { id: "current-location" })
+            const resolvedLocationData = await handleMapMoveEnd(lat, lng, {
+              force: true,
+              suppressPersist: true,
+            })
+            await maybeConfirmLocationChange({
+              locationData: { ...locationData, ...resolvedLocationData },
+              latitude: lat,
+              longitude: lng,
+              applyChange: () =>
+                applyCurrentLocationSelection(locationData, resolvedLocationData),
+            })
           }, 200)
 
         } catch (mapError) {
@@ -2601,18 +2763,20 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           toast.error("Failed to update map location", { id: "current-location" })
         }
       } else {
-        // Map not initialized yet, just update position and fetch address (reduced delay)
+        // Map not initialized yet, just preview the new location and ask before applying it.
         setTimeout(async () => {
-          await handleMapMoveEnd(lat, lng, { force: true })
-          await persistRefinedLocationToBackend(locationData)
-          toast.success("Location updated!", { id: "current-location" })
+          const resolvedLocationData = await handleMapMoveEnd(lat, lng, {
+            force: true,
+            suppressPersist: true,
+          })
+          await maybeConfirmLocationChange({
+            locationData: { ...locationData, ...resolvedLocationData },
+            latitude: lat,
+            longitude: lng,
+            applyChange: () =>
+              applyCurrentLocationSelection(locationData, resolvedLocationData),
+          })
         }, 200)
-      }
-
-      // If map is unavailable (key blocked), still fetch address and fill form.
-      if (googleMapsAuthFailed || !window.google || !window.google.maps) {
-        await handleMapMoveEnd(lat, lng, { force: true })
-        await persistRefinedLocationToBackend(locationData)
       }
     } catch (error) {
       console.error("❌ Error getting current location:", error)
@@ -2862,7 +3026,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     }
   }
 
-  const handleSelectSavedAddress = async (address, options = {}) => {
+  const applySavedAddressSelection = async (address, options = {}) => {
     const { closeAfterSelect = true, showToast = true } = options
     try {
       const locationData = buildLocationDataFromAddress(address)
@@ -2952,6 +3116,17 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       console.error("Error selecting saved address:", error)
       toast.error("Failed to update location. Please try again.")
     }
+  }
+
+  const handleSelectSavedAddress = async (address, options = {}) => {
+    const locationData = buildLocationDataFromAddress(address)
+
+    await maybeConfirmLocationChange({
+      locationData,
+      latitude: locationData.latitude,
+      longitude: locationData.longitude,
+      applyChange: () => applySavedAddressSelection(address, options),
+    })
   }
 
   // Calculate distance for saved addresses
@@ -3409,6 +3584,17 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           )}
         </div>
       </div>
+
+      <ReplaceCartModal
+        isOpen={!!pendingLocationChange}
+        mode="location"
+        cartRestaurantName={pendingLocationChange?.cartRestaurantName}
+        itemCount={pendingLocationChange?.itemCount || 0}
+        currentZoneName={pendingLocationChange?.currentZoneName}
+        currentAddress={pendingLocationChange?.currentAddress}
+        onReplace={handleConfirmPendingLocationChange}
+        onCancel={handleCancelPendingLocationChange}
+      />
 
       <style>{`
         @keyframes fadeIn {

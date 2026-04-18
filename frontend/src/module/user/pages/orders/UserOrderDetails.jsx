@@ -20,6 +20,11 @@ import { toast } from "sonner"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { getCompanyNameAsync } from "@/lib/utils/businessSettings"
+import {
+  RESTAURANT_CONTACT_UNAVAILABLE_MESSAGE,
+  normalizeTelPhone,
+  resolveRestaurantPhone,
+} from "./restaurantContact"
 
 export default function UserOrderDetails() {
   const navigate = useNavigate()
@@ -215,23 +220,24 @@ export default function UserOrderDetails() {
     (pricing.originalItemTotal || 0) -
     (pricing.subtotal || 0)
 
-  // Restaurant phone (multiple fallbacks) - use fetched restaurant data first
-  const rawRestaurantPhone =
-    restaurantObj.primaryContactNumber ||
-    restaurantObj.phone ||
-    restaurantObj.contactNumber ||
-    (typeof order.restaurantId === "object" && (order.restaurantId?.primaryContactNumber || order.restaurantId?.phone)) ||
-    order.restaurantPhone ||
-    ""
-  const restaurantPhone = rawRestaurantPhone.replace(/\s/g, "").trim()
+  // Restaurant phone belongs to this order's restaurant only.
+  const restaurantPhone = resolveRestaurantPhone(order, restaurant)
 
   const handleCallRestaurant = () => {
-    if (!restaurantPhone) {
-      toast.error("Restaurant phone number not available")
+    const telPhone = normalizeTelPhone(restaurantPhone)
+    if (!telPhone) {
+      console.warn("Restaurant contact number unavailable for order", {
+        orderId: order.orderId || order._id || orderId,
+        restaurantId:
+          typeof order.restaurantId === "string"
+            ? order.restaurantId
+            : order.restaurantId?._id || order.restaurantId?.id,
+        hasRestaurantPhone: Boolean(restaurantPhone),
+      })
+      toast.error(RESTAURANT_CONTACT_UNAVAILABLE_MESSAGE)
       return
     }
-    const digits = restaurantPhone.replace(/\D/g, "").slice(-10)
-    window.location.href = `tel:${digits}`
+    window.location.href = `tel:${telPhone}`
   }
 
   const handleSubmitRating = async () => {

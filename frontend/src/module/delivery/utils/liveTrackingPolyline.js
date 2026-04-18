@@ -269,10 +269,15 @@ export function extractPolylineFromDirections(directionsResult) {
 
   // Method 3: Use overview_path if available (already decoded)
   if (route.overview_path && route.overview_path.length > 0) {
-    return route.overview_path.map(point => ({
-      lat: point.lat(),
-      lng: point.lng()
-    }));
+    return route.overview_path
+      .map(point => {
+        const lat = typeof point.lat === 'function' ? point.lat() : point.lat;
+        const lng = typeof point.lng === 'function' ? point.lng() : point.lng;
+        return Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))
+          ? { lat: Number(lat), lng: Number(lng) }
+          : null;
+      })
+      .filter(Boolean);
   }
 
   return polylinePoints;

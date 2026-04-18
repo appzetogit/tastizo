@@ -99,6 +99,31 @@ const payableOrderVisibilityQuery = {
   ],
 };
 
+const restaurantContactSelect =
+  "name slug profileImage address location phone mobile ownerPhone primaryContactNumber contactNumber";
+
+const getRestaurantContactNumber = (restaurant) => {
+  if (!restaurant || typeof restaurant !== "object") return "";
+
+  return (
+    restaurant.phone ||
+    restaurant.mobile ||
+    restaurant.contactNumber ||
+    restaurant.primaryContactNumber ||
+    restaurant.ownerPhone ||
+    ""
+  );
+};
+
+const attachRestaurantContact = (order) => {
+  if (!order) return order;
+
+  return {
+    ...order,
+    restaurantPhone: getRestaurantContactNumber(order.restaurantId || order.restaurant),
+  };
+};
+
 /**
  * Create a new order and initiate Razorpay payment
  */
@@ -1190,10 +1215,7 @@ export const getUserOrders = async (req, res) => {
       .limit(parseInt(limit))
       .skip(skip)
       .select("-__v")
-      .populate(
-        "restaurantId",
-        "name slug profileImage address location phone ownerPhone primaryContactNumber contactNumber",
-      )
+      .populate("restaurantId", restaurantContactSelect)
       .populate("userId", "name phone email")
       .lean();
 
@@ -1206,7 +1228,7 @@ export const getUserOrders = async (req, res) => {
     res.json({
       success: true,
       data: {
-        orders,
+        orders: orders.map(attachRestaurantContact),
         pagination: {
           total,
           page: parseInt(page),
@@ -1242,10 +1264,7 @@ export const getOrderDetails = async (req, res) => {
         _id: id,
         userId,
       })
-        .populate(
-          "restaurantId",
-          "name slug profileImage address location phone ownerPhone primaryContactNumber contactNumber",
-        )
+        .populate("restaurantId", restaurantContactSelect)
         .populate("deliveryPartnerId", "name email phone")
         .populate("userId", "name fullName phone email")
         .lean();
@@ -1257,10 +1276,7 @@ export const getOrderDetails = async (req, res) => {
         orderId: id,
         userId,
       })
-        .populate(
-          "restaurantId",
-          "name slug profileImage address location phone ownerPhone primaryContactNumber contactNumber",
-        )
+        .populate("restaurantId", restaurantContactSelect)
         .populate("deliveryPartnerId", "name email phone")
         .populate("userId", "name fullName phone email")
         .lean();
@@ -1281,7 +1297,7 @@ export const getOrderDetails = async (req, res) => {
     res.json({
       success: true,
       data: {
-        order,
+        order: attachRestaurantContact(order),
         payment,
       },
     });

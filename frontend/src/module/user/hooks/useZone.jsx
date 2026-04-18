@@ -228,6 +228,7 @@ function useUserZoneEngine() {
             currentZoneId: nextZoneId,
             previousZone: previousZoneId ? { _id: previousZoneId } : null,
             currentZone: nextZone,
+            currentLocation: refreshDetail.currentLocation,
             message:
               "Your location has changed. Please add items from restaurants in your current area.",
             refreshedAt: now,

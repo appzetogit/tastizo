@@ -373,6 +373,13 @@ export const useRestaurantNotifications = () => {
     }
   };
 
+  const stopNotificationSound = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  };
+
   const clearNewOrder = () => {
     setNewOrder(null);
   };
@@ -381,7 +388,8 @@ export const useRestaurantNotifications = () => {
     newOrder,
     clearNewOrder,
     isConnected,
-    playNotificationSound
+    playNotificationSound,
+    stopNotificationSound
   };
 };
 

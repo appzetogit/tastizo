@@ -32,6 +32,25 @@ import {
 const ZONE_CHANGE_CART_MESSAGE =
   "Your location has changed. Please add items from restaurants in your current area."
 
+function readStoredUserLocation() {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage?.getItem("userLocation")
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function getReadableLocationAddress(location) {
+  if (!location) return ""
+  return (
+    location.formattedAddress ||
+    location.address ||
+    [location.area, location.city, location.state].filter(Boolean).join(", ")
+  )
+}
+
 function buildCartItem(item, restaurant, variation = null) {
   const validRestaurantId = restaurant?.restaurantId || restaurant?._id || restaurant?.id
   const base = {
@@ -139,12 +158,14 @@ export function CartProvider({ children }) {
   const [lastRemoveEvent, setLastRemoveEvent] = useState(null)
   const [variantPicker, setVariantPicker] = useState({ item: null, restaurant: null })
   const [replaceCartPending, setReplaceCartPending] = useState(null)
+  const [zoneChangePending, setZoneChangePending] = useState(null)
 
   const cartRef = useRef([])
   const cartOwnerRef = useRef(cartOwner)
   const bootSequenceRef = useRef(0)
   const skipNextServerSyncRef = useRef(false)
   const syncTimeoutRef = useRef(null)
+  const suppressedZoneMismatchRef = useRef(null)
 
   useEffect(() => {
     cartRef.current = cart
@@ -491,37 +512,56 @@ export function CartProvider({ children }) {
       cart.length > 0 &&
       cartMeta?.zoneId &&
       currentZoneId &&
-      cartMeta.zoneId !== currentZoneId
+      cartMeta.zoneId !== currentZoneId &&
+      !zoneChangePending &&
+      suppressedZoneMismatchRef.current !== currentZoneId
     ) {
-      replaceCartState([], cartOwnerRef.current, { zoneId: currentZoneId })
-      if (cartOwnerRef.current.type === "guest") {
-        clearGuestCartState()
-      }
+      const storedLocation = readStoredUserLocation()
+      setZoneChangePending({
+        previousZoneId: cartMeta.zoneId,
+        currentZoneId,
+        cartRestaurantName: cartMeta.restaurantName || cart[0]?.restaurant || "Restaurant",
+        itemCount: cart.reduce((total, item) => total + (item.quantity || 0), 0),
+        currentZoneName: "Selected location",
+        currentAddress: getReadableLocationAddress(storedLocation),
+      })
     }
-  }, [cart.length, cartMeta?.zoneId, replaceCartState])
+  }, [cart, cart.length, cartMeta?.restaurantName, cartMeta?.zoneId, zoneChangePending])
 
   useEffect(() => {
     if (typeof window === "undefined") return
 
     const handleZoneChanged = (event) => {
-      const message = event?.detail?.message || ZONE_CHANGE_CART_MESSAGE
+      const nextZoneId = event?.detail?.currentZoneId || getCurrentZoneId()
+      const currentZone = event?.detail?.currentZone || null
+      const currentLocation = event?.detail?.currentLocation || readStoredUserLocation()
+      suppressedZoneMismatchRef.current = null
       setReplaceCartPending(null)
       setVariantPicker({ item: null, restaurant: null })
-      setCart((previousCart) => {
-        if (previousCart.length > 0) {
-          toast.error(message)
+      setZoneChangePending((previousPending) => {
+        if (cartRef.current.length === 0) return null
+        return previousPending || {
+          previousZoneId: event?.detail?.previousZoneId || cartMeta?.zoneId || null,
+          currentZoneId: nextZoneId,
+          cartRestaurantName:
+            cartMeta?.restaurantName || cartRef.current[0]?.restaurant || "Restaurant",
+          itemCount: cartRef.current.reduce(
+            (total, item) => total + (item.quantity || 0),
+            0,
+          ),
+          currentZoneName:
+            currentZone?.name ||
+            currentZone?.zoneName ||
+            currentZone?.area ||
+            "Selected location",
+          currentAddress: getReadableLocationAddress(currentLocation),
         }
-        return []
       })
-      setCartMeta(null)
-      if (cartOwnerRef.current.type === "guest") {
-        clearGuestCartState()
-      }
     }
 
     window.addEventListener("userZoneChanged", handleZoneChanged)
     return () => window.removeEventListener("userZoneChanged", handleZoneChanged)
-  }, [])
+  }, [cartMeta?.restaurantName, cartMeta?.zoneId])
 
   const addToCart = (item, sourcePosition = null) => {
     const currentZoneId = getCurrentZoneId()
@@ -529,9 +569,17 @@ export function CartProvider({ children }) {
     if (cartMeta?.zoneId && currentZoneId && cartMeta.zoneId !== currentZoneId) {
       setReplaceCartPending(null)
       closeVariantPicker()
-      replaceCartState([], cartOwnerRef.current, { zoneId: currentZoneId })
+      const storedLocation = readStoredUserLocation()
+      setZoneChangePending({
+        previousZoneId: cartMeta.zoneId,
+        currentZoneId,
+        cartRestaurantName: cartMeta.restaurantName || cart[0]?.restaurant || "Restaurant",
+        itemCount: cart.reduce((total, cartItem) => total + (cartItem.quantity || 0), 0),
+        currentZoneName: "Selected location",
+        currentAddress: getReadableLocationAddress(storedLocation),
+      })
       toast.error(ZONE_CHANGE_CART_MESSAGE)
-      activeCart = []
+      return
     }
 
     if (activeCart.length > 0) {
@@ -776,6 +824,24 @@ export function CartProvider({ children }) {
     setReplaceCartPending(null)
   }, [])
 
+  const confirmLocationCartReplace = useCallback(() => {
+    const currentZoneId = zoneChangePending?.currentZoneId || getCurrentZoneId()
+    suppressedZoneMismatchRef.current = null
+    setZoneChangePending(null)
+    setReplaceCartPending(null)
+    closeVariantPicker()
+    replaceCartState([], cartOwnerRef.current, { zoneId: currentZoneId })
+    if (cartOwnerRef.current.type === "guest") {
+      clearGuestCartState()
+    }
+    toast.success("Location changed. Please add items available in this area.")
+  }, [closeVariantPicker, replaceCartState, zoneChangePending?.currentZoneId])
+
+  const cancelLocationCartReplace = useCallback(() => {
+    suppressedZoneMismatchRef.current = zoneChangePending?.currentZoneId || getCurrentZoneId()
+    setZoneChangePending(null)
+  }, [zoneChangePending?.currentZoneId])
+
   const cleanCartForRestaurant = (restaurantId, restaurantName) => {
     setCart((previousCart) => {
       if (previousCart.length === 0) return previousCart
@@ -936,6 +1002,16 @@ export function CartProvider({ children }) {
         newRestaurantName={replaceCartPending?.newRestaurantName}
         onReplace={confirmReplaceCart}
         onCancel={cancelReplaceCart}
+      />
+      <ReplaceCartModal
+        isOpen={!!zoneChangePending}
+        mode="location"
+        cartRestaurantName={zoneChangePending?.cartRestaurantName}
+        itemCount={zoneChangePending?.itemCount || 0}
+        currentZoneName={zoneChangePending?.currentZoneName}
+        currentAddress={zoneChangePending?.currentAddress}
+        onReplace={confirmLocationCartReplace}
+        onCancel={cancelLocationCartReplace}
       />
     </CartContext.Provider>
   )

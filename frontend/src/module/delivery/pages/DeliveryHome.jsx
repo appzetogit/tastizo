@@ -139,6 +139,40 @@ const mockRestaurants = [
   }
 ]
 
+function extractCustomerPhoneFromOrder(order) {
+  if (!order) return null
+
+  return (
+    order.userId?.phone ||
+    order.customerPhone ||
+    order.userPhone ||
+    order.customer?.phone ||
+    order.address?.phone ||
+    null
+  )
+}
+
+function normalizeDialPhone(phone) {
+  if (!phone) return null
+
+  const cleanedPhone = String(phone).trim().replace(/[^\d+]/g, "")
+  return cleanedPhone || null
+}
+
+function extractRestaurantPhoneFromOrder(order) {
+  if (!order) return null
+
+  return (
+    order.restaurantId?.phone ||
+    order.restaurantId?.ownerPhone ||
+    order.restaurant?.phone ||
+    order.restaurant?.ownerPhone ||
+    order.restaurantId?.contact?.phone ||
+    order.restaurantId?.owner?.phone ||
+    null
+  )
+}
+
 // ============================================
 // STABLE TRACKING SYSTEM - RAPIDO/UBER STYLE
 // ============================================
@@ -2417,6 +2451,7 @@ export default function DeliveryHome() {
                 customerAddress: order.address?.formattedAddress || 
                                 (order.address?.street ? `${order.address.street}, ${order.address.city || ''}, ${order.address.state || ''}`.trim() : '') ||
                                 selectedRestaurant?.customerAddress,
+                customerPhone: extractCustomerPhoneFromOrder(order) || selectedRestaurant?.customerPhone || null,
                 customerLat: order.address?.location?.coordinates?.[1],
                 customerLng: order.address?.location?.coordinates?.[0],
                 items: order.items || [],
@@ -4205,6 +4240,7 @@ export default function DeliveryHome() {
         amount: earnedValue > 0 ? earnedValue : (deliveryFee > 0 ? deliveryFee : 0),
         customerName: newOrder.customerName,
         customerAddress: newOrder.customerLocation?.address || 'Customer address',
+        customerPhone: newOrder.customerPhone || newOrder.userPhone || null,
         customerLat: newOrder.customerLocation?.latitude,
         customerLng: newOrder.customerLocation?.longitude,
         items: newOrder.items || [],
@@ -4614,6 +4650,7 @@ export default function DeliveryHome() {
                            (firstOrder.address?.street 
                              ? `${firstOrder.address.street}, ${firstOrder.address.city || ''}, ${firstOrder.address.state || ''}`.trim()
                              : 'Customer address'),
+            customerPhone: extractCustomerPhoneFromOrder(firstOrder),
             customerLat: firstOrder.address?.location?.coordinates?.[1],
             customerLng: firstOrder.address?.location?.coordinates?.[0],
             items: firstOrder.items || [],
@@ -6347,6 +6384,47 @@ export default function DeliveryHome() {
     setRoutePolyline([]);
     setShowRoutePath(false);
   }, [clearNewOrder, clearOrderReady])
+
+  useEffect(() => {
+    const handleOrderAcceptedByOther = (event) => {
+      const payload = event.detail || {};
+      const acceptedIds = [
+        payload.orderId,
+        payload.mongoId,
+        payload.orderMongoId,
+        payload._id
+      ].filter(Boolean).map(String);
+
+      const currentIds = [
+        newOrder?.orderId,
+        newOrder?.orderMongoId,
+        newOrder?.mongoId,
+        newOrder?._id,
+        selectedRestaurant?.orderId,
+        selectedRestaurant?.id
+      ].filter(Boolean).map(String);
+
+      if (!acceptedIds.some(id => currentIds.includes(id))) return;
+
+      if (alertAudioRef.current) {
+        alertAudioRef.current.pause();
+        alertAudioRef.current.currentTime = 0;
+        alertAudioRef.current = null;
+      }
+
+      acceptedIds.forEach(id => acceptedOrderIdsRef.current.add(id));
+      setShowNewOrderPopup(false);
+      setIsNewOrderPopupMinimized(false);
+      setNewOrderDragY(0);
+      setSelectedRestaurant(null);
+      clearNewOrder();
+    };
+
+    window.addEventListener('deliveryOrderAcceptedByOther', handleOrderAcceptedByOther);
+    return () => {
+      window.removeEventListener('deliveryOrderAcceptedByOther', handleOrderAcceptedByOther);
+    };
+  }, [newOrder, selectedRestaurant, clearNewOrder])
 
   // Periodically verify order still exists (every 30 seconds) to catch deletions
   useEffect(() => {
@@ -9433,12 +9511,8 @@ export default function DeliveryHome() {
           <div className="flex gap-3 mb-6">
             <button 
               onClick={async () => {
-                // Try multiple paths to find restaurant phone number
-                let restaurantPhone = selectedRestaurant?.phone || 
-                                    selectedRestaurant?.restaurantId?.phone || 
-                                    selectedRestaurant?.ownerPhone ||
-                                    selectedRestaurant?.restaurant?.phone ||
-                                    null
+                let restaurantPhone = null
+                const orderId = selectedRestaurant?.orderId || selectedRestaurant?.id
                 
                 console.log('📞 Checking phone in selectedRestaurant:', {
                   phone: selectedRestaurant?.phone,
@@ -9448,18 +9522,17 @@ export default function DeliveryHome() {
                   found: !!restaurantPhone
                 })
                 
-                // If phone not found in selectedRestaurant, try to fetch order details from backend
-                if (!restaurantPhone && selectedRestaurant?.orderId) {
+                // Always fetch order details from backend first so the rider gets the real restaurant number.
+                if (orderId) {
                   try {
                     console.log('📞 [CALL] Phone not found in selectedRestaurant, fetching order details from backend...')
-                    const orderId = selectedRestaurant.orderId || selectedRestaurant.id
                     console.log('📞 [CALL] Fetching order details for orderId:', orderId)
                     
                     const response = await deliveryAPI.getOrderDetails(orderId)
                     console.log('📞 [CALL] Order details API response:', JSON.stringify(response.data, null, 2))
                     
                     // Check multiple response formats
-                    const order = response.data?.data?.order || response.data?.order || null
+                    const order = response.data?.data?.order || response.data?.order || response.data?.data || null
                     
                     if (order) {
                       console.log('📞 [CALL] Order data extracted from API:', {
@@ -9472,23 +9545,17 @@ export default function DeliveryHome() {
                       
                       // Try all possible paths in the API response
                       // Restaurant model has both 'phone' and 'ownerPhone' fields
-                      restaurantPhone = order.restaurantId?.phone || 
-                                       order.restaurantId?.ownerPhone ||
-                                       order.restaurant?.phone ||
-                                       order.restaurant?.ownerPhone ||
-                                       order.restaurantId?.contact?.phone ||
-                                       order.restaurantId?.owner?.phone ||
-                                       null
+                      restaurantPhone = extractRestaurantPhoneFromOrder(order)
                       
                       console.log('📞 [CALL] Phone extracted from order:', restaurantPhone)
                       
                       // If phone found, update selectedRestaurant for future use
                       if (restaurantPhone && selectedRestaurant) {
-                        setSelectedRestaurant({
-                          ...selectedRestaurant,
+                        setSelectedRestaurant((prev) => prev ? ({
+                          ...prev,
                           phone: restaurantPhone,
                           ownerPhone: order.restaurantId?.ownerPhone || order.restaurant?.ownerPhone || restaurantPhone
-                        })
+                        }) : prev)
                         console.log('✅ [CALL] Updated selectedRestaurant with phone:', restaurantPhone)
                       }
                       
@@ -9507,11 +9574,11 @@ export default function DeliveryHome() {
                               restaurantPhone = restaurant.phone || restaurant.ownerPhone || restaurant.primaryContactNumber
                               
                               if (restaurantPhone) {
-                                setSelectedRestaurant({
-                                  ...selectedRestaurant,
+                                setSelectedRestaurant((prev) => prev ? ({
+                                  ...prev,
                                   phone: restaurantPhone,
                                   ownerPhone: restaurant.ownerPhone || restaurantPhone
-                                })
+                                }) : prev)
                                 console.log('✅ [CALL] Updated selectedRestaurant with phone from restaurant API:', restaurantPhone)
                               }
                             }
@@ -9536,15 +9603,28 @@ export default function DeliveryHome() {
                     console.error('❌ [CALL] Error response:', error.response?.data)
                     console.error('❌ [CALL] Error status:', error.response?.status)
                   }
-                } else if (!selectedRestaurant?.orderId) {
+                } else if (!orderId) {
                   console.warn('⚠️ [CALL] Cannot fetch phone - orderId not found in selectedRestaurant:', selectedRestaurant)
                 }
                 
-                if (restaurantPhone) {
+                if (!restaurantPhone) {
+                  restaurantPhone =
+                    selectedRestaurant?.phone ||
+                    selectedRestaurant?.ownerPhone ||
+                    selectedRestaurant?.restaurantId?.phone ||
+                    selectedRestaurant?.restaurantId?.ownerPhone ||
+                    selectedRestaurant?.restaurant?.phone ||
+                    selectedRestaurant?.restaurant?.ownerPhone ||
+                    null
+                }
+
+                const dialPhone = normalizeDialPhone(restaurantPhone)
+
+                if (dialPhone) {
                   // Remove any spaces, dashes, or special characters except + and digits
-                  const cleanPhone = restaurantPhone.replace(/[^\d+]/g, '')
+                  const cleanPhone = dialPhone
                   console.log('📞 Calling restaurant:', { original: restaurantPhone, clean: cleanPhone })
-                  window.location.href = `tel:${cleanPhone}`
+                  window.location.href = `tel:${dialPhone}`
                 } else {
                   toast.error('Restaurant phone number not available. Please contact support.')
                   console.error('❌ Restaurant phone not found in any path:', { 
@@ -9947,32 +10027,60 @@ export default function DeliveryHome() {
           </div>
 
           {/* Customer Info */}
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+          <div className="mb-6 min-w-0">
+            <h2 className="break-words text-[1.75rem] font-bold leading-tight text-gray-900 mb-2">
               {selectedRestaurant?.customerName || 'Customer Name'}
             </h2>
-            <p className="text-gray-600 mb-2 leading-relaxed">
+            <p className="break-words text-gray-600 mb-2 leading-relaxed">
               {selectedRestaurant?.customerAddress || 'Customer Address'}
             </p>
-            <p className="text-gray-500 text-sm font-medium">
+            <p className="break-all text-gray-500 text-sm font-medium">
               Order ID: {selectedRestaurant?.orderId || 'ORD1234567890'}
             </p>
           </div>
 
           {/* Action Buttons - Call (customer), Chat, Map (navigation to customer) */}
-          <div className="flex gap-3 mb-6">
+          <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <button
               type="button"
-              onClick={() => {
-                const customerPhone = selectedRestaurant?.customerPhone || selectedRestaurant?.phone
-                if (customerPhone) {
-                  const clean = String(customerPhone).replace(/[^\d+]/g, '')
-                  window.location.href = `tel:${clean}`
+              onClick={async () => {
+                const orderId = selectedRestaurant?.orderId || selectedRestaurant?.id
+                let customerPhone = selectedRestaurant?.customerPhone
+
+                if (orderId) {
+                  try {
+                    const response = await deliveryAPI.getOrderDetails(orderId)
+                    const order = response?.data?.data?.order || response?.data?.data || null
+                    const latestCustomerPhone = extractCustomerPhoneFromOrder(order)
+
+                    if (latestCustomerPhone) {
+                      customerPhone = latestCustomerPhone
+                      setSelectedRestaurant((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              customerPhone: latestCustomerPhone,
+                              customerName: order?.userId?.name || prev.customerName,
+                              customerAddress:
+                                order?.address?.formattedAddress ||
+                                prev.customerAddress,
+                            }
+                          : prev
+                      )
+                    }
+                  } catch (error) {
+                    console.error('Failed to refresh customer phone before dial:', error)
+                  }
+                }
+
+                const dialPhone = normalizeDialPhone(customerPhone)
+                if (dialPhone) {
+                  window.location.href = `tel:${dialPhone}`
                 } else {
                   toast.error('Customer phone not available')
                 }
               }}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-3 text-center hover:bg-gray-50 transition-colors"
             >
               <Phone className="w-5 h-5 text-gray-700" />
               <span className="text-gray-700 font-medium">Call</span>
@@ -9988,7 +10096,7 @@ export default function DeliveryHome() {
                   toast.error('Order not found')
                 }
               }}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-3 text-center hover:bg-gray-50 transition-colors"
             >
               <MessageCircle className="w-5 h-5 text-gray-700" />
               <span className="text-gray-700 font-medium">Chat</span>
@@ -10020,7 +10128,7 @@ export default function DeliveryHome() {
                   toast.error('Customer location not available')
                 }
               }}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+              className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-3 text-center text-white hover:bg-gray-800 transition-colors"
             >
               <MapPin className="w-5 h-5 text-white" />
               <span className="text-white font-medium">Map</span>

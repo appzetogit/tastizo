@@ -19,6 +19,13 @@ import { useLocation } from "../hooks/useLocation"
 import { useZone } from "../hooks/useZone"
 import { useCart } from "../context/CartContext"
 import StickyCartCard from "../components/StickyCartCard"
+import {
+  buildCategoryKeywordMap,
+  categoryMatchesText,
+  getCategoryKeywords,
+  getCategorySuggestions,
+  normalizeCategoryText,
+} from "../utils/categoryMatching"
 
 // Filter options
 const filterOptions = [
@@ -51,6 +58,7 @@ export default function CategoryPage() {
   const [sortBy, setSortBy] = useState(null)
   const [selectedCuisine, setSelectedCuisine] = useState(null)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false)
   const [activeFilterTab, setActiveFilterTab] = useState('sort')
   const [activeScrollSection, setActiveScrollSection] = useState('sort')
   const [isLoadingFilterResults, setIsLoadingFilterResults] = useState(false)
@@ -75,6 +83,10 @@ export default function CategoryPage() {
       return true
     })
   }, [categories, vegMode])
+
+  const categorySuggestions = useMemo(() => {
+    return getCategorySuggestions(visibleCategories, searchQuery, 4)
+  }, [visibleCategories, searchQuery])
 
   // Fetch categories from admin API
   useEffect(() => {
@@ -101,26 +113,19 @@ export default function CategoryPage() {
 
           setCategories(transformedCategories)
 
-          // Generate category keywords dynamically from category names
-          const keywordsMap = {}
-          categoriesArray.forEach((cat) => {
-            const categoryId = cat.slug || cat.id
-            const categoryName = cat.name.toLowerCase()
-
-            // Generate keywords from category name
-            const words = categoryName.split(/[\s-]+/).filter(w => w.length > 0)
-            keywordsMap[categoryId] = [categoryName, ...words]
-          })
-
-          setCategoryKeywords(keywordsMap)
+          setCategoryKeywords(buildCategoryKeywordMap(transformedCategories))
         } else {
           // Keep default "All" category on error
-          setCategories([{ id: 'all', name: "All", image: null, slug: 'all', dietType: 'Both' }])
+          const fallbackCategories = [{ id: 'all', name: "All", image: null, slug: 'all', dietType: 'Both' }]
+          setCategories(fallbackCategories)
+          setCategoryKeywords(buildCategoryKeywordMap(fallbackCategories))
         }
       } catch (error) {
         console.error('Error fetching categories:', error)
         // Keep default "All" category on error
-          setCategories([{ id: 'all', name: "All", image: null, slug: 'all', dietType: 'Both' }])
+          const fallbackCategories = [{ id: 'all', name: "All", image: null, slug: 'all', dietType: 'Both' }]
+          setCategories(fallbackCategories)
+          setCategoryKeywords(buildCategoryKeywordMap(fallbackCategories))
       } finally {
         setLoadingCategories(false)
       }
@@ -173,25 +178,24 @@ export default function CategoryPage() {
       return false
     }
 
-    const keywords = categoryKeywords[categoryId] || []
+    const keywords =
+      categoryKeywords[categoryId] ||
+      getCategoryKeywords({ id: categoryId, name: String(categoryId).replace(/-/g, " ") })
     if (keywords.length === 0) {
       return false
     }
 
     for (const section of menu.sections) {
-      const sectionNameLower = (section.name || '').toLowerCase()
-      if (keywords.some(keyword => sectionNameLower.includes(keyword))) {
+      if (categoryMatchesText(section.name, keywords)) {
         return true
       }
 
       if (section.items && Array.isArray(section.items)) {
         for (const item of section.items) {
-          const itemNameLower = (item.name || '').toLowerCase()
-          const itemCategoryLower = (item.category || '').toLowerCase()
-
-          if (keywords.some(keyword =>
-            itemNameLower.includes(keyword) || itemCategoryLower.includes(keyword)
-          )) {
+          if (
+            categoryMatchesText(item.name, keywords) ||
+            categoryMatchesText(item.category, keywords)
+          ) {
             return true
           }
         }
@@ -207,7 +211,9 @@ export default function CategoryPage() {
       return []
     }
 
-    const keywords = categoryKeywords[categoryId] || []
+    const keywords =
+      categoryKeywords[categoryId] ||
+      getCategoryKeywords({ id: categoryId, name: String(categoryId).replace(/-/g, " ") })
     if (keywords.length === 0) {
       return []
     }
@@ -217,12 +223,10 @@ export default function CategoryPage() {
     for (const section of menu.sections) {
       if (section.items && Array.isArray(section.items)) {
         for (const item of section.items) {
-          const itemNameLower = (item.name || '').toLowerCase()
-          const itemCategoryLower = (item.category || '').toLowerCase()
-
-          if (keywords.some(keyword =>
-            itemNameLower.includes(keyword) || itemCategoryLower.includes(keyword)
-          )) {
+          if (
+            categoryMatchesText(item.name, keywords) ||
+            categoryMatchesText(item.category, keywords)
+          ) {
             // Calculate final price considering discounts
             const originalPrice = item.originalPrice || item.price || 0
             const discountPercent = item.discountPercent || 0
@@ -454,11 +458,11 @@ export default function CategoryPage() {
   // Update selected category when URL changes
   useEffect(() => {
     if (category && categories && categories.length > 0) {
-      const categorySlug = category.toLowerCase()
+      const categorySlug = normalizeCategoryText(category).replace(/\s+/g, '-')
       const matchedCategory = categories.find(cat =>
-        cat.slug === categorySlug ||
-        cat.id === categorySlug ||
-        cat.name.toLowerCase().replace(/\s+/g, '-') === categorySlug
+        normalizeCategoryText(cat.slug || '').replace(/\s+/g, '-') === categorySlug ||
+        normalizeCategoryText(cat.id || '').replace(/\s+/g, '-') === categorySlug ||
+        normalizeCategoryText(cat.name || '').replace(/\s+/g, '-') === categorySlug
       )
       if (matchedCategory) {
         setSelectedCategory(matchedCategory.slug || matchedCategory.id)
@@ -629,17 +633,17 @@ export default function CategoryPage() {
         if (r.category === selectedCategory) return true
         if (selectedCategory === 'paneer-tikka' && r.hasPaneer) return true
 
-        const keywords = categoryKeywords[selectedCategory] || []
+        const keywords =
+          categoryKeywords[selectedCategory] ||
+          getCategoryKeywords({
+            id: selectedCategory,
+            name: String(selectedCategory).replace(/-/g, " "),
+          })
         if (keywords.length === 0) return false
 
-        const featuredDishLower = (r.featuredDish || '').toLowerCase()
-        const cuisineLower = (r.cuisine || '').toLowerCase()
-        const nameLower = (r.name || '').toLowerCase()
-
-        return keywords.some(keyword =>
-          featuredDishLower.includes(keyword) ||
-          cuisineLower.includes(keyword) ||
-          nameLower.includes(keyword)
+        return (
+          categoryMatchesText(r.featuredDish, keywords) ||
+          categoryMatchesText(r.cuisine, keywords)
         )
       })
     }
@@ -657,16 +661,6 @@ export default function CategoryPage() {
     }
     if (activeFilters.has('flat-50-off')) {
       filtered = filtered.filter(r => r.offer && r.offer.includes('50%'))
-    }
-
-    // Filter by search - match on restaurant name / cuisine / featured dish
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(r =>
-        r.name?.toLowerCase().includes(query) ||
-        r.cuisine?.toLowerCase().includes(query) ||
-        r.featuredDish?.toLowerCase().includes(query)
-      )
     }
 
     return filtered
@@ -688,17 +682,17 @@ export default function CategoryPage() {
         if (r.category === selectedCategory) return true
         if (selectedCategory === 'paneer-tikka' && r.hasPaneer) return true
 
-        const keywords = categoryKeywords[selectedCategory] || []
+        const keywords =
+          categoryKeywords[selectedCategory] ||
+          getCategoryKeywords({
+            id: selectedCategory,
+            name: String(selectedCategory).replace(/-/g, " "),
+          })
         if (keywords.length === 0) return false
 
-        const featuredDishLower = (r.featuredDish || '').toLowerCase()
-        const cuisineLower = (r.cuisine || '').toLowerCase()
-        const nameLower = (r.name || '').toLowerCase()
-
-        return keywords.some((keyword) =>
-          featuredDishLower.includes(keyword) ||
-          cuisineLower.includes(keyword) ||
-          nameLower.includes(keyword),
+        return (
+          categoryMatchesText(r.featuredDish, keywords) ||
+          categoryMatchesText(r.cuisine, keywords)
         )
       })
     }
@@ -722,26 +716,35 @@ export default function CategoryPage() {
       filtered = filtered.filter(r => r.offer && r.offer.includes('50%'))
     }
 
-    // Filter by search
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(r =>
-        r.name?.toLowerCase().includes(query) ||
-        r.cuisine?.toLowerCase().includes(query) ||
-        r.featuredDish?.toLowerCase().includes(query)
-      )
-    }
-
     return filtered
   }, [selectedCategory, activeFilters, searchQuery, restaurantsData, categoryKeywords, vegMode])
 
-  const handleCategorySelect = (category) => {
+  const handleCategorySelect = (category, options = {}) => {
     const categorySlug = category.slug || category.id
     setSelectedCategory(categorySlug)
+    setShowCategorySuggestions(false)
+    setSearchQuery(options.keepSearchText ? category.name : "")
     if (typeof window !== "undefined") {
       const nextUrl =
         categorySlug === 'all' ? '/user/category/all' : `/user/category/${categorySlug}`
       window.history.replaceState(window.history.state, "", nextUrl)
+    }
+  }
+
+  const handleCategorySuggestionSelect = (category) => {
+    handleCategorySelect(category, { keepSearchText: true })
+  }
+
+  const handleSearchInputChange = (event) => {
+    setSearchQuery(event.target.value)
+    setShowCategorySuggestions(Boolean(event.target.value.trim()))
+  }
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key !== "Enter") return
+    event.preventDefault()
+    if (categorySuggestions.length > 0) {
+      handleCategorySuggestionSelect(categorySuggestions[0])
     }
   }
 
@@ -772,14 +775,64 @@ export default function CategoryPage() {
             <div className="flex-1 relative max-w-2xl">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
               <Input
-                placeholder="Restaurant name or a dish..."
+                placeholder="Search categories..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={handleSearchInputChange}
+                onFocus={() => setShowCategorySuggestions(Boolean(searchQuery.trim()))}
+                onBlur={() => {
+                  window.setTimeout(() => setShowCategorySuggestions(false), 120)
+                }}
+                onKeyDown={handleSearchKeyDown}
                 className="pl-10 pr-10 h-11 md:h-12 rounded-lg border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#1a1a1a] focus:bg-white dark:focus:bg-[#2a2a2a] focus:border-gray-500 dark:focus:border-gray-600 text-sm md:text-base dark:text-white placeholder:text-gray-600 dark:placeholder:text-gray-400"
               />
               <button className="absolute right-3 top-1/2 -translate-y-1/2">
                 <Mic className="h-4 w-4 text-gray-500" />
               </button>
+              <AnimatePresence>
+                {showCategorySuggestions && searchQuery.trim() && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute left-0 right-0 top-[calc(100%+6px)] z-40 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] shadow-lg overflow-hidden"
+                  >
+                    {categorySuggestions.length > 0 ? (
+                      categorySuggestions.map((cat) => (
+                        <button
+                          key={cat.slug || cat.id}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => handleCategorySuggestionSelect(cat)}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        >
+                          {cat.image ? (
+                            <img
+                              src={cat.image}
+                              alt={cat.name}
+                              className="h-8 w-8 rounded-md object-contain bg-gray-50 dark:bg-gray-900"
+                              onError={(event) => {
+                                event.currentTarget.style.display = "none"
+                              }}
+                            />
+                          ) : (
+                            <span className="h-8 w-8 rounded-md bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-sm">
+                              🍽️
+                            </span>
+                          )}
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">
+                            {cat.name}
+                          </span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                        No categories found
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 
@@ -1082,9 +1135,7 @@ export default function CategoryPage() {
             {filteredAllRestaurants.length === 0 && (
               <div className="text-center py-12 md:py-16">
                 <p className="text-gray-500 dark:text-gray-400 text-sm md:text-base">
-                  {searchQuery
-                    ? `No restaurants found for "${searchQuery}"`
-                    : "No restaurants found with selected filters"}
+                  No restaurants found with selected filters
                 </p>
                 <Button
                   variant="outline"

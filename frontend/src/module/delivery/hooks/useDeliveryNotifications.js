@@ -338,6 +338,37 @@ export const useDeliveryNotifications = () => {
       }
     });
 
+    socketRef.current.on('order_accepted', (payload) => {
+      const current = newOrderRef.current;
+      if (!current) return;
+
+      const acceptedBy = payload.acceptedBy?.toString?.() || String(payload.acceptedBy || '');
+      const currentDeliveryId = deliveryPartnerId?.toString?.() || String(deliveryPartnerId || '');
+      if (acceptedBy && currentDeliveryId && acceptedBy === currentDeliveryId) {
+        return;
+      }
+
+      const currentIds = [
+        current.orderId,
+        current.orderMongoId,
+        current.mongoId,
+        current._id
+      ].filter(Boolean).map(String);
+      const acceptedIds = [
+        payload.orderId,
+        payload.mongoId,
+        payload.orderMongoId,
+        payload._id
+      ].filter(Boolean).map(String);
+
+      if (acceptedIds.some(id => currentIds.includes(id))) {
+        setNewOrder(null);
+        window.dispatchEvent(new CustomEvent('deliveryOrderAcceptedByOther', {
+          detail: payload
+        }));
+      }
+    });
+
     socketRef.current.on('play_notification_sound', (data) => {
       console.log('🔔 Sound notification:', data);
       playNotificationSound();

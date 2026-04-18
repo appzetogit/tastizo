@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { X } from "lucide-react"
+import { MapPin, ShoppingBag, X } from "lucide-react"
 
 /**
  * Modal shown when user tries to add item from a different restaurant.
@@ -8,12 +8,18 @@ import { X } from "lucide-react"
  */
 export default function ReplaceCartModal({
   isOpen,
+  mode = "restaurant",
   cartRestaurantName,
   newRestaurantName,
+  itemCount = 0,
+  currentZoneName = "",
+  currentAddress = "",
   onReplace,
   onCancel,
 }) {
   if (!isOpen) return null
+
+  const isLocationChange = mode === "location"
 
   const content = (
     <AnimatePresence>
@@ -44,19 +50,69 @@ export default function ReplaceCartModal({
             </button>
 
             <h3 className="text-lg font-bold text-gray-900 dark:text-white pr-8">
-              Replace cart item?
+              {isLocationChange ? "Change location?" : "Replace cart item?"}
             </h3>
-            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-              Your cart contains dishes from{" "}
-              <span className="font-semibold text-gray-900 dark:text-white">
-                {cartRestaurantName || "another restaurant"}
-              </span>
-              . Do you want to discard the selection and add dishes from{" "}
-              <span className="font-semibold text-gray-900 dark:text-white">
-                {newRestaurantName || "this restaurant"}
-              </span>
-              ?
-            </p>
+            {isLocationChange ? (
+              <>
+                <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                  Your cart has items from{" "}
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {cartRestaurantName || "another restaurant"}
+                  </span>
+                  . This restaurant may not deliver to your new location.
+                </p>
+
+                <div className="mt-5 space-y-3">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-3">
+                    <div className="flex items-start gap-3">
+                      <ShoppingBag className="mt-0.5 h-4 w-4 text-[#2B9C64]" />
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                          Current cart
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                          {cartRestaurantName || "Restaurant"}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {itemCount || 0} {itemCount === 1 ? "item" : "items"} will be removed
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-3">
+                    <div className="flex items-start gap-3">
+                      <MapPin className="mt-0.5 h-4 w-4 text-[#2B9C64]" />
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                          New delivery area
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                          {currentZoneName || "Selected location"}
+                        </p>
+                        {currentAddress && (
+                          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                            {currentAddress}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                Your cart contains dishes from{" "}
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {cartRestaurantName || "another restaurant"}
+                </span>
+                . Do you want to discard the selection and add dishes from{" "}
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {newRestaurantName || "this restaurant"}
+                </span>
+                ?
+              </p>
+            )}
 
             <div className="mt-6 flex gap-3">
               <button
@@ -64,14 +120,14 @@ export default function ReplaceCartModal({
                 onClick={onCancel}
                 className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
-                No
+                {isLocationChange ? "Not now" : "No"}
               </button>
               <button
                 type="button"
                 onClick={onReplace}
                 className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold text-white bg-[#2B9C64] hover:bg-[#218a56] transition-colors shadow-sm"
               >
-                Replace
+                {isLocationChange ? "Change location" : "Replace"}
               </button>
             </div>
           </div>

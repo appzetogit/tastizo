@@ -37,6 +37,11 @@ import DeliveryTrackingMap from "../../components/DeliveryTrackingMap"
 import { orderAPI, restaurantAPI } from "@/lib/api"
 import { shareWithFallback } from "@/lib/utils/shareBridge"
 import circleIcon from "@/assets/circleicon.png"
+import {
+  RESTAURANT_CONTACT_UNAVAILABLE_MESSAGE,
+  normalizeTelPhone,
+  resolveRestaurantPhone,
+} from "./restaurantContact"
 
 // Animated checkmark component
 const AnimatedCheckmark = ({ delay = 0 }) => (
@@ -73,17 +78,6 @@ const AnimatedCheckmark = ({ delay = 0 }) => (
   </motion.svg>
 )
 
-const getRestaurantPhone = (restaurant) => {
-  if (!restaurant || typeof restaurant !== "object") return "";
-  return (
-    restaurant.primaryContactNumber ||
-    restaurant.contactNumber ||
-    restaurant.phone ||
-    restaurant.ownerPhone ||
-    ""
-  );
-};
-
 const hasAssignedDeliveryPartner = (order) => {
   return !!(
     order?.deliveryPartnerId ||
@@ -91,6 +85,23 @@ const hasAssignedDeliveryPartner = (order) => {
     order?.assignmentInfo?.deliveryPartnerId
   );
 };
+
+const getOrderTrackingStatus = (order) => {
+  const status = order?.status;
+  const phase = order?.deliveryState?.currentPhase;
+
+  if (status === "cancelled") return "cancelled";
+  if (status === "delivered") return "delivered";
+  if (status === "out_for_delivery" || phase === "en_route_to_delivery" || phase === "at_delivery") {
+    return "pickup";
+  }
+  if (status === "ready") return "prepared";
+  if (status === "preparing") return "preparing";
+
+  return "placed";
+};
+
+const isTerminalOrderStatus = (status) => status === "delivered" || status === "cancelled";
 
 // Real Delivery Map Component with User Live Location
 const DeliveryMap = ({ orderId, order, isVisible }) => {
@@ -262,6 +273,7 @@ export default function OrderTracking() {
   // Only poll if delivery partner is not yet assigned to avoid unnecessary updates
   useEffect(() => {
     if (!orderId || !order) return;
+    if (isTerminalOrderStatus(getOrderTrackingStatus(order))) return;
 
     // Skip polling if delivery partner is already assigned and accepted
     const currentDeliveryStatus = order?.deliveryState?.status;
@@ -286,11 +298,6 @@ export default function OrderTracking() {
           const newPhase = apiOrder.deliveryState?.currentPhase;
           const newOrderStatus = apiOrder.status;
           const currentOrderStatus = order?.status;
-
-          // Check if order was cancelled
-          if (newOrderStatus === 'cancelled' && currentOrderStatus !== 'cancelled') {
-            setOrderStatus('cancelled');
-          }
 
           // Only update if status actually changed
           if (newDeliveryStatus === 'accepted' ||
@@ -335,6 +342,7 @@ export default function OrderTracking() {
             };
 
             setOrder(transformedOrder);
+            setOrderStatus(getOrderTrackingStatus(transformedOrder));
           }
         }
       } catch (err) {
@@ -343,7 +351,7 @@ export default function OrderTracking() {
     }, pollInterval);
 
     return () => clearInterval(interval);
-  }, [orderId, order?.deliveryState?.status, order?.deliveryState?.currentPhase]);
+  }, [orderId, order?.status, order?.deliveryState?.status, order?.deliveryState?.currentPhase]);
 
   // Fetch order from API if not found in context
   useEffect(() => {
@@ -363,13 +371,15 @@ export default function OrderTracking() {
           console.log('⚠️ Context order missing restaurantId, will fetch from API');
         }
         setOrder(contextOrder)
+        setOrderStatus(getOrderTrackingStatus(contextOrder))
         setLoading(false)
-        return
       }
 
-      // If not in context, fetch from API
+      // Always hydrate from API so the restaurant phone belongs to the current order.
       try {
-        setLoading(true)
+        if (!contextOrder) {
+          setLoading(true)
+        }
         setError(null)
 
         const response = await orderAPI.getOrderDetails(orderId)
@@ -435,7 +445,7 @@ export default function OrderTracking() {
             mongoId: apiOrder._id,
             restaurant: apiOrder.restaurantName || 'Restaurant',
             restaurantId: apiOrder.restaurantId || null, // Include restaurantId for location access
-            restaurantPhone: getRestaurantPhone(apiOrder.restaurantId) || getRestaurantPhone(apiOrder.restaurant) || apiOrder.restaurantPhone || "",
+            restaurantPhone: resolveRestaurantPhone(apiOrder),
             userId: apiOrder.userId || null, // Include user data for phone number
             userName: apiOrder.userName || apiOrder.userId?.name || apiOrder.userId?.fullName || '',
             userPhone: apiOrder.userPhone || apiOrder.userId?.phone || '',
@@ -475,27 +485,15 @@ export default function OrderTracking() {
           }
 
           setOrder(transformedOrder)
-
-          // Update orderStatus based on API order status
-          // 'ready' = food ready at restaurant, waiting for delivery partner (show "Food is ready")
-          // 'out_for_delivery' = delivery partner picked up and on the way (show "Order picked up")
-          if (apiOrder.status === 'cancelled') {
-            setOrderStatus('cancelled');
-          } else if (apiOrder.status === 'preparing') {
-            setOrderStatus('preparing');
-          } else if (apiOrder.status === 'ready') {
-            setOrderStatus('prepared');
-          } else if (apiOrder.status === 'out_for_delivery') {
-            setOrderStatus('pickup');
-          } else if (apiOrder.status === 'delivered') {
-            setOrderStatus('delivered');
-          }
+          setOrderStatus(getOrderTrackingStatus(apiOrder))
         } else {
           throw new Error('Order not found')
         }
       } catch (err) {
         console.error('Error fetching order:', err)
-        setError(err.response?.data?.message || err.message || 'Failed to fetch order')
+        if (!contextOrder) {
+          setError(err.response?.data?.message || err.message || 'Failed to fetch order')
+        }
       } finally {
         setLoading(false)
       }
@@ -506,12 +504,11 @@ export default function OrderTracking() {
     }
   }, [orderId, getOrderById])
 
-  // Simulate order status progression
+  // Close the confirmation overlay after order placement; status comes from backend.
   useEffect(() => {
     if (confirmed) {
       const timer1 = setTimeout(() => {
         setShowConfirmation(false)
-        setOrderStatus('preparing')
       }, 3000)
       return () => clearTimeout(timer1)
     }
@@ -534,7 +531,7 @@ export default function OrderTracking() {
 
       // Update order status in UI
       if (status === 'out_for_delivery') {
-        setOrderStatus('on_way');
+        setOrderStatus('pickup');
       }
 
       // Show notification toast
@@ -666,7 +663,7 @@ export default function OrderTracking() {
 
   const handleCallRestaurant = async () => {
     if (!order) return;
-    let restaurantPhone = getRestaurantPhone(order.restaurantId) || order.restaurantPhone || "";
+    let restaurantPhone = resolveRestaurantPhone(order);
     const restaurantId =
       typeof order.restaurantId === "string"
         ? order.restaurantId
@@ -676,18 +673,22 @@ export default function OrderTracking() {
       try {
         const res = await restaurantAPI.getRestaurantById(restaurantId);
         const r = res?.data?.data?.restaurant;
-        restaurantPhone = getRestaurantPhone(r);
+        restaurantPhone = resolveRestaurantPhone(order, r);
       } catch (e) {
         console.error("Error fetching restaurant for phone:", e);
       }
     }
-    restaurantPhone = String(restaurantPhone).replace(/\s/g, "").trim();
-    if (!restaurantPhone) {
-      toast.error("Restaurant phone number not available");
+    const telPhone = normalizeTelPhone(restaurantPhone);
+    if (!telPhone) {
+      console.warn("Restaurant contact number unavailable for order", {
+        orderId: order.id || order.orderId || order.mongoId || orderId,
+        restaurantId,
+        hasRestaurantPhone: Boolean(restaurantPhone),
+      });
+      toast.error(RESTAURANT_CONTACT_UNAVAILABLE_MESSAGE);
       return;
     }
-    const digits = restaurantPhone.replace(/\D/g, "").slice(-10);
-    window.location.href = `tel:${digits}`;
+    window.location.href = `tel:${telPhone}`;
   };
 
   const handleOpenDeliveryInstructions = () => {
@@ -789,7 +790,7 @@ export default function OrderTracking() {
           mongoId: apiOrder._id,
           restaurant: apiOrder.restaurantName || 'Restaurant',
           restaurantId: apiOrder.restaurantId || null, // Include restaurantId for location access
-          restaurantPhone: getRestaurantPhone(apiOrder.restaurantId) || getRestaurantPhone(apiOrder.restaurant) || apiOrder.restaurantPhone || "",
+          restaurantPhone: resolveRestaurantPhone(apiOrder),
           userId: apiOrder.userId || null, // Include user data for phone number
           userName: apiOrder.userName || apiOrder.userId?.name || apiOrder.userId?.fullName || '',
           userPhone: apiOrder.userPhone || apiOrder.userId?.phone || '',
@@ -828,19 +829,7 @@ export default function OrderTracking() {
           phoneNumber: apiOrder.phoneNumber || undefined
         }
         setOrder(transformedOrder)
-
-        // Update order status for UI
-        if (apiOrder.status === 'cancelled') {
-          setOrderStatus('cancelled');
-        } else if (apiOrder.status === 'preparing') {
-          setOrderStatus('preparing')
-        } else if (apiOrder.status === 'ready') {
-          setOrderStatus('prepared')
-        } else if (apiOrder.status === 'out_for_delivery') {
-          setOrderStatus('pickup')
-        } else if (apiOrder.status === 'delivered') {
-          setOrderStatus('delivered')
-        }
+        setOrderStatus(getOrderTrackingStatus(apiOrder))
       }
     } catch (err) {
       console.error('Error refreshing order:', err)
@@ -879,12 +868,12 @@ export default function OrderTracking() {
   const statusConfig = {
     placed: {
       title: "Order placed",
-      subtitle: "Food preparation will begin shortly",
+      subtitle: "Waiting for restaurant confirmation",
       color: "bg-green-700"
     },
     preparing: {
-      title: "Preparing your order",
-      subtitle: `Arriving in ${estimatedTime} mins`,
+      title: "Processing your order",
+      subtitle: `Restaurant accepted · Arriving in ${estimatedTime} mins`,
       color: "bg-green-700"
     },
     prepared: {
@@ -910,6 +899,7 @@ export default function OrderTracking() {
   }
 
   const currentStatus = statusConfig[orderStatus] || statusConfig.placed
+  const shouldShowMap = !showConfirmation && order !== null && !isTerminalOrderStatus(orderStatus)
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#0a0a0a]">
@@ -1023,11 +1013,13 @@ export default function OrderTracking() {
       </motion.div>
 
       {/* Map Section */}
-      <DeliveryMap
-        orderId={orderId}
-        order={order}
-        isVisible={!showConfirmation && order !== null}
-      />
+      {shouldShowMap && (
+        <DeliveryMap
+          orderId={orderId}
+          order={order}
+          isVisible={shouldShowMap}
+        />
+      )}
 
       {/* Scrollable Content */}
       <div className="max-w-4xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 space-y-4 md:space-y-6 pb-24 md:pb-32">
@@ -1142,7 +1134,7 @@ export default function OrderTracking() {
             order?.deliveryState?.status === 'order_confirmed'
 
           // Show "Food is Cooking" until delivery partner accepts pickup
-          if (!hasAcceptedPickup) {
+          if (['preparing', 'prepared'].includes(orderStatus) && !hasAcceptedPickup) {
             return (
               <motion.div
                 className="bg-white rounded-xl p-4 shadow-sm"
@@ -1341,20 +1333,21 @@ export default function OrderTracking() {
           </div>
         </motion.div>
 
-        {/* Help Section */}
-        <motion.div
-          className="bg-white rounded-xl shadow-sm overflow-hidden"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8 }}
-        >
-          <SectionItem
-            icon={CircleSlash}
-            title="Cancel order"
-            subtitle=""
-            onClick={handleCancelOrder}
-          />
-        </motion.div>
+        {!isTerminalOrderStatus(orderStatus) && (
+          <motion.div
+            className="bg-white rounded-xl shadow-sm overflow-hidden"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8 }}
+          >
+            <SectionItem
+              icon={CircleSlash}
+              title="Cancel order"
+              subtitle=""
+              onClick={handleCancelOrder}
+            />
+          </motion.div>
+        )}
 
       </div>
 

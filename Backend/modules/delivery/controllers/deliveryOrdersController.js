@@ -5,6 +5,7 @@ import {
 } from "../../../shared/utils/response.js";
 import Delivery from "../models/Delivery.js";
 import Order from "../../order/models/Order.js";
+import OrderAssignmentHistory from "../../order/models/OrderAssignmentHistory.js";
 import Payment from "../../payment/models/Payment.js";
 import Restaurant from "../../restaurant/models/Restaurant.js";
 import DeliveryWallet from "../models/DeliveryWallet.js";
@@ -602,6 +603,12 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         orderMongoId,
         {
           $set: {
+            deliveryPartnerId: delivery._id,
+            assignmentStatus: "accepted",
+            "assignmentInfo.deliveryPartnerId": delivery._id.toString(),
+            "assignmentInfo.assignedBy": order.assignmentInfo?.assignedBy || "delivery_accept",
+            "assignmentInfo.assignedAt": order.assignmentInfo?.assignedAt || new Date(),
+            "assignmentTimings.acceptedAt": new Date(),
             "deliveryState.status": "accepted",
             "deliveryState.acceptedAt": new Date(),
             "deliveryState.currentPhase": "en_route_to_pickup",
@@ -901,20 +908,28 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
     const delivery = req.delivery;
     const { orderId } = req.params;
     const deliveryId = delivery._id;
+    const deliveryIdString = deliveryId.toString();
     // Find order by _id or orderId field
     let order = null;
+    const deliveryPartnerMatch = {
+      $or: [
+        { deliveryPartnerId: deliveryId },
+        { deliveryPartnerId: deliveryIdString },
+        { "assignmentInfo.deliveryPartnerId": deliveryIdString },
+      ],
+    };
 
     // Check if orderId is a valid MongoDB ObjectId
     if (mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24) {
       order = await Order.findOne({
         _id: orderId,
-        deliveryPartnerId: deliveryId,
+        ...deliveryPartnerMatch,
       });
     } else {
       // If not a valid ObjectId, search by orderId field
       order = await Order.findOne({
         orderId: orderId,
-        deliveryPartnerId: deliveryId,
+        ...deliveryPartnerMatch,
       });
     }
 
@@ -1063,11 +1078,20 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
     // Find order by _id or orderId - try multiple methods for better compatibility
     let order = null;
     const deliveryId = delivery._id;
+    const deliveryIdString = deliveryId.toString();
+    const deliveryPartnerMatch = {
+      $or: [
+        { deliveryPartnerId: deliveryId },
+        { deliveryPartnerId: deliveryIdString },
+        { "assignmentInfo.deliveryPartnerId": deliveryIdString },
+      ],
+    };
 
     // Method 1: Try as MongoDB ObjectId
     if (mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24) {
       order = await Order.findOne({
-        $and: [{ _id: orderId }, { deliveryPartnerId: deliveryId }],
+        _id: orderId,
+        ...deliveryPartnerMatch,
       })
         .populate("userId", "name phone")
         .populate("restaurantId", "name location address phone ownerPhone")
@@ -1077,24 +1101,8 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
     // Method 2: Try by orderId field
     if (!order) {
       order = await Order.findOne({
-        $and: [{ orderId: orderId }, { deliveryPartnerId: deliveryId }],
-      })
-        .populate("userId", "name phone")
-        .populate("restaurantId", "name location address phone ownerPhone")
-        .lean();
-    }
-
-    // Method 3: Try with string comparison for deliveryPartnerId
-    if (!order) {
-      order = await Order.findOne({
-        $and: [
-          {
-            $or: [{ _id: orderId }, { orderId: orderId }],
-          },
-          {
-            deliveryPartnerId: deliveryId.toString(),
-          },
-        ],
+        orderId: orderId,
+        ...deliveryPartnerMatch,
       })
         .populate("userId", "name phone")
         .populate("restaurantId", "name location address phone ownerPhone")
@@ -1534,30 +1542,27 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
     // Find order by _id or orderId, and ensure it's assigned to this delivery partner
     // Try multiple comparison methods for deliveryPartnerId (ObjectId vs string)
     const deliveryId = delivery._id;
+    const deliveryIdString = deliveryId.toString();
+    const deliveryPartnerMatch = {
+      $or: [
+        { deliveryPartnerId: deliveryId },
+        { deliveryPartnerId: deliveryIdString },
+        { "assignmentInfo.deliveryPartnerId": deliveryIdString },
+      ],
+    };
     // Try finding order with different deliveryPartnerId comparison methods
     // First try without lean() to get Mongoose document (needed for proper ObjectId comparison)
-    let order = await Order.findOne({
-      $and: [
-        {
-          $or: [{ _id: orderId }, { orderId: orderId }],
-        },
-        {
-          deliveryPartnerId: deliveryId, // Try as ObjectId first (most common)
-        },
-      ],
-    });
-
-    // If not found, try with string comparison
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24) {
+      order = await Order.findOne({
+        _id: orderId,
+        ...deliveryPartnerMatch,
+      });
+    }
     if (!order) {
       order = await Order.findOne({
-        $and: [
-          {
-            $or: [{ _id: orderId }, { orderId: orderId }],
-          },
-          {
-            deliveryPartnerId: deliveryId.toString(), // Try as string
-          },
-        ],
+        orderId,
+        ...deliveryPartnerMatch,
       });
     }
 

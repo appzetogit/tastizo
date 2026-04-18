@@ -15,6 +15,114 @@ import autoTable from "jspdf-autotable"
 
 const STORAGE_KEY = "restaurant_online_status"
 
+const getPopupOrder = (popupOrder, newOrder, selectedOrder = null) =>
+  popupOrder || newOrder || selectedOrder || null
+
+const getOrderTotal = (order) => {
+  const total =
+    order?.total ??
+    order?.amount ??
+    order?.pricing?.total ??
+    order?.pricing?.grandTotal ??
+    0
+  const parsed = Number(total)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const getOrderAddressText = (address) => {
+  if (!address) return "Address not available"
+  if (typeof address === "string") return address
+  return (
+    address.formattedAddress ||
+    address.address ||
+    [
+      address.street,
+      address.addressLine1,
+      address.area,
+      address.city,
+      address.state,
+      address.pincode || address.postalCode,
+    ].filter(Boolean).join(", ") ||
+    "Address not available"
+  )
+}
+
+const getOrderPaymentText = (order) => {
+  const raw = order?.paymentMethod ?? order?.payment?.method ?? order?.paymentMode ?? ""
+  const method = String(raw).toLowerCase().trim()
+  if (method === "cash" || method === "cod") return "Cash on Delivery"
+  return "Online"
+}
+
+const getReceiptRestaurantName = (order) =>
+  order?.restaurantName ||
+  order?.restaurantId?.name ||
+  order?.restaurant?.name ||
+  "Restaurant"
+
+const getReceiptCreatedAt = (order) => {
+  if (!order?.createdAt) return new Date().toLocaleString("en-GB")
+
+  const parsedDate = new Date(order.createdAt)
+  if (Number.isNaN(parsedDate.getTime())) {
+    return new Date().toLocaleString("en-GB")
+  }
+
+  return parsedDate.toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+const getReceiptItems = (order) =>
+  (Array.isArray(order?.items) ? order.items : []).map((item) => {
+    const quantity = Number(
+      item?.quantity ?? item?.qty ?? item?.cartQuantity ?? 1
+    )
+    const unitPrice = Number(
+      item?.price ??
+      item?.finalPrice ??
+      item?.unitPrice ??
+      item?.selectedVariation?.price ??
+      item?.selectedVariation?.variationPrice ??
+      0
+    )
+
+    return {
+      name: item?.name || item?.itemName || "Item",
+      quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+      unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
+    }
+  })
+
+const getReceiptPayload = (order) => {
+  const items = getReceiptItems(order)
+  const computedItemsTotal = items.reduce(
+    (sum, item) => sum + item.unitPrice * item.quantity,
+    0
+  )
+  const fallbackTotal = getOrderTotal(order)
+  const total = fallbackTotal > 0 ? fallbackTotal : computedItemsTotal
+
+  return {
+    orderId: order?.orderId || order?.orderMongoId || order?._id || "N/A",
+    restaurantName: getReceiptRestaurantName(order),
+    createdAtText: getReceiptCreatedAt(order),
+    customerAddressText: getOrderAddressText(
+      order?.customerAddress || order?.address
+    ),
+    items,
+    total,
+    paymentText: getOrderPaymentText(order),
+    estimatedDeliveryTime: order?.estimatedDeliveryTime || null,
+    note: order?.note || "",
+    sendCutlery: Boolean(order?.sendCutlery),
+  }
+}
+
 // Top filter tabs
 const filterTabs = [
   { id: "preparing", label: "Preparing" },
@@ -592,7 +700,7 @@ export default function OrdersMain() {
   const [showZoneSetupPrompt, setShowZoneSetupPrompt] = useState(false)
 
   // Restaurant notifications hook for real-time orders
-  const { newOrder, clearNewOrder, isConnected } = useRestaurantNotifications()
+  const { newOrder, clearNewOrder, isConnected, stopNotificationSound } = useRestaurantNotifications()
 
   const rejectReasons = [
     "Restaurant is too busy",
@@ -889,6 +997,7 @@ export default function OrdersMain() {
       audioRef.current.pause()
       audioRef.current.currentTime = 0
     }
+    stopNotificationSound()
 
     // Use popupOrder (from Socket.IO or API fallback) or newOrder (from hook)
     const orderToAccept = popupOrder || newOrder
@@ -899,6 +1008,7 @@ export default function OrdersMain() {
         const orderId = orderToAccept.orderMongoId || orderToAccept.orderId
         const response = await restaurantAPI.acceptOrder(orderId, prepTime)
         console.log('✅ Order accepted:', orderId)
+        stopNotificationSound()
         toast.success('Order accepted successfully')
       } catch (error) {
         console.error('❌ Error accepting order:', error)
@@ -1016,10 +1126,13 @@ export default function OrdersMain() {
 
   // Handle PDF download
   const handlePrint = async () => {
-    if (!newOrder) {
+    const activeOrder = getPopupOrder(popupOrder, newOrder, selectedOrder)
+    if (!activeOrder) {
       console.warn('No order data available for PDF generation')
+      toast.error('Order details are not available for printing')
       return
     }
+    const receipt = getReceiptPayload(activeOrder)
 
     try {
       // Create new PDF document
@@ -1035,54 +1148,40 @@ export default function OrdersMain() {
       // Restaurant name
       doc.setFontSize(14)
       doc.setFont('helvetica', 'normal')
-      doc.text(orderToPrint.restaurantName || 'Restaurant', 105, 30, { align: 'center' })
+      doc.text(receipt.restaurantName, 105, 30, { align: 'center' })
 
       // Order details
       doc.setFontSize(10)
       doc.setFont('helvetica', 'bold')
-      doc.text(`Order ID: ${orderToPrint.orderId || 'N/A'}`, 20, 45)
+      doc.text(`Order ID: ${receipt.orderId}`, 20, 45)
       doc.setFont('helvetica', 'normal')
-
-      const orderDate = orderToPrint.createdAt
-        ? new Date(orderToPrint.createdAt).toLocaleString('en-GB', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-        : new Date().toLocaleString('en-GB')
-
-      doc.text(`Date: ${orderDate}`, 20, 52)
+      doc.text(`Date: ${receipt.createdAtText}`, 20, 52)
 
       // Customer address
-      if (orderToPrint.customerAddress) {
+      if (receipt.customerAddressText) {
         doc.setFont('helvetica', 'bold')
         doc.text('Delivery Address:', 20, 62)
         doc.setFont('helvetica', 'normal')
-        const addressText = [
-          orderToPrint.customerAddress.street,
-          orderToPrint.customerAddress.city,
-          orderToPrint.customerAddress.state
-        ].filter(Boolean).join(', ') || 'Address not available'
-        const addressLines = doc.splitTextToSize(addressText, 170)
+        const addressLines = doc.splitTextToSize(receipt.customerAddressText, 170)
         doc.text(addressLines, 20, 69)
       }
 
       // Items table
       let yPos = 85
-      if (orderToPrint.items && orderToPrint.items.length > 0) {
+      if (receipt.items.length > 0) {
         doc.setFont('helvetica', 'bold')
         doc.text('Items:', 20, yPos)
         yPos += 8
 
         // Prepare table data
-        const tableData = orderToPrint.items.map(item => [
+        const tableData = receipt.items.map(item => {
+          return [
           item.name || 'Item',
-          item.quantity || 1,
-          `₹${(item.price || 0).toFixed(2)}`,
-          `₹${((item.price || 0) * (item.quantity || 1)).toFixed(2)}`
-        ])
+          item.quantity,
+          `Rs. ${item.unitPrice.toFixed(2)}`,
+          `Rs. ${(item.unitPrice * item.quantity).toFixed(2)}`
+          ]
+        })
 
         autoTable(doc, {
           startY: yPos,
@@ -1105,35 +1204,35 @@ export default function OrdersMain() {
       // Total
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(12)
-      doc.text(`Total: ₹${(orderToPrint.total || 0).toFixed(2)}`, 20, yPos)
+      doc.text(`Total: Rs. ${receipt.total.toFixed(2)}`, 20, yPos)
 
       // Payment status
       yPos += 10
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
-      doc.text(`Payment Status: ${orderToPrint.status === 'confirmed' ? 'Paid' : 'Pending'}`, 20, yPos)
+      doc.text(`Payment: ${receipt.paymentText}`, 20, yPos)
 
       // Estimated delivery time
-      if (orderToPrint.estimatedDeliveryTime) {
+      if (receipt.estimatedDeliveryTime) {
         yPos += 8
-        doc.text(`Estimated Delivery: ${orderToPrint.estimatedDeliveryTime} minutes`, 20, yPos)
+        doc.text(`Estimated Delivery: ${receipt.estimatedDeliveryTime} minutes`, 20, yPos)
       }
 
       // Notes
-      if (orderToPrint.note) {
+      if (receipt.note) {
         yPos += 10
         doc.setFont('helvetica', 'bold')
         doc.text('Note:', 20, yPos)
         doc.setFont('helvetica', 'normal')
-        const noteLines = doc.splitTextToSize(orderToPrint.note, 170)
+        const noteLines = doc.splitTextToSize(receipt.note, 170)
         doc.text(noteLines, 20, yPos + 7)
       }
 
       // Send cutlery
-      if (orderToPrint.sendCutlery) {
+      if (receipt.sendCutlery) {
         yPos += 15
         doc.setFont('helvetica', 'normal')
-        doc.text('✓ Send cutlery requested', 20, yPos)
+        doc.text('[x] Send cutlery requested', 20, yPos)
       }
 
       // Footer
@@ -1148,14 +1247,31 @@ export default function OrdersMain() {
       )
 
       // Download PDF
-      const fileName = `Order-${orderToPrint.orderId || 'Receipt'}-${Date.now()}.pdf`
+      const fileName = `Order-${receipt.orderId || 'Receipt'}-${Date.now()}.pdf`
       doc.save(fileName)
 
-      console.log('✅ PDF generated successfully:', fileName)
+      console.log('Receipt PDF generated successfully:', fileName)
     } catch (error) {
-      console.error('❌ Error generating PDF:', error)
-      alert('Failed to generate PDF. Please try again.')
+      console.error('Error generating PDF:', error)
+      toast.error('Failed to generate receipt. Please try again.')
     }
+  }
+
+  const handleNeedHelpWithOrder = () => {
+    const orderForHelp = getPopupOrder(popupOrder, newOrder, selectedOrder)
+    if (!orderForHelp) {
+      toast.error('Order details are not available')
+      return
+    }
+
+    navigate('/restaurant/help-centre', {
+      state: {
+        source: 'order',
+        orderId: orderForHelp.orderId || orderForHelp.mongoId || orderForHelp._id,
+        restaurantName: orderForHelp.restaurantName || 'Restaurant',
+        issueHint: `Need help with order ${orderForHelp.orderId || ''}`.trim(),
+      },
+    })
   }
 
   // Handle swipe gestures with smooth animations
@@ -1762,7 +1878,11 @@ export default function OrdersMain() {
 
                 {/* Footer */}
                 <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
-                  <button className="text-sm text-gray-600 hover:text-gray-900 transition-colors underline mx-auto block">
+                  <button
+                    type="button"
+                    onClick={handleNeedHelpWithOrder}
+                    className="text-sm text-gray-600 hover:text-gray-900 transition-colors underline mx-auto block"
+                  >
                     Need help with this order?
                   </button>
                 </div>
@@ -2108,7 +2228,7 @@ function ResendNotificationButton({ orderId, mongoId, onSuccess }) {
       type="button"
       onClick={handleResend}
       disabled={loading}
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-blue-300 bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 transition-colors hover:bg-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
       title="Resend notification to delivery partners"
     >
       {loading ? (
@@ -2151,7 +2271,7 @@ function MarkAsReadyButton({ orderId, mongoId, onSuccess }) {
       type="button"
       onClick={handleMarkReady}
       disabled={loading}
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 border border-emerald-700 transition-colors"
+      className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-emerald-700 bg-emerald-600 px-2 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-60"
       title="Mark as ready (shows for delivery partners)"
     >
       {loading ? (
@@ -2184,18 +2304,19 @@ function OrderCard({
   onMarkReadySuccess,
 }) {
   const isReady = status === "Ready"
+  const showCancelButton = status === 'preparing' && onCancel
 
   return (
-    <div className="w-full bg-white rounded-2xl p-4 mb-3 border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
+    <div className="relative mb-3 w-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 shadow-sm transition-all hover:border-gray-300 hover:shadow-md sm:p-4">
       {/* Cancel button - only show for preparing orders */}
-      {status === 'preparing' && onCancel && (
+      {showCancelButton && (
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             onCancel({ orderId, mongoId, customerName });
           }}
-          className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-white border border-red-100 text-red-600 shadow-md hover:bg-red-50 transition-colors z-10"
+          className="absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-red-100 bg-white text-red-600 shadow-md transition-colors hover:bg-red-50"
           title="Cancel Order"
         >
           <X className="w-4 h-4" />
@@ -2215,10 +2336,10 @@ function OrderCard({
             items,
           })
         }
-        className="w-full text-left flex gap-3 items-stretch cursor-pointer"
+        className="flex w-full cursor-pointer gap-3 text-left"
       >
         {/* Photo */}
-        <div className="h-20 w-20 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0 my-auto">
+        <div className="my-auto flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100">
           {photoUrl ? (
             <img
               src={photoUrl}
@@ -2235,9 +2356,9 @@ function OrderCard({
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex flex-col justify-between min-h-[80px]">
+        <div className={`flex min-h-[80px] flex-1 flex-col justify-between ${showCancelButton ? "pr-10" : ""}`}>
           {/* Top row */}
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-black leading-tight truncate">
                 Order #{orderId}
@@ -2247,20 +2368,8 @@ function OrderCard({
               </p>
             </div>
 
-            <div className="flex flex-col items-end gap-1 min-w-0 flex-shrink">
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border flex-wrap break-words ${isReady
-                  ? "border-green-500 text-green-600"
-                  : "border-gray-800 text-gray-900"
-                  }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${isReady ? "bg-green-500" : "bg-gray-800"
-                    }`}
-                />
-                <span className="whitespace-nowrap">{status}</span>
-              </span>
-              <span className="text-[11px] text-gray-500 text-right break-words">
+            <div className="flex min-w-0 shrink-0 flex-col items-end gap-1 text-right">
+              <span className="max-w-full text-[11px] text-gray-500">
                 {timePlaced}
               </span>
             </div>
@@ -2274,12 +2383,24 @@ function OrderCard({
           </div>
 
           {/* Bottom row */}
-          <div className="mt-2 flex items-end justify-between gap-2">
-            <div className="flex flex-col gap-1">
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex min-w-0 flex-col gap-1">
               <p className="text-[11px] text-gray-500">
                 {type}
                 {tableOrToken ? ` • ${tableOrToken}` : ""}
               </p>
+              <span
+                className={`inline-flex w-fit max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium ${isReady
+                  ? "border-green-500 text-green-600"
+                  : "border-gray-800 text-gray-900"
+                  }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${isReady ? "bg-green-500" : "bg-gray-800"
+                    }`}
+                />
+                <span className="whitespace-nowrap">{status}</span>
+              </span>
               {/* Delivery Assignment Status - Only show for preparing orders */}
               {status === 'preparing' && (
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -2300,7 +2421,7 @@ function OrderCard({
             </div>
             {/* Hide ETA for ready orders */}
             {status !== 'ready' && eta && (
-              <div className="flex items-baseline gap-1 shrink-0">
+              <div className="flex shrink-0 items-baseline gap-1 self-start sm:self-auto">
                 <span className="text-[11px] text-gray-500 whitespace-nowrap">ETA</span>
                 <span className="text-xs font-medium text-black whitespace-nowrap">
                   {eta}
