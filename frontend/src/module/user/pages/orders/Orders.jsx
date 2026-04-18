@@ -83,6 +83,23 @@ export default function Orders() {
     return status || 'confirmed'
   }
 
+  const hasOrderReview = (order) => {
+    if (!order) return false
+
+    if (order.hasReview) return true
+    if (order.rating !== null && order.rating !== undefined && order.rating !== '') return true
+    if (order.review?.rating !== null && order.review?.rating !== undefined) return true
+    if (order.review !== null && order.review !== undefined) return true
+
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return false
+      const orderId = order.id || order._id || order.mongoId
+      return Boolean(orderId) && window.localStorage.getItem(`orderRated_${orderId}`) === "true"
+    } catch {
+      return false
+    }
+  }
+
   // Auto-show rating popup when order is delivered (only once per order)
   useEffect(() => {
     if (orders.length === 0 || ratingModal.open) {
@@ -126,11 +143,8 @@ export default function Orders() {
         lowerTransformed === 'delivered' ||
         lowerTransformed === 'completed'
       
-      // Check if order has rating - check multiple places where rating might be stored
-      const hasRating = 
-        (order.rating !== null && order.rating !== undefined && order.rating !== '') ||
-        (order.review?.rating !== null && order.review?.rating !== undefined) ||
-        (order.review !== null && order.review !== undefined)
+      // Check if order has rating/review from backend or local cache.
+      const hasRating = hasOrderReview(order)
       
       const orderId = order.id || order._id || order.mongoId
       const hasShownPopup = shownRatingForOrders.has(orderId)
@@ -283,6 +297,7 @@ export default function Orders() {
               restaurantLocation: order.restaurantId?.location?.area || order.restaurantId?.location?.city || order.address?.city || '',
               rating: order.rating || order.review?.rating || null, // Check both rating and review.rating
               review: order.review || null,
+              hasReview: Boolean(order.hasReview || order.review?.rating || order.rating),
               tracking: order.tracking || {},
               cancellationReason: cancellationReason,
               isRestaurantCancelled: isRestaurantCancelled,
@@ -408,6 +423,11 @@ Order again from this restaurant in the ${companyName} app.`
 
   // Open rating modal for an order
   const handleOpenRating = (order) => {
+    if (hasOrderReview(order)) {
+      toast.info("You have already rated this order.")
+      return
+    }
+
     setRatingModal({ open: true, order })
     setSelectedRating(order.rating || null)
     setFeedbackText("")
@@ -441,7 +461,7 @@ Order again from this restaurant in the ${companyName} app.`
           })
         } catch (reviewErr) {
           const reviewMsg = reviewErr?.response?.data?.message || ""
-          if (reviewErr?.response?.status === 400 && reviewMsg.toLowerCase().includes("already")) {
+          if ([400, 409].includes(reviewErr?.response?.status) && reviewMsg.toLowerCase().includes("already")) {
             // Already reviewed – treat as success, don't block
           } else {
             throw reviewErr
@@ -491,7 +511,7 @@ Order again from this restaurant in the ${companyName} app.`
       const message = error?.response?.data?.message
 
       // If backend says already rated, treat as success and prevent re‑rating
-      if (error?.response?.status === 400 && message === "You have already rated this order") {
+      if ([400, 409].includes(error?.response?.status) && String(message || "").toLowerCase().includes("already")) {
         const order = ratingModal.order
         const orderId = order.id || order._id || order.mongoId
         setShownRatingForOrders(prev => new Set([...prev, orderId]))
@@ -848,16 +868,7 @@ Order again from this restaurant in the ${companyName} app.`
                       </div>
                       <span className="text-xs font-semibold text-red-500">Payment failed</span>
                     </div>
-                  ) : isDelivered && (order.rating || (() => {
-                    try {
-                      if (typeof window === "undefined" || !window.localStorage) return false
-                      const orderId = order.id || order._id || order.mongoId
-                      if (!orderId) return false
-                      return window.localStorage.getItem(`orderRated_${orderId}`) === "true"
-                    } catch {
-                      return false
-                    }
-                  })()) ? (
+                  ) : isDelivered && hasOrderReview(order) ? (
                     <div>
                       <div className="flex items-center gap-1">
                         <span className="text-sm text-gray-800">You rated</span>

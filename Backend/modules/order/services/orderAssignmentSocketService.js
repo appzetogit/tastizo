@@ -1,5 +1,9 @@
 import OrderAssignmentHistory from '../models/OrderAssignmentHistory.js';
 import Order from '../models/Order.js';
+import {
+  DELIVERY_NOTIFICATION_EVENTS,
+  notifyDeliveryOrderEvent,
+} from '../../delivery/services/deliveryNotificationService.js';
 
 /**
  * Order Assignment Socket Service
@@ -81,6 +85,20 @@ class OrderAssignmentSocketService {
         .to(`delivery:${deliveryPartnerId}`)
         .emit('NEW_ORDER_ASSIGNMENT', assignmentPayload);
 
+      notifyDeliveryOrderEvent({
+        order,
+        deliveryBoyId: deliveryPartnerId,
+        type: DELIVERY_NOTIFICATION_EVENTS.NEW_DELIVERY_REQUEST,
+        metadata: {
+          distance: assignmentData.distance || 0,
+          attemptNumber: assignmentData.attemptNumber || 1,
+          expiresInSeconds: 60,
+        },
+        source: "orderAssignmentSocketService.emitOrderAssignment",
+      }).catch((notifyError) => {
+        console.warn("Delivery assignment notification failed:", notifyError.message);
+      });
+
       console.log(`Order assignment sent to delivery partner ${deliveryPartnerId} for order ${order.orderId}`);
 
       return assignmentPayload;
@@ -117,6 +135,19 @@ class OrderAssignmentSocketService {
       io.of('/delivery')
         .to(`delivery:${deliveryPartnerId}`)
         .emit('ORDER_ASSIGNMENT_CANCELLED', cancellationPayload);
+
+      notifyDeliveryOrderEvent({
+        order,
+        deliveryBoyId,
+        type: DELIVERY_NOTIFICATION_EVENTS.DELIVERY_CANCELLED,
+        suffix: reason,
+        metadata: {
+          reason,
+        },
+        source: "orderAssignmentSocketService.emitOrderAssignmentCancelled",
+      }).catch((notifyError) => {
+        console.warn("Delivery cancellation notification failed:", notifyError.message);
+      });
 
       console.log(`Order assignment cancelled for delivery partner ${deliveryPartnerId}, order ${order.orderId}, reason: ${reason}`);
     } catch (error) {
@@ -215,6 +246,20 @@ class OrderAssignmentSocketService {
           .to(`delivery:${deliveryPartnerId}`)
           .emit('ASSIGNMENT_COUNTDOWN', countdownPayload);
 
+        if (remainingSeconds === 10) {
+          notifyDeliveryOrderEvent({
+            orderId,
+            deliveryBoyId,
+            type: DELIVERY_NOTIFICATION_EVENTS.DELIVERY_REQUEST_EXPIRING_SOON,
+            metadata: {
+              remainingSeconds,
+            },
+            source: "orderAssignmentSocketService.startAssignmentCountdown",
+          }).catch((notifyError) => {
+            console.warn("Delivery expiring notification failed:", notifyError.message);
+          });
+        }
+
         remainingSeconds--;
 
         // If countdown reaches 0, handle expiration
@@ -261,8 +306,8 @@ class OrderAssignmentSocketService {
       await this.emitOrderAssignmentCancelled(orderId, deliveryPartnerId, 'expired');
 
       // Trigger reassignment logic
-      const { reassignOrder } = await import('./orderAssignmentController.js');
-      await reassignOrder(orderId, deliveryPartnerId, 'timeout');
+      const { default: orderAssignmentController } = await import('./orderAssignmentController.js');
+      await orderAssignmentController.reassignOrder(orderId, deliveryPartnerId, 'timeout');
     } catch (error) {
       console.error('Error handling assignment expiration:', error);
     }

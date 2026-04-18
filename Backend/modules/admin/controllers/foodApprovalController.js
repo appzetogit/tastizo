@@ -6,6 +6,10 @@ import {
 import Menu from "../../restaurant/models/Menu.js";
 import Restaurant from "../../restaurant/models/Restaurant.js";
 import winston from "winston";
+import {
+  RESTAURANT_NOTIFICATION_EVENTS,
+  sendNotificationToRestaurant,
+} from "../../restaurant/services/restaurantNotificationService.js";
 
 const logger = winston.createLogger({
   level: "info",
@@ -239,6 +243,18 @@ export const approveFoodItem = asyncHandler(async (req, res) => {
         menu.markModified("addons");
 
         await menu.save();
+        await sendNotificationToRestaurant({
+          restaurantId: foundMenu.restaurant,
+          type: RESTAURANT_NOTIFICATION_EVENTS.MENU_ITEM_APPROVED,
+          eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.MENU_ITEM_APPROVED}:${foundMenu._id}:addon:${addon.id}`,
+          redirectUrl: "/restaurant/hub-menu",
+          metadata: {
+            itemId: addon.id,
+            itemName: addon.name,
+            itemType: "addon",
+          },
+          source: "foodApprovalController.approveFoodItem",
+        });
         return successResponse(res, 200, "Add-on approved successfully", {
           addon: {
             id: addon.id,
@@ -371,6 +387,19 @@ export const approveFoodItem = asyncHandler(async (req, res) => {
       restaurantId: foundMenu.restaurant,
     });
 
+    await sendNotificationToRestaurant({
+      restaurantId: foundMenu.restaurant,
+      type: RESTAURANT_NOTIFICATION_EVENTS.MENU_ITEM_APPROVED,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.MENU_ITEM_APPROVED}:${foundMenu._id}:item:${id}`,
+      redirectUrl: "/restaurant/hub-menu",
+      metadata: {
+        itemId: id,
+        itemName: savedItem.name,
+        itemType: "menu_item",
+      },
+      source: "foodApprovalController.approveFoodItem",
+    });
+
     return successResponse(res, 200, "Food item approved successfully", {
       itemId: id,
       itemName: savedItem.name,
@@ -483,6 +512,19 @@ export const rejectFoodItem = asyncHandler(async (req, res) => {
         menu.markModified("addons");
 
         await menu.save();
+        await sendNotificationToRestaurant({
+          restaurantId: foundMenu.restaurant,
+          type: RESTAURANT_NOTIFICATION_EVENTS.MENU_ITEM_REJECTED,
+          eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.MENU_ITEM_REJECTED}:${foundMenu._id}:addon:${addon.id}`,
+          redirectUrl: "/restaurant/hub-menu",
+          metadata: {
+            itemId: addon.id,
+            itemName: addon.name,
+            itemType: "addon",
+            rejectionReason: addon.rejectionReason,
+          },
+          source: "foodApprovalController.rejectFoodItem",
+        });
         return successResponse(res, 200, "Add-on rejected successfully", {
           addon: {
             id: addon.id,
@@ -615,6 +657,20 @@ export const rejectFoodItem = asyncHandler(async (req, res) => {
       itemName: foundItem.name,
       reason: reason.trim(),
       restaurantId: foundMenu.restaurant,
+    });
+
+    await sendNotificationToRestaurant({
+      restaurantId: foundMenu.restaurant,
+      type: RESTAURANT_NOTIFICATION_EVENTS.MENU_ITEM_REJECTED,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.MENU_ITEM_REJECTED}:${foundMenu._id}:item:${id}`,
+      redirectUrl: "/restaurant/hub-menu",
+      metadata: {
+        itemId: id,
+        itemName: savedItem.name,
+        itemType: "menu_item",
+        rejectionReason: savedItem.rejectionReason,
+      },
+      source: "foodApprovalController.rejectFoodItem",
     });
 
     return successResponse(res, 200, "Food item rejected successfully", {

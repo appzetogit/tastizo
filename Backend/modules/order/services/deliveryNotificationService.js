@@ -2,6 +2,10 @@ import Order from "../models/Order.js";
 import Delivery from "../../delivery/models/Delivery.js";
 import Restaurant from "../../restaurant/models/Restaurant.js";
 import mongoose from "mongoose";
+import {
+  DELIVERY_NOTIFICATION_EVENTS,
+  notifyDeliveryOrderEvent,
+} from "../../delivery/services/deliveryNotificationService.js";
 
 // Dynamic import to avoid circular dependency
 let getIO = null;
@@ -364,9 +368,33 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
     }
 
     if (notificationSent) {
+      notifyDeliveryOrderEvent({
+        order,
+        deliveryBoyId: deliveryPartnerId,
+        type: DELIVERY_NOTIFICATION_EVENTS.NEW_DELIVERY_REQUEST,
+        metadata: {
+          pickupDistance,
+          deliveryDistance,
+          estimatedEarnings,
+        },
+        source: "order.deliveryNotificationService.notifyDeliveryBoyNewOrder",
+      }).catch((notifyError) => {
+        console.warn("Delivery DB notification failed:", notifyError.message);
+      });
     } else {
       console.error(`❌ Failed to send notification`);
     }
+
+    await notifyDeliveryOrderEvent({
+      order,
+      deliveryBoyId: normalizedDeliveryPartnerId,
+      type: DELIVERY_NOTIFICATION_EVENTS.PICKUP_READY,
+      metadata: {
+        restaurantLat: coords?.[1],
+        restaurantLng: coords?.[0],
+      },
+      source: "order.deliveryNotificationService.notifyDeliveryBoyOrderReady",
+    });
 
     return {
       success: true,

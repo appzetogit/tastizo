@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom"
 import { useState, useEffect } from "react"
-import { MapPin, ShoppingCart, Trophy } from "lucide-react"
+import { Bell, MapPin, ShoppingCart, Trophy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -12,6 +12,7 @@ import {
 import { useLocation } from "../hooks/useLocation"
 import { useCart } from "../context/CartContext"
 import { useLocationSelector } from "./UserLayout"
+import { useUserNotifications } from "../hooks/useUserNotifications"
 import { getCachedSettings, loadBusinessSettings } from "@/lib/utils/businessSettings"
 import { pickNavbarLocationLines } from "@/lib/userLocationDisplay"
 
@@ -19,6 +20,7 @@ export default function Navbar() {
   const { location, loading } = useLocation()
   const { getCartCount } = useCart()
   const { openLocationSelector } = useLocationSelector()
+  const { unreadCount } = useUserNotifications()
   const cartCount = getCartCount()
   const [logoUrl, setLogoUrl] = useState(null)
   const [companyName, setCompanyName] = useState(null)
@@ -134,7 +136,7 @@ export default function Navbar() {
             ) : null}
           </Link>
 
-          {/* Right Side Actions - Profile, Points, Cart */}
+          {/* Right Side Actions - Profile, Points, Notifications, Cart */}
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             {/* Points */}
             <Button
@@ -150,6 +152,22 @@ export default function Navbar() {
                 {userPoints > 999 ? "999+" : userPoints}
               </span>
             </Button>
+
+            <Link to="/user/notifications">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative h-10 w-10 sm:h-11 sm:w-11 md:h-12 md:w-12 hover:bg-gray-100"
+                title="Notifications"
+              >
+                <Bell className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 sm:min-w-5 sm:h-5 rounded-full bg-red-500 text-white text-[10px] sm:text-xs flex items-center justify-center font-semibold">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </Button>
+            </Link>
 
             {/* Cart */}
             <Link to="/user/cart">

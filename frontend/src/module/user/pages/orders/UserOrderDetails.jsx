@@ -55,6 +55,11 @@ export default function UserOrderDetails() {
         }
 
         setOrder(orderData)
+        if (orderData.hasReview || orderData.review?.rating || orderData.rating) {
+          setHasRated(true)
+          setRating(orderData.review?.rating || orderData.rating || null)
+          setFeedbackText(orderData.review?.comment || orderData.review?.reviewText || "")
+        }
 
         // If restaurantId is just a string (not populated), fetch restaurant details separately
         const restaurantId = orderData.restaurantId
@@ -255,6 +260,16 @@ export default function UserOrderDetails() {
         comment: feedbackText?.trim() || "",
       })
 
+      setOrder((prev) =>
+        prev
+          ? {
+            ...prev,
+            review: { rating, comment: feedbackText?.trim() || "" },
+            rating,
+            hasReview: true,
+          }
+          : prev,
+      )
       setHasRated(true)
       try {
         if (typeof window !== "undefined" && window.localStorage) {
@@ -269,7 +284,7 @@ export default function UserOrderDetails() {
       console.error("Error submitting order rating from details page:", error)
       const message = error?.response?.data?.message
 
-      if (error?.response?.status === 400 && message === "You have already rated this order") {
+      if ([400, 409].includes(error?.response?.status) && String(message || "").toLowerCase().includes("already")) {
         setHasRated(true)
         try {
           if (typeof window !== "undefined" && window.localStorage) {

@@ -29,6 +29,12 @@ import {
   updateDiningMenuItem,
   requestDiningEnable,
 } from './controllers/diningManagementController.js';
+import {
+  getRestaurantNotifications,
+  getRestaurantUnreadNotificationCount,
+  markAllRestaurantNotificationsRead,
+  markRestaurantNotificationRead,
+} from './controllers/restaurantNotificationController.js';
 
 const router = express.Router();
 
@@ -115,6 +121,12 @@ router.patch('/dining-offers/:offerId', authenticate, updateDiningOffer);
 router.delete('/dining-offers/:offerId', authenticate, deleteDiningOffer);
 router.get('/dining-menu', authenticate, getDiningMenu);
 router.patch('/dining-menu/items', authenticate, updateDiningMenuItem);
+
+// Restaurant notification history (authenticated)
+router.get('/notifications', authenticate, getRestaurantNotifications);
+router.get('/notifications/unread-count', authenticate, getRestaurantUnreadNotificationCount);
+router.patch('/notifications/read-all', authenticate, markAllRestaurantNotificationsRead);
+router.patch('/notifications/:notificationId/read', authenticate, markRestaurantNotificationRead);
 
 // Restaurant routes (public - for user module)
 router.get('/list', getRestaurants);

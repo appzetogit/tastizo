@@ -1,13 +1,14 @@
 import { Link } from "react-router-dom"
 import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
-import { ChevronDown, ShoppingCart, Wallet } from "lucide-react"
+import { Bell, ChevronDown, ShoppingCart, Wallet } from "lucide-react"
 import { TbLocation } from "react-icons/tb"
 import { Button } from "@/components/ui/button"
 import { useLocation } from "../hooks/useLocation"
 import { useCart } from "../context/CartContext"
 import { useLocationSelector } from "./UserLayout"
 import { useLocationIconTransition } from "@/context/LocationIconTransitionContext"
+import { useUserNotifications } from "../hooks/useUserNotifications"
 import { FaLocationDot } from "react-icons/fa6"
 import { getCachedSettings, loadBusinessSettings } from "@/lib/utils/businessSettings"
 import { DEFAULT_LOGO_PLACEHOLDER } from "@/lib/constants/defaultLogo"
@@ -25,6 +26,7 @@ export default function PageNavbar({
   const { location, loading, requestLocation } = useLocation()
   const { getCartCount } = useCart()
   const { openLocationSelector } = useLocationSelector()
+  const { unreadCount } = useUserNotifications()
   const cartCount = getCartCount()
   const [logoUrl, setLogoUrl] = useState(null)
   const [companyName, setCompanyName] = useState(null)
@@ -961,6 +963,25 @@ export default function PageNavbar({
               <div className={`h-full w-full rounded-full bg-white/20 flex items-center justify-center ring-2 ${ringColor}`}>
                 <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-gray-800" strokeWidth={2} />
               </div>
+            </Button>
+          </Link>
+
+          {/* Notification Icon */}
+          <Link to="/user/notifications">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 hover:opacity-80 transition-opacity"
+              title="Notifications"
+            >
+              <div className={`h-full w-full rounded-full bg-white/20 flex items-center justify-center ring-2 ${ringColor}`}>
+                <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-gray-800" strokeWidth={2} />
+              </div>
+              {unreadCount > 0 && (
+                <span className={`absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-red-500 rounded-full flex items-center justify-center ring-2 ${textColor === "white" ? "ring-white/50" : "ring-gray-800/30"}`}>
+                  <span className="text-[9px] font-bold text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>
+                </span>
+              )}
             </Button>
           </Link>
 

@@ -4,6 +4,10 @@ import Delivery from '../../delivery/models/Delivery.js';
 import { findNearestDeliveryBoy } from './deliveryAssignmentService.js';
 import orderAssignmentSocketService from './orderAssignmentSocketService.js';
 import mongoose from 'mongoose';
+import {
+  DELIVERY_NOTIFICATION_EVENTS,
+  notifyDeliveryOrderEvent,
+} from '../../delivery/services/deliveryNotificationService.js';
 
 /**
  * Order Assignment Controller
@@ -17,7 +21,7 @@ class OrderAssignmentController {
    * @param {Number} restaurantLng - Restaurant longitude
    * @param {String} restaurantId - Restaurant ID
    */
-  async assignOrderToDelivery(orderId, restaurantLat, restaurantLng, restaurantId = null) {
+  async assignOrderToDelivery(orderId, restaurantLat, restaurantLng, restaurantId = null, previousDeliveryPartnerId = null) {
     try {
       console.log(`Starting order assignment for order ${orderId}`);
       
@@ -130,6 +134,34 @@ class OrderAssignmentController {
         60
       );
 
+      notifyDeliveryOrderEvent({
+        orderId,
+        deliveryBoyId: nearestDeliveryBoy.deliveryPartnerId,
+        type: DELIVERY_NOTIFICATION_EVENTS.NEW_DELIVERY_REQUEST,
+        metadata: {
+          distance: nearestDeliveryBoy.distance,
+          attemptNumber: excludedPartners.length + 1,
+          expiresInSeconds: 60,
+        },
+        source: "orderAssignmentController.assignOrderToDelivery",
+      }).catch((notifyError) => {
+        console.warn("Delivery request notification failed:", notifyError.message);
+      });
+
+      if (order.status === "ready") {
+        notifyDeliveryOrderEvent({
+          orderId,
+          deliveryBoyId: nearestDeliveryBoy.deliveryPartnerId,
+          type: DELIVERY_NOTIFICATION_EVENTS.PICKUP_READY,
+          metadata: {
+            distance: nearestDeliveryBoy.distance,
+          },
+          source: "orderAssignmentController.assignOrderToDelivery.ready",
+        }).catch((notifyError) => {
+          console.warn("Pickup ready notification failed:", notifyError.message);
+        });
+      }
+
       console.log(`Order ${orderId} assigned to delivery boy ${nearestDeliveryBoy.deliveryPartnerId}`);
 
       return {
@@ -230,6 +262,18 @@ class OrderAssignmentController {
             // Broadcast acceptance to all delivery boys
             await orderAssignmentSocketService.emitOrderAccepted(orderId, deliveryPartnerId);
 
+            notifyDeliveryOrderEvent({
+              order: updatedOrder,
+              deliveryBoyId: deliveryPartnerId,
+              type: DELIVERY_NOTIFICATION_EVENTS.ORDER_ASSIGNED,
+              metadata: {
+                acceptedAt: new Date(),
+              },
+              source: "orderAssignmentController.acceptOrderAssignment",
+            }).catch((notifyError) => {
+              console.warn("Order assigned delivery notification failed:", notifyError.message);
+            });
+
             console.log(`Order ${orderId} accepted by delivery partner ${deliveryPartnerId}`);
 
             return {
@@ -296,6 +340,19 @@ class OrderAssignmentController {
       // Immediately notify delivery boy that order is cancelled for them
       await orderAssignmentSocketService.emitOrderAssignmentCancelled(orderId, deliveryPartnerId, 'rejected');
 
+      notifyDeliveryOrderEvent({
+        orderId,
+        deliveryBoyId: deliveryPartnerId,
+        type: DELIVERY_NOTIFICATION_EVENTS.DELIVERY_CANCELLED,
+        suffix: reason || "rejected",
+        metadata: {
+          reason: reason || "rejected_by_delivery",
+        },
+        source: "orderAssignmentController.rejectOrderAssignment",
+      }).catch((notifyError) => {
+        console.warn("Delivery cancelled notification failed:", notifyError.message);
+      });
+
       // CRITICAL: Add a small delay before reassignment to ensure the rejection is processed
       await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -348,7 +405,7 @@ class OrderAssignmentController {
       }
 
       // Assign to next available delivery boy
-      const result = await this.assignOrderToDelivery(orderId, restaurantLat, restaurantLng, restaurantId);
+      const result = await this.assignOrderToDelivery(orderId, restaurantLat, restaurantLng, restaurantId, previousDeliveryPartnerId);
 
       if (result) {
         console.log(`Order ${orderId} reassigned to delivery partner ${result.deliveryPartnerId}`);
@@ -394,6 +451,19 @@ class OrderAssignmentController {
 
       // Notify delivery boy about expiration
       await orderAssignmentSocketService.emitOrderAssignmentCancelled(orderId, deliveryPartnerId, 'expired');
+
+      notifyDeliveryOrderEvent({
+        orderId,
+        deliveryBoyId,
+        type: DELIVERY_NOTIFICATION_EVENTS.DELIVERY_CANCELLED,
+        suffix: "expired",
+        metadata: {
+          reason: "expired",
+        },
+        source: "orderAssignmentController.handleAssignmentExpiration",
+      }).catch((notifyError) => {
+        console.warn("Delivery expiration notification failed:", notifyError.message);
+      });
 
       // Trigger reassignment
       await this.reassignOrder(orderId, deliveryPartnerId, 'timeout');

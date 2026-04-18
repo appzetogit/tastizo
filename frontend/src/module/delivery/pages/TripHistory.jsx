@@ -111,6 +111,16 @@ export default function TripHistory() {
 
   const recentDates = generateRecentDates()
 
+  const formatAmount = (value) => {
+    const numericValue = Number(value)
+    if (!Number.isFinite(numericValue)) return "0.00"
+
+    return numericValue.toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  }
+
   // Fetch bonus transactions when modal opens
   useEffect(() => {
     const fetchBonusTransactions = async () => {
@@ -367,7 +377,7 @@ export default function TripHistory() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-500">Amount</p>
-                    <p className="text-sm font-semibold text-black mt-1">₹{trip.amount}</p>
+                    <p className="text-sm font-semibold text-black mt-1">{"\u20B9"}{formatAmount(trip.amount)}</p>
                   </div>
                 </div>
               </div>

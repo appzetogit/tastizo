@@ -13,6 +13,18 @@ import DeliveryBoyCommission from "../../admin/models/DeliveryBoyCommission.js";
 import RestaurantWallet from "../../restaurant/models/RestaurantWallet.js";
 import RestaurantCommission from "../../admin/models/RestaurantCommission.js";
 import AdminCommission from "../../admin/models/AdminCommission.js";
+import {
+  RESTAURANT_NOTIFICATION_EVENTS,
+  sendNotificationToRestaurant,
+} from "../../restaurant/services/restaurantNotificationService.js";
+import {
+  notifyUserOrderEvent,
+  USER_NOTIFICATION_EVENTS,
+} from "../../user/services/userNotificationService.js";
+import {
+  DELIVERY_NOTIFICATION_EVENTS,
+  notifyDeliveryOrderEvent,
+} from "../services/deliveryNotificationService.js";
 import { calculateRoute } from "../../order/services/routeCalculationService.js";
 import {
   upsertActiveOrder,
@@ -641,6 +653,33 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         `Failed to update order: ${updateError.message || "Unknown error"}`,
       );
     }
+
+    await sendNotificationToRestaurant({
+      restaurantId: updatedOrder.restaurantId?._id || updatedOrder.restaurantId || order.restaurantId,
+      type: RESTAURANT_NOTIFICATION_EVENTS.DELIVERY_PARTNER_ASSIGNED,
+      orderId: updatedOrder._id,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.DELIVERY_PARTNER_ASSIGNED}:${updatedOrder._id}:${delivery._id}`,
+      redirectUrl: `/restaurant/orders/${updatedOrder.orderId}`,
+      metadata: {
+        orderDisplayId: updatedOrder.orderId,
+        deliveryPartnerId: delivery._id.toString(),
+        deliveryPartnerName: delivery.name,
+      },
+      source: "deliveryOrdersController.acceptOrder",
+    });
+
+    notifyDeliveryOrderEvent({
+      order: updatedOrder,
+      deliveryBoyId: delivery._id,
+      type: DELIVERY_NOTIFICATION_EVENTS.ORDER_ASSIGNED,
+      metadata: {
+        deliveryPartnerName: delivery.name,
+      },
+      source: "deliveryOrdersController.acceptOrder",
+    }).catch((notifyError) => {
+      console.warn("Delivery assigned notification failed:", notifyError.message);
+    });
+
     // Calculate delivery distance (restaurant to customer) for earnings calculation
     let deliveryDistance = 0;
     if (
@@ -1007,6 +1046,20 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
     order.deliveryState.currentPhase = "at_pickup";
     order.deliveryState.reachedPickupAt = new Date();
     await order.save();
+
+    await sendNotificationToRestaurant({
+      restaurantId: order.restaurantId,
+      type: RESTAURANT_NOTIFICATION_EVENTS.DELIVERY_PARTNER_REACHED,
+      orderId: order._id,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.DELIVERY_PARTNER_REACHED}:${order._id}`,
+      redirectUrl: `/restaurant/orders/${order.orderId}`,
+      metadata: {
+        orderDisplayId: order.orderId,
+        deliveryPartnerId: delivery._id.toString(),
+        deliveryPartnerName: delivery.name,
+      },
+      source: "deliveryOrdersController.confirmReachedPickup",
+    });
 
     // Sync phase to Firebase
     try {
@@ -1412,6 +1465,62 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
       .populate("userId", "name phone")
       .populate("restaurantId", "name location address")
       .lean();
+
+    await sendNotificationToRestaurant({
+      restaurantId: updatedOrder.restaurantId?._id || updatedOrder.restaurantId || order.restaurantId,
+      type: RESTAURANT_NOTIFICATION_EVENTS.ORDER_PICKED_UP,
+      orderId: updatedOrder._id,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.ORDER_PICKED_UP}:${updatedOrder._id}`,
+      redirectUrl: `/restaurant/orders/${updatedOrder.orderId}`,
+      metadata: {
+        orderDisplayId: updatedOrder.orderId,
+        deliveryPartnerId: delivery._id.toString(),
+        deliveryPartnerName: delivery.name,
+      },
+      source: "deliveryOrdersController.confirmOrderId",
+    });
+
+    notifyDeliveryOrderEvent({
+      order: updatedOrder,
+      deliveryBoyId: delivery._id,
+      type:
+        updatedOrder.payment?.method === "cash" || updatedOrder.payment?.method === "cod"
+          ? DELIVERY_NOTIFICATION_EVENTS.COD_COLLECTION_REMINDER
+          : DELIVERY_NOTIFICATION_EVENTS.ONLINE_PAYMENT_CONFIRMED,
+      metadata: {
+        paymentMethod: updatedOrder.payment?.method || "online",
+        amount: updatedOrder.pricing?.total || 0,
+      },
+      source: "deliveryOrdersController.confirmOrderId.payment",
+    }).catch((notifyError) => {
+      console.warn("Delivery payment notification failed:", notifyError.message);
+    });
+
+    notifyUserOrderEvent(
+      updatedOrder,
+      USER_NOTIFICATION_EVENTS.ORDER_PICKED_BY_DELIVERY_PARTNER,
+      {
+        deliveryPartnerId: delivery._id.toString(),
+        deliveryPartnerName: delivery.name,
+      },
+      "deliveryOrdersController.confirmOrderId",
+    ).catch((notifyError) => {
+      console.error("Error sending user picked-up notification:", notifyError);
+    });
+
+    notifyUserOrderEvent(
+      updatedOrder,
+      USER_NOTIFICATION_EVENTS.ORDER_OUT_FOR_DELIVERY,
+      {
+        deliveryPartnerId: delivery._id.toString(),
+        deliveryPartnerName: delivery.name,
+        estimatedDeliveryTime: routeData.duration || null,
+      },
+      "deliveryOrdersController.confirmOrderId",
+    ).catch((notifyError) => {
+      console.error("Error sending user out-for-delivery notification:", notifyError);
+    });
+
     // Send response first, then handle socket notification asynchronously
     const responseData = {
       order: updatedOrder,
@@ -1662,6 +1771,18 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
     if (!finalOrder) {
       return errorResponse(res, 500, "Failed to process order");
     }
+
+    notifyDeliveryOrderEvent({
+      order: finalOrder,
+      deliveryBoyId: delivery._id,
+      type: DELIVERY_NOTIFICATION_EVENTS.NEAR_CUSTOMER,
+      metadata: {
+        reachedDropAt: finalOrder.deliveryState?.reachedDropAt || new Date(),
+      },
+      source: "deliveryOrdersController.confirmReachedDrop",
+    }).catch((notifyError) => {
+      console.warn("Delivery near customer notification failed:", notifyError.message);
+    });
 
     const orderIdForLog =
       finalOrder.orderId || finalOrder._id?.toString() || orderId;
@@ -2354,6 +2475,27 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       ? orderMongoId.toString()
       : orderMongoId;
     Promise.all([
+      notifyDeliveryOrderEvent({
+        order: updatedOrder,
+        deliveryBoyId: delivery._id,
+        type: DELIVERY_NOTIFICATION_EVENTS.DELIVERY_COMPLETED,
+        metadata: {
+          amount: totalEarning,
+          orderDisplayId: orderIdForLog,
+        },
+        source: "deliveryOrdersController.completeDelivery",
+      }),
+      notifyDeliveryOrderEvent({
+        order: updatedOrder,
+        deliveryBoyId: delivery._id,
+        type: DELIVERY_NOTIFICATION_EVENTS.EARNINGS_UPDATE,
+        metadata: {
+          amount: totalEarning,
+          currency: "INR",
+          transactionId: walletTransaction?._id || walletTransaction?.id,
+        },
+        source: "deliveryOrdersController.completeDelivery.wallet",
+      }),
       // Notify restaurant about delivery completion
       (async () => {
         try {

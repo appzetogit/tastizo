@@ -42,7 +42,6 @@ import {
 } from "../utils/deliveryWalletState"
 import { formatCurrency } from "../../restaurant/utils/currency"
 import { getAllDeliveryOrders } from "../utils/deliveryOrderStatus"
-import { getUnreadDeliveryNotificationCount } from "../utils/deliveryNotifications"
 import { deliveryAPI, restaurantAPI, uploadAPI } from "@/lib/api"
 import { useDeliveryNotifications } from "../hooks/useDeliveryNotifications"
 import { getGoogleMapsApiKey } from "@/lib/utils/googleMapsApiKey"
@@ -421,10 +420,21 @@ export default function DeliveryHome() {
     const stored = localStorage.getItem('activeOrder')
     return stored ? JSON.parse(stored) : null
   })
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(() => getUnreadDeliveryNotificationCount())
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
   
   // Delivery notifications hook
   const { newOrder, clearNewOrder, orderReady, clearOrderReady, isConnected } = useDeliveryNotifications()
+
+  const refreshUnreadNotificationCount = useCallback(async () => {
+    try {
+      const response = await deliveryAPI.getUnreadNotificationCount()
+      const count = response?.data?.data?.unreadCount ?? response?.data?.unreadCount ?? 0
+      setUnreadNotificationCount(Number(count) || 0)
+    } catch (error) {
+      console.warn("Failed to refresh delivery unread notifications:", error?.message || error)
+      setUnreadNotificationCount(0)
+    }
+  }, [])
   
   // Default location - will be set from saved location or GPS, not hardcoded
   const [riderLocation, setRiderLocation] = useState(null) // Will be set from GPS or saved location
@@ -4099,9 +4109,10 @@ export default function DeliveryHome() {
     }
 
     const handleNotificationUpdate = () => {
-      setUnreadNotificationCount(getUnreadDeliveryNotificationCount())
+      refreshUnreadNotificationCount()
     }
 
+    refreshUnreadNotificationCount()
     window.addEventListener('deliveryHomeRefresh', handleRefresh)
     window.addEventListener('gigStateUpdated', handleRefresh)
     window.addEventListener('deliveryOrderStatusUpdated', handleRefresh)
@@ -4117,7 +4128,7 @@ export default function DeliveryHome() {
       window.removeEventListener('storage', handleActiveOrderUpdate)
       window.removeEventListener('deliveryNotificationsUpdated', handleNotificationUpdate)
     }
-  }, [])
+  }, [refreshUnreadNotificationCount])
 
   // Helper function to calculate time away from distance
   const calculateTimeAway = useCallback((distanceStr) => {
@@ -10039,8 +10050,8 @@ export default function DeliveryHome() {
             </p>
           </div>
 
-          {/* Action Buttons - Call (customer), Chat, Map (navigation to customer) */}
-          <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {/* Action Buttons - Call (customer), Chat */}
+          <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
               type="button"
               onClick={async () => {
@@ -10100,38 +10111,6 @@ export default function DeliveryHome() {
             >
               <MessageCircle className="w-5 h-5 text-gray-700" />
               <span className="text-gray-700 font-medium">Chat</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const customerLat = selectedRestaurant?.customerLat
-                const customerLng = selectedRestaurant?.customerLng
-                if (customerLat != null && customerLng != null) {
-                  const userAgent = navigator.userAgent || navigator.vendor || window.opera
-                  const isAndroid = /android/i.test(userAgent)
-                  const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream
-                  if (isAndroid) {
-                    window.location.href = `google.navigation:q=${customerLat},${customerLng}&mode=b`
-                    setTimeout(() => {
-                      window.open(`https://www.google.com/maps/dir/?api=1&destination=${customerLat},${customerLng}&travelmode=bicycling`, '_blank')
-                    }, 500)
-                  } else if (isIOS) {
-                    window.location.href = `comgooglemaps://?daddr=${customerLat},${customerLng}&directionsmode=bicycling`
-                    setTimeout(() => {
-                      window.open(`https://maps.google.com/?daddr=${customerLat},${customerLng}&directionsmode=bicycling`, '_blank')
-                    }, 500)
-                  } else {
-                    window.open(`https://www.google.com/maps/dir/?api=1&destination=${customerLat},${customerLng}&travelmode=bicycling`, '_blank')
-                  }
-                  toast.success('Opening Google Maps navigation')
-                } else {
-                  toast.error('Customer location not available')
-                }
-              }}
-              className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-3 text-center text-white hover:bg-gray-800 transition-colors"
-            >
-              <MapPin className="w-5 h-5 text-white" />
-              <span className="text-white font-medium">Map</span>
             </button>
           </div>
 

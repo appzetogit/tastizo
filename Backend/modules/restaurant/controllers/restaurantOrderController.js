@@ -4,8 +4,13 @@ import Restaurant from '../models/Restaurant.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import asyncHandler from '../../../shared/middleware/asyncHandler.js';
 import { notifyRestaurantOrderUpdate } from '../../order/services/restaurantNotificationService.js';
+import {
+  notifyUserOrderEvent,
+  USER_NOTIFICATION_EVENTS,
+} from "../../user/services/userNotificationService.js";
 import { assignOrderToDeliveryBoy, findNearestDeliveryBoys, findNearestDeliveryBoy } from '../../order/services/deliveryAssignmentService.js';
 import { notifyDeliveryBoyNewOrder, notifyMultipleDeliveryBoys, broadcastNewOrderToAllDeliveryBoys } from '../../order/services/deliveryNotificationService.js';
+import orderAssignmentTriggerService from '../../order/services/orderAssignmentTriggerService.js';
 import mongoose from 'mongoose';
 import { removeActiveOrder } from '../../../services/firebaseRealtimeService.js';
 
@@ -299,6 +304,24 @@ export const acceptOrder = asyncHandler(async (req, res) => {
 
     await order.save();
 
+    notifyUserOrderEvent(
+      order,
+      USER_NOTIFICATION_EVENTS.ORDER_ACCEPTED_BY_RESTAURANT,
+      { previousStatus: order.status === "preparing" ? "confirmed" : undefined },
+      "restaurantOrderController.acceptOrder",
+    ).catch((notifyError) => {
+      console.error("Error sending user accepted notification:", notifyError);
+    });
+
+    notifyUserOrderEvent(
+      order,
+      USER_NOTIFICATION_EVENTS.ORDER_PREPARING,
+      { acceptedByRestaurant: true },
+      "restaurantOrderController.acceptOrder",
+    ).catch((notifyError) => {
+      console.error("Error sending user preparing notification:", notifyError);
+    });
+
     // Trigger ETA recalculation for restaurant accepted event
     try {
       const etaEventService = (await import('../../order/services/etaEventService.js')).default;
@@ -408,6 +431,15 @@ export const rejectOrder = asyncHandler(async (req, res) => {
     order.cancelledAt = new Date();
     await order.save();
 
+    notifyUserOrderEvent(
+      order,
+      USER_NOTIFICATION_EVENTS.ORDER_REJECTED,
+      { reason: order.cancellationReason },
+      "restaurantOrderController.rejectOrder",
+    ).catch((notifyError) => {
+      console.error("Error sending user rejected notification:", notifyError);
+    });
+
     // Clean up Firebase active order entry
     try {
       await removeActiveOrder(order.orderId);
@@ -501,6 +533,15 @@ export const markOrderPreparing = asyncHandler(async (req, res) => {
       order.status = 'preparing';
       order.tracking.preparing = { status: true, timestamp: new Date() };
       await order.save();
+
+      notifyUserOrderEvent(
+        order,
+        USER_NOTIFICATION_EVENTS.ORDER_PREPARING,
+        {},
+        "restaurantOrderController.markOrderPreparing",
+      ).catch((notifyError) => {
+        console.error("Error sending user preparing notification:", notifyError);
+      });
     }
 
     // Notify about status update only if status actually changed
@@ -577,6 +618,15 @@ export const markOrderReady = asyncHandler(async (req, res) => {
       timestamp: now
     };
     await order.save();
+
+    notifyUserOrderEvent(
+      order,
+      USER_NOTIFICATION_EVENTS.ORDER_READY,
+      {},
+      "restaurantOrderController.markOrderReady",
+    ).catch((notifyError) => {
+      console.error("Error sending user ready notification:", notifyError);
+    });
 
     // Populate order for notifications and potential assignment
     let populatedOrder = await Order.findById(order._id)

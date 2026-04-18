@@ -8,6 +8,7 @@ import deliveryEarningsRoutes from './routes/deliveryEarningsRoutes.js';
 import deliveryLocationRoutes from './routes/deliveryLocationRoutes.js';
 import deliverySignupRoutes from './routes/deliverySignupRoutes.js';
 import deliveryWalletRoutes from './routes/deliveryWalletRoutes.js';
+import deliveryNotificationRoutes from './routes/deliveryNotificationRoutes.js';
 
 const router = express.Router();
 
@@ -34,6 +35,9 @@ router.use('/', deliveryLocationRoutes);
 
 // Delivery wallet routes (protected)
 router.use('/wallet', deliveryWalletRoutes);
+
+// Delivery notification routes (protected)
+router.use('/', deliveryNotificationRoutes);
 
 export default router;
 

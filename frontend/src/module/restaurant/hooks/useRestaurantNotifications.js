@@ -12,6 +12,8 @@ import alertSound from '@/assets/audio/alert.mp3';
 export const useRestaurantNotifications = () => {
   const socketRef = useRef(null);
   const [newOrder, setNewOrder] = useState(null);
+  const [latestNotification, setLatestNotification] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const audioRef = useRef(null);
   const userInteractedRef = useRef(false); // Track user interaction for autoplay policy
@@ -32,6 +34,14 @@ export const useRestaurantNotifications = () => {
           // Also ensure FCM token is registered for this restaurant account
           // This will no-op if permission is not granted or messaging unsupported.
           registerFcmTokenForRestaurant();
+
+          restaurantAPI.getUnreadNotificationCount()
+            .then((countResponse) => {
+              setUnreadCount(countResponse.data?.data?.unreadCount || 0);
+            })
+            .catch((error) => {
+              console.warn('Failed to fetch restaurant unread notifications:', error);
+            });
         }
       } catch (error) {
         console.error('Error fetching restaurant:', error);
@@ -298,6 +308,17 @@ export const useRestaurantNotifications = () => {
       playNotificationSound();
     });
 
+    socketRef.current.on('restaurant_notification', (notification) => {
+      console.log('Restaurant notification received:', notification);
+      setLatestNotification(notification);
+      if (!notification?.isRead) {
+        setUnreadCount((count) => count + 1);
+      }
+      if (notification?.type !== 'NEW_ORDER_RECEIVED') {
+        playNotificationSound();
+      }
+    });
+
     // Listen for sound notification event
     socketRef.current.on('play_notification_sound', (data) => {
       console.log('🔔 Sound notification:', data);
@@ -384,9 +405,25 @@ export const useRestaurantNotifications = () => {
     setNewOrder(null);
   };
 
+  const clearLatestNotification = () => {
+    setLatestNotification(null);
+  };
+
+  const refreshUnreadCount = async () => {
+    const response = await restaurantAPI.getUnreadNotificationCount();
+    const count = response.data?.data?.unreadCount || 0;
+    setUnreadCount(count);
+    return count;
+  };
+
   return {
     newOrder,
+    latestNotification,
+    unreadCount,
     clearNewOrder,
+    clearLatestNotification,
+    refreshUnreadCount,
+    setUnreadCount,
     isConnected,
     playNotificationSound,
     stopNotificationSound

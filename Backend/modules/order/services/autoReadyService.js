@@ -1,5 +1,9 @@
 import Order from '../models/Order.js';
 import { notifyDeliveryBoyOrderReady } from './deliveryNotificationService.js';
+import {
+  notifyUserOrderEvent,
+  USER_NOTIFICATION_EVENTS,
+} from "../../user/services/userNotificationService.js";
 
 /**
  * Automatically mark orders as ready when ETA becomes 0
@@ -61,6 +65,14 @@ export async function processAutoReadyOrders() {
           if (updatedOrder) {
             readyOrders.push(updatedOrder);
             processedCount++;
+            notifyUserOrderEvent(
+              updatedOrder,
+              USER_NOTIFICATION_EVENTS.ORDER_READY,
+              { automatic: true },
+              "autoReadyService.processAutoReadyOrders",
+            ).catch((notifyError) => {
+              console.error(`Error creating user ready notification for order ${order.orderId}:`, notifyError);
+            });
             // Notify delivery boy if order is assigned
             if (updatedOrder.deliveryPartnerId) {
               try {

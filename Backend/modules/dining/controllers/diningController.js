@@ -19,6 +19,10 @@ import {
   verifyPayment as verifyRazorpayPayment,
 } from "../../payment/services/razorpayService.js";
 import { getRazorpayCredentials } from "../../../shared/utils/envService.js";
+import {
+  RESTAURANT_NOTIFICATION_EVENTS,
+  sendNotificationToRestaurant,
+} from "../../restaurant/services/restaurantNotificationService.js";
 
 const MAX_BOOKINGS_PER_SLOT = 4;
 const MAX_GUESTS_PER_BOOKING = 4;
@@ -401,6 +405,22 @@ export const createBooking = async (req, res) => {
       data: bookingObj,
     });
 
+    sendNotificationToRestaurant({
+      restaurantId: booking.restaurant,
+      type: RESTAURANT_NOTIFICATION_EVENTS.NEW_DINING_BOOKING,
+      bookingId: booking._id,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.NEW_DINING_BOOKING}:${booking._id}`,
+      redirectUrl: "/restaurant/reservations",
+      metadata: {
+        guests,
+        date,
+        timeSlot,
+      },
+      source: "diningController.createBooking",
+    }).catch((err) => {
+      console.error("Failed to create restaurant dining booking notification:", err);
+    });
+
     // Send confirmation email asynchronously if user has email
     if (req.user.email) {
       emailService
@@ -572,6 +592,7 @@ export const updateBookingStatus = async (req, res) => {
       updateData.checkOutTime = new Date();
     }
 
+    const existingBooking = await TableBooking.findById(bookingId).lean();
     const booking = await TableBooking.findByIdAndUpdate(
       bookingId,
       updateData,
@@ -590,6 +611,23 @@ export const updateBookingStatus = async (req, res) => {
       message: `Booking status updated to ${status}`,
       data: booking,
     });
+
+    if (status === "cancelled" && existingBooking?.status !== "cancelled") {
+      sendNotificationToRestaurant({
+        restaurantId: booking.restaurant,
+        type: RESTAURANT_NOTIFICATION_EVENTS.DINING_BOOKING_CANCELLED,
+        bookingId: booking._id,
+        eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.DINING_BOOKING_CANCELLED}:${booking._id}`,
+        redirectUrl: "/restaurant/reservations",
+        metadata: {
+          previousStatus: existingBooking?.status,
+          status,
+        },
+        source: "diningController.updateBookingStatus",
+      }).catch((err) => {
+        console.error("Failed to create dining cancellation notification:", err);
+      });
+    }
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -638,6 +676,22 @@ export const createDiningReview = async (req, res) => {
     res.status(201).json({
       success: true,
       data: review,
+    });
+
+    sendNotificationToRestaurant({
+      restaurantId: booking.restaurant,
+      type: RESTAURANT_NOTIFICATION_EVENTS.NEW_REVIEW_RECEIVED,
+      bookingId: booking._id,
+      reviewId: review._id,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.NEW_REVIEW_RECEIVED}:dining:${review._id}`,
+      redirectUrl: "/restaurant/reviews",
+      metadata: {
+        bookingId: booking._id,
+        rating,
+      },
+      source: "diningController.createDiningReview",
+    }).catch((err) => {
+      console.error("Failed to create dining review notification:", err);
     });
   } catch (error) {
     res.status(500).json({

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Search, Menu, ChevronRight, MapPin, X, Bell } from "lucide-react"
 import { restaurantAPI } from "@/lib/api"
+import { useRestaurantNotifications } from "../hooks/useRestaurantNotifications"
 
 export default function RestaurantNavbar({
   restaurantName: propRestaurantName,
@@ -16,6 +17,7 @@ export default function RestaurantNavbar({
   const [status, setStatus] = useState("Offline")
   const [restaurantData, setRestaurantData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const { unreadCount } = useRestaurantNotifications()
 
   // Fetch restaurant data on mount
   useEffect(() => {
@@ -335,10 +337,15 @@ export default function RestaurantNavbar({
         {showNotifications && (
           <button
             onClick={handleNotificationsClick}
-            className="p-2 ml-1 hover:bg-gray-100 rounded-full transition-colors"
+            className="relative p-2 ml-1 hover:bg-gray-100 rounded-full transition-colors"
             aria-label="Notifications"
           >
             <Bell className="w-5 h-5 text-gray-700" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-semibold leading-[18px] text-center">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
           </button>
         )}
 

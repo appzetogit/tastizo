@@ -251,6 +251,27 @@ export const userAPI = {
     return apiClient.get(API_ENDPOINTS.USER.ORDERS, { params });
   },
 
+  getNotifications: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.USER.NOTIFICATIONS, { params });
+  },
+
+  getUnreadNotificationCount: () => {
+    return apiClient.get(API_ENDPOINTS.USER.NOTIFICATIONS_UNREAD_COUNT);
+  },
+
+  markNotificationRead: (notificationId) => {
+    return apiClient.patch(
+      API_ENDPOINTS.USER.NOTIFICATION_READ.replace(
+        ":notificationId",
+        notificationId,
+      ),
+    );
+  },
+
+  markAllNotificationsRead: () => {
+    return apiClient.patch(API_ENDPOINTS.USER.NOTIFICATIONS_READ_ALL);
+  },
+
   // Order chat (Track Order live chat with delivery partner)
   getOrderChat: (orderId) => {
     return apiClient.get(
@@ -655,6 +676,24 @@ export const restaurantAPI = {
     });
   },
 
+  getNotifications: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.NOTIFICATIONS, { params });
+  },
+  getUnreadNotificationCount: () => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.NOTIFICATIONS_UNREAD_COUNT);
+  },
+  markNotificationRead: (notificationId) => {
+    return apiClient.patch(
+      API_ENDPOINTS.RESTAURANT.NOTIFICATION_READ.replace(
+        ":notificationId",
+        notificationId,
+      ),
+    );
+  },
+  markAllNotificationsRead: () => {
+    return apiClient.patch(API_ENDPOINTS.RESTAURANT.NOTIFICATIONS_READ_ALL);
+  },
+
   // Get analytics
   getAnalytics: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.ANALYTICS, { params });
@@ -866,6 +905,17 @@ export const deliveryAPI = {
   getCurrentDelivery: () => {
     return apiClient.get(API_ENDPOINTS.DELIVERY.AUTH.ME);
   },
+  registerFcmToken: (platform, fcmToken) => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.AUTH.FCM_TOKEN, {
+      platform,
+      fcmToken,
+    });
+  },
+  removeFcmToken: (platform = "web") => {
+    return apiClient.delete(API_ENDPOINTS.DELIVERY.AUTH.FCM_TOKEN, {
+      data: { platform },
+    });
+  },
 
   // Dashboard
   getDashboard: () => {
@@ -932,6 +982,24 @@ export const deliveryAPI = {
 
   createSupportTicket: (data) => {
     return apiClient.post(API_ENDPOINTS.DELIVERY.SUPPORT_TICKETS, data);
+  },
+
+  getNotifications: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.NOTIFICATIONS, { params });
+  },
+  getUnreadNotificationCount: () => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.NOTIFICATIONS_UNREAD_COUNT);
+  },
+  markNotificationRead: (notificationId) => {
+    return apiClient.patch(
+      API_ENDPOINTS.DELIVERY.NOTIFICATION_READ.replace(
+        ":notificationId",
+        notificationId,
+      ),
+    );
+  },
+  markAllNotificationsRead: () => {
+    return apiClient.patch(API_ENDPOINTS.DELIVERY.NOTIFICATIONS_READ_ALL);
   },
 
   // Get delivery profile

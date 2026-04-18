@@ -67,9 +67,16 @@ async function sendToToken(token, payload) {
       return { success: false, error: "Firebase Admin not initialized" };
     }
 
-    const { title, body, image } = payload;
+    const { title, body, image, data = {}, link = "/" } = payload;
+    const stringData = Object.entries(data).reduce((acc, [key, value]) => {
+      if (value !== undefined && value !== null) {
+        acc[key] = String(value);
+      }
+      return acc;
+    }, {});
     const message = {
       token,
+      data: stringData,
       notification: {
         title: title || "Notification",
         body: body || "",
@@ -77,7 +84,7 @@ async function sendToToken(token, payload) {
       },
       webpush: {
         fcmOptions: {
-          link: "/",
+          link,
         },
       },
       android: {
@@ -116,6 +123,33 @@ async function sendToToken(token, payload) {
     }
     return { success: false, error: errMsg };
   }
+}
+
+export async function sendPushToTokens(tokens = [], payload = {}) {
+  const result = { sent: 0, failed: 0, total: 0, errors: [] };
+
+  const uniqueTokens = [...new Set((tokens || []).filter(Boolean))];
+  result.total = uniqueTokens.length;
+
+  if (!admin.apps.length) {
+    result.errors.push("Firebase Admin not initialized");
+    result.failed = uniqueTokens.length;
+    return result;
+  }
+
+  for (const token of uniqueTokens) {
+    const res = await sendToToken(token, payload);
+    if (res.success) {
+      result.sent++;
+    } else {
+      result.failed++;
+      if (res.error && res.error !== "invalid_token") {
+        result.errors.push(res.error);
+      }
+    }
+  }
+
+  return result;
 }
 
 /**

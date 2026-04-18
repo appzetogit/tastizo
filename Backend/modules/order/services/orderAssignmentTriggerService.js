@@ -1,6 +1,10 @@
 import Order from '../models/Order.js';
 import orderAssignmentController from './orderAssignmentController.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
+import {
+  DELIVERY_NOTIFICATION_EVENTS,
+  notifyDeliveryOrderEvent,
+} from '../../delivery/services/deliveryNotificationService.js';
 
 /**
  * Order Assignment Trigger Service
@@ -257,6 +261,27 @@ class OrderAssignmentTriggerService {
             respondedAt: new Date()
           }
         }
+      );
+
+      const cancelledAssignments = await OrderAssignmentHistory.find({
+        orderId,
+        reason: 'order_cancelled',
+        respondedAt: { $gte: new Date(Date.now() - 60 * 1000) },
+      }).select('deliveryPartnerId').lean();
+
+      await Promise.all(
+        cancelledAssignments.map((assignment) =>
+          notifyDeliveryOrderEvent({
+            orderId,
+            deliveryBoyId: assignment.deliveryPartnerId,
+            type: DELIVERY_NOTIFICATION_EVENTS.DELIVERY_CANCELLED,
+            suffix: 'order_cancelled',
+            metadata: {
+              reason: 'order_cancelled',
+            },
+            source: 'orderAssignmentTriggerService.handleOrderCancellation',
+          }),
+        ),
       );
 
       console.log(`Cancelled ${result.modifiedCount} active assignments for order ${orderId}`);

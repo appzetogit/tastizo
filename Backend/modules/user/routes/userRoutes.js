@@ -10,6 +10,12 @@ import {
   updateUserAddress,
   deleteUserAddress
 } from '../controllers/userController.js';
+import {
+  getUserNotifications,
+  getUserUnreadNotificationCount,
+  markAllUserNotificationsRead,
+  markUserNotificationRead,
+} from "../controllers/userNotificationController.js";
 import { authenticate } from '../../auth/middleware/auth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
 import userWalletRoutes from './userWalletRoutes.js';
@@ -34,6 +40,12 @@ router.post(
 // Location routes
 router.get('/location', getUserLocation);
 router.put('/location', updateUserLocation);
+
+// Notification routes
+router.get("/notifications", getUserNotifications);
+router.get("/notifications/unread-count", getUserUnreadNotificationCount);
+router.patch("/notifications/read-all", markAllUserNotificationsRead);
+router.patch("/notifications/:notificationId/read", markUserNotificationRead);
 
 // Address routes
 router.get('/addresses', getUserAddresses);

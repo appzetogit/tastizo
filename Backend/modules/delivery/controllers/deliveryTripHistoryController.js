@@ -3,6 +3,7 @@ import { successResponse, errorResponse } from '../../../shared/utils/response.j
 import Order from '../../order/models/Order.js';
 import Payment from '../../payment/models/Payment.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
+import DeliveryWallet from '../models/DeliveryWallet.js';
 import mongoose from 'mongoose';
 import winston from 'winston';
 
@@ -104,6 +105,36 @@ export const getTripHistory = asyncHandler(async (req, res) => {
 
     // Get order IDs for Payment collection lookup
     const orderIds = orders.map(o => o._id);
+
+    // Fetch wallet transactions for these orders so trip history shows the credited earning,
+    // not the customer-facing delivery fee/order total.
+    const earningsByOrderId = new Map();
+    try {
+      const wallet = await DeliveryWallet.findOne({ deliveryId: delivery._id })
+        .select('transactions')
+        .lean();
+
+      (wallet?.transactions || []).forEach((transaction) => {
+        if (
+          !transaction?.orderId ||
+          transaction.type !== 'payment' ||
+          transaction.status !== 'Completed'
+        ) {
+          return;
+        }
+
+        const orderId = transaction.orderId.toString();
+        if (!orderIds.some((id) => id?.toString() === orderId)) {
+          return;
+        }
+
+        if (!earningsByOrderId.has(orderId) || Number(transaction.amount) > 0) {
+          earningsByOrderId.set(orderId, Number(transaction.amount) || 0);
+        }
+      });
+    } catch (e) {
+      logger.warn('Could not fetch wallet earnings for trip history:', e.message);
+    }
     
     // Fetch payment records for COD fallback check
     const codOrderIds = new Set();
@@ -194,8 +225,22 @@ export const getTripHistory = asyncHandler(async (req, res) => {
                         'Unknown Restaurant';
       }
 
-      // Get order amount (delivery fee or total)
-      const amount = order.pricing?.deliveryFee || order.pricing?.total || 0;
+      // Prefer the actual credited earning from wallet transactions. Fall back to
+      // legacy earning fields for older records.
+      let earningAmount = earningsByOrderId.get(order._id.toString());
+
+      if (!(Number.isFinite(earningAmount) && earningAmount > 0)) {
+        earningAmount =
+          order.deliveryEarning ||
+          order.deliveryPayout ||
+          order.payout ||
+          order.estimatedEarnings?.totalEarning ||
+          order.pricing?.deliveryFee ||
+          order.pricing?.total ||
+          0;
+      }
+
+      const amount = Number(earningAmount) || 0;
 
       // Get payment method - check Payment collection as fallback (for COD orders)
       let paymentMethod = order.payment?.method || 'razorpay';
@@ -213,6 +258,9 @@ export const getTripHistory = asyncHandler(async (req, res) => {
         status: displayStatus,
         time,
         amount,
+        deliveryEarning: amount,
+        deliveryPayout: amount,
+        payout: amount,
         paymentMethod: paymentMethod,
         payment: {
           method: paymentMethod

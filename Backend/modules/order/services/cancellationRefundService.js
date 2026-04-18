@@ -7,6 +7,10 @@ import AdminWallet from '../../admin/models/AdminWallet.js';
 import AuditLog from '../../admin/models/AuditLog.js';
 import Payment from '../../payment/models/Payment.js';
 import { createRefund } from '../../payment/services/razorpayService.js';
+import {
+  RESTAURANT_NOTIFICATION_EVENTS,
+  sendNotificationToRestaurant,
+} from '../../restaurant/services/restaurantNotificationService.js';
 
 /**
  * Determine cancellation stage based on order status
@@ -481,6 +485,20 @@ export const processRazorpayRefund = async (orderId, adminId = null) => {
     }
     await settlement.save();
 
+    await sendNotificationToRestaurant({
+      restaurantId: order.restaurantId,
+      type: RESTAURANT_NOTIFICATION_EVENTS.REFUND_INITIATED,
+      orderId: order._id,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.REFUND_INITIATED}:${order._id}`,
+      redirectUrl: "/restaurant/hub-finance?tab=refunds",
+      metadata: {
+        orderDisplayId: order.orderId,
+        refundAmount,
+        paymentMethod: order.payment?.method,
+      },
+      source: "cancellationRefundService.processRazorpayRefund",
+    });
+
     // Create Razorpay refund
     let razorpayRefund = null;
     try {
@@ -534,6 +552,27 @@ export const processRazorpayRefund = async (orderId, adminId = null) => {
     settlement.cancellationDetails.razorpayRefundId = razorpayRefund.id;
     settlement.cancellationDetails.refundStatus = 'initiated'; // Will be updated to 'processed' via webhook
     await settlement.save();
+
+    if (razorpayRefund?.status === "processed") {
+      settlement.cancellationDetails.refundStatus = "processed";
+      settlement.cancellationDetails.refundProcessedAt = new Date();
+      await settlement.save();
+
+      await sendNotificationToRestaurant({
+        restaurantId: order.restaurantId,
+        type: RESTAURANT_NOTIFICATION_EVENTS.REFUND_COMPLETED,
+        orderId: order._id,
+        eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.REFUND_COMPLETED}:${order._id}`,
+        redirectUrl: "/restaurant/hub-finance?tab=refunds",
+        metadata: {
+          orderDisplayId: order.orderId,
+          refundAmount,
+          refundId: razorpayRefund.id,
+          paymentMethod: order.payment?.method,
+        },
+        source: "cancellationRefundService.processRazorpayRefund",
+      });
+    }
 
     // Compensate restaurant if applicable
     const restaurantCompensation = settlement.cancellationDetails?.restaurantCompensation || 0;
@@ -751,6 +790,20 @@ export const processWalletRefund = async (orderId, adminId = null, refundAmount 
     }
     await settlement.save();
 
+    await sendNotificationToRestaurant({
+      restaurantId: order.restaurantId,
+      type: RESTAURANT_NOTIFICATION_EVENTS.REFUND_INITIATED,
+      orderId: order._id,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.REFUND_INITIATED}:${order._id}`,
+      redirectUrl: "/restaurant/hub-finance?tab=refunds",
+      metadata: {
+        orderDisplayId: order.orderId,
+        refundAmount: refundAmountToProcess,
+        paymentMethod: order.payment?.method,
+      },
+      source: "cancellationRefundService.processWalletRefund",
+    });
+
     // Refund to user wallet - verify user exists first
     try {
       // Get user ID (handle both populated and non-populated)
@@ -840,6 +893,20 @@ export const processWalletRefund = async (orderId, adminId = null, refundAmount 
       settlement.cancellationDetails.refundProcessedBy = adminId;
     }
     await settlement.save();
+
+    await sendNotificationToRestaurant({
+      restaurantId: order.restaurantId,
+      type: RESTAURANT_NOTIFICATION_EVENTS.REFUND_COMPLETED,
+      orderId: order._id,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.REFUND_COMPLETED}:${order._id}`,
+      redirectUrl: "/restaurant/hub-finance?tab=refunds",
+      metadata: {
+        orderDisplayId: order.orderId,
+        refundAmount: refundAmountToProcess,
+        paymentMethod: order.payment?.method,
+      },
+      source: "cancellationRefundService.processWalletRefund",
+    });
 
     // Create audit log for order
     try {

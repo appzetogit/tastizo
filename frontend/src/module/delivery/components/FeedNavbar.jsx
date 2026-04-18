@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { HelpCircle, ArrowRight, Phone, Ambulance, AlertTriangle, Shield, ShieldCheck } from "lucide-react";
+import { Bell, HelpCircle, ArrowRight, Phone, Ambulance, AlertTriangle, Shield, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { deliveryAPI } from "@/lib/api";
 import { useCompanyName } from "@/lib/hooks/useCompanyName";
@@ -239,6 +239,28 @@ export default function FeedNavbar({ className = "" }) {
 
   const [showEmergencyPopup, setShowEmergencyPopup] = useState(false);
   const [showHelpPopup, setShowHelpPopup] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  const fetchUnreadNotifications = async () => {
+    try {
+      const response = await deliveryAPI.getUnreadNotificationCount();
+      const count = response?.data?.data?.unreadCount ?? response?.data?.unreadCount ?? 0;
+      setUnreadNotifications(Number(count) || 0);
+    } catch (error) {
+      console.warn("Error fetching delivery notification count:", error?.message || error);
+    }
+  };
+
+  useEffect(() => {
+    fetchUnreadNotifications();
+    const handleUpdate = () => fetchUnreadNotifications();
+    window.addEventListener("deliveryNotificationsUpdated", handleUpdate);
+    window.addEventListener("deliveryNotificationReceived", handleUpdate);
+    return () => {
+      window.removeEventListener("deliveryNotificationsUpdated", handleUpdate);
+      window.removeEventListener("deliveryNotificationReceived", handleUpdate);
+    };
+  }, []);
 
   // Fetch emergency help numbers
   useEffect(() => {
@@ -358,6 +380,20 @@ export default function FeedNavbar({ className = "" }) {
 
       {/* Right Icons */}
       <div className="flex items-center gap-3">
+        {/* Notifications */}
+        <button
+          onClick={() => navigate("/delivery/notifications")}
+          className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center hover:bg-gray-300 transition-colors relative"
+          title="Notifications"
+        >
+          <Bell className="w-5 h-5 text-gray-700" />
+          {unreadNotifications > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#ff8100] text-white text-[10px] font-bold flex items-center justify-center">
+              {unreadNotifications > 99 ? "99+" : unreadNotifications}
+            </span>
+          )}
+        </button>
+
         {/* Emergency */}
         <button
             onClick={() => setShowEmergencyPopup(true)}

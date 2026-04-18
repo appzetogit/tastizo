@@ -12,6 +12,10 @@ import winston from "winston";
 import { calculateOrderPricing } from "../services/orderCalculationService.js";
 import { getRazorpayCredentials } from "../../../shared/utils/envService.js";
 import { notifyRestaurantNewOrder } from "../services/restaurantNotificationService.js";
+import {
+  RESTAURANT_NOTIFICATION_EVENTS,
+  sendNotificationToRestaurant,
+} from "../../restaurant/services/restaurantNotificationService.js";
 import { calculateOrderSettlement } from "../services/orderSettlementService.js";
 import { holdEscrow } from "../services/escrowWalletService.js";
 import { processCancellationRefund } from "../services/cancellationRefundService.js";
@@ -20,6 +24,14 @@ import etaWebSocketService from "../services/etaWebSocketService.js";
 import OrderEvent from "../models/OrderEvent.js";
 import { removeActiveOrder } from "../../../services/firebaseRealtimeService.js";
 import UserWallet from "../../user/models/UserWallet.js";
+import {
+  notifyUserOrderEvent,
+  USER_NOTIFICATION_EVENTS,
+} from "../../user/services/userNotificationService.js";
+import {
+  DELIVERY_NOTIFICATION_EVENTS,
+  notifyDeliveryOrderEvent,
+} from "../../delivery/services/deliveryNotificationService.js";
 
 const logger = winston.createLogger({
   level: "info",
@@ -122,6 +134,45 @@ const attachRestaurantContact = (order) => {
     ...order,
     restaurantPhone: getRestaurantContactNumber(order.restaurantId || order.restaurant),
   };
+};
+
+const buildOrderReviewSnapshot = (reviewDoc) => {
+  if (!reviewDoc) return null;
+
+  return {
+    rating: reviewDoc.rating,
+    comment: reviewDoc.reviewText || "",
+    submittedAt: reviewDoc.createdAt,
+    reviewedBy: reviewDoc.userId,
+  };
+};
+
+const attachSubmittedReviews = async (orders = [], userId) => {
+  if (!orders.length || !userId) return orders;
+
+  const orderIds = orders.map((order) => order?._id).filter(Boolean);
+  if (!orderIds.length) return orders;
+
+  const reviews = await OrderReview.find({
+    orderId: { $in: orderIds },
+    userId,
+  }).lean();
+
+  const reviewsByOrderId = new Map(
+    reviews.map((review) => [String(review.orderId), review]),
+  );
+
+  return orders.map((order) => {
+    const canonicalReview = reviewsByOrderId.get(String(order._id));
+    const existingReview = order.review?.rating ? order.review : null;
+    const review = existingReview || buildOrderReviewSnapshot(canonicalReview);
+    const rating = order.rating || review?.rating || null;
+
+    return {
+      ...order,
+      ...(review ? { review, rating, hasReview: true } : {}),
+    };
+  });
 };
 
 /**
@@ -643,6 +694,18 @@ export const createOrder = async (req, res) => {
         // Calculate order settlement and hold escrow
         await confirmOrderSettlement(order, userId);
 
+        notifyUserOrderEvent(
+          order,
+          USER_NOTIFICATION_EVENTS.ORDER_PLACED,
+          { paymentMethod: "wallet" },
+          "orderController.createOrder.wallet",
+        ).catch((notifyError) => {
+          logger.warn("Failed to create wallet order placed user notification", {
+            orderId: order.orderId,
+            error: notifyError.message,
+          });
+        });
+
         // Notify restaurant
         try {
           await notifyRestaurantNewOrder(order, assignedRestaurantId, "wallet");
@@ -737,6 +800,18 @@ export const createOrder = async (req, res) => {
 
       // Calculate order settlement and hold escrow for COD payment
       await confirmOrderSettlement(order, userId);
+
+      notifyUserOrderEvent(
+        order,
+        USER_NOTIFICATION_EVENTS.ORDER_PLACED,
+        { paymentMethod: "cash" },
+        "orderController.createOrder.cash",
+      ).catch((notifyError) => {
+        logger.warn("Failed to create COD order placed user notification", {
+          orderId: order.orderId,
+          error: notifyError.message,
+        });
+      });
 
       // Notify restaurant about new COD order via Socket.IO (non-blocking)
       try {
@@ -977,6 +1052,18 @@ export const verifyOrderPayment = async (req, res) => {
 
     // Calculate order settlement and hold escrow
     await confirmOrderSettlement(order, userId);
+
+    notifyUserOrderEvent(
+      order,
+      USER_NOTIFICATION_EVENTS.ORDER_PLACED,
+      { paymentMethod: "razorpay" },
+      "orderController.verifyOrderPayment",
+    ).catch((notifyError) => {
+      logger.warn("Failed to create Razorpay order placed user notification", {
+        orderId: order.orderId,
+        error: notifyError.message,
+      });
+    });
 
     // Notify restaurant about confirmed order (payment verified)
     try {
@@ -1225,10 +1312,12 @@ export const getUserOrders = async (req, res) => {
       `Found ${orders.length} orders for user ${userId} (total: ${total})`,
     );
 
+    const ordersWithReviews = await attachSubmittedReviews(orders, userId);
+
     res.json({
       success: true,
       data: {
-        orders: orders.map(attachRestaurantContact),
+        orders: ordersWithReviews.map(attachRestaurantContact),
         pagination: {
           total,
           page: parseInt(page),
@@ -1294,10 +1383,12 @@ export const getOrderDetails = async (req, res) => {
       orderId: order._id,
     }).lean();
 
+    const [orderWithReview] = await attachSubmittedReviews([order], userId);
+
     res.json({
       success: true,
       data: {
-        order: attachRestaurantContact(order),
+        order: attachRestaurantContact(orderWithReview),
         payment,
       },
     });
@@ -1382,6 +1473,19 @@ export const cancelOrder = async (req, res) => {
     order.cancelledBy = "user";
     order.cancelledAt = new Date();
     await order.save();
+
+    await sendNotificationToRestaurant({
+      restaurantId: order.restaurantId,
+      type: RESTAURANT_NOTIFICATION_EVENTS.ORDER_CANCELLED_BY_USER,
+      orderId: order._id,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.ORDER_CANCELLED_BY_USER}:${order._id}`,
+      redirectUrl: `/restaurant/orders/${order.orderId}`,
+      metadata: {
+        orderDisplayId: order.orderId,
+        reason: order.cancellationReason,
+      },
+      source: "orderController.cancelOrder",
+    });
 
     // Clean up Firebase active order entry
     try {
@@ -1595,6 +1699,23 @@ export const updateOrderDeliveryDetails = async (req, res) => {
 
     await order.save();
 
+    if (order.deliveryPartnerId || order.assignmentInfo?.deliveryPartnerId) {
+      notifyDeliveryOrderEvent({
+        order,
+        deliveryBoyId: order.deliveryPartnerId || order.assignmentInfo.deliveryPartnerId,
+        type: DELIVERY_NOTIFICATION_EVENTS.CUSTOMER_LOCATION_UPDATED,
+        metadata: {
+          deliveryAddress: order.deliveryAddress,
+        },
+        source: "orderController.updateOrderDeliveryDetails",
+      }).catch((notifyError) => {
+        logger.warn("Failed to notify delivery partner about location update", {
+          orderId: order.orderId,
+          error: notifyError.message,
+        });
+      });
+    }
+
     logger.info(`Order delivery details updated for order: ${order.orderId}`, {
       orderId: order.orderId,
       userId,
@@ -1689,24 +1810,26 @@ export const submitOrderReview = async (req, res) => {
       });
     }
 
+    const alreadyReviewed =
+      Boolean(order.review?.rating) ||
+      Boolean(await OrderReview.exists({ orderId: order._id, userId }));
+
+    if (alreadyReviewed) {
+      return res.status(400).json({
+        success: false,
+        message: "You have already rated this order",
+      });
+    }
+
     const trimmedComment = comment ? comment.trim() : "";
 
-    // Upsert canonical review document (one per order per user)
-    const reviewDoc = await OrderReview.findOneAndUpdate(
-      { orderId: order._id, userId },
-      {
-        $set: {
-          restaurantId: restaurantObjectId,
-          rating: numericRating,
-          reviewText: trimmedComment,
-        },
-      },
-      {
-        new: true,
-        upsert: true,
-        runValidators: true,
-      },
-    );
+    const reviewDoc = await OrderReview.create({
+      orderId: order._id,
+      userId,
+      restaurantId: restaurantObjectId,
+      rating: numericRating,
+      reviewText: trimmedComment,
+    });
 
     // Keep embedded snapshot on Order in sync (for backward compatibility)
     order.review = {
@@ -1717,6 +1840,20 @@ export const submitOrderReview = async (req, res) => {
     };
 
     await order.save();
+
+    await sendNotificationToRestaurant({
+      restaurantId: restaurantObjectId,
+      type: RESTAURANT_NOTIFICATION_EVENTS.NEW_REVIEW_RECEIVED,
+      orderId: order._id,
+      reviewId: reviewDoc._id,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.NEW_REVIEW_RECEIVED}:${reviewDoc._id}`,
+      redirectUrl: "/restaurant/reviews",
+      metadata: {
+        orderDisplayId: order.orderId,
+        rating: numericRating,
+      },
+      source: "orderController.submitOrderReview",
+    });
 
     logger.info(
       `✅ Review submitted for order ${order.orderId} by user ${userId}`,
@@ -1736,6 +1873,13 @@ export const submitOrderReview = async (req, res) => {
       },
     });
   } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "You have already rated this order",
+      });
+    }
+
     logger.error(`Error submitting order review: ${error.message}`, {
       error: error.message,
       stack: error.stack,

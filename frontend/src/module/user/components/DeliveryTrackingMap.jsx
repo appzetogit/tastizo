@@ -49,6 +49,8 @@ const DeliveryTrackingMap = ({
   /** Pending decoded route from socket before map is ready */
   const pendingRoutePointsRef = useRef(null);
   const pendingEncodedPolylineRef = useRef(null);
+  const lastRoadRouteRequestRef = useRef(null);
+  const lastDeliveryBoundsKeyRef = useRef(null);
 
   const backendUrl = API_BASE_URL.replace('/api', '');
 
@@ -56,6 +58,8 @@ const DeliveryTrackingMap = ({
     lastDrawnPolylineRef.current = null;
     pendingRoutePointsRef.current = null;
     pendingEncodedPolylineRef.current = null;
+    lastRoadRouteRequestRef.current = null;
+    lastDeliveryBoundsKeyRef.current = null;
     routePolylinePointsRef.current = null;
     if (routePolylineRef.current) {
       routePolylineRef.current.setMap(null);
@@ -99,7 +103,9 @@ const DeliveryTrackingMap = ({
       routePolylineRef.current.setMap(null);
     }
 
-    const isFallback = dedupeKey === "__straight_restaurant_customer__";
+    const isFallback =
+      dedupeKey === "__straight_restaurant_customer__" ||
+      String(dedupeKey).startsWith("__straight_delivery_customer__");
     routePolylineRef.current = new window.google.maps.Polyline({
       path,
       geodesic: true,
@@ -160,10 +166,153 @@ const DeliveryTrackingMap = ({
     [drawPolylineFromPathPoints],
   );
 
+  const drawRoadPolylineToCustomer = useCallback(
+    async (origin, destination) => {
+      if (!mapInstance.current || !window.google?.maps || !origin || !destination) return false;
+
+      const originLat = Number(origin.lat);
+      const originLng = Number(origin.lng);
+      const destLat = Number(destination.lat);
+      const destLng = Number(destination.lng);
+
+      if (
+        !Number.isFinite(originLat) ||
+        !Number.isFinite(originLng) ||
+        !Number.isFinite(destLat) ||
+        !Number.isFinite(destLng)
+      ) {
+        return false;
+      }
+
+      const routeKey = [
+        originLat.toFixed(5),
+        originLng.toFixed(5),
+        destLat.toFixed(5),
+        destLng.toFixed(5),
+      ].join(":");
+
+      if (lastRoadRouteRequestRef.current === routeKey) {
+        return true;
+      }
+
+      lastRoadRouteRequestRef.current = routeKey;
+
+      drawPolylineFromPathPoints(
+        [
+          { lat: originLat, lng: originLng },
+          { lat: destLat, lng: destLng },
+        ],
+        `__straight_delivery_customer__:${routeKey}`,
+      );
+      focusDeliveryRoute({ lat: originLat, lng: originLng }, { lat: destLat, lng: destLng });
+
+      try {
+        const directionsService = new window.google.maps.DirectionsService();
+        const result = await directionsService.route({
+          origin: { lat: originLat, lng: originLng },
+          destination: { lat: destLat, lng: destLng },
+          travelMode: window.google.maps.TravelMode.DRIVING,
+          provideRouteAlternatives: false,
+        });
+
+        const overviewPath = result?.routes?.[0]?.overview_path || [];
+        if (!overviewPath.length) {
+          return false;
+        }
+
+        const pathPoints = overviewPath.map((point) => ({
+          lat: point.lat(),
+          lng: point.lng(),
+        }));
+
+        drawPolylineFromPathPoints(pathPoints, `__road_rider_customer__:${routeKey}`);
+        focusDeliveryRoute({ lat: originLat, lng: originLng }, { lat: destLat, lng: destLng });
+        return true;
+      } catch (error) {
+        console.warn("Failed to draw road route from delivery partner to customer:", error);
+        lastRoadRouteRequestRef.current = null;
+        drawPolylineFromPathPoints(
+          [
+            { lat: originLat, lng: originLng },
+            { lat: destLat, lng: destLng },
+          ],
+          `__straight_delivery_customer__:${routeKey}`,
+        );
+        focusDeliveryRoute({ lat: originLat, lng: originLng }, { lat: destLat, lng: destLng });
+        return false;
+      }
+    },
+    [drawPolylineFromPathPoints],
+  );
+
+  const currentPhase = order?.deliveryState?.currentPhase;
+  const isHeadingToCustomerPhase =
+    currentPhase === 'picked_up' || currentPhase === 'en_route_to_delivery';
+
+  const getActiveRiderLocation = useCallback(() => {
+    const lat = deliveryBoyLocation?.lat ?? currentLocation?.lat;
+    const lng = deliveryBoyLocation?.lng ?? currentLocation?.lng;
+
+    if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
+      return null;
+    }
+
+    return { lat: Number(lat), lng: Number(lng) };
+  }, [currentLocation?.lat, currentLocation?.lng, deliveryBoyLocation?.lat, deliveryBoyLocation?.lng]);
+
+  const setPostPickupMarkerVisibility = useCallback(() => {
+    if (!mapInstance.current) return;
+
+    const visible = !isHeadingToCustomerPhase;
+    mapInstance.current._restaurantMarker?.setMap(visible ? mapInstance.current : null);
+    mapInstance.current._customerMarker?.setMap(visible ? mapInstance.current : null);
+
+    if (userLocationMarkerRef.current) {
+      userLocationMarkerRef.current.setMap(visible ? mapInstance.current : null);
+    }
+    if (userLocationCircleRef.current) {
+      userLocationCircleRef.current.setMap(visible ? mapInstance.current : null);
+    }
+  }, [isHeadingToCustomerPhase]);
+
+  const focusDeliveryRoute = useCallback((origin, destination) => {
+    if (!mapInstance.current || !window.google?.maps || !origin || !destination) return;
+
+    const boundsKey = [
+      origin.lat.toFixed(5),
+      origin.lng.toFixed(5),
+      destination.lat.toFixed(5),
+      destination.lng.toFixed(5),
+    ].join(":");
+
+    if (lastDeliveryBoundsKeyRef.current === boundsKey && userHasInteractedRef.current) {
+      return;
+    }
+
+    lastDeliveryBoundsKeyRef.current = boundsKey;
+    const bounds = new window.google.maps.LatLngBounds();
+    bounds.extend(origin);
+    bounds.extend(destination);
+
+    isProgrammaticChangeRef.current = true;
+    mapInstance.current.fitBounds(bounds, {
+      top: 44,
+      right: 44,
+      bottom: 44,
+      left: 44,
+    });
+
+    setTimeout(() => {
+      if (mapInstance.current?.getZoom() > 17) {
+        mapInstance.current.setZoom(17);
+      }
+      isProgrammaticChangeRef.current = false;
+    }, 250);
+  }, []);
+
   // Check if delivery partner is assigned
   const hasDeliveryPartner = useMemo(() => {
     const deliveryStateStatus = order?.deliveryState?.status;
-    const currentPhase = order?.deliveryState?.currentPhase;
     const hasAccepted = deliveryStateStatus === 'accepted';
     return !!(order?.deliveryPartnerId ||
       order?.deliveryPartner ||
@@ -173,8 +322,9 @@ const DeliveryTrackingMap = ({
       (currentPhase && currentPhase !== 'assigned' && currentPhase !== 'pending') ||
       (currentPhase === 'en_route_to_pickup') ||
       (currentPhase === 'at_pickup') ||
+      (currentPhase === 'picked_up') ||
       (currentPhase === 'en_route_to_delivery'));
-  }, [order?.deliveryPartnerId, order?.deliveryPartner, order?.assignmentInfo?.deliveryPartnerId, order?.deliveryState?.status, order?.deliveryState?.currentPhase]);
+  }, [order?.deliveryPartnerId, order?.deliveryPartner, order?.assignmentInfo?.deliveryPartnerId, order?.deliveryState?.status, currentPhase]);
 
   // Move bike smoothly with rotation
   const moveBikeSmoothly = useCallback((lat, lng, heading) => {
@@ -613,7 +763,11 @@ const DeliveryTrackingMap = ({
       setCurrentLocation(location);
       setDeliveryBoyLocation(location);
 
-      if (loc.polyline) {
+      if (isHeadingToCustomerPhase && customerCoords?.lat != null && customerCoords?.lng != null) {
+        if (isMapLoaded && mapInstance.current) {
+          void drawRoadPolylineToCustomer(location, customerCoords);
+        }
+      } else if (loc.polyline) {
         if (isMapLoaded && mapInstance.current) {
           drawPolylineFromEncoded(loc.polyline);
         } else {
@@ -628,11 +782,42 @@ const DeliveryTrackingMap = ({
     return () => {
       unsubscribe();
     };
-  }, [orderId, isMapLoaded, moveBikeSmoothly, drawPolylineFromEncoded]);
+  }, [orderId, isMapLoaded, moveBikeSmoothly, drawPolylineFromEncoded, isHeadingToCustomerPhase, customerCoords?.lat, customerCoords?.lng, drawRoadPolylineToCustomer]);
+
+  useEffect(() => {
+    if (!isMapLoaded || !mapInstance.current) return;
+
+    setPostPickupMarkerVisibility();
+
+    if (isHeadingToCustomerPhase) {
+      const riderLocation = getActiveRiderLocation();
+      if (riderLocation && customerCoords?.lat != null && customerCoords?.lng != null) {
+        void drawRoadPolylineToCustomer(riderLocation, customerCoords);
+        if (bikeMarkerRef.current) {
+          moveBikeSmoothly(riderLocation.lat, riderLocation.lng, deliveryBoyLocation?.heading || currentLocation?.heading || 0);
+        }
+      }
+    }
+  }, [
+    isMapLoaded,
+    isHeadingToCustomerPhase,
+    setPostPickupMarkerVisibility,
+    getActiveRiderLocation,
+    customerCoords?.lat,
+    customerCoords?.lng,
+    drawRoadPolylineToCustomer,
+    moveBikeSmoothly,
+    deliveryBoyLocation?.heading,
+    currentLocation?.heading,
+  ]);
 
   // Apply route data that arrived before the map finished loading
   useEffect(() => {
     if (!isMapLoaded || !mapInstance.current) return;
+    if (isHeadingToCustomerPhase) {
+      pendingEncodedPolylineRef.current = null;
+      return;
+    }
     if (pendingEncodedPolylineRef.current) {
       drawPolylineFromEncoded(pendingEncodedPolylineRef.current);
       pendingEncodedPolylineRef.current = null;
@@ -642,7 +827,7 @@ const DeliveryTrackingMap = ({
       pendingRoutePointsRef.current = null;
       drawPolylineFromPathPoints(pts, `routeInit:${pts.length}:${JSON.stringify(pts[0])}`);
     }
-  }, [isMapLoaded, drawPolylineFromEncoded, drawPolylineFromPathPoints]);
+  }, [isMapLoaded, drawPolylineFromEncoded, drawPolylineFromPathPoints, isHeadingToCustomerPhase]);
 
   // Initialize Google Map (only once - prevent re-initialization)
   useEffect(() => {
@@ -944,6 +1129,7 @@ const DeliveryTrackingMap = ({
           const deliveryStateStatus = order?.deliveryState?.status;
           const hasDeliveryPartnerOnLoad = currentPhase === 'en_route_to_pickup' ||
             currentPhase === 'at_pickup' ||
+            currentPhase === 'picked_up' ||
             currentPhase === 'en_route_to_delivery' ||
             deliveryStateStatus === 'accepted' ||
             (deliveryStateStatus && deliveryStateStatus !== 'pending');
@@ -991,10 +1177,12 @@ const DeliveryTrackingMap = ({
     if (!isMapLoaded) return;
 
     // If delivery partner is assigned but bike marker doesn't exist, request real location
-    const currentPhase = order?.deliveryState?.currentPhase;
     const hasDeliveryPartnerByPhase = currentPhase === 'en_route_to_pickup' ||
       currentPhase === 'at_pickup' ||
+      currentPhase === 'picked_up' ||
       currentPhase === 'en_route_to_delivery';
+    const activeRiderLat = deliveryBoyLat ?? currentLocation?.lat;
+    const activeRiderLng = deliveryBoyLng ?? currentLocation?.lng;
 
     if (hasDeliveryPartnerByPhase && !bikeMarkerRef.current && mapInstance.current) {
       if (deliveryBoyLat && deliveryBoyLng) {
@@ -1002,6 +1190,21 @@ const DeliveryTrackingMap = ({
       } else if (socketRef.current && socketRef.current.connected) {
         socketRef.current.emit('request-current-location', orderId);
       }
+    }
+
+    if (
+      isHeadingToCustomerPhase &&
+      mapInstance.current &&
+      activeRiderLat != null &&
+      activeRiderLng != null &&
+      customerCoords?.lat != null &&
+      customerCoords?.lng != null
+    ) {
+      void drawRoadPolylineToCustomer(
+        { lat: activeRiderLat, lng: activeRiderLng },
+        customerCoords,
+      );
+      return;
     }
 
     // No partner yet (e.g. "Preparing your order"): still show restaurant → customer line
@@ -1026,7 +1229,9 @@ const DeliveryTrackingMap = ({
     isMapLoaded,
     deliveryBoyLat,
     deliveryBoyLng,
-    order?.deliveryState?.currentPhase,
+    currentLocation?.lat,
+    currentLocation?.lng,
+    currentPhase,
     order?.deliveryState?.status,
     moveBikeSmoothly,
     hasDeliveryPartner,
@@ -1035,6 +1240,8 @@ const DeliveryTrackingMap = ({
     customerCoords?.lat,
     customerCoords?.lng,
     drawPolylineFromPathPoints,
+    drawRoadPolylineToCustomer,
+    isHeadingToCustomerPhase,
   ]);
 
   // Update bike when REAL location changes (from socket)
@@ -1064,6 +1271,7 @@ const DeliveryTrackingMap = ({
       deliveryStateStatus === 'accepted' ||
       currentPhase === 'en_route_to_pickup' ||
       currentPhase === 'at_pickup' ||
+      currentPhase === 'picked_up' ||
       currentPhase === 'en_route_to_delivery';
 
     if (shouldShowBike && !bikeMarkerRef.current) {
@@ -1084,6 +1292,16 @@ const DeliveryTrackingMap = ({
 
   // Update user's live location marker and circle when location changes
   useEffect(() => {
+    if (isHeadingToCustomerPhase) {
+      if (userLocationMarkerRef.current) {
+        userLocationMarkerRef.current.setMap(null);
+      }
+      if (userLocationCircleRef.current) {
+        userLocationCircleRef.current.setMap(null);
+      }
+      return;
+    }
+
     if (isMapLoaded && userLiveCoords && userLiveCoords.lat && userLiveCoords.lng && mapInstance.current) {
       const userPos = { lat: userLiveCoords.lat, lng: userLiveCoords.lng };
       const radiusMeters = Math.max(userLocationAccuracy || 50, 20);
@@ -1127,7 +1345,7 @@ const DeliveryTrackingMap = ({
         });
       }
     }
-  }, [isMapLoaded, userLiveCoords, userLocationAccuracy]);
+  }, [isMapLoaded, userLiveCoords, userLocationAccuracy, isHeadingToCustomerPhase]);
 
   // Periodic check to ensure bike marker is created if it should be visible
   // DISABLED - prevents duplicate marker creation

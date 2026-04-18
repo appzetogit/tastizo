@@ -2308,20 +2308,6 @@ function OrderCard({
 
   return (
     <div className="relative mb-3 w-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 shadow-sm transition-all hover:border-gray-300 hover:shadow-md sm:p-4">
-      {/* Cancel button - only show for preparing orders */}
-      {showCancelButton && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onCancel({ orderId, mongoId, customerName });
-          }}
-          className="absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-red-100 bg-white text-red-600 shadow-md transition-colors hover:bg-red-50"
-          title="Cancel Order"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      )}
       <div
         onClick={() =>
           onSelect?.({
@@ -2356,7 +2342,7 @@ function OrderCard({
         </div>
 
         {/* Content */}
-        <div className={`flex min-h-[80px] flex-1 flex-col justify-between ${showCancelButton ? "pr-10" : ""}`}>
+        <div className="flex min-h-[80px] flex-1 flex-col justify-between">
           {/* Top row */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
@@ -2389,18 +2375,34 @@ function OrderCard({
                 {type}
                 {tableOrToken ? ` • ${tableOrToken}` : ""}
               </p>
-              <span
-                className={`inline-flex w-fit max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium ${isReady
-                  ? "border-green-500 text-green-600"
-                  : "border-gray-800 text-gray-900"
-                  }`}
-              >
+              <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${isReady ? "bg-green-500" : "bg-gray-800"
+                  className={`inline-flex w-fit max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium ${isReady
+                    ? "border-green-500 text-green-600"
+                    : "border-gray-800 text-gray-900"
                     }`}
-                />
-                <span className="whitespace-nowrap">{status}</span>
-              </span>
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${isReady ? "bg-green-500" : "bg-gray-800"
+                      }`}
+                  />
+                  <span className="whitespace-nowrap">{status}</span>
+                </span>
+                {showCancelButton && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCancel({ orderId, mongoId, customerName });
+                    }}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-red-100 bg-white text-red-600 transition-colors hover:bg-red-50"
+                    title="Cancel Order"
+                    aria-label="Cancel Order"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
               {/* Delivery Assignment Status - Only show for preparing orders */}
               {status === 'preparing' && (
                 <div className="flex items-center gap-1.5 flex-wrap">

@@ -4,6 +4,24 @@
  */
 
 const DELIVERY_NOTIFICATIONS_KEY = 'delivery_notifications'
+const NOTIFICATION_RETENTION_MS = 48 * 60 * 60 * 1000
+
+const isRecentNotification = (notification) => {
+  const baseDate =
+    notification?.createdAt ||
+    notification?.date ||
+    notification?.timestamp
+
+  if (!baseDate) return true
+
+  const createdAt = new Date(baseDate)
+  if (Number.isNaN(createdAt.getTime())) return true
+
+  return Date.now() - createdAt.getTime() <= NOTIFICATION_RETENTION_MS
+}
+
+const pruneOldNotifications = (notifications = []) =>
+  notifications.filter(isRecentNotification)
 
 /**
  * Get all notifications from localStorage
@@ -13,7 +31,12 @@ export const getDeliveryNotifications = () => {
   try {
     const saved = localStorage.getItem(DELIVERY_NOTIFICATIONS_KEY)
     if (saved) {
-      return JSON.parse(saved)
+      const parsed = JSON.parse(saved)
+      const pruned = pruneOldNotifications(Array.isArray(parsed) ? parsed : [])
+      if (pruned.length !== parsed.length) {
+        localStorage.setItem(DELIVERY_NOTIFICATIONS_KEY, JSON.stringify(pruned))
+      }
+      return pruned
     }
     // Return default notifications if none exist
     return []
@@ -29,7 +52,8 @@ export const getDeliveryNotifications = () => {
  */
 export const saveDeliveryNotifications = (notifications) => {
   try {
-    localStorage.setItem(DELIVERY_NOTIFICATIONS_KEY, JSON.stringify(notifications))
+    const prunedNotifications = pruneOldNotifications(notifications)
+    localStorage.setItem(DELIVERY_NOTIFICATIONS_KEY, JSON.stringify(prunedNotifications))
     // Dispatch custom event for other components
     window.dispatchEvent(new CustomEvent('deliveryNotificationsUpdated'))
   } catch (error) {

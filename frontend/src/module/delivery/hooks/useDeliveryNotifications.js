@@ -19,6 +19,7 @@ export const useDeliveryNotifications = () => {
   const [orderReady, setOrderReady] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [deliveryPartnerId, setDeliveryPartnerId] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Step 3: All callbacks before effects (unconditional)
   // Track user interaction for autoplay policy
@@ -122,6 +123,23 @@ export const useDeliveryNotifications = () => {
       }
     };
   }, []); // Note: This runs once on mount. To update dynamically, we'd need to listen to storage events
+
+  const refreshUnreadCount = useCallback(async () => {
+    try {
+      const response = await deliveryAPI.getUnreadNotificationCount();
+      const count = response?.data?.data?.unreadCount ?? response?.data?.unreadCount ?? 0;
+      setUnreadCount(Number(count) || 0);
+    } catch (error) {
+      console.warn('Failed to fetch delivery unread notification count:', error?.message || error);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshUnreadCount();
+    const handleRefresh = () => refreshUnreadCount();
+    window.addEventListener('deliveryNotificationsUpdated', handleRefresh);
+    return () => window.removeEventListener('deliveryNotificationsUpdated', handleRefresh);
+  }, [refreshUnreadCount]);
 
   // Fetch delivery partner ID
   useEffect(() => {
@@ -380,6 +398,16 @@ export const useDeliveryNotifications = () => {
       playNotificationSound();
     });
 
+    socketRef.current.on('delivery_notification', (notification) => {
+      console.log('🔔 Delivery notification received:', notification);
+      setUnreadCount((count) => count + (notification?.isRead ? 0 : 1));
+      window.dispatchEvent(new CustomEvent('deliveryNotificationReceived', {
+        detail: notification,
+      }));
+      window.dispatchEvent(new CustomEvent('deliveryNotificationsUpdated'));
+      playNotificationSound();
+    });
+
     return () => {
       if (socketRef.current) {
         socketRef.current.disconnect();
@@ -408,6 +436,8 @@ export const useDeliveryNotifications = () => {
     orderReady,
     clearOrderReady,
     isConnected,
+    unreadCount,
+    refreshUnreadCount,
     playNotificationSound
   };
 };

@@ -1,12 +1,13 @@
 import { Link, useLocation } from "react-router-dom"
 import { useEffect, useState, useRef } from "react"
-import { ChevronDown, ShoppingCart, Wallet } from "lucide-react"
+import { Bell, ChevronDown, ShoppingCart, Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useLocation as useLocationHook } from "../hooks/useLocation"
 import { useCart } from "../context/CartContext"
 import { useLocationSelector } from "./UserLayout"
 import { FaLocationDot } from "react-icons/fa6"
 import { pickNavbarLocationLines } from "@/lib/userLocationDisplay"
+import { useUserNotifications } from "../hooks/useUserNotifications"
 
 export default function DesktopNavbar() {
   const location = useLocation()
@@ -14,6 +15,7 @@ export default function DesktopNavbar() {
   const { getCartCount } = useCart()
   const { openLocationSelector } = useLocationSelector()
   const cartCount = getCartCount()
+  const { unreadCount } = useUserNotifications()
   const [isVisible, setIsVisible] = useState(true)
   const lastScrollY = useRef(0)
 
@@ -191,6 +193,22 @@ export default function DesktopNavbar() {
 
             {/* Right: Wallet and Cart Icons */}
             <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+              <Link to="/user/notifications">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative h-9 w-9 lg:h-10 lg:w-10 rounded-full p-0 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  title="Notifications"
+                >
+                  <Bell className="h-5 w-5 lg:h-6 lg:w-6 text-gray-700 dark:text-gray-300" strokeWidth={2} />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-5 h-5 px-1 bg-red-500 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-gray-800">
+                      <span className="text-[10px] font-bold text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>
+                    </span>
+                  )}
+                </Button>
+              </Link>
+
               {/* Wallet Icon */}
               <Link to="/user/wallet">
                 <Button

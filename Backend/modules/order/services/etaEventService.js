@@ -4,6 +4,14 @@ import OrderEvent from '../models/OrderEvent.js';
 import Order from '../models/Order.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
 import Delivery from '../../delivery/models/Delivery.js';
+import {
+  RESTAURANT_NOTIFICATION_EVENTS,
+  sendNotificationToRestaurant,
+} from '../../restaurant/services/restaurantNotificationService.js';
+import {
+  DELIVERY_NOTIFICATION_EVENTS,
+  notifyDeliveryOrderEvent,
+} from '../../delivery/services/deliveryNotificationService.js';
 
 /**
  * ETA Event Service
@@ -105,6 +113,29 @@ class ETAEventService {
       if (delayMinutes > expectedAssignTime) {
         eventType = 'RIDER_ASSIGNED_LATE';
         eventData.delayMinutes = delayMinutes - expectedAssignTime;
+        await sendNotificationToRestaurant({
+          restaurantId: order.restaurantId,
+          type: RESTAURANT_NOTIFICATION_EVENTS.DELIVERY_PARTNER_DELAYED,
+          orderId: order._id,
+          eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.DELIVERY_PARTNER_DELAYED}:${order._id}:assignment`,
+          redirectUrl: `/restaurant/orders/${order.orderId}`,
+          metadata: {
+            orderDisplayId: order.orderId,
+            deliveryPartnerId: rider._id.toString(),
+            delayMinutes: eventData.delayMinutes,
+          },
+          source: 'etaEventService.handleRiderAssigned',
+        });
+        await notifyDeliveryOrderEvent({
+          order,
+          deliveryBoyId: rider._id,
+          type: DELIVERY_NOTIFICATION_EVENTS.DELIVERY_DELAYED_WARNING,
+          metadata: {
+            delayMinutes: eventData.delayMinutes,
+            reason: 'assignment_delay',
+          },
+          source: 'etaEventService.handleRiderAssigned',
+        });
       } else if (delayMinutes < 2) {
         eventType = 'RIDER_ASSIGNED_EARLY';
       }
@@ -170,6 +201,19 @@ class ETAEventService {
 
       // Emit WebSocket update
       await etaWebSocketService.emitETAUpdate(orderId, newETA);
+
+      if (trafficLevel === 'high' && order.deliveryPartnerId) {
+        await notifyDeliveryOrderEvent({
+          order,
+          deliveryBoyId: order.deliveryPartnerId,
+          type: DELIVERY_NOTIFICATION_EVENTS.DELIVERY_DELAYED_WARNING,
+          suffix: 'traffic',
+          metadata: {
+            trafficLevel,
+          },
+          source: 'etaEventService.handleTrafficDetected',
+        });
+      }
 
       return { event, newETA };
     } catch (error) {

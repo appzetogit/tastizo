@@ -503,6 +503,39 @@ io.on("connection", (socket) => {
         `location-receive-${data.orderId}`,
         locationData,
       );
+
+      import("./modules/user/services/userNotificationService.js")
+        .then(({ maybeNotifyUserDeliveryNearby }) =>
+          maybeNotifyUserDeliveryNearby({
+            orderId: data.orderId,
+            deliveryLat: data.lat,
+            deliveryLng: data.lng,
+            source: "server.update-location",
+          }),
+        )
+        .catch((error) => {
+          console.warn(
+            "User nearby notification check failed:",
+            error?.message || error,
+          );
+        });
+
+      import("./modules/delivery/services/deliveryNotificationService.js")
+        .then(({ maybeNotifyDeliveryNearCustomer }) =>
+          maybeNotifyDeliveryNearCustomer({
+            orderId: data.orderId,
+            deliveryLat: data.lat,
+            deliveryLng: data.lng,
+            deliveryBoyId: data.deliveryPartnerId || data.deliveryBoyId,
+            source: "server.update-location",
+          }),
+        )
+        .catch((error) => {
+          console.warn(
+            "Delivery near-customer notification check failed:",
+            error?.message || error,
+          );
+        });
     } catch (error) {
       console.error("Error handling location update:", error);
     }
@@ -558,6 +591,18 @@ io.on("connection", (socket) => {
       } catch (error) {
         console.error("Error sending current location:", error.message);
       }
+    }
+  });
+
+  socket.on("join-user", (userId) => {
+    if (userId) {
+      const normalizedUserId = userId?.toString() || userId;
+      socket.join(`user:${normalizedUserId}`);
+      socket.emit("user-room-joined", {
+        userId: normalizedUserId,
+        room: `user:${normalizedUserId}`,
+        socketId: socket.id,
+      });
     }
   });
 

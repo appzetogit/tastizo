@@ -142,7 +142,7 @@ export default function DeliveryOrderChatScreen() {
       }
 
       {/* Messages - pb so content isn't hidden behind fixed input */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 pb-24 space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-24 space-y-3">
         {messages.length === 0 && !loading && (
           <div className="text-center py-8">
             <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-2" />

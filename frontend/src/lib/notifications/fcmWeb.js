@@ -1,6 +1,6 @@
 import { getMessaging, getToken, isSupported, onMessage } from "firebase/messaging";
 import { ensureFirebaseInitialized, getFirebaseVapidKey } from "@/lib/firebase";
-import { authAPI, restaurantAPI } from "@/lib/api";
+import { authAPI, deliveryAPI, restaurantAPI } from "@/lib/api";
 
 const FCM_SW_PATH = "/firebase-messaging-sw.js";
 const FCM_SW_SCOPE = "/firebase-cloud-messaging-push-scope/";
@@ -158,6 +158,30 @@ export async function registerFcmTokenForRestaurant() {
   }
 }
 
+export async function registerFcmTokenForDelivery() {
+  try {
+    const token = await getBrowserFcmToken();
+    if (!token) return;
+
+    console.log(
+      "[FCM][Delivery] Token to send:",
+      token.substring(0, 30) + "...",
+    );
+    const res = await deliveryAPI.registerFcmToken("web", token);
+    const saved =
+      res?.data?.data?.fcmTokenWeb ?? res?.data?.data?.fcmtokenWeb;
+    console.log(
+      "[FCM][Delivery] Backend saved fcmTokenWeb:",
+      saved ? saved.substring(0, 30) + "..." : "null",
+    );
+  } catch (error) {
+    console.error(
+      "[FCM][Delivery] Error during web FCM registration:",
+      error?.message || error,
+    );
+  }
+}
+
 export async function removeFcmTokenForLoggedInUser() {
   try {
     await authAPI.removeFcmToken("web");
@@ -174,3 +198,10 @@ export async function removeFcmTokenForRestaurant() {
   }
 }
 
+export async function removeFcmTokenForDelivery() {
+  try {
+    await deliveryAPI.removeFcmToken("web");
+  } catch (error) {
+    console.error("[FCM][Delivery] Error removing FCM token for web:", error);
+  }
+}

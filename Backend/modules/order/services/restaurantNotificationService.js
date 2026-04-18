@@ -2,6 +2,10 @@ import Order from '../models/Order.js';
 import Payment from '../../payment/models/Payment.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
 import mongoose from 'mongoose';
+import {
+  RESTAURANT_NOTIFICATION_EVENTS,
+  sendNotificationToRestaurant,
+} from '../../restaurant/services/restaurantNotificationService.js';
 
 // Dynamic import to avoid circular dependency
 let getIO = null;
@@ -26,7 +30,6 @@ export async function notifyRestaurantNewOrder(order, restaurantId, paymentMetho
 
     if (!io) {
       console.warn('Socket.IO not initialized, skipping restaurant notification');
-      return;
     }
 
     // CRITICAL: Validate restaurantId matches order's restaurantId
@@ -102,6 +105,30 @@ export async function notifyRestaurantNewOrder(order, restaurantId, paymentMetho
       sendCutlery: order.sendCutlery,
       paymentMethod: resolvedPaymentMethod
     };
+
+    await sendNotificationToRestaurant({
+      restaurantId,
+      type: RESTAURANT_NOTIFICATION_EVENTS.NEW_ORDER_RECEIVED,
+      orderId: order._id,
+      eventKey: `${RESTAURANT_NOTIFICATION_EVENTS.NEW_ORDER_RECEIVED}:${order._id}`,
+      redirectUrl: `/restaurant/orders/${order.orderId}`,
+      metadata: {
+        orderDisplayId: order.orderId,
+        total: order.pricing?.total,
+        paymentMethod: resolvedPaymentMethod,
+      },
+      source: 'notifyRestaurantNewOrder',
+    });
+
+    if (!io) {
+      return {
+        success: true,
+        restaurantId,
+        orderId: order.orderId,
+        socketSkipped: true,
+      };
+    }
+
     // Get restaurant namespace
     const restaurantNamespace = io.of('/restaurant');
 

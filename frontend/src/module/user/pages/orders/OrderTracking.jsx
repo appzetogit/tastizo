@@ -1,6 +1,6 @@
-import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom"
+import { useParams, Link, useNavigate } from "react-router-dom"
 import { useState, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { toast } from "sonner"
 import {
   ArrowLeft,
@@ -42,41 +42,6 @@ import {
   normalizeTelPhone,
   resolveRestaurantPhone,
 } from "./restaurantContact"
-
-// Animated checkmark component
-const AnimatedCheckmark = ({ delay = 0 }) => (
-  <motion.svg
-    width="80"
-    height="80"
-    viewBox="0 0 80 80"
-    initial="hidden"
-    animate="visible"
-    className="mx-auto"
-  >
-    <motion.circle
-      cx="40"
-      cy="40"
-      r="36"
-      fill="none"
-      stroke="#22c55e"
-      strokeWidth="4"
-      initial={{ pathLength: 0, opacity: 0 }}
-      animate={{ pathLength: 1, opacity: 1 }}
-      transition={{ duration: 0.5, delay, ease: "easeOut" }}
-    />
-    <motion.path
-      d="M24 40 L35 51 L56 30"
-      fill="none"
-      stroke="#22c55e"
-      strokeWidth="4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      initial={{ pathLength: 0, opacity: 0 }}
-      animate={{ pathLength: 1, opacity: 1 }}
-      transition={{ duration: 0.4, delay: delay + 0.4, ease: "easeOut" }}
-    />
-  </motion.svg>
-)
 
 const hasAssignedDeliveryPartner = (order) => {
   return !!(
@@ -240,8 +205,6 @@ const SectionItem = ({ icon: Icon, title, subtitle, onClick, showArrow = true, r
 export default function OrderTracking() {
   const { orderId } = useParams()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const confirmed = searchParams.get("confirmed") === "true"
   const { getOrderById } = useOrders()
   const { profile, getDefaultAddress } = useProfile()
 
@@ -250,7 +213,6 @@ export default function OrderTracking() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const [showConfirmation, setShowConfirmation] = useState(confirmed)
   const [orderStatus, setOrderStatus] = useState('placed')
   const [estimatedTime, setEstimatedTime] = useState(29)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -481,7 +443,10 @@ export default function OrderTracking() {
             deliveryState: apiOrder.deliveryState || null,
             deliveryInstructions: apiOrder.deliveryInstructions || "",
             deliveryAddress: apiOrder.deliveryAddress || undefined,
-            phoneNumber: apiOrder.phoneNumber || undefined
+            phoneNumber: apiOrder.phoneNumber || undefined,
+            review: apiOrder.review || null,
+            rating: apiOrder.rating || apiOrder.review?.rating || null,
+            hasReview: Boolean(apiOrder.hasReview || apiOrder.review?.rating || apiOrder.rating)
           }
 
           setOrder(transformedOrder)
@@ -503,16 +468,6 @@ export default function OrderTracking() {
       fetchOrder()
     }
   }, [orderId, getOrderById])
-
-  // Close the confirmation overlay after order placement; status comes from backend.
-  useEffect(() => {
-    if (confirmed) {
-      const timer1 = setTimeout(() => {
-        setShowConfirmation(false)
-      }, 3000)
-      return () => clearTimeout(timer1)
-    }
-  }, [confirmed])
 
   // Countdown timer
   useEffect(() => {
@@ -639,12 +594,27 @@ export default function OrderTracking() {
       if (response.data?.success) {
         toast.success("Review submitted! Thank you for your feedback.")
         setReviewSubmitted(true)
+        setOrder((prev) =>
+          prev
+            ? {
+              ...prev,
+              review: { rating, comment: reviewComment?.trim() || "" },
+              rating,
+              hasReview: true,
+            }
+            : prev,
+        )
       } else {
         toast.error(response.data?.message || "Failed to submit review")
       }
     } catch (error) {
       console.error("Error submitting review:", error)
       const message = error?.response?.data?.message || "Failed to submit review. Please try again."
+      if ([400, 409].includes(error?.response?.status) && message.toLowerCase().includes("already")) {
+        setReviewSubmitted(true)
+        toast.info("You have already rated this order.")
+        return
+      }
       toast.error(message)
     } finally {
       setIsSubmittingReview(false)
@@ -826,7 +796,10 @@ export default function OrderTracking() {
           deliveryState: apiOrder.deliveryState || null,
           deliveryInstructions: apiOrder.deliveryInstructions || "",
           deliveryAddress: apiOrder.deliveryAddress || undefined,
-          phoneNumber: apiOrder.phoneNumber || undefined
+          phoneNumber: apiOrder.phoneNumber || undefined,
+          review: apiOrder.review || null,
+          rating: apiOrder.rating || apiOrder.review?.rating || null,
+          hasReview: Boolean(apiOrder.hasReview || apiOrder.review?.rating || apiOrder.rating)
         }
         setOrder(transformedOrder)
         setOrderStatus(getOrderTrackingStatus(apiOrder))
@@ -899,56 +872,10 @@ export default function OrderTracking() {
   }
 
   const currentStatus = statusConfig[orderStatus] || statusConfig.placed
-  const shouldShowMap = !showConfirmation && order !== null && !isTerminalOrderStatus(orderStatus)
+  const shouldShowMap = order !== null && !isTerminalOrderStatus(orderStatus)
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#0a0a0a]">
-      {/* Order Confirmed Modal */}
-      <AnimatePresence>
-        {showConfirmation && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-white dark:bg-[#1a1a1a] flex flex-col items-center justify-center"
-          >
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.2, type: "spring" }}
-              className="text-center px-8"
-            >
-              <AnimatedCheckmark delay={0.3} />
-              <motion.h1
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.9 }}
-                className="text-2xl font-bold text-gray-900 mt-6"
-              >
-                Order Confirmed!
-              </motion.h1>
-              <motion.p
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 1.1 }}
-                className="text-gray-600 mt-2"
-              >
-                Your order has been placed successfully
-              </motion.p>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 1.5 }}
-                className="mt-8"
-              >
-                <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-sm text-gray-500 mt-3">Loading order details...</p>
-              </motion.div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Green Header */}
       <motion.div
         className={`${currentStatus.color} text-white sticky top-0 z-40`}
@@ -1266,7 +1193,7 @@ export default function OrderTracking() {
         </motion.div>
 
         {/* Chat with delivery partner */}
-        {hasAssignedDeliveryPartner(order) && (
+        {orderStatus !== 'delivered' && hasAssignedDeliveryPartner(order) && (
           <motion.button
             onClick={() => navigate(`/orders/${orderId}/chat`)}
             className="w-full bg-white rounded-xl p-4 shadow-sm flex items-center gap-3 text-left border-0"
@@ -1301,14 +1228,16 @@ export default function OrderTracking() {
               <p className="font-semibold text-gray-900">{order.restaurant}</p>
               <p className="text-sm text-gray-500">{order.address?.city || 'Local Area'}</p>
             </div>
-            <motion.button
-              type="button"
-              onClick={handleCallRestaurant}
-              className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center"
-              whileTap={{ scale: 0.9 }}
-            >
-              <Phone className="w-5 h-5 text-green-700" />
-            </motion.button>
+            {orderStatus !== 'delivered' && (
+              <motion.button
+                type="button"
+                onClick={handleCallRestaurant}
+                className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center"
+                whileTap={{ scale: 0.9 }}
+              >
+                <Phone className="w-5 h-5 text-green-700" />
+              </motion.button>
+            )}
           </div>
 
           {/* Order Items */}

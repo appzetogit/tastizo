@@ -1,81 +1,147 @@
-import { Link } from "react-router-dom"
-import { ArrowLeft, Bell, CheckCircle2, Clock, Tag, Gift, AlertCircle } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Link, useNavigate } from "react-router-dom"
+import { ArrowLeft, Bell, CheckCheck, Clock, Loader2, PackageCheck } from "lucide-react"
 import AnimatedPage from "../components/AnimatedPage"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
+import { userAPI } from "@/lib/api"
+import { useUserNotifications } from "../hooks/useUserNotifications"
 
-// Mock notification data
-const notifications = [
-  {
-    id: 1,
-    type: "order",
-    title: "Order Confirmed",
-    message: "Your order #12345 has been confirmed and is being prepared",
-    time: "2 minutes ago",
-    read: false,
-    icon: CheckCircle2,
-    iconColor: "text-green-600"
-  },
-  {
-    id: 2,
-    type: "offer",
-    title: "Special Offer",
-    message: "Get 50% off on your next order above ₹500",
-    time: "1 hour ago",
-    read: false,
-    icon: Tag,
-    iconColor: "text-red-600"
-  },
-  {
-    id: 3,
-    type: "promotion",
-    title: "New Restaurant Added",
-    message: "Check out the new Italian restaurant in your area",
-    time: "3 hours ago",
-    read: true,
-    icon: Gift,
-    iconColor: "text-blue-600"
-  },
-  {
-    id: 4,
-    type: "order",
-    title: "Order Delivered",
-    message: "Your order #12340 has been delivered successfully",
-    time: "Yesterday",
-    read: true,
-    icon: CheckCircle2,
-    iconColor: "text-green-600"
-  },
-  {
-    id: 5,
-    type: "alert",
-    title: "Payment Failed",
-    message: "Your payment for order #12338 failed. Please try again",
-    time: "2 days ago",
-    read: true,
-    icon: AlertCircle,
-    iconColor: "text-orange-600"
-  },
-  {
-    id: 6,
-    type: "offer",
-    title: "Weekend Special",
-    message: "Enjoy free delivery on all orders this weekend",
-    time: "3 days ago",
-    read: true,
-    icon: Tag,
-    iconColor: "text-red-600"
+function normalizeNotification(notification) {
+  const metadata = notification.metadata || {}
+  const displayOrderId =
+    metadata.orderDisplayId ||
+    metadata.orderNumber ||
+    metadata.orderId ||
+    notification.orderDisplayId ||
+    ""
+
+  return {
+    ...notification,
+    id: notification.id || notification._id,
+    createdAt: notification.createdAt || new Date().toISOString(),
+    displayOrderId,
   }
-]
+}
+
+function formatNotificationTime(value) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+
+  const diffMinutes = Math.floor((Date.now() - date.getTime()) / 60000)
+  if (diffMinutes < 1) return "Just now"
+  if (diffMinutes < 60) return `${diffMinutes} min ago`
+
+  const diffHours = Math.floor(diffMinutes / 60)
+  if (diffHours < 24) return `${diffHours} hr ago`
+
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  })
+}
 
 export default function Notifications() {
-  const unreadCount = notifications.filter(n => !n.read).length
+  const navigate = useNavigate()
+  const {
+    latestNotification,
+    clearLatestNotification,
+    refreshUnreadCount,
+    setUnreadCount,
+  } = useUserNotifications()
+  const [notifications, setNotifications] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [markingAll, setMarkingAll] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadNotifications = async () => {
+      try {
+        setLoading(true)
+        setError("")
+        const response = await userAPI.getNotifications({ page: 1, limit: 50 })
+        const list = response.data?.data?.notifications || []
+        if (mounted) {
+          setNotifications(list.map(normalizeNotification))
+        }
+      } catch (err) {
+        console.error("Failed to fetch user notifications:", err)
+        if (mounted) setError("Unable to load notifications right now.")
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    loadNotifications()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!latestNotification) return
+
+    const incoming = normalizeNotification(latestNotification)
+    setNotifications((prev) => {
+      const next = prev.filter((item) => {
+        if (incoming.id && item.id === incoming.id) return false
+        if (incoming.eventKey && item.eventKey === incoming.eventKey) return false
+        return true
+      })
+      return [incoming, ...next]
+    })
+    clearLatestNotification()
+  }, [latestNotification, clearLatestNotification])
+
+  const handleNotificationClick = async (notification) => {
+    if (!notification?.id) return
+
+    const redirectUrl = notification.redirectUrl || "/user/orders"
+
+    if (!notification.isRead) {
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item.id === notification.id ? { ...item, isRead: true } : item,
+        ),
+      )
+      setUnreadCount((count) => Math.max(0, count - 1))
+
+      try {
+        await userAPI.markNotificationRead(notification.id)
+        await refreshUnreadCount()
+      } catch (err) {
+        console.error("Failed to mark user notification as read:", err)
+      }
+    }
+
+    navigate(redirectUrl)
+  }
+
+  const handleMarkAllRead = async () => {
+    try {
+      setMarkingAll(true)
+      await userAPI.markAllNotificationsRead()
+      setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })))
+      await refreshUnreadCount()
+    } catch (err) {
+      console.error("Failed to mark all user notifications as read:", err)
+      setError("Unable to mark all notifications as read.")
+    } finally {
+      setMarkingAll(false)
+    }
+  }
+
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length
 
   return (
     <AnimatedPage className="min-h-screen bg-white dark:bg-[#0a0a0a] max-md:pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
       <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
-        {/* Header */}
         <div className="flex items-center gap-3 sm:gap-4 mb-4 md:mb-6 lg:mb-8">
           <Link to="/user">
             <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-10 sm:w-10">
@@ -84,75 +150,107 @@ export default function Notifications() {
           </Link>
           <div className="flex items-center gap-2 sm:gap-3 flex-1">
             <Bell className="h-5 w-5 sm:h-6 sm:w-6 text-red-600 fill-red-600" />
-            <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-gray-800 dark:text-white">Notifications</h1>
+            <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-gray-800 dark:text-white">
+              Notifications
+            </h1>
             {unreadCount > 0 && (
               <Badge className="bg-red-600 text-white text-xs md:text-sm">
                 {unreadCount}
               </Badge>
             )}
           </div>
+          {unreadCount > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleMarkAllRead}
+              disabled={markingAll}
+              className="text-green-700 hover:text-green-800"
+            >
+              {markingAll ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCheck className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline ml-1">Mark all read</span>
+            </Button>
+          )}
         </div>
 
-        {/* Notifications List */}
-        <div className="space-y-3 md:space-y-4">
-          {notifications.map((notification) => {
-            const Icon = notification.icon
-            return (
+        {error && (
+          <div className="mb-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 text-sm text-gray-600 py-12">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading notifications
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="text-center py-12 md:py-16 lg:py-20">
+            <Bell className="h-16 w-16 md:h-20 md:w-20 lg:h-24 lg:w-24 text-gray-300 dark:text-gray-600 mx-auto mb-4 md:mb-5 lg:mb-6" />
+            <h3 className="text-lg md:text-xl lg:text-2xl font-semibold text-gray-700 dark:text-gray-300 mb-2 md:mb-3">
+              No notifications
+            </h3>
+            <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
+              You're all caught up!
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3 md:space-y-4">
+            {notifications.map((notification) => (
               <Card
-                key={notification.id}
+                key={notification.id || notification.eventKey}
+                onClick={() => handleNotificationClick(notification)}
                 className={`relative cursor-pointer transition-all duration-200 py-1 hover:shadow-md ${
-                  !notification.read ? "bg-red-50/50 dark:bg-red-900/20 border-red-200 dark:border-red-800" : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+                  !notification.isRead
+                    ? "bg-red-50/50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                    : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
                 }`}
               >
-                {/* Unread Dot - Top Right */}
-                {!notification.read && (
+                {!notification.isRead && (
                   <div className="absolute top-2 right-2 w-2.5 h-2.5 md:w-3 md:h-3 bg-red-600 rounded-full" />
                 )}
-                
+
                 <CardContent className="p-3 md:p-4 lg:p-5">
                   <div className="flex items-start gap-3 sm:gap-4 md:gap-5">
-                    {/* Icon */}
-                    <div className={`flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center ${
-                      notification.type === "order" ? "bg-green-100 dark:bg-green-900/40" :
-                      notification.type === "offer" ? "bg-red-100 dark:bg-red-900/40" :
-                      notification.type === "promotion" ? "bg-blue-100 dark:bg-blue-900/40" :
-                      "bg-orange-100 dark:bg-orange-900/40"
-                    }`}>
-                      <Icon className={`h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 ${notification.iconColor}`} />
+                    <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center bg-green-100 dark:bg-green-900/40">
+                      <PackageCheck className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 text-green-600" />
                     </div>
 
-                    {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <h3 className={`text-sm sm:text-base md:text-lg font-semibold mb-1 md:mb-2 ${
-                        !notification.read ? "text-gray-900 dark:text-white" : "text-gray-700 dark:text-gray-300"
-                      }`}>
-                        {notification.title}
+                      <h3
+                        className={`text-sm sm:text-base md:text-lg font-semibold mb-1 md:mb-2 ${
+                          !notification.isRead
+                            ? "text-gray-900 dark:text-white"
+                            : "text-gray-700 dark:text-gray-300"
+                        }`}
+                      >
+                        {notification.title || "Order update"}
                       </h3>
                       <p className="text-xs sm:text-sm md:text-base text-gray-600 dark:text-gray-400 mb-2 md:mb-3 line-clamp-2">
                         {notification.message}
                       </p>
+                      {notification.displayOrderId && (
+                        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-2">
+                          Order ID: {notification.displayOrderId}
+                        </p>
+                      )}
                       <div className="flex items-center gap-1 text-xs md:text-sm text-gray-500 dark:text-gray-400">
                         <Clock className="h-3 w-3 md:h-4 md:w-4" />
-                        <span>{notification.time}</span>
+                        <span>{formatNotificationTime(notification.createdAt)}</span>
                       </div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            )
-          })}
-        </div>
-
-        {/* Empty State (if no notifications) */}
-        {notifications.length === 0 && (
-          <div className="text-center py-12 md:py-16 lg:py-20">
-            <Bell className="h-16 w-16 md:h-20 md:w-20 lg:h-24 lg:w-24 text-gray-300 dark:text-gray-600 mx-auto mb-4 md:mb-5 lg:mb-6" />
-            <h3 className="text-lg md:text-xl lg:text-2xl font-semibold text-gray-700 dark:text-gray-300 mb-2 md:mb-3">No notifications</h3>
-            <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">You're all caught up!</p>
+            ))}
           </div>
         )}
       </div>
     </AnimatedPage>
   )
 }
-
