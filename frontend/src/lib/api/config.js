@@ -152,6 +152,7 @@ export const API_ENDPOINTS = {
     NOTIFICATIONS: "/user/notifications",
     NOTIFICATIONS_UNREAD_COUNT: "/user/notifications/unread-count",
     NOTIFICATION_READ: "/user/notifications/:notificationId/read",
+    NOTIFICATIONS_DELETE_ALL: "/user/notifications",
     NOTIFICATIONS_READ_ALL: "/user/notifications/read-all",
     ORDER_CHAT: "/order/:orderId/chat",
     ORDER_CHAT_MESSAGES: "/order/:orderId/chat/messages",

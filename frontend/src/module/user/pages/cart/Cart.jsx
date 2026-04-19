@@ -11,7 +11,7 @@ import { useLocationSelector } from "../../components/UserLayout"
 import { useOrders } from "../../context/OrdersContext"
 import { useLocation as useUserLocation } from "../../hooks/useLocation"
 import { useZone } from "../../hooks/useZone"
-import { orderAPI, restaurantAPI, adminAPI, userAPI, API_ENDPOINTS } from "@/lib/api"
+import { orderAPI, restaurantAPI, adminAPI, userAPI, cartAPI, API_ENDPOINTS } from "@/lib/api"
 import { API_BASE_URL } from "@/lib/api/config"
 import { initRazorpayPayment } from "@/lib/utils/razorpay"
 import { isModuleAuthenticated } from "@/lib/utils/auth"
@@ -279,20 +279,30 @@ export default function Cart() {
     }
   }, [showBillDetails]);
 
-  const redirectToOrderConfirmation = (placedOrderId) => {
+  const redirectToOrderConfirmation = async (placedOrderId, paymentMethod = "") => {
+    clearCart()
+    setIsPlacingOrder(false)
+
+    try {
+      await cartAPI.replaceCart({
+        items: [],
+        restaurantId: null,
+        restaurantName: null,
+        zoneId: null,
+      })
+    } catch (error) {
+      console.warn("Failed to clear server cart after order placement:", error)
+    }
+
     if (!placedOrderId) {
-      clearCart()
-      setIsPlacingOrder(false)
       navigate("/user/orders", { replace: true })
       return
     }
 
-    navigate(`/user/orders/${placedOrderId}?confirmed=true`, { replace: true })
-
-    setTimeout(() => {
-      clearCart()
-      setIsPlacingOrder(false)
-    }, 0)
+    navigate(`/user/orders/${placedOrderId}/confirmation`, {
+      replace: true,
+      state: { paymentMethod },
+    })
   }
 
   // Fetch restaurant data when cart has items
@@ -1184,7 +1194,7 @@ export default function Cart() {
       if (selectedPaymentMethod === "cash") {
         toast.success("Order placed with Cash on Delivery")
         const placedOrderId = order?.orderId || order?.id || order?._id
-        redirectToOrderConfirmation(placedOrderId)
+        await redirectToOrderConfirmation(placedOrderId, selectedPaymentMethod)
         return
       }
 
@@ -1201,7 +1211,7 @@ export default function Cart() {
         } catch (error) {
           console.error("Error refreshing wallet balance:", error)
         }
-        redirectToOrderConfirmation(placedOrderId)
+        await redirectToOrderConfirmation(placedOrderId, selectedPaymentMethod)
         return
       }
 
@@ -1292,7 +1302,7 @@ export default function Cart() {
                 paymentId: verifyResponse.data.data?.payment?.paymentId
               })
               const placedOrderId = order?.orderId || order?.id || order?._id
-              redirectToOrderConfirmation(placedOrderId)
+              await redirectToOrderConfirmation(placedOrderId, selectedPaymentMethod)
             } else {
               throw new Error(verifyResponse.data.message || "Payment verification failed")
             }

@@ -1010,7 +1010,7 @@ export default function CategoryPage() {
                     key={restaurant.id}
                     to={
                       selectedCategory && selectedCategory !== 'all'
-                        ? `/user/restaurants/${restaurantSlug}?q=${encodeURIComponent(selectedCategory)}`
+                        ? `/user/restaurants/${restaurantSlug}?category=${encodeURIComponent(selectedCategory)}`
                         : `/user/restaurants/${restaurantSlug}`
                     }
                     className="h-full flex"

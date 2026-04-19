@@ -138,6 +138,7 @@ async function sendPushNotification(user, payload) {
       userId: payload.userId,
       orderId: payload.orderId,
       orderDisplayId: payload.metadata?.orderDisplayId,
+      deliveryOtp: payload.metadata?.deliveryOtp,
     },
   });
 }

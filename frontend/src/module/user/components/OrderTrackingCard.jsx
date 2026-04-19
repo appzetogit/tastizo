@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UtensilsCrossed, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -12,39 +12,55 @@ export default function OrderTrackingCard() {
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [apiOrders, setApiOrders] = useState([]);
 
-  // Fetch orders from API (optional - only if endpoint exists)
-  // For now, we'll rely primarily on localStorage orders from OrdersContext
-  useEffect(() => {
-    // Only try API if user is authenticated
+  const deliveryOtp = activeOrder?.deliveryVerification?.otp || ''
+  const shouldShowDeliveryOtp = Boolean(deliveryOtp)
+
+  const fetchOrders = useCallback(async () => {
     const userToken = localStorage.getItem('user_accessToken') || localStorage.getItem('accessToken');
     if (!userToken) {
-      // No token, skip API call
+      setApiOrders([]);
       return;
     }
 
-    const fetchOrders = async () => {
-      try {
-        const response = await orderAPI.getOrders({ limit: 10, page: 1 });
-        if (response?.data?.success && response?.data?.data?.orders) {
-          setApiOrders(response.data.data.orders);
-        } else if (response?.data?.orders) {
-          setApiOrders(response.data.orders);
-        } else if (response?.data?.data && Array.isArray(response.data.data)) {
-          setApiOrders(response.data.data);
-        }
-      } catch (error) {
-        // Silently fail - don't show error if API fails, just use context orders
-        // Only log if it's not a 404 (endpoint doesn't exist)
-        if (error?.response?.status !== 404) {
-          console.warn('Could not fetch orders from API for tracking card, using context orders only:', error?.response?.status || error?.message);
-        }
-        setApiOrders([]);
+    try {
+      const response = await orderAPI.getOrders({ limit: 10, page: 1 });
+      if (response?.data?.success && response?.data?.data?.orders) {
+        setApiOrders(response.data.data.orders);
+      } else if (response?.data?.orders) {
+        setApiOrders(response.data.orders);
+      } else if (response?.data?.data && Array.isArray(response.data.data)) {
+        setApiOrders(response.data.data);
       }
+    } catch (error) {
+      if (error?.response?.status !== 404) {
+        console.warn('Could not fetch orders from API for tracking card, using context orders only:', error?.response?.status || error?.message);
+      }
+      setApiOrders([]);
+    }
+  }, []);
+
+  // Fetch orders from API and keep active-order popup in sync with cancellations/status changes
+  useEffect(() => {
+    fetchOrders();
+
+    const handleRefresh = () => {
+      fetchOrders();
     };
 
-    // Try once on mount, but don't retry if it fails
-    fetchOrders();
-  }, []);
+    const intervalId = window.setInterval(fetchOrders, 5000);
+    window.addEventListener('focus', handleRefresh);
+    document.addEventListener('visibilitychange', handleRefresh);
+    window.addEventListener('storage', handleRefresh);
+    window.addEventListener('orderStatusUpdated', handleRefresh);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleRefresh);
+      document.removeEventListener('visibilitychange', handleRefresh);
+      window.removeEventListener('storage', handleRefresh);
+      window.removeEventListener('orderStatusUpdated', handleRefresh);
+    };
+  }, [fetchOrders]);
 
   // Get active order (not delivered) - check both context and API orders
   useEffect(() => {
@@ -72,6 +88,8 @@ export default function OrderTrackingCard() {
       const status = (order.status || order.deliveryState?.status || '').toLowerCase();
       const isInactive = status === 'delivered' ||
         status === 'cancelled' ||
+        status === 'restaurant_cancelled' ||
+        status === 'user_cancelled' ||
         status === 'completed' ||
         status === '';
 
@@ -127,7 +145,13 @@ export default function OrderTrackingCard() {
       }
 
       const status = (currentActive.status || currentActive.deliveryState?.status || '').toLowerCase();
-      if (status === 'delivered' || status === 'cancelled' || status === 'completed') {
+      if (
+        status === 'delivered' ||
+        status === 'cancelled' ||
+        status === 'restaurant_cancelled' ||
+        status === 'user_cancelled' ||
+        status === 'completed'
+      ) {
         setActiveOrder(null);
         setTimeRemaining(null);
         return;
@@ -148,23 +172,6 @@ export default function OrderTrackingCard() {
     return () => clearInterval(interval);
   }, [activeOrder, timeRemaining, contextOrders, apiOrders]);
 
-  // Listen for order updates from localStorage
-  useEffect(() => {
-    const handleStorageChange = () => {
-      // When storage changes, the OrdersContext will update automatically
-      // No need to fetch from API again - just rely on context orders
-      // This prevents unnecessary API calls and errors
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('orderStatusUpdated', handleStorageChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('orderStatusUpdated', handleStorageChange);
-    };
-  }, []);
-
   // Debug: Log when component renders
   useEffect(() => {
     console.log('🎯 OrderTrackingCard render:', {
@@ -182,7 +189,14 @@ export default function OrderTrackingCard() {
 
   // Check if order is delivered or time remaining is 0 - hide card
   const orderStatus = (activeOrder.status || activeOrder.deliveryState?.status || 'preparing').toLowerCase();
-  if (orderStatus === 'delivered' || orderStatus === 'completed' || timeRemaining === 0) {
+  if (
+    orderStatus === 'delivered' ||
+    orderStatus === 'cancelled' ||
+    orderStatus === 'restaurant_cancelled' ||
+    orderStatus === 'user_cancelled' ||
+    orderStatus === 'completed' ||
+    timeRemaining === 0
+  ) {
     console.log('❌ OrderTrackingCard - Order delivered or time is 0, hiding card');
     return null;
   }
@@ -227,14 +241,28 @@ export default function OrderTrackingCard() {
               </div>
             </div>
 
-            {/* Right Side - Time Pill */}
-            <div className="bg-green-600 rounded-lg px-3 py-2 flex-shrink-0">
-              <p className="text-white text-[10px] font-medium uppercase leading-tight">arriving in</p>
-              <p className="text-white text-sm font-bold leading-tight">
-                {timeRemaining !== null ? `${timeRemaining} mins` : '-- mins'}
-              </p>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {shouldShowDeliveryOtp && (
+                <div className="rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 min-w-[92px]">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-green-200 leading-tight">
+                    OTP
+                  </p>
+                  <p className="mt-1 text-sm font-bold tracking-[0.28em] text-white leading-tight">
+                    {deliveryOtp}
+                  </p>
+                </div>
+              )}
+
+              {/* Right Side - Time Pill */}
+              <div className="bg-green-600 rounded-lg px-3 py-2">
+                <p className="text-white text-[10px] font-medium uppercase leading-tight">arriving in</p>
+                <p className="text-white text-sm font-bold leading-tight">
+                  {timeRemaining !== null ? `${timeRemaining} mins` : '-- mins'}
+                </p>
+              </div>
             </div>
           </div>
+
         </div>
       </motion.div>
     </AnimatePresence>

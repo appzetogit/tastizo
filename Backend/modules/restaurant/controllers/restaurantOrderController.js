@@ -6,6 +6,7 @@ import asyncHandler from '../../../shared/middleware/asyncHandler.js';
 import { notifyRestaurantOrderUpdate } from '../../order/services/restaurantNotificationService.js';
 import {
   notifyUserOrderEvent,
+  sendNotificationToUser,
   USER_NOTIFICATION_EVENTS,
 } from "../../user/services/userNotificationService.js";
 import { assignOrderToDeliveryBoy, findNearestDeliveryBoys, findNearestDeliveryBoy } from '../../order/services/deliveryAssignmentService.js';
@@ -431,14 +432,19 @@ export const rejectOrder = asyncHandler(async (req, res) => {
     order.cancelledAt = new Date();
     await order.save();
 
-    notifyUserOrderEvent(
-      order,
-      USER_NOTIFICATION_EVENTS.ORDER_REJECTED,
-      { reason: order.cancellationReason },
-      "restaurantOrderController.rejectOrder",
-    ).catch((notifyError) => {
-      console.error("Error sending user rejected notification:", notifyError);
-    });
+    const isInstantWalletRefund =
+      order.payment?.method === 'wallet' && order.payment?.status === 'completed';
+
+    if (!isInstantWalletRefund) {
+      notifyUserOrderEvent(
+        order,
+        USER_NOTIFICATION_EVENTS.ORDER_REJECTED,
+        { reason: order.cancellationReason },
+        "restaurantOrderController.rejectOrder",
+      ).catch((notifyError) => {
+        console.error("Error sending user rejected notification:", notifyError);
+      });
+    }
 
     // Clean up Firebase active order entry
     try {
@@ -447,15 +453,39 @@ export const rejectOrder = asyncHandler(async (req, res) => {
       console.warn("Firebase removeActiveOrder on restaurant reject failed:", fbErr.message);
     }
 
-    // Calculate refund amount but don't process automatically
-    // Admin will process refund manually via refund button
+    // Wallet refunds are instant. Other payment methods keep the existing
+    // refund-calculation flow for admin/processor follow-up.
     try {
-      const { calculateCancellationRefund } = await import('../../order/services/cancellationRefundService.js');
-      await calculateCancellationRefund(order._id, reason || 'Rejected by restaurant');
+      if (isInstantWalletRefund) {
+        const { processWalletRefund } = await import('../../order/services/cancellationRefundService.js');
+        const refundResult = await processWalletRefund(order._id.toString(), null);
+
+        order.payment.status = 'refunded';
+        await order.save();
+
+        await sendNotificationToUser({
+          userId: order.userId,
+          order,
+          type: USER_NOTIFICATION_EVENTS.ORDER_REJECTED,
+          title: "Order Cancelled - Wallet Refunded",
+          message: `Restaurant cancelled your order. ₹${Number(refundResult?.refundAmount || 0).toFixed(2)} has been refunded to your wallet instantly.`,
+          eventKey: `${USER_NOTIFICATION_EVENTS.ORDER_REJECTED}:wallet_refund:${order._id}`,
+          metadata: {
+            reason: order.cancellationReason,
+            orderDisplayId: order.orderId,
+            refundAmount: refundResult?.refundAmount || 0,
+            refundMethod: "wallet",
+            refundedInstantly: true,
+          },
+          source: "restaurantOrderController.rejectOrder.walletRefund",
+        });
+      } else {
+        const { calculateCancellationRefund } = await import('../../order/services/cancellationRefundService.js');
+        await calculateCancellationRefund(order._id, reason || 'Rejected by restaurant');
+      }
     } catch (refundError) {
-      console.error(`❌ Error calculating cancellation refund for order ${order.orderId}:`, refundError);
-      // Don't fail order cancellation if refund calculation fails
-      // But log it for investigation
+      console.error(`❌ Error processing refund for order ${order.orderId}:`, refundError);
+      // Don't fail order cancellation if refund processing fails, but keep it visible for investigation.
     }
 
     // Notify about status update

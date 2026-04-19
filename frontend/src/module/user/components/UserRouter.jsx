@@ -34,6 +34,7 @@ const Checkout = lazy(() => import("../pages/cart/Checkout"))
 
 // Orders
 const Orders = lazy(() => import("../pages/orders/Orders"))
+const OrderConfirmation = lazy(() => import("../pages/orders/OrderConfirmation"))
 const OrderTracking = lazy(() => import("../pages/orders/OrderTracking"))
 const OrderInvoice = lazy(() => import("../pages/orders/OrderInvoice"))
 const UserOrderDetails = lazy(() => import("../pages/orders/UserOrderDetails"))
@@ -167,6 +168,14 @@ export default function UserRouter() {
             element={
               <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
                 <Orders />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/orders/:orderId/confirmation"
+            element={
+              <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+                <OrderConfirmation />
               </ProtectedRoute>
             }
           />

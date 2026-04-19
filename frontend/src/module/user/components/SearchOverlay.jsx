@@ -306,7 +306,7 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
     if (food.restaurantSlug) {
       // Go directly to the restaurant menu page with a dish search query
       navigate(
-        `/user/restaurants/${food.restaurantSlug}?q=${encodeURIComponent(
+        `/user/restaurants/${food.restaurantSlug}?search=${encodeURIComponent(
           food.name,
         )}`,
       )

@@ -104,3 +104,17 @@ export async function markAllUserNotificationsRead(req, res) {
     return errorResponse(res, 500, error.message || "Failed to mark all notifications as read");
   }
 }
+
+export async function deleteAllUserNotifications(req, res) {
+  try {
+    const result = await UserNotification.deleteMany({
+      userId: req.user._id,
+    });
+
+    return successResponse(res, 200, "All notifications deleted successfully", {
+      deletedCount: result.deletedCount || 0,
+    });
+  } catch (error) {
+    return errorResponse(res, 500, error.message || "Failed to delete notifications");
+  }
+}

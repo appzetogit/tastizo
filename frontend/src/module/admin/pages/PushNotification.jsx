@@ -14,6 +14,8 @@ export default function PushNotification() {
     defaultZone: "All",
     defaultTarget: "Customer",
   }
+  const [zones, setZones] = useState([])
+  const [zonesLoading, setZonesLoading] = useState(true)
   const [formData, setFormData] = useState({
     title: "",
     zone: "All",
@@ -29,6 +31,28 @@ export default function PushNotification() {
   const fileInputRef = useRef(null)
   const formSectionRef = useRef(null)
   const titleInputRef = useRef(null)
+  const zoneOptions = useMemo(() => {
+    const dynamicZones = zones
+      .filter((zone) => zone?.isActive !== false)
+      .map((zone) => zone.displayName || zone.name || zone.zoneName)
+      .filter(Boolean)
+
+    return ["All", ...new Set(dynamicZones)]
+  }, [zones])
+
+  const fetchZones = async () => {
+    try {
+      setZonesLoading(true)
+      const res = await adminAPI.getZones({ limit: 1000, isActive: true })
+      const list = res?.data?.data?.zones
+      setZones(Array.isArray(list) ? list : [])
+    } catch (err) {
+      console.error("Failed to fetch zones:", err)
+      setZones([])
+    } finally {
+      setZonesLoading(false)
+    }
+  }
 
   const fetchNotifications = async () => {
     try {
@@ -41,6 +65,7 @@ export default function PushNotification() {
   }
 
   useEffect(() => {
+    fetchZones()
     fetchNotifications()
   }, [])
 
@@ -58,6 +83,20 @@ export default function PushNotification() {
       console.error("Failed to load notification settings:", error)
     }
   }, [])
+
+  useEffect(() => {
+    if (!zoneOptions.length) return
+
+    setNotificationSettings((prev) => {
+      if (zoneOptions.includes(prev.defaultZone)) return prev
+      return { ...prev, defaultZone: "All" }
+    })
+
+    setFormData((prev) => {
+      if (zoneOptions.includes(prev.zone)) return prev
+      return { ...prev, zone: "All" }
+    })
+  }, [zoneOptions])
 
   const filteredNotifications = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -290,11 +329,21 @@ export default function PushNotification() {
                   value={formData.zone}
                   onChange={(e) => handleInputChange("zone", e.target.value)}
                   className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  disabled={zonesLoading}
                 >
-                  <option value="All">All</option>
-                  <option value="Asia">Asia</option>
-                  <option value="Europe">Europe</option>
+                  {zoneOptions.map((zoneName) => (
+                    <option key={zoneName} value={zoneName}>
+                      {zoneName}
+                    </option>
+                  ))}
                 </select>
+                {zonesLoading ? (
+                  <p className="mt-2 text-xs text-slate-500">Loading admin zones...</p>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500">
+                    {zoneOptions.length - 1} active zones available from Zone Setup.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -549,11 +598,21 @@ export default function PushNotification() {
                   setNotificationSettings((prev) => ({ ...prev, defaultZone: e.target.value }))
                 }
                 className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                disabled={zonesLoading}
               >
-                <option value="All">All</option>
-                <option value="Asia">Asia</option>
-                <option value="Europe">Europe</option>
+                {zoneOptions.map((zoneName) => (
+                  <option key={zoneName} value={zoneName}>
+                    {zoneName}
+                  </option>
+                ))}
               </select>
+              {zonesLoading ? (
+                <p className="mt-2 text-xs text-slate-500">Loading admin zones...</p>
+              ) : (
+                <p className="mt-2 text-xs text-slate-500">
+                  Default zone uses the same live zones created by admin.
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Default Send To</label>

@@ -282,6 +282,37 @@ const orderSchema = new mongoose.Schema(
     deliveredAt: {
       type: Date,
     },
+    deliveryVerification: {
+      isRequired: {
+        type: Boolean,
+        default: false,
+      },
+      otp: {
+        type: String,
+        trim: true,
+      },
+      otpHash: {
+        type: String,
+        trim: true,
+      },
+      createdAt: Date,
+      expiresAt: Date,
+      verified: {
+        type: Boolean,
+        default: false,
+      },
+      verifiedAt: Date,
+      verifiedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Delivery",
+      },
+      attempts: {
+        type: Number,
+        default: 0,
+      },
+      lastSentAt: Date,
+      lockedUntil: Date,
+    },
     billImageUrl: {
       type: String,
       default: null,

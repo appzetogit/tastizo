@@ -1,6 +1,7 @@
 import Order from "../models/Order.js";
 import OrderReview from "../models/OrderReview.js";
 import Payment from "../../payment/models/Payment.js";
+import crypto from "crypto";
 import {
   createOrder as createRazorpayOrder,
   verifyPayment,
@@ -133,6 +134,114 @@ const attachRestaurantContact = (order) => {
   return {
     ...order,
     restaurantPhone: getRestaurantContactNumber(order.restaurantId || order.restaurant),
+  };
+};
+
+const ACTIVE_OTP_ORDER_STATUSES = new Set([
+  "confirmed",
+  "preparing",
+  "ready",
+  "out_for_delivery",
+]);
+
+const PREPAID_PAYMENT_METHODS = new Set(["razorpay", "wallet", "upi", "card"]);
+const DELIVERY_OTP_LENGTH = 4;
+const DELIVERY_OTP_EXPIRY_MS = 6 * 60 * 60 * 1000;
+
+const isPrepaidPaidOrder = (order) => {
+  const paymentMethod = String(order?.payment?.method || order?.paymentMethod || "")
+    .trim()
+    .toLowerCase();
+  const paymentStatus = String(order?.payment?.status || order?.paymentStatus || "")
+    .trim()
+    .toLowerCase();
+
+  return PREPAID_PAYMENT_METHODS.has(paymentMethod) && [
+    "completed",
+    "paid",
+  ].includes(paymentStatus);
+};
+
+const generateDeliveryOtp = () =>
+  String(Math.floor(10 ** (DELIVERY_OTP_LENGTH - 1) + Math.random() * 9 * 10 ** (DELIVERY_OTP_LENGTH - 1)));
+
+const hashDeliveryOtp = (otp) =>
+  crypto
+    .createHash("sha256")
+    .update(`${otp}:${process.env.DELIVERY_OTP_SECRET || "delivery-otp-secret"}`)
+    .digest("hex");
+
+const shouldRefreshDeliveryOtp = (deliveryVerification = {}) => {
+  if (!deliveryVerification.isRequired) return true;
+  if (!deliveryVerification.otp || !deliveryVerification.otpHash) return true;
+  if (deliveryVerification.verified) return false;
+
+  const expiresAt = deliveryVerification.expiresAt
+    ? new Date(deliveryVerification.expiresAt)
+    : null;
+
+  return !expiresAt || Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= Date.now();
+};
+
+const ensureDeliveryOtpForPrepaidOrder = (order) => {
+  if (!isPrepaidPaidOrder(order)) return false;
+  if (!shouldRefreshDeliveryOtp(order?.deliveryVerification || {})) return false;
+
+  const now = new Date();
+  const otp = generateDeliveryOtp();
+
+  order.deliveryVerification = {
+    isRequired: true,
+    otp,
+    otpHash: hashDeliveryOtp(otp),
+    createdAt: now,
+    expiresAt: new Date(now.getTime() + DELIVERY_OTP_EXPIRY_MS),
+    verified: false,
+    verifiedAt: null,
+    verifiedBy: null,
+    attempts: 0,
+    lastSentAt: now,
+    lockedUntil: null,
+  };
+
+  return true;
+};
+
+const isDeliveryOtpVisibleToUser = (order) => {
+  if (!order?.deliveryVerification?.isRequired) return false;
+  if (!order?.deliveryVerification?.otp) return false;
+  if (order?.deliveryVerification?.verified) return false;
+  if (!ACTIVE_OTP_ORDER_STATUSES.has(String(order?.status || "").toLowerCase())) return false;
+
+  const expiresAt = order?.deliveryVerification?.expiresAt
+    ? new Date(order.deliveryVerification.expiresAt)
+    : null;
+  if (expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() <= Date.now()) {
+    return false;
+  }
+
+  return isPrepaidPaidOrder(order);
+};
+
+const sanitizeOrderForUser = (order) => {
+  if (!order) return order;
+
+  const deliveryVerification = order.deliveryVerification || null;
+  const otpVisible = isDeliveryOtpVisibleToUser(order);
+
+  return {
+    ...attachRestaurantContact(order),
+    deliveryVerification: deliveryVerification
+      ? {
+          isRequired: Boolean(deliveryVerification.isRequired && isPrepaidPaidOrder(order)),
+          otp: otpVisible ? deliveryVerification.otp : "",
+          createdAt: otpVisible ? deliveryVerification.createdAt : null,
+          expiresAt: otpVisible ? deliveryVerification.expiresAt : null,
+          verified: Boolean(deliveryVerification.verified),
+          verifiedAt: deliveryVerification.verifiedAt || null,
+          lastSentAt: otpVisible ? deliveryVerification.lastSentAt || null : null,
+        }
+      : null,
   };
 };
 
@@ -657,6 +766,7 @@ export const createOrder = async (req, res) => {
           status: true,
           timestamp: new Date(),
         };
+        ensureDeliveryOtpForPrepaidOrder(order);
 
         // Save order
         await order.save();
@@ -1048,6 +1158,7 @@ export const verifyOrderPayment = async (req, res) => {
     order.payment.transactionId = razorpayPaymentId;
     order.status = "confirmed";
     order.tracking.confirmed = { status: true, timestamp: new Date() };
+    ensureDeliveryOtpForPrepaidOrder(order);
     await order.save();
 
     // Calculate order settlement and hold escrow
@@ -1317,7 +1428,7 @@ export const getUserOrders = async (req, res) => {
     res.json({
       success: true,
       data: {
-        orders: ordersWithReviews.map(attachRestaurantContact),
+        orders: ordersWithReviews.map(sanitizeOrderForUser),
         pagination: {
           total,
           page: parseInt(page),
@@ -1388,7 +1499,7 @@ export const getOrderDetails = async (req, res) => {
     res.json({
       success: true,
       data: {
-        order: attachRestaurantContact(orderWithReview),
+        order: sanitizeOrderForUser(orderWithReview),
         payment,
       },
     });
@@ -1472,6 +1583,18 @@ export const cancelOrder = async (req, res) => {
     order.cancellationReason = reason.trim();
     order.cancelledBy = "user";
     order.cancelledAt = new Date();
+    if (order.deliveryVerification?.isRequired) {
+      order.deliveryVerification = {
+        ...order.deliveryVerification,
+        isRequired: false,
+        otp: "",
+        otpHash: "",
+        verified: false,
+        verifiedAt: null,
+        verifiedBy: null,
+        lockedUntil: null,
+      };
+    }
     await order.save();
 
     await sendNotificationToRestaurant({

@@ -53,8 +53,8 @@ export default function RestaurantDetails() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const showOnlyUnder250 = searchParams.get('under250') === 'true'
-  const initialSearchQuery = searchParams.get('q') || ""
-  const categoryFromUrl = searchParams.get('q') || ""
+  const initialSearchQuery = searchParams.get('search') || searchParams.get('q') || ""
+  const categoryFromUrl = searchParams.get('category') || ""
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart, openVariantPicker, addItemOrAskVariant } = useCart()
   const hasCartItems = cart.some((item) => (item.quantity || 0) > 0)
   const {
@@ -92,6 +92,9 @@ export default function RestaurantDetails() {
   const [showLargeOrderMenu, setShowLargeOrderMenu] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery)
+  const [showSearchSuggestions, setShowSearchSuggestions] = useState(
+    Boolean(initialSearchQuery.trim()),
+  )
   const [showMenuOptionsSheet, setShowMenuOptionsSheet] = useState(false)
   const [expandedAddButtons, setExpandedAddButtons] = useState(new Set())
   const [expandedSections, setExpandedSections] = useState(new Set([0])) // Default: Recommended section is expanded
@@ -576,7 +579,7 @@ export default function RestaurantDetails() {
     })
   }, [])
 
-  // When arriving with a ?q= from category/search page, auto-scroll to matching menu section
+  // When arriving with a dish search query, auto-scroll to the first matching menu section
   useEffect(() => {
     if (!initialSearchQuery || !restaurant || !restaurant.menuSections) return
 
@@ -787,7 +790,7 @@ export default function RestaurantDetails() {
     if (!items) return items
 
     return items.filter((item) => {
-      // Category filter (when coming from category page with ?q=)
+      // Category filter (when coming from category page with ?category=)
       if (categoryFromUrl.trim()) {
         if (!itemMatchesCategory(item, categoryFromUrl)) return false
       }
@@ -801,8 +804,17 @@ export default function RestaurantDetails() {
       // Search filter
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim()
-        const itemName = item.name?.toLowerCase() || ""
-        if (!itemName.includes(query)) return false
+        const searchableText = [
+          item.name,
+          item.description,
+          item.category,
+          item.foodType,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+
+        if (!searchableText.includes(query)) return false
       }
 
       // VegMode filter - when vegMode is ON and no local override is selected,
@@ -888,6 +900,89 @@ export default function RestaurantDetails() {
     }
     return sections
   }
+
+  const allMenuItems = (() => {
+    if (!restaurant?.menuSections || !Array.isArray(restaurant.menuSections)) return []
+
+    const seenItemKeys = new Set()
+    const flattenedItems = []
+
+    const appendItems = (items = []) => {
+      items.forEach((item) => {
+        if (!item || item.isAvailable === false) return
+        const uniqueKey = String(item.id || item._id || item.name || Math.random())
+        if (seenItemKeys.has(uniqueKey)) return
+        seenItemKeys.add(uniqueKey)
+        flattenedItems.push(item)
+      })
+    }
+
+    restaurant.menuSections.forEach((section) => {
+      appendItems(section?.items || [])
+      ;(section?.subsections || []).forEach((subsection) => {
+        appendItems(subsection?.items || [])
+      })
+    })
+
+    return flattenedItems
+  })()
+
+  const searchSuggestions = (() => {
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) return []
+
+    return allMenuItems
+      .map((item) => {
+        const name = String(item.name || "").trim()
+        const description = String(item.description || "").trim()
+        const searchableText = [name, description, item.category, item.foodType]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+
+        let score = 0
+        if (name.toLowerCase().startsWith(query)) score += 4
+        if (name.toLowerCase().includes(query)) score += 3
+        if (description.toLowerCase().includes(query)) score += 1
+        if (searchableText.includes(query)) score += 1
+
+        return {
+          item,
+          name,
+          description,
+          score,
+        }
+      })
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+      .slice(0, 6)
+  })()
+
+  const hasVisibleMenuItems = getFilteredSections().some(({ section }) => {
+    const directItems = sortMenuItems(filterMenuItems(section.items || []))
+    if (directItems.length > 0) return true
+
+    if (!section.subsections || section.subsections.length === 0) return false
+
+    return section.subsections.some((subsection) => {
+      if (categoryFromUrl.trim()) {
+        if (!subsection.items || subsection.items.length === 0) return false
+        if (!subsection.items.some((item) => item.isAvailable !== false && itemMatchesCategory(item, categoryFromUrl))) {
+          return false
+        }
+      }
+      if (showOnlyUnder250) {
+        if (!subsection.items || subsection.items.length === 0) return false
+        const hasUnder250Item = subsection.items.some((item) => {
+          if (item.isAvailable === false) return false
+          return getFinalPrice(item) <= 250
+        })
+        if (!hasUnder250Item) return false
+      }
+
+      return sortMenuItems(filterMenuItems(subsection.items || [])).length > 0
+    })
+  })
 
   // Menu categories - use filtered sections so menu sheet matches main content
   const menuCategories = (() => {
@@ -1002,19 +1097,57 @@ export default function RestaurantDetails() {
                     type="text"
                     placeholder="Search for dishes..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value)
+                      setShowSearchSuggestions(Boolean(e.target.value.trim()))
+                    }}
                     className="w-full pl-10 pr-10 py-2 rounded-full border border-gray-200 dark:border-gray-800 shadow-sm bg-white dark:bg-[#1a1a1a] text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                     autoFocus
+                    onFocus={() => {
+                      setShowSearchSuggestions(Boolean(searchQuery.trim()))
+                    }}
                     onBlur={() => {
-                      if (!searchQuery) {
-                        setShowSearch(false)
-                      }
+                      window.setTimeout(() => {
+                        setShowSearchSuggestions(false)
+                        if (!searchQuery) {
+                          setShowSearch(false)
+                        }
+                      }, 120)
                     }}
                   />
+                  {showSearchSuggestions && searchSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-30 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
+                      {searchSuggestions.map(({ item, name, description }) => (
+                        <button
+                          key={String(item.id || item._id || name)}
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault()
+                            setSearchQuery(name)
+                            setShowSearchSuggestions(false)
+                          }}
+                          className="flex w-full items-start gap-3 border-b border-gray-100 px-4 py-3 text-left last:border-b-0 hover:bg-gray-50"
+                        >
+                          <Search className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-gray-900">
+                              {name}
+                            </div>
+                            {description && (
+                              <div className="truncate text-xs text-gray-500">
+                                {description}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {searchQuery && (
                     <button
                       onClick={() => {
                         setSearchQuery("")
+                        setShowSearchSuggestions(false)
                         setShowSearch(false)
                       }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
@@ -1199,7 +1332,7 @@ export default function RestaurantDetails() {
         )}
 
         {/* Menu Items Section */}
-        {restaurant?.menuSections && Array.isArray(restaurant.menuSections) && restaurant.menuSections.length > 0 && (
+        {restaurant?.menuSections && Array.isArray(restaurant.menuSections) && restaurant.menuSections.length > 0 && hasVisibleMenuItems && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-6 sm:py-8 md:py-10 lg:py-12 space-y-6 md:space-y-8 lg:space-y-10">
             {getFilteredSections().map(({ section, originalIndex }, sectionIndex) => {
               // Handle section name - check for valid non-empty string
@@ -1694,6 +1827,38 @@ export default function RestaurantDetails() {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {restaurant?.menuSections && Array.isArray(restaurant.menuSections) && restaurant.menuSections.length > 0 && !hasVisibleMenuItems && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-16 text-center">
+            <div className="mx-auto max-w-md rounded-3xl border border-gray-200 bg-gray-50 px-6 py-10">
+              <h3 className="text-lg font-bold text-gray-900">No matching dishes found</h3>
+              <p className="mt-2 text-sm text-gray-600">
+                Try a different dish name or clear the current filters.
+              </p>
+              <div className="mt-4 flex items-center justify-center gap-3">
+                {searchQuery.trim() && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearchQuery("")
+                      setShowSearch(false)
+                    }}
+                  >
+                    Clear search
+                  </Button>
+                )}
+                {categoryFromUrl.trim() && (
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate(`/user/restaurants/${slug}`)}
+                  >
+                    View full menu
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>

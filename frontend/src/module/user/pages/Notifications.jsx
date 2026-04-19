@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowLeft, Bell, CheckCheck, Clock, Loader2, PackageCheck } from "lucide-react"
+import { ArrowLeft, Bell, CheckCheck, Clock, Loader2, PackageCheck, Trash2 } from "lucide-react"
 import AnimatedPage from "../components/AnimatedPage"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +22,7 @@ function normalizeNotification(notification) {
     id: notification.id || notification._id,
     createdAt: notification.createdAt || new Date().toISOString(),
     displayOrderId,
+    deliveryOtp: metadata.deliveryOtp || "",
   }
 }
 
@@ -56,6 +57,7 @@ export default function Notifications() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [markingAll, setMarkingAll] = useState(false)
+  const [deletingAll, setDeletingAll] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -137,6 +139,22 @@ export default function Notifications() {
     }
   }
 
+  const handleDeleteAll = async () => {
+    try {
+      setDeletingAll(true)
+      setError("")
+      await userAPI.deleteAllNotifications()
+      setNotifications([])
+      setUnreadCount(0)
+      await refreshUnreadCount()
+    } catch (err) {
+      console.error("Failed to delete all user notifications:", err)
+      setError("Unable to delete notifications right now.")
+    } finally {
+      setDeletingAll(false)
+    }
+  }
+
   const unreadCount = notifications.filter((notification) => !notification.isRead).length
 
   return (
@@ -159,22 +177,42 @@ export default function Notifications() {
               </Badge>
             )}
           </div>
-          {unreadCount > 0 && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleMarkAllRead}
-              disabled={markingAll}
-              className="text-green-700 hover:text-green-800"
-            >
-              {markingAll ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CheckCheck className="h-4 w-4" />
+          {notifications.length > 0 && (
+            <div className="flex items-center gap-1 sm:gap-2">
+              {unreadCount > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleMarkAllRead}
+                  disabled={markingAll || deletingAll}
+                  className="text-green-700 hover:text-green-800"
+                >
+                  {markingAll ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCheck className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline ml-1">Mark all read</span>
+                </Button>
               )}
-              <span className="hidden sm:inline ml-1">Mark all read</span>
-            </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleDeleteAll}
+                disabled={deletingAll || markingAll}
+                className="text-red-600 hover:text-red-700"
+              >
+                {deletingAll ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline ml-1">Delete all</span>
+              </Button>
+            </div>
           )}
         </div>
 
@@ -237,6 +275,11 @@ export default function Notifications() {
                       {notification.displayOrderId && (
                         <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-2">
                           Order ID: {notification.displayOrderId}
+                        </p>
+                      )}
+                      {notification.deliveryOtp && (
+                        <p className="text-xs sm:text-sm font-semibold text-green-700 dark:text-green-400 mb-2">
+                          OTP: {notification.deliveryOtp}
                         </p>
                       )}
                       <div className="flex items-center gap-1 text-xs md:text-sm text-gray-500 dark:text-gray-400">

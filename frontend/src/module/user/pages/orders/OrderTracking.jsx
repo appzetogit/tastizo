@@ -432,6 +432,7 @@ export default function OrderTracking() {
               price: item.price
             })) || [],
             total: apiOrder.pricing?.total || 0,
+            paymentMethod: apiOrder.payment?.method || apiOrder.paymentMethod || "",
             status: apiOrder.status || 'pending',
             deliveryPartner: apiOrder.deliveryPartnerId ? {
               name: apiOrder.deliveryPartnerId.name || 'Delivery Partner',
@@ -444,6 +445,7 @@ export default function OrderTracking() {
             deliveryInstructions: apiOrder.deliveryInstructions || "",
             deliveryAddress: apiOrder.deliveryAddress || undefined,
             phoneNumber: apiOrder.phoneNumber || undefined,
+            deliveryVerification: apiOrder.deliveryVerification || null,
             review: apiOrder.review || null,
             rating: apiOrder.rating || apiOrder.review?.rating || null,
             hasReview: Boolean(apiOrder.hasReview || apiOrder.review?.rating || apiOrder.rating)
@@ -785,6 +787,7 @@ export default function OrderTracking() {
             price: item.price
           })) || [],
           total: apiOrder.pricing?.total || 0,
+          paymentMethod: apiOrder.payment?.method || apiOrder.paymentMethod || "",
           status: apiOrder.status || 'pending',
           deliveryPartner: apiOrder.deliveryPartnerId ? {
             name: apiOrder.deliveryPartnerId.name || 'Delivery Partner',
@@ -797,6 +800,7 @@ export default function OrderTracking() {
           deliveryInstructions: apiOrder.deliveryInstructions || "",
           deliveryAddress: apiOrder.deliveryAddress || undefined,
           phoneNumber: apiOrder.phoneNumber || undefined,
+          deliveryVerification: apiOrder.deliveryVerification || null,
           review: apiOrder.review || null,
           rating: apiOrder.rating || apiOrder.review?.rating || null,
           hasReview: Boolean(apiOrder.hasReview || apiOrder.review?.rating || apiOrder.rating)
@@ -873,6 +877,8 @@ export default function OrderTracking() {
 
   const currentStatus = statusConfig[orderStatus] || statusConfig.placed
   const shouldShowMap = order !== null && !isTerminalOrderStatus(orderStatus)
+  const deliveryOtp = order?.deliveryVerification?.otp || ""
+  const shouldShowDeliveryOtp = Boolean(deliveryOtp)
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#0a0a0a]">
@@ -1113,6 +1119,40 @@ export default function OrderTracking() {
             All your delivery details in one place 👇
           </p>
         </motion.div>
+
+        {shouldShowDeliveryOtp && (
+          <motion.div
+            className="rounded-2xl border border-green-100 bg-white p-4 shadow-sm"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.68 }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-green-700">
+                  Share this OTP with your delivery partner
+                </p>
+                <p className="mt-2 text-sm text-gray-600">
+                  Required to confirm prepaid order delivery.
+                </p>
+                <p className="mt-2 text-xs text-gray-500">
+                  Do not share this OTP before receiving your order.
+                </p>
+                <p className="mt-3 text-xs font-medium text-gray-500">
+                  Order ID: {order?.id || order?.orderId || 'N/A'}
+                </p>
+              </div>
+              <div className="rounded-xl bg-green-600 px-4 py-3 text-center shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-green-100">
+                  OTP
+                </p>
+                <p className="mt-1 text-2xl font-bold tracking-[0.35em] text-white">
+                  {deliveryOtp}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* Contact & Address Section */}
         <motion.div

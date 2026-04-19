@@ -18,6 +18,7 @@ import {
   sendNotificationToRestaurant,
 } from "../../restaurant/services/restaurantNotificationService.js";
 import {
+  sendNotificationToUser,
   notifyUserOrderEvent,
   USER_NOTIFICATION_EVENTS,
 } from "../../user/services/userNotificationService.js";
@@ -34,6 +35,7 @@ import {
 } from "../../../services/firebaseRealtimeService.js";
 import { encodePolyline } from "../../../shared/utils/polylineEncoder.js";
 import mongoose from "mongoose";
+import crypto from "crypto";
 import winston from "winston";
 
 const logger = winston.createLogger({
@@ -45,6 +47,108 @@ const logger = winston.createLogger({
     }),
   ],
 });
+
+const DELIVERY_OTP_LENGTH = 4;
+const DELIVERY_OTP_MAX_ATTEMPTS = 5;
+const DELIVERY_OTP_EXPIRY_MS = 6 * 60 * 60 * 1000;
+const DELIVERY_OTP_LOCK_MS = 15 * 60 * 1000;
+const PREPAID_PAYMENT_METHODS = new Set(["razorpay", "wallet", "upi", "card"]);
+const ACTIVE_DELIVERY_OTP_STATUSES = new Set(["out_for_delivery"]);
+
+function resolvePaymentMethod(order) {
+  return String(order?.payment?.method || order?.paymentMethod || "")
+    .trim()
+    .toLowerCase();
+}
+
+function resolvePaymentStatus(order) {
+  return String(order?.payment?.status || order?.paymentStatus || "")
+    .trim()
+    .toLowerCase();
+}
+
+function isPrepaidOrder(order) {
+  return (
+    PREPAID_PAYMENT_METHODS.has(resolvePaymentMethod(order)) &&
+    ["completed", "paid"].includes(resolvePaymentStatus(order))
+  );
+}
+
+function generateDeliveryOtp() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function hashDeliveryOtp(otp) {
+  return crypto
+    .createHash("sha256")
+    .update(`${otp}:${process.env.DELIVERY_OTP_SECRET || "delivery-otp-secret"}`)
+    .digest("hex");
+}
+
+function isDeliveryOtpExpired(deliveryVerification) {
+  if (!deliveryVerification?.expiresAt) return true;
+  const expiresAt = new Date(deliveryVerification.expiresAt);
+  return Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= Date.now();
+}
+
+function isDeliveryOtpLocked(deliveryVerification) {
+  if (!deliveryVerification?.lockedUntil) return false;
+  const lockedUntil = new Date(deliveryVerification.lockedUntil);
+  return !Number.isNaN(lockedUntil.getTime()) && lockedUntil.getTime() > Date.now();
+}
+
+function shouldGenerateDeliveryOtp(order) {
+  if (!isPrepaidOrder(order)) return false;
+  if (!ACTIVE_DELIVERY_OTP_STATUSES.has(String(order?.status || "").toLowerCase()) &&
+      String(order?.deliveryState?.currentPhase || "").toLowerCase() !== "en_route_to_delivery") {
+    return false;
+  }
+
+  const deliveryVerification = order?.deliveryVerification || {};
+  if (!deliveryVerification.isRequired) return true;
+  if (deliveryVerification.verified) return false;
+  if (!deliveryVerification.otp || !deliveryVerification.otpHash) return true;
+  if (isDeliveryOtpExpired(deliveryVerification)) return true;
+
+  return false;
+}
+
+function buildDeliveryVerificationPayload(order, otp) {
+  const now = new Date();
+  return {
+    isRequired: true,
+    otp,
+    otpHash: hashDeliveryOtp(otp),
+    createdAt: now,
+    expiresAt: new Date(now.getTime() + DELIVERY_OTP_EXPIRY_MS),
+    verified: false,
+    verifiedAt: null,
+    verifiedBy: null,
+    attempts: 0,
+    lastSentAt: now,
+    lockedUntil: null,
+  };
+}
+
+function sanitizeOrderForDelivery(order) {
+  if (!order) return order;
+
+  const deliveryVerification = order.deliveryVerification || null;
+  return {
+    ...order,
+    deliveryVerification: deliveryVerification
+      ? {
+          isRequired: Boolean(deliveryVerification.isRequired && isPrepaidOrder(order)),
+          createdAt: deliveryVerification.createdAt || null,
+          expiresAt: deliveryVerification.expiresAt || null,
+          verified: Boolean(deliveryVerification.verified),
+          verifiedAt: deliveryVerification.verifiedAt || null,
+          attempts: Number(deliveryVerification.attempts || 0),
+          lockedUntil: deliveryVerification.lockedUntil || null,
+        }
+      : null,
+  };
+}
 
 /**
  * Get Delivery Partner Orders
@@ -111,7 +215,7 @@ export const getOrders = asyncHandler(async (req, res) => {
     const total = await Order.countDocuments(query);
 
     return successResponse(res, 200, "Orders retrieved successfully", {
-      orders,
+      orders: orders.map(sanitizeOrderForDelivery),
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -238,7 +342,10 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
         /* ignore */
       }
     }
-    const orderWithPayment = { ...order, paymentMethod };
+    const orderWithPayment = sanitizeOrderForDelivery({
+      ...order,
+      paymentMethod,
+    });
 
     return successResponse(res, 200, "Order details retrieved successfully", {
       order: orderWithPayment,
@@ -1424,6 +1531,28 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
       },
     };
 
+    let generatedDeliveryOtp = null;
+    if (shouldGenerateDeliveryOtp({
+      ...order,
+      status: "out_for_delivery",
+      deliveryState: {
+        ...(order.deliveryState || {}),
+        currentPhase: "en_route_to_delivery",
+      },
+    })) {
+      generatedDeliveryOtp = generateDeliveryOtp();
+      updateData.deliveryVerification = buildDeliveryVerificationPayload(
+        {
+          ...order,
+          paymentMethod: order.payment?.method,
+        },
+        generatedDeliveryOtp,
+      );
+    } else if (order.deliveryVerification?.isRequired) {
+      updateData["deliveryVerification.lastSentAt"] =
+        order.deliveryVerification?.lastSentAt || new Date();
+    }
+
     // Add bill image URL if provided (with validation)
     if (billImageUrl) {
       // Validate URL format
@@ -1521,9 +1650,36 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
       console.error("Error sending user out-for-delivery notification:", notifyError);
     });
 
+    if (
+      generatedDeliveryOtp &&
+      updatedOrder?.userId &&
+      updatedOrder?.orderId
+    ) {
+      sendNotificationToUser({
+        userId: updatedOrder.userId?._id || updatedOrder.userId,
+        order: updatedOrder,
+        type: USER_NOTIFICATION_EVENTS.ORDER_DELIVERY_OTP_READY,
+        title: "Your delivery OTP is here",
+        message: [
+          `Order ID: #${updatedOrder.orderId}`,
+          `OTP: ${generatedDeliveryOtp}`,
+          "",
+          "Share this OTP with the delivery partner only after receiving your prepaid order.",
+        ].join("\n"),
+        eventKey: `${USER_NOTIFICATION_EVENTS.ORDER_DELIVERY_OTP_READY}:${updatedOrder._id}:${generatedDeliveryOtp}`,
+        metadata: {
+          orderDisplayId: updatedOrder.orderId,
+          deliveryOtp: generatedDeliveryOtp,
+        },
+        source: "deliveryOrdersController.confirmOrderId.deliveryOtp",
+      }).catch((notifyError) => {
+        console.error("Error sending user delivery OTP notification:", notifyError);
+      });
+    }
+
     // Send response first, then handle socket notification asynchronously
     const responseData = {
-      order: updatedOrder,
+      order: sanitizeOrderForDelivery(updatedOrder),
       route: {
         coordinates: routeData.coordinates,
         distance: routeData.distance,
@@ -1808,6 +1964,150 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Verify Delivery OTP for prepaid orders
+ * POST /api/delivery/orders/:orderId/verify-delivery-otp
+ */
+export const verifyDeliveryOtp = asyncHandler(async (req, res) => {
+  try {
+    const delivery = req.delivery;
+    const { orderId } = req.params;
+    const otp = String(req.body?.otp || "").trim();
+
+    if (!delivery?._id) {
+      return errorResponse(res, 401, "Delivery partner authentication required");
+    }
+
+    if (!orderId) {
+      return errorResponse(res, 400, "Order ID is required");
+    }
+
+    if (!/^\d{4}$/.test(otp)) {
+      return errorResponse(res, 400, "OTP must be exactly 4 digits");
+    }
+
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24) {
+      order = await Order.findOne({
+        _id: orderId,
+        deliveryPartnerId: delivery._id,
+      })
+        .populate("restaurantId", "name location address phone ownerPhone")
+        .populate("userId", "name phone")
+        .lean();
+    }
+
+    if (!order) {
+      order = await Order.findOne({
+        orderId,
+        deliveryPartnerId: delivery._id,
+      })
+        .populate("restaurantId", "name location address phone ownerPhone")
+        .populate("userId", "name phone")
+        .lean();
+    }
+
+    if (!order) {
+      return errorResponse(res, 404, "Order not found or not assigned to you");
+    }
+
+    if (!isPrepaidOrder(order)) {
+      return errorResponse(res, 400, "Delivery OTP is required only for prepaid paid orders");
+    }
+
+    if (order.status === "cancelled") {
+      return errorResponse(res, 400, "Cancelled orders cannot be verified");
+    }
+
+    if (
+      order.status === "delivered" ||
+      order.deliveryState?.currentPhase === "completed" ||
+      order.deliveryState?.status === "delivered"
+    ) {
+      return errorResponse(res, 400, "Order is already delivered");
+    }
+
+    const deliveryVerification = order.deliveryVerification || {};
+
+    if (!deliveryVerification.isRequired || !deliveryVerification.otpHash) {
+      return errorResponse(res, 400, "Delivery OTP is not available for this order");
+    }
+
+    if (deliveryVerification.verified) {
+      return successResponse(res, 200, "OTP already verified", {
+        order: sanitizeOrderForDelivery(order),
+        orderStatus: order.status,
+      });
+    }
+
+    if (isDeliveryOtpExpired(deliveryVerification)) {
+      return errorResponse(res, 400, "Delivery OTP has expired");
+    }
+
+    if (isDeliveryOtpLocked(deliveryVerification)) {
+      return errorResponse(
+        res,
+        429,
+        "Too many invalid attempts. Please try again later or contact support.",
+      );
+    }
+
+    const hashedOtp = hashDeliveryOtp(otp);
+    if (hashedOtp !== deliveryVerification.otpHash) {
+      const nextAttempts = Number(deliveryVerification.attempts || 0) + 1;
+      const updatePayload = {
+        "deliveryVerification.attempts": nextAttempts,
+      };
+
+      if (nextAttempts >= DELIVERY_OTP_MAX_ATTEMPTS) {
+        updatePayload["deliveryVerification.lockedUntil"] = new Date(
+          Date.now() + DELIVERY_OTP_LOCK_MS,
+        );
+      }
+
+      await Order.updateOne(
+        { _id: order._id },
+        {
+          $set: updatePayload,
+        },
+      );
+
+      return errorResponse(
+        res,
+        nextAttempts >= DELIVERY_OTP_MAX_ATTEMPTS ? 429 : 400,
+        nextAttempts >= DELIVERY_OTP_MAX_ATTEMPTS
+          ? "Too many invalid attempts. Please contact support or retry later."
+          : "Invalid OTP. Please re-check and try again.",
+      );
+    }
+
+    const verifiedAt = new Date();
+    const verifiedOrder = await Order.findByIdAndUpdate(
+      order._id,
+      {
+        $set: {
+          "deliveryVerification.verified": true,
+          "deliveryVerification.verifiedAt": verifiedAt,
+          "deliveryVerification.verifiedBy": delivery._id,
+          "deliveryVerification.lockedUntil": null,
+        },
+      },
+      { new: true },
+    )
+      .populate("restaurantId", "name location address phone ownerPhone")
+      .populate("userId", "name phone")
+      .lean();
+
+    return successResponse(res, 200, "OTP verified successfully", {
+      order: sanitizeOrderForDelivery(verifiedOrder),
+      orderStatus: verifiedOrder?.status || order.status,
+    });
+  } catch (error) {
+    logger.error(`Error verifying delivery OTP: ${error.message}`);
+    return errorResponse(res, 500, "Failed to verify delivery OTP");
+  }
+});
+
+/**
  * Confirm Delivery Complete
  * PATCH /api/delivery/orders/:orderId/complete-delivery
  */
@@ -1990,7 +2290,7 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       }
 
       return successResponse(res, 200, "Order already delivered", {
-        order: order,
+        order: sanitizeOrderForDelivery(order),
         earnings: earnings,
         message: "Order was already marked as delivered",
       });
@@ -2017,6 +2317,39 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       return errorResponse(res, 500, "Order ID not found in order object");
     }
 
+    if (isPrepaidOrder(order)) {
+      const deliveryVerification = order.deliveryVerification || {};
+
+      if (!deliveryVerification.isRequired) {
+        return errorResponse(
+          res,
+          400,
+          "Delivery OTP verification is required before completing this prepaid order",
+        );
+      }
+
+      if (isDeliveryOtpExpired(deliveryVerification)) {
+        return errorResponse(res, 400, "Delivery OTP has expired");
+      }
+
+      if (!deliveryVerification.verified) {
+        return errorResponse(
+          res,
+          400,
+          "OTP verification is required before completing prepaid delivery",
+        );
+      }
+
+      const verifiedBy = deliveryVerification.verifiedBy?.toString?.() || "";
+      if (verifiedBy && verifiedBy !== delivery._id.toString()) {
+        return errorResponse(
+          res,
+          403,
+          "OTP was verified by another delivery partner",
+        );
+      }
+    }
+
     // Prepare update object
     const updateData = {
       status: "delivered",
@@ -2032,6 +2365,15 @@ export const completeDelivery = asyncHandler(async (req, res) => {
     // Also update embedded payment status for COD orders
     if (order.payment?.method === "cash" || order.payment?.method === "cod") {
       updateData["payment.status"] = "completed";
+    }
+
+    if (isPrepaidOrder(order)) {
+      updateData["deliveryVerification.verified"] = true;
+      updateData["deliveryVerification.verifiedAt"] =
+        order.deliveryVerification?.verifiedAt || new Date();
+      updateData["deliveryVerification.verifiedBy"] = delivery._id;
+      updateData["deliveryVerification.otp"] = "";
+      updateData["deliveryVerification.otpHash"] = "";
     }
 
     // Delivery partners should not overwrite user-submitted ratings/comments.
@@ -2432,7 +2774,7 @@ export const completeDelivery = asyncHandler(async (req, res) => {
     // Send response first, then handle notifications asynchronously
     // This prevents timeouts if notifications take too long
     const responseData = {
-      order: updatedOrder,
+      order: sanitizeOrderForDelivery(updatedOrder),
       earnings: {
         amount: totalEarning,
         currency: "INR",
@@ -2585,7 +2927,10 @@ export const getActiveOrder = asyncHandler(async (req, res) => {
         /* ignore */
       }
     }
-    const orderWithPayment = { ...order, paymentMethod };
+    const orderWithPayment = sanitizeOrderForDelivery({
+      ...order,
+      paymentMethod,
+    });
 
     // Determine current state/phase from backend
     const deliveryState = order.deliveryState || {};

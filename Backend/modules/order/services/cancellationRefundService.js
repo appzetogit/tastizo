@@ -28,21 +28,39 @@ const getCancellationStage = (order) => {
   return 'post_pickup';
 };
 
+const resolveOrderAndAuditId = async (orderId) => {
+  let order = null;
+
+  if (mongoose.Types.ObjectId.isValid(orderId)) {
+    order = await Order.findById(orderId);
+  }
+
+  if (!order) {
+    order = await Order.findOne({ orderId: String(orderId) });
+  }
+
+  if (!order) {
+    throw new Error('Order not found');
+  }
+
+  return {
+    order,
+    auditOrderId: order._id,
+  };
+};
+
 /**
  * Calculate cancellation refund amount without processing (for admin approval)
  */
 export const calculateCancellationRefund = async (orderId, cancellationReason) => {
   try {
-    const order = await Order.findById(orderId);
-    if (!order) {
-      throw new Error('Order not found');
-    }
+    const { order, auditOrderId } = await resolveOrderAndAuditId(orderId);
 
     if (order.status !== 'cancelled') {
       throw new Error('Order is not cancelled');
     }
 
-    const settlement = await OrderSettlement.findOne({ orderId });
+    const settlement = await OrderSettlement.findOne({ orderId: order._id });
     if (!settlement) {
       throw new Error('Settlement not found');
     }
@@ -108,7 +126,7 @@ export const calculateCancellationRefund = async (orderId, cancellationReason) =
     // Create audit log
     await AuditLog.createLog({
       entityType: 'order',
-      entityId: orderId,
+      entityId: auditOrderId,
       action: 'cancellation_refund_calculated',
       actionType: 'refund',
       performedBy: {
@@ -119,7 +137,7 @@ export const calculateCancellationRefund = async (orderId, cancellationReason) =
         amount: refundAmount,
         type: 'refund',
         status: 'pending',
-        orderId: orderId
+        orderId: auditOrderId
       },
       description: `Cancellation refund calculated for order ${settlement.orderNumber}. Stage: ${cancellationStage}, Refund: ₹${refundAmount}, Restaurant Compensation: ₹${restaurantCompensation}. Awaiting admin approval.`
     });
@@ -141,16 +159,13 @@ export const calculateCancellationRefund = async (orderId, cancellationReason) =
  */
 export const processCancellationRefund = async (orderId, cancellationReason) => {
   try {
-    const order = await Order.findById(orderId);
-    if (!order) {
-      throw new Error('Order not found');
-    }
+    const { order, auditOrderId } = await resolveOrderAndAuditId(orderId);
 
     if (order.status !== 'cancelled') {
       throw new Error('Order is not cancelled');
     }
 
-    const settlement = await OrderSettlement.findOne({ orderId });
+    const settlement = await OrderSettlement.findOne({ orderId: order._id });
     if (!settlement) {
       throw new Error('Settlement not found');
     }
@@ -240,7 +255,7 @@ export const processCancellationRefund = async (orderId, cancellationReason) => 
     // Create audit log
     await AuditLog.createLog({
       entityType: 'order',
-      entityId: orderId,
+      entityId: auditOrderId,
       action: 'cancellation_refund',
       actionType: 'refund',
       performedBy: {
@@ -251,7 +266,7 @@ export const processCancellationRefund = async (orderId, cancellationReason) => 
         amount: refundAmount,
         type: 'refund',
         status: 'success',
-        orderId: orderId
+        orderId: auditOrderId
       },
       description: `Cancellation refund processed for order ${settlement.orderNumber}. Stage: ${cancellationStage}, Refund: ₹${refundAmount}, Restaurant Compensation: ₹${restaurantCompensation}`
     });

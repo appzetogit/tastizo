@@ -13,6 +13,7 @@ import {
 import {
   getUserNotifications,
   getUserUnreadNotificationCount,
+  deleteAllUserNotifications,
   markAllUserNotificationsRead,
   markUserNotificationRead,
 } from "../controllers/userNotificationController.js";
@@ -44,6 +45,7 @@ router.put('/location', updateUserLocation);
 // Notification routes
 router.get("/notifications", getUserNotifications);
 router.get("/notifications/unread-count", getUserUnreadNotificationCount);
+router.delete("/notifications", deleteAllUserNotifications);
 router.patch("/notifications/read-all", markAllUserNotificationsRead);
 router.patch("/notifications/:notificationId/read", markUserNotificationRead);
 

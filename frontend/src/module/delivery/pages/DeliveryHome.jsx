@@ -27,6 +27,7 @@ import {
   Loader2,
   Camera,
   MessageCircle,
+  Shield,
 } from "lucide-react"
 import BottomPopup from "../components/BottomPopup"
 import DeliveryOrderChatModal from "../components/DeliveryOrderChatModal"
@@ -680,6 +681,9 @@ export default function DeliveryHome() {
   const [showPaymentPage, setShowPaymentPage] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [chatOrderId, setChatOrderId] = useState(null)
+  const [deliveryCompletionOtp, setDeliveryCompletionOtp] = useState("")
+  const [deliveryCompletionOtpError, setDeliveryCompletionOtpError] = useState("")
+  const [isVerifyingDeliveryOtp, setIsVerifyingDeliveryOtp] = useState(false)
   const [customerRating, setCustomerRating] = useState(0)
   const [customerReviewText, setCustomerReviewText] = useState("")
   const [orderEarnings, setOrderEarnings] = useState(0) // Store earnings from completed order
@@ -691,11 +695,17 @@ export default function DeliveryHome() {
   useEffect(() => {
     if (!selectedRestaurant) {
       setOrderEarnings(0)
+      setDeliveryCompletionOtp("")
+      setDeliveryCompletionOtpError("")
+      setIsVerifyingDeliveryOtp(false)
       return
     }
     const key = selectedRestaurant.id || selectedRestaurant.orderId
     if (key) {
       setOrderEarnings(0)
+      setDeliveryCompletionOtp("")
+      setDeliveryCompletionOtpError("")
+      setIsVerifyingDeliveryOtp(false)
     }
   }, [selectedRestaurant?.id, selectedRestaurant?.orderId])
   const [reachedPickupButtonProgress, setreachedPickupButtonProgress] = useState(0)
@@ -2463,11 +2473,12 @@ export default function DeliveryHome() {
                                 selectedRestaurant?.customerAddress,
                 customerPhone: extractCustomerPhoneFromOrder(order) || selectedRestaurant?.customerPhone || null,
                 customerLat: order.address?.location?.coordinates?.[1],
-                customerLng: order.address?.location?.coordinates?.[0],
-                items: order.items || [],
-                total: order.pricing?.total || 0,
-                paymentMethod: order.paymentMethod ?? order.payment?.method ?? 'razorpay', // backend-resolved first (COD vs Online)
-                phone: order.restaurantId?.phone || order.restaurantId?.ownerPhone || null, // Restaurant phone number (prefer phone, fallback to ownerPhone)
+              customerLng: order.address?.location?.coordinates?.[0],
+              items: order.items || [],
+              total: order.pricing?.total || 0,
+              paymentMethod: order.paymentMethod ?? order.payment?.method ?? 'razorpay', // backend-resolved first (COD vs Online)
+              deliveryVerification: order.deliveryVerification || null,
+              phone: order.restaurantId?.phone || order.restaurantId?.ownerPhone || null, // Restaurant phone number (prefer phone, fallback to ownerPhone)
                 ownerPhone: order.restaurantId?.ownerPhone || null, // Owner phone number (separate field for direct access)
                 orderStatus: order.status || 'preparing', // Store order status (pending, preparing, ready, out_for_delivery, delivered)
                 deliveryState: {
@@ -3559,6 +3570,9 @@ export default function DeliveryHome() {
                   customerAddress: order.address?.formattedAddress ||
                                   (order.address?.street ? `${order.address.street}, ${order.address.city || ''}, ${order.address.state || ''}`.trim() : '') ||
                                   selectedRestaurant.customerAddress,
+                  deliveryVerification: order.deliveryVerification || selectedRestaurant.deliveryVerification || null,
+                  paymentMethod: order.paymentMethod ?? order.payment?.method ?? selectedRestaurant.paymentMethod,
+                  paymentStatus: order.paymentStatus ?? order.payment?.status ?? selectedRestaurant.paymentStatus,
                   customerLat,
                   customerLng
                 }
@@ -3680,6 +3694,9 @@ export default function DeliveryHome() {
               ...prev,
               orderStatus: 'out_for_delivery',
               status: 'out_for_delivery',
+              deliveryVerification: order.deliveryVerification || prev?.deliveryVerification || null,
+              paymentMethod: order.paymentMethod ?? order.payment?.method ?? prev?.paymentMethod,
+              paymentStatus: order.paymentStatus ?? order.payment?.status ?? prev?.paymentStatus,
               deliveryPhase: 'en_route_to_delivery',
               deliveryState: {
                 ...prev.deliveryState,
@@ -3823,6 +3840,173 @@ export default function DeliveryHome() {
     }
   }
 
+  const isPrepaidDeliveryCompletionOrder = (orderLike) => {
+    const paymentMethod = String(
+      orderLike?.paymentMethod || orderLike?.payment?.method || '',
+    ).toLowerCase()
+    const paymentStatus = String(
+      orderLike?.paymentStatus || orderLike?.payment?.status || '',
+    ).toLowerCase()
+
+    if (paymentMethod === 'cash' || paymentMethod === 'cod') {
+      return false
+    }
+
+    if (orderLike?.deliveryVerification?.isRequired) {
+      return true
+    }
+
+    return ['paid', 'completed'].includes(paymentStatus) || Boolean(paymentMethod)
+  }
+
+  const continueOrderCompletion = () => {
+    const requiresDeliveryOtp = isPrepaidDeliveryCompletionOrder(selectedRestaurant)
+    const trimmedDeliveryOtp = deliveryCompletionOtp.trim()
+
+    if (requiresDeliveryOtp && !/^\d{4}$/.test(trimmedDeliveryOtp)) {
+      setDeliveryCompletionOtpError(
+        trimmedDeliveryOtp
+          ? 'Please enter a valid 4-digit OTP.'
+          : 'Ask customer for the 4-digit OTP to complete prepaid delivery.',
+      )
+      return
+    }
+
+    setOrderDeliveredIsAnimatingToComplete(true)
+    setOrderDeliveredButtonProgress(1)
+
+    setTimeout(() => {
+      setShowOrderDeliveredAnimation(false)
+
+      setShowReachedDropPopup(false)
+      setShowreachedPickupPopup(false)
+      setShowOrderIdConfirmationPopup(false)
+
+      ;(async () => {
+        try {
+          const orderIdForApi =
+            selectedRestaurant?.id ||
+            newOrder?.orderMongoId ||
+            newOrder?._id ||
+            selectedRestaurant?.orderId ||
+            newOrder?.orderId
+
+          if (!orderIdForApi) {
+            console.error("âŒ Order ID not available for completeDelivery", {
+              selectedRestaurant,
+              newOrder,
+            })
+            toast.error("Order ID not available. Please try again.")
+            return
+          }
+
+          console.log("ðŸ“ Completing delivery directly from swipe:", {
+            orderId: orderIdForApi,
+          })
+
+          if (requiresDeliveryOtp) {
+            setIsVerifyingDeliveryOtp(true)
+            setDeliveryCompletionOtpError("")
+
+            const verifyResponse = await deliveryAPI.verifyDeliveryOtp(
+              orderIdForApi,
+              trimmedDeliveryOtp,
+            )
+
+            if (!verifyResponse.data?.success) {
+              throw new Error(
+                verifyResponse.data?.message ||
+                  "Invalid OTP. Please re-check and try again.",
+              )
+            }
+          }
+
+          const response = await deliveryAPI.completeDelivery(
+            orderIdForApi,
+            null,
+            "",
+          )
+
+          if (response.data?.success) {
+            let earnings = response.data.data?.earnings?.amount
+            if (earnings == null) {
+              earnings = response.data.data?.totalEarning
+            }
+            if (earnings == null) {
+              const backendEstimated = response.data.data?.estimatedEarnings
+              if (
+                typeof backendEstimated === "object" &&
+                backendEstimated?.totalEarning != null
+              ) {
+                earnings = Number(backendEstimated.totalEarning) || 0
+              } else if (typeof backendEstimated === "number") {
+                earnings = Number(backendEstimated) || 0
+              }
+            }
+            if (earnings == null) {
+              const est = selectedRestaurant?.estimatedEarnings
+              if (typeof est === "object" && est?.totalEarning != null) {
+                earnings = Number(est.totalEarning) || 0
+              } else if (typeof est === "number") {
+                earnings = Number(est) || 0
+              }
+            }
+            if (earnings == null) {
+              earnings = 0
+            }
+
+            setOrderEarnings(earnings)
+
+            console.log(
+              "âœ… Delivery completed and earnings added to wallet:",
+              earnings,
+            )
+            console.log(
+              "âœ… Wallet transaction:",
+              response.data.data?.walletTransaction,
+            )
+
+            window.dispatchEvent(new Event("deliveryWalletStateUpdated"))
+
+            if (earnings > 0) {
+              toast.success(`â‚¹${earnings.toFixed(2)} added to your wallet!`)
+            } else {
+              toast.success("Order marked as delivered")
+            }
+
+            setDeliveryCompletionOtp("")
+            setDeliveryCompletionOtpError("")
+
+            clearOrderData()
+          } else {
+            console.error("âŒ Failed to complete delivery:", response.data)
+            const failureMessage =
+              response.data?.message ||
+              "Failed to complete delivery. Please try again."
+            toast.error(failureMessage)
+            setDeliveryCompletionOtpError(failureMessage)
+            setShowOrderDeliveredAnimation(true)
+          }
+        } catch (error) {
+          console.error("âŒ Error completing delivery:", error)
+          const failureMessage =
+            error?.response?.data?.message ||
+            error?.message ||
+            "Failed to complete delivery. Please try again."
+          toast.error(failureMessage)
+          setDeliveryCompletionOtpError(failureMessage)
+          setShowOrderDeliveredAnimation(true)
+        } finally {
+          setIsVerifyingDeliveryOtp(false)
+          setTimeout(() => {
+            setOrderDeliveredButtonProgress(0)
+            setOrderDeliveredIsAnimatingToComplete(false)
+          }, 500)
+        }
+      })()
+    }, 200)
+  }
+
   const handleOrderDeliveredTouchEnd = (e) => {
     if (!orderDeliveredIsSwiping.current) {
       setOrderDeliveredButtonProgress(0)
@@ -3835,8 +4019,23 @@ export default function DeliveryHome() {
     const padding = 16
     const maxSwipe = buttonWidth - circleWidth - (padding * 2)
     const threshold = maxSwipe * 0.7 // 70% of max swipe
+    const requiresDeliveryOtp = isPrepaidDeliveryCompletionOrder(selectedRestaurant)
+    const trimmedDeliveryOtp = deliveryCompletionOtp.trim()
 
     if (deltaX > threshold) {
+      if (requiresDeliveryOtp && !/^\d{4}$/.test(trimmedDeliveryOtp)) {
+        setDeliveryCompletionOtpError(
+          trimmedDeliveryOtp
+            ? 'Please enter a valid 4-digit OTP.'
+            : 'Ask customer for the 4-digit OTP to complete prepaid delivery.',
+        )
+        setOrderDeliveredButtonProgress(0)
+        orderDeliveredSwipeStartX.current = 0
+        orderDeliveredSwipeStartY.current = 0
+        orderDeliveredIsSwiping.current = false
+        return
+      }
+
       // Animate to completion
       setOrderDeliveredIsAnimatingToComplete(true)
       setOrderDeliveredButtonProgress(1)
@@ -3872,6 +4071,23 @@ export default function DeliveryHome() {
             console.log("📝 Completing delivery directly from swipe:", {
               orderId: orderIdForApi,
             })
+
+            if (requiresDeliveryOtp) {
+              setIsVerifyingDeliveryOtp(true)
+              setDeliveryCompletionOtpError("")
+
+              const verifyResponse = await deliveryAPI.verifyDeliveryOtp(
+                orderIdForApi,
+                trimmedDeliveryOtp,
+              )
+
+              if (!verifyResponse.data?.success) {
+                throw new Error(
+                  verifyResponse.data?.message ||
+                    "Invalid OTP. Please re-check and try again.",
+                )
+              }
+            }
 
             const response = await deliveryAPI.completeDelivery(
               orderIdForApi,
@@ -3927,19 +4143,31 @@ export default function DeliveryHome() {
                 toast.success("Order marked as delivered")
               }
 
+              setDeliveryCompletionOtp("")
+              setDeliveryCompletionOtpError("")
+
               // Clear active order from UI so everywhere reflects delivered state
               clearOrderData()
             } else {
               console.error("❌ Failed to complete delivery:", response.data)
-              toast.error(
+              const failureMessage =
                 response.data?.message ||
-                  "Failed to complete delivery. Please try again.",
-              )
+                "Failed to complete delivery. Please try again."
+              toast.error(failureMessage)
+              setDeliveryCompletionOtpError(failureMessage)
+              setShowOrderDeliveredAnimation(true)
             }
           } catch (error) {
             console.error("❌ Error completing delivery:", error)
-            toast.error("Failed to complete delivery. Please try again.")
+            const failureMessage =
+              error?.response?.data?.message ||
+              error?.message ||
+              "Failed to complete delivery. Please try again."
+            toast.error(failureMessage)
+            setDeliveryCompletionOtpError(failureMessage)
+            setShowOrderDeliveredAnimation(true)
           } finally {
+            setIsVerifyingDeliveryOtp(false)
             // Reset after animation
             setTimeout(() => {
               setOrderDeliveredButtonProgress(0)
@@ -6183,6 +6411,7 @@ export default function DeliveryHome() {
             restaurantInfoToRestore = {
               ...restaurantInfoToRestore,
               deliveryPhase: deliveryPhase || 'en_route_to_delivery',
+              deliveryVerification: order.deliveryVerification || restaurantInfoToRestore.deliveryVerification || null,
               customerLat,
               customerLng,
               customerName: order.userId?.name || restaurantInfoToRestore.customerName,
@@ -6482,6 +6711,7 @@ export default function DeliveryHome() {
             ...prev,
             orderStatus: order.status,
             status: order.status,
+            deliveryVerification: order.deliveryVerification || prev?.deliveryVerification || null,
             deliveryPhase: order.deliveryState?.currentPhase || prev?.deliveryPhase,
             deliveryState: order.deliveryState || prev?.deliveryState
           }));
@@ -10184,6 +10414,10 @@ export default function DeliveryHome() {
         isOpen={showOrderDeliveredAnimation}
         onClose={() => {
           setShowOrderDeliveredAnimation(false)
+          setDeliveryCompletionOtp("")
+          setDeliveryCompletionOtpError("")
+          setIsVerifyingDeliveryOtp(false)
+          setOrderDeliveredButtonProgress(0)
           setShowCustomerReviewPopup(true)
         }}
         showCloseButton={false}
@@ -10192,8 +10426,10 @@ export default function DeliveryHome() {
         showHandle={true}
         showBackdrop={false}
         backdropBlocksInteraction={false}
+        stickyFooter={true}
       >
-        <div className="">
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="flex-1 overflow-y-auto pr-1">
           {/* Success Icon and Title */}
           <div className="text-center mb-6">
             <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -10285,11 +10521,75 @@ export default function DeliveryHome() {
             )
           })()}
 
-          {/* Order Delivered Button with Swipe */}
-          <div className="relative w-full">
+          </div>
+
+          <div className="border-t border-gray-100 bg-white pt-4">
+            {(() => {
+              const requiresDeliveryOtp = isPrepaidDeliveryCompletionOrder(
+                selectedRestaurant,
+              )
+
+              if (!requiresDeliveryOtp) return null
+
+              return (
+                <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3">
+                  <div className="mb-2 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm">
+                      <Shield className="h-4 w-4 text-amber-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-amber-900">
+                        Enter customer OTP
+                      </p>
+                      <p className="text-xs text-amber-800">
+                        Ask customer for the 4-digit OTP.
+                      </p>
+                    </div>
+                  </div>
+
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    autoComplete="one-time-code"
+                    value={deliveryCompletionOtp}
+                    onChange={(event) => {
+                      const nextOtp = event.target.value.replace(/\D/g, '').slice(0, 4)
+                      setDeliveryCompletionOtp(nextOtp)
+                      if (deliveryCompletionOtpError) {
+                        setDeliveryCompletionOtpError('')
+                      }
+                    }}
+                    placeholder="OTP"
+                    className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2.5 text-center text-xl font-bold tracking-[0.35em] text-gray-900 outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                  />
+
+                  <div className="mt-2 flex items-center justify-between gap-3 text-[11px]">
+                    <span className="text-amber-700">
+                      Order ID: {selectedRestaurant?.orderId || selectedRestaurant?.id || '--'}
+                    </span>
+                    <span className="text-gray-500">
+                      {deliveryCompletionOtp.length}/4
+                    </span>
+                  </div>
+
+                  {deliveryCompletionOtpError && (
+                    <p className="mt-2 text-xs font-medium text-red-600">
+                      {deliveryCompletionOtpError}
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* Order Delivered Button with Swipe */}
+            <div className="relative w-full">
             <motion.div
               ref={orderDeliveredButtonRef}
-              className="relative w-full bg-green-600 rounded-full overflow-hidden shadow-xl"
+              className={`relative w-full rounded-full overflow-hidden shadow-xl ${
+                isVerifyingDeliveryOtp ? 'bg-green-500/80 pointer-events-none' : 'bg-green-600'
+              }`}
               style={{ touchAction: 'pan-x' }} // Prevent vertical scrolling, allow horizontal pan
               onTouchStart={handleOrderDeliveredTouchStart}
               onTouchMove={handleOrderDeliveredTouchMove}
@@ -10340,12 +10640,25 @@ export default function DeliveryHome() {
                       damping: 25
                     } : { duration: 0 }}
                   >
-                    {orderDeliveredButtonProgress > 0.5 ? 'Release to Confirm' : 'Order Delivered'}
+                    {isVerifyingDeliveryOtp
+                      ? 'Verifying OTP...'
+                      : orderDeliveredButtonProgress > 0.5
+                        ? 'Release to Confirm'
+                        : (() => {
+                            const requiresDeliveryOtp = isPrepaidDeliveryCompletionOrder(
+                              selectedRestaurant,
+                            )
+
+                            return requiresDeliveryOtp
+                              ? 'Verify & Complete Delivery'
+                              : 'Order Delivered'
+                          })()}
                   </motion.span>
                 </div>
               </div>
             </motion.div>
           </div>
+        </div>
         </div>
       </BottomPopup>
 

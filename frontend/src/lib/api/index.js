@@ -272,6 +272,10 @@ export const userAPI = {
     return apiClient.patch(API_ENDPOINTS.USER.NOTIFICATIONS_READ_ALL);
   },
 
+  deleteAllNotifications: () => {
+    return apiClient.delete(API_ENDPOINTS.USER.NOTIFICATIONS_DELETE_ALL);
+  },
+
   // Order chat (Track Order live chat with delivery partner)
   getOrderChat: (orderId) => {
     return apiClient.get(
@@ -1072,6 +1076,12 @@ export const deliveryAPI = {
   confirmReachedDrop: (orderId) => {
     return apiClient.patch(
       API_ENDPOINTS.DELIVERY.ORDER_REACHED_DROP.replace(":orderId", orderId),
+    );
+  },
+  verifyDeliveryOtp: (orderId, otp) => {
+    return apiClient.post(
+      `/delivery/orders/${orderId}/verify-delivery-otp`,
+      { otp },
     );
   },
   completeDelivery: (orderId, rating = null, review = "") => {

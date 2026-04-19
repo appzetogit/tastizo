@@ -65,7 +65,11 @@ export default function Checkout() {
 
       clearCart()
       setIsPlacingOrder(false)
-      navigate(`/user/orders/${orderId}?confirmed=true`)
+      navigate(`/user/orders/${orderId}/confirmation`, {
+        state: {
+          paymentMethod: defaultPayment?.type || defaultPayment?.id || "",
+        },
+      })
     }, 1500)
   }
 
