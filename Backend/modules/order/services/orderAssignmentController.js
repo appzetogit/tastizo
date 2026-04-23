@@ -234,15 +234,17 @@ class OrderAssignmentController {
             throw new Error('Order not found');
           }
 
-          // Check if order is still available for acceptance
-          if (order.assignmentStatus !== 'assigned' || order.deliveryPartnerId.toString() !== deliveryPartnerId) {
-            throw new Error('Order not available for acceptance');
+          // Multi-rider flow: everyone can see the ready order, but only the
+          // first rider who acquires the lock can claim it.
+          const isAlreadyAcceptedByOther =
+            order.assignmentStatus === 'accepted' &&
+            order.deliveryPartnerId?.toString?.() !== deliveryPartnerId.toString();
+          if (isAlreadyAcceptedByOther) {
+            throw new Error('Order was already accepted by another delivery partner');
           }
 
-          // Check if assignment hasn't expired
-          const activeAssignment = await OrderAssignmentHistory.getActiveAssignment(orderId);
-          if (!activeAssignment || activeAssignment.deliveryPartnerId._id.toString() !== deliveryPartnerId) {
-            throw new Error('Assignment not found or expired');
+          if (order.status !== 'ready') {
+            throw new Error('Order not available for acceptance');
           }
 
           // Use atomic update to prevent race conditions
@@ -254,16 +256,25 @@ class OrderAssignmentController {
             const updatedOrder = await Order.findOneAndUpdate(
               {
                 _id: orderId,
-                deliveryPartnerId: deliveryPartnerId,
-                assignmentStatus: 'assigned'
+                status: 'ready',
+                assignmentStatus: { $ne: 'accepted' },
+                $or: [
+                  { deliveryPartnerId: { $exists: false } },
+                  { deliveryPartnerId: null },
+                  { deliveryPartnerId: deliveryPartnerId },
+                ]
               },
               {
                 $set: {
+                  deliveryPartnerId: deliveryPartnerId,
                   assignmentStatus: 'accepted',
                   'deliveryState.status': 'accepted',
                   'deliveryState.acceptedAt': new Date(),
                   'deliveryState.currentPhase': 'en_route_to_pickup',
-                  'assignmentTimings.acceptedAt': new Date()
+                  'assignmentTimings.acceptedAt': new Date(),
+                  'assignmentInfo.deliveryPartnerId': deliveryPartnerId.toString(),
+                  'assignmentInfo.priorityDeliveryPartnerIds': [],
+                  'assignmentInfo.expandedDeliveryPartnerIds': []
                 }
               },
               { new: true, session }
@@ -274,18 +285,30 @@ class OrderAssignmentController {
               throw new Error('Order was already accepted by another delivery partner');
             }
 
-            // Update assignment history
+            // Record who won the race for audit/debugging.
             await OrderAssignmentHistory.findOneAndUpdate(
               {
                 orderId: orderId,
                 deliveryPartnerId: deliveryPartnerId,
-                assignmentStatus: 'pending'
               },
               {
-                assignmentStatus: 'accepted',
-                respondedAt: new Date()
+                $set: {
+                  assignmentStatus: 'accepted',
+                  respondedAt: new Date(),
+                  reason: undefined,
+                },
+                $setOnInsert: {
+                  orderNumber: order.orderId,
+                  assignedAt: new Date(),
+                  expiresAt: new Date(Date.now() + 60 * 1000),
+                  metadata: {
+                    assignmentMethod: 'manual',
+                    totalAttempts: 1,
+                    previousAttempts: 0,
+                  },
+                },
               },
-              { session }
+              { upsert: true, session }
             );
 
             await session.commitTransaction();
@@ -346,6 +369,15 @@ class OrderAssignmentController {
     try {
       console.log(`Delivery partner ${deliveryPartnerId} rejecting order ${orderId}`);
 
+      const order = await Order.findById(orderId);
+      if (!order) {
+        throw new Error('Order not found');
+      }
+
+      if (order.assignmentStatus === 'accepted') {
+        throw new Error('Order has already been accepted and cannot be rejected');
+      }
+
       // Update assignment history immediately to block this delivery partner
       const assignment = await OrderAssignmentHistory.findOne({
         orderId: orderId,
@@ -353,18 +385,41 @@ class OrderAssignmentController {
         assignmentStatus: 'pending'
       });
 
-      if (!assignment) {
-        throw new Error('Active assignment not found');
+      if (assignment) {
+        await assignment.rejectAssignment(reason);
+      } else {
+        await OrderAssignmentHistory.findOneAndUpdate(
+          {
+            orderId,
+            deliveryPartnerId,
+          },
+          {
+            $set: {
+              assignmentStatus: 'rejected',
+              respondedAt: new Date(),
+              reason,
+            },
+            $setOnInsert: {
+              orderNumber: order.orderId,
+              assignedAt: new Date(),
+              expiresAt: new Date(Date.now() + 60 * 1000),
+              metadata: {
+                assignmentMethod: 'manual',
+                totalAttempts: 1,
+                previousAttempts: 0,
+              },
+            },
+          },
+          { upsert: true }
+        );
       }
-
-      // Mark as rejected immediately to prevent reassignment to same partner
-      await assignment.rejectAssignment(reason);
 
       // Update order to remove current assignment immediately
       await Order.findByIdAndUpdate(orderId, {
         $set: {
-          assignmentStatus: 'expired',
-          deliveryPartnerId: null
+          assignmentStatus: 'pending_assignment',
+          deliveryPartnerId: null,
+          'assignmentInfo.deliveryPartnerId': null,
         }
       });
 
@@ -387,13 +442,7 @@ class OrderAssignmentController {
         console.warn("Delivery cancelled notification failed:", notifyError.message);
       });
 
-      // CRITICAL: Add a small delay before reassignment to ensure the rejection is processed
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Trigger reassignment to next available delivery partner (excluding rejected one)
-      await this.reassignOrder(orderId, deliveryPartnerId, reason);
-
-      console.log(`Order ${orderId} rejected by delivery partner ${deliveryPartnerId}, blocked from future assignments and reassigned...`);
+      console.log(`Order ${orderId} rejected by delivery partner ${deliveryPartnerId} and blocked from future visibility for that partner.`);
 
       return {
         success: true,
@@ -422,7 +471,11 @@ class OrderAssignmentController {
       }
 
       // Check if order is still in assignable state
-      if (order.assignmentStatus === 'accepted' || order.deliveryPartnerId.toString() !== previousDeliveryPartnerId) {
+      const currentAssignedPartnerId = order.deliveryPartnerId?.toString?.() || null;
+      if (
+        order.assignmentStatus === 'accepted' ||
+        (currentAssignedPartnerId && currentAssignedPartnerId !== previousDeliveryPartnerId?.toString?.())
+      ) {
         console.log(`Order ${orderId} already accepted or assigned to different partner, skipping reassignment`);
         return null;
       }

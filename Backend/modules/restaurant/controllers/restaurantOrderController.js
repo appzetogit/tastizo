@@ -10,8 +10,7 @@ import {
   USER_NOTIFICATION_EVENTS,
 } from "../../user/services/userNotificationService.js";
 import { assignOrderToDeliveryBoy, findNearestDeliveryBoys, findNearestDeliveryBoy } from '../../order/services/deliveryAssignmentService.js';
-import { notifyDeliveryBoyNewOrder, notifyMultipleDeliveryBoys, broadcastNewOrderToAllDeliveryBoys } from '../../order/services/deliveryNotificationService.js';
-import orderAssignmentTriggerService from '../../order/services/orderAssignmentTriggerService.js';
+import { notifyDeliveryBoyNewOrder, broadcastNewOrderToAllDeliveryBoys } from '../../order/services/deliveryNotificationService.js';
 import mongoose from 'mongoose';
 import { removeActiveOrder } from '../../../services/firebaseRealtimeService.js';
 
@@ -673,7 +672,7 @@ export const markOrderReady = asyncHandler(async (req, res) => {
 
     // Only when restaurant marks "Ready for Pickup": emit order to all delivery boys (real-time available orders list)
     // Order.restaurantId is String, so populate does not fill it — fetch Restaurant for location and payload
-    if (!populatedOrder.deliveryPartnerId) {
+    if (false && !populatedOrder.deliveryPartnerId) {
       try {
         const restId = order.restaurantId || restaurantId;
         let restaurantDoc = null;
@@ -705,32 +704,40 @@ export const markOrderReady = asyncHandler(async (req, res) => {
                 },
               },
             });
-            await notifyMultipleDeliveryBoys(populatedOrder, priorityIds, 'priority');
           }
         } else {
           console.warn(`⚠️ Restaurant location missing or invalid for ${restId}; broadcasting to all delivery boys anyway`);
         }
 
-        // Always broadcast to entire /delivery namespace so every connected delivery boy sees the order
-        await broadcastNewOrderToAllDeliveryBoys(populatedOrder, 'priority');
       } catch (assignmentError) {
         console.error(`❌ Error in READY stage delivery notification:`, assignmentError);
       }
     }
 
-    // If a delivery partner WAS already assigned but maybe not notified, notify them specifically too
-    if (populatedOrder?.deliveryPartnerId) {
-      try {
-        const { notifyDeliveryBoyOrderReady } = await import('../../order/services/deliveryNotificationService.js');
-        const deliveryPartnerId = populatedOrder.deliveryPartnerId._id || populatedOrder.deliveryPartnerId;
+    try {
+      // Re-open the order for the all-riders flow. This clears any stale
+      // reserved rider left behind by legacy assignment logic.
+      await Order.findByIdAndUpdate(order._id, {
+        $set: {
+          assignmentStatus: 'pending_assignment',
+          deliveryPartnerId: null,
+          'assignmentInfo.deliveryPartnerId': null,
+          'assignmentInfo.priorityDeliveryPartnerIds': [],
+          'assignmentInfo.expandedDeliveryPartnerIds': [],
+          'assignmentInfo.notificationPhase': 'ready_broadcast',
+          'assignmentTimings.lastAssignedAt': new Date(),
+        },
+      });
 
-        // First, send full new_order so it appears in the rider's order list
-        await notifyDeliveryBoyNewOrder(populatedOrder, deliveryPartnerId);
-        // Then, send order_ready to update any UI badges/state
-        await notifyDeliveryBoyOrderReady(populatedOrder, deliveryPartnerId);
-      } catch (deliveryNotifError) {
-        console.error('Error sending specific delivery boy notification at READY stage:', deliveryNotifError);
-      }
+      populatedOrder = await Order.findById(order._id)
+        .populate('restaurantId', 'name location address phone ownerPhone')
+        .populate('userId', 'name phone')
+        .populate('deliveryPartnerId', 'name phone')
+        .lean();
+
+      await broadcastNewOrderToAllDeliveryBoys(populatedOrder, 'ready_broadcast');
+    } catch (assignmentError) {
+      console.error('Error broadcasting order from READY state:', assignmentError);
     }
 
     return successResponse(res, 200, 'Order marked as ready', {

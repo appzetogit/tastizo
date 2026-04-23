@@ -56,7 +56,6 @@ export default function BottomPopup({
   const handleCollapseToggle = (e) => {
     if (e) {
       e.stopPropagation()
-      e.preventDefault()
     }
     setIsCollapsed(prev => {
       const newState = !prev
@@ -299,7 +298,6 @@ export default function BottomPopup({
                 onClick={(e) => {
                   console.log('🖱️ Handle clicked, current collapsed:', isCollapsed)
                   e.stopPropagation()
-                  e.preventDefault()
                   handleCollapseToggle(e)
                 }}
                 onTouchStart={(e) => {
@@ -310,7 +308,6 @@ export default function BottomPopup({
                   // Handle touch end for mobile collapse toggle
                   console.log('👆 Handle touched, current collapsed:', isCollapsed)
                   e.stopPropagation()
-                  e.preventDefault()
                   handleCollapseToggle(e)
                 }}
                 onMouseDown={(e) => {

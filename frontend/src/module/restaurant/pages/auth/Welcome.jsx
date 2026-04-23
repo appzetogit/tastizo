@@ -223,29 +223,6 @@ export default function RestaurantWelcome() {
 
                   {/* Text Overlay */}
                   <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8 pb-16">
-                    {/* Appzeto Brand */}
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.2, duration: 0.5 }}
-                      className="mb-3"
-                    >
-                      <h1
-                        className="text-3xl italic md:text-4xl tracking-wide font-extrabold text-white"
-                        style={{
-                          WebkitTextStroke: "0.5px white",
-                          textStroke: "0.5px white"
-                        }}
-                      >
-                        {companyName.toLowerCase()}
-                      </h1>
-
-                      <div className="w-12 h-[0.1px] bg-white mt-0 mb-3" />
-                      {/* <p className="text-sm md:text-base text-white/90 font-medium">
-                        restaurant partner
-                      </p> */}
-                    </motion.div>
-
                     {/* Tagline */}
                     <motion.h2
                       initial={{ opacity: 0, y: 20 }}

@@ -397,24 +397,9 @@ export default function RestaurantLogin() {
       {/* Header - no back button per requirement */}
       <div className="relative flex items-center justify-center py-4 px-4 mt-2" />
 
-      {/* Top Section - Logo and Badge */}
+      {/* Top Section - Partner Badge */}
       <div className="flex flex-col items-center pt-8 pb-8 px-6">
-        {/* Tastizo Logo */}
         <div>
-          <h1
-            className="text-3xl italic md:text-4xl tracking-wide font-extrabold text-black"
-            style={{
-              WebkitTextStroke: "0.5px black",
-              textStroke: "0.5px black"
-            }}
-          >
-
-            {companyName.toLowerCase()}
-          </h1>
-        </div>
-
-        {/* Restaurant Partner Badge */}
-        <div className="">
           <span className="text-gray-600 font-light text-sm tracking-wide block text-center">
             — restaurant partner —
           </span>

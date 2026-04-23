@@ -147,12 +147,16 @@ export const getAllDeliveryOrders = () => {
   try {
     const ordersMap = new Map()
     
-    // Get active order from localStorage
-    const activeOrder = localStorage.getItem('activeOrder')
+    // Get the current real active delivery order from the delivery module store
+    const activeOrder = localStorage.getItem('deliveryActiveOrder')
     if (activeOrder) {
-      const order = JSON.parse(activeOrder)
-      order.status = getDeliveryOrderStatus(order.orderId)
-      ordersMap.set(order.orderId, order)
+      const parsed = JSON.parse(activeOrder)
+      const order = parsed?.restaurantInfo
+
+      if (order?.orderId) {
+        order.status = getDeliveryOrderStatus(order.orderId)
+        ordersMap.set(order.orderId, order)
+      }
     }
     
     // Get all order statuses from localStorage

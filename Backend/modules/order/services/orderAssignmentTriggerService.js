@@ -52,68 +52,14 @@ class OrderAssignmentTriggerService {
    */
   async triggerAssignment(orderId, triggerReason = 'status_change') {
     try {
-      console.log(`Triggering assignment for order ${orderId}, reason: ${triggerReason}`);
-
-      const order = await Order.findById(orderId);
-      if (!order) {
-        console.error(`Order ${orderId} not found for assignment trigger`);
-        return null;
-      }
-
-      // Check if order is ready for assignment
-      if (!this.isOrderReadyForAssignment(order)) {
-        console.log(`Order ${orderId} not ready for assignment, status: ${order.status}`);
-        return null;
-      }
-
-      // Check if order already has a delivery partner assigned
-      if (order.deliveryPartnerId || order.assignmentStatus === 'accepted') {
-        console.log(`Order ${orderId} already has delivery partner assigned`);
-        return null;
-      }
-
-      // Get restaurant coordinates
-      const restaurant = await resolveRestaurantForAssignment(order.restaurantId);
-      const coordinates = getRestaurantCoordinates(restaurant);
-
-      if (!restaurant || !coordinates) {
-        console.error(`Restaurant coordinates not found for order ${orderId}`, {
-          orderRestaurantId: order.restaurantId,
-          foundRestaurant: !!restaurant,
-          restaurantName: restaurant?.name,
-          location: restaurant?.location,
-        });
-        return null;
-      }
-
-      const { restaurantLat, restaurantLng } = coordinates;
-      const restaurantId = restaurant._id.toString();
-
-      // Validate coordinates
-      if (!restaurantLat || !restaurantLng || isNaN(restaurantLat) || isNaN(restaurantLng)) {
-        console.error(`Invalid restaurant coordinates for order ${orderId}: lat=${restaurantLat}, lng=${restaurantLng}`);
-        return null;
-      }
-
-      // Trigger assignment
-      const assignmentResult = await orderAssignmentController.assignOrderToDelivery(
-        orderId,
-        restaurantLat,
-        restaurantLng,
-        restaurantId
+      console.log(
+        `Assignment trigger skipped for order ${orderId}, reason: ${triggerReason}. Broadcast-to-all delivery flow is active.`,
       );
-
-      if (assignmentResult && assignmentResult.success) {
-        console.log(`Assignment triggered successfully for order ${orderId}:`, {
-          deliveryPartnerId: assignmentResult.deliveryPartnerId,
-          deliveryPartnerName: assignmentResult.deliveryPartnerName,
-          distance: assignmentResult.distance
-        });
-      } else {
-        console.log(`Assignment trigger failed for order ${orderId}`);
-      }
-
-      return assignmentResult;
+      return {
+        success: false,
+        skipped: true,
+        reason: 'broadcast_delivery_flow_active',
+      };
     } catch (error) {
       console.error('Error in triggerAssignment:', error);
       throw error;
@@ -125,20 +71,8 @@ class OrderAssignmentTriggerService {
    * @param {Object} order - Order document
    */
   isOrderReadyForAssignment(order) {
-    // Order is ready for assignment if:
-    // 1. Status is 'preparing' or 'ready' (restaurant is preparing/ready)
-    // 2. Not cancelled, delivered, or already assigned
-    // 3. Has valid restaurant and customer addresses
-    
-    const validStatuses = ['preparing', 'ready'];
-    const invalidStatuses = ['cancelled', 'delivered', 'pending'];
-    
-    return validStatuses.includes(order.status) && 
-           !invalidStatuses.includes(order.status) &&
-           order.restaurantId &&
-           order.address &&
-           order.address.location &&
-           order.address.location.coordinates;
+    void order;
+    return false;
   }
 
   /**
@@ -147,31 +81,15 @@ class OrderAssignmentTriggerService {
    */
   async triggerBatchAssignments(orderIds) {
     try {
-      console.log(`Triggering batch assignments for ${orderIds.length} orders`);
-      
-      const results = [];
-      for (const orderId of orderIds) {
-        try {
-          const result = await this.triggerAssignment(orderId, 'batch_trigger');
-          results.push({
-            orderId,
-            success: !!result?.success,
-            result: result || null
-          });
-        } catch (error) {
-          console.error(`Error triggering assignment for order ${orderId}:`, error);
-          results.push({
-            orderId,
-            success: false,
-            error: error.message
-          });
-        }
-      }
-
-      const successCount = results.filter(r => r.success).length;
-      console.log(`Batch assignment completed: ${successCount}/${orderIds.length} successful`);
-
-      return results;
+      console.log(
+        `Batch assignment skipped for ${orderIds.length} orders. Broadcast-to-all delivery flow is active.`,
+      );
+      return orderIds.map((orderId) => ({
+        orderId,
+        success: false,
+        skipped: true,
+        reason: 'broadcast_delivery_flow_active',
+      }));
     } catch (error) {
       console.error('Error in triggerBatchAssignments:', error);
       throw error;
@@ -184,51 +102,8 @@ class OrderAssignmentTriggerService {
    */
   async assignPendingOrders() {
     try {
-      console.log('Finding pending orders for assignment...');
-
-      // Find orders that are ready for assignment but not yet assigned
-      const pendingOrders = await Order.find({
-        status: { $in: ['preparing', 'ready'] },
-        assignmentStatus: { $in: ['pending_assignment', 'expired'] },
-        $or: [
-          { deliveryPartnerId: { $exists: false } },
-          { deliveryPartnerId: null },
-        ],
-        'address.location.coordinates': { $exists: true }
-      })
-      .limit(50) // Process in batches to avoid overwhelming
-      .lean();
-
-      if (pendingOrders.length === 0) {
-        console.log('No pending orders found for assignment');
-        return [];
-      }
-
-      console.log(`Found ${pendingOrders.length} pending orders for assignment`);
-
-      const results = [];
-      for (const order of pendingOrders) {
-        try {
-          const result = await this.triggerAssignment(order._id.toString(), 'periodic_check');
-          results.push({
-            orderId: order.orderId,
-            success: !!result?.success,
-            result: result || null
-          });
-        } catch (error) {
-          console.error(`Error assigning pending order ${order.orderId}:`, error);
-          results.push({
-            orderId: order.orderId,
-            success: false,
-            error: error.message
-          });
-        }
-      }
-
-      const successCount = results.filter(r => r.success).length;
-      console.log(`Pending assignment completed: ${successCount}/${pendingOrders.length} successful`);
-
-      return results;
+      console.log('Pending assignment checker skipped. Broadcast-to-all delivery flow is active.');
+      return [];
     } catch (error) {
       console.error('Error in assignPendingOrders:', error);
       throw error;
@@ -245,20 +120,6 @@ class OrderAssignmentTriggerService {
   async handleOrderStatusChange(orderId, newStatus, previousStatus = null) {
     try {
       console.log(`Handling order status change for ${orderId}: ${previousStatus} -> ${newStatus}`);
-
-      // Trigger assignment if order moved to 'preparing' or 'ready' status
-      const assignmentTriggerStatuses = ['preparing', 'ready'];
-      
-      if (assignmentTriggerStatuses.includes(newStatus)) {
-        // Add small delay to ensure all order data is saved
-        setTimeout(async () => {
-          try {
-            await this.triggerAssignment(orderId, 'status_change');
-          } catch (error) {
-            console.error(`Error in delayed assignment trigger for order ${orderId}:`, error);
-          }
-        }, 1000);
-      }
 
       // Handle order cancellation - stop any active assignments
       if (newStatus === 'cancelled') {
@@ -331,17 +192,9 @@ class OrderAssignmentTriggerService {
    * This runs every 30 seconds to check for orders that need assignment
    */
   startPeriodicAssignmentChecker() {
-    console.log('Starting periodic assignment checker...');
-    
-    const intervalId = setInterval(async () => {
-      try {
-        await this.assignPendingOrders();
-      } catch (error) {
-        console.error('Error in periodic assignment checker:', error);
-      }
-    }, 30000); // Every 30 seconds
+    console.log('Periodic assignment checker disabled. Broadcast-to-all delivery flow is active.');
 
-    // Store interval ID for cleanup
+    const intervalId = null;
     if (!this.intervalIds) {
       this.intervalIds = new Map();
     }
@@ -355,7 +208,10 @@ class OrderAssignmentTriggerService {
    */
   stopPeriodicAssignmentChecker() {
     if (this.intervalIds && this.intervalIds.has('periodic_checker')) {
-      clearInterval(this.intervalIds.get('periodic_checker'));
+      const intervalId = this.intervalIds.get('periodic_checker');
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
       this.intervalIds.delete('periodic_checker');
       console.log('Stopped periodic assignment checker');
     }

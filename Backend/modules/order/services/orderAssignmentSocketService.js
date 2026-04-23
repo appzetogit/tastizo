@@ -7,6 +7,89 @@ import {
   notifyDeliveryOrderEvent,
 } from '../../delivery/services/deliveryNotificationService.js';
 
+function calculateDistanceKm(origin, destination) {
+  if (!origin || !destination) return 0;
+
+  const originLat = Number(origin.latitude);
+  const originLng = Number(origin.longitude);
+  const destinationLat = Number(destination.latitude);
+  const destinationLng = Number(destination.longitude);
+
+  if (
+    !Number.isFinite(originLat) ||
+    !Number.isFinite(originLng) ||
+    !Number.isFinite(destinationLat) ||
+    !Number.isFinite(destinationLng)
+  ) {
+    return 0;
+  }
+
+  const R = 6371;
+  const dLat = (destinationLat - originLat) * Math.PI / 180;
+  const dLng = (destinationLng - originLng) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(originLat * Math.PI / 180) *
+      Math.cos(destinationLat * Math.PI / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+async function calculateEstimatedDeliveryPartnerEarnings(deliveryDistance) {
+  try {
+    const DeliveryBoyCommission = (
+      await import('../../admin/models/DeliveryBoyCommission.js')
+    ).default;
+
+    const normalizedDistance =
+      Number.isFinite(Number(deliveryDistance)) && Number(deliveryDistance) > 0
+        ? Number(deliveryDistance)
+        : 0;
+
+    const commissionResult =
+      await DeliveryBoyCommission.calculateCommission(normalizedDistance);
+
+    if (normalizedDistance <= 0) {
+      return {
+        basePayout: Math.round((commissionResult.breakdown.basePayout || 0) * 100) / 100,
+        distance: 0,
+        commissionPerKm:
+          Math.round((commissionResult.breakdown.commissionPerKm || 0) * 100) / 100,
+        distanceCommission: 0,
+        totalEarning: Math.round((commissionResult.breakdown.basePayout || 0) * 100) / 100,
+        breakdown: `Base payout: Rs.${commissionResult.breakdown.basePayout || 0}`,
+        minDistance: commissionResult.rule?.minDistance ?? 0,
+        maxDistance: commissionResult.rule?.maxDistance ?? null,
+      };
+    }
+
+    return {
+      basePayout: Math.round((commissionResult.breakdown.basePayout || 0) * 100) / 100,
+      distance: Math.round(normalizedDistance * 100) / 100,
+      commissionPerKm:
+        Math.round((commissionResult.breakdown.commissionPerKm || 0) * 100) / 100,
+      distanceCommission:
+        Math.round((commissionResult.breakdown.distanceCommission || 0) * 100) / 100,
+      totalEarning: Math.round((commissionResult.commission || 0) * 100) / 100,
+      breakdown: `Base payout: Rs.${commissionResult.breakdown.basePayout || 0} + distance payout = Rs.${Math.round((commissionResult.commission || 0) * 100) / 100}`,
+      minDistance: commissionResult.rule?.minDistance ?? 0,
+      maxDistance: commissionResult.rule?.maxDistance ?? null,
+    };
+  } catch (error) {
+    console.error('Error calculating assignment earnings:', error);
+    return {
+      basePayout: 0,
+      distance: Number(deliveryDistance) || 0,
+      commissionPerKm: 0,
+      distanceCommission: 0,
+      totalEarning: 0,
+      breakdown: 'Unable to calculate rider earnings',
+    };
+  }
+}
+
 async function resolveRestaurantForAssignment(restaurantId) {
   if (!restaurantId) return null;
 
@@ -124,6 +207,12 @@ class OrderAssignmentSocketService {
         restaurant.primaryContactNumber ||
         restaurant.contactNumber ||
         restaurant.ownerPhone;
+      const deliveryDistanceKm =
+        Number.isFinite(Number(assignmentData.deliveryDistance))
+          ? Number(assignmentData.deliveryDistance)
+          : calculateDistanceKm(restaurantLocation, customerLocation);
+      const estimatedEarnings =
+        await calculateEstimatedDeliveryPartnerEarnings(deliveryDistanceKm);
 
       // Prepare assignment payload
       const assignmentPayload = {
@@ -137,9 +226,11 @@ class OrderAssignmentSocketService {
         customerName: order.userId?.name,
         customerPhone: order.userId?.phone || order.phoneNumber,
         customerLocation,
-        deliveryDistance: assignmentData.deliveryDistance,
+        deliveryDistance:
+          deliveryDistanceKm > 0 ? `${deliveryDistanceKm.toFixed(2)} km` : "Calculating...",
+        deliveryDistanceRaw: deliveryDistanceKm,
         pickupDistance: assignmentData.distance ? `${assignmentData.distance.toFixed(2)} km` : undefined,
-        estimatedEarnings: order.deliveryPartnerEarning?.totalEarning,
+        estimatedEarnings,
         deliveryFee: order.pricing?.deliveryFee,
         total: order.pricing?.total,
         restaurant: {
@@ -270,6 +361,13 @@ class OrderAssignmentSocketService {
 
       // Emit to all delivery partners
       io.of('/delivery').emit('ORDER_ACCEPTED_BY_OTHER', acceptancePayload);
+      io.of('/delivery').emit('order_accepted', {
+        orderId: order.orderId,
+        mongoId: order._id.toString(),
+        orderMongoId: order._id.toString(),
+        acceptedBy: acceptedBy.toString(),
+        acceptedAt: acceptancePayload.acceptedAt,
+      });
 
       console.log(`Order acceptance broadcast for order ${order.orderId}, accepted by ${acceptedBy}`);
     } catch (error) {

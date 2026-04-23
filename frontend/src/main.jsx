@@ -254,6 +254,16 @@ console.error = (...args) => {
     return
   }
 
+  // Suppress browser autoplay-blocked audio errors
+  if (
+    errorName === 'NotAllowedError' ||
+    errorMsg.includes("play() failed because the user didn't interact") ||
+    errorStr.includes("play() failed because the user didn't interact") ||
+    errorStr.includes('Audio play error:')
+  ) {
+    return
+  }
+
   originalError.apply(console, args)
 }
 
@@ -284,6 +294,16 @@ window.addEventListener('unhandledrejection', (event) => {
     (errorName === 'AxiosError' && errorMsg.includes('refund'))
   ) {
     // Error is already handled by the component, just prevent unhandled rejection
+    event.preventDefault()
+    return
+  }
+
+  // Suppress autoplay-blocked audio promise rejections
+  if (
+    errorName === 'NotAllowedError' ||
+    errorMsg.includes("play() failed because the user didn't interact") ||
+    errorStr.includes("play() failed because the user didn't interact")
+  ) {
     event.preventDefault()
     return
   }

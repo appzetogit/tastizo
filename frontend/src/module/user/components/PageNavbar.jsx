@@ -913,19 +913,7 @@ export default function PageNavbar({
               )}
             </Button>
           ) : brandOnLeftMobile && showBrandLogo ? (
-            <Link to="/" className="flex items-center justify-start pl-5">
-              {logoUrl && logoUrl !== DEFAULT_LOGO_PLACEHOLDER && (
-                <img
-                  src={logoUrl}
-                  alt="Company Logo"
-                  className="h-12 w-20 object-contain"
-                  crossOrigin="anonymous"
-                  onError={(e) => {
-                    e.target.style.display = "none"
-                  }}
-                />
-              )}
-            </Link>
+            <div className="w-16 sm:w-20" aria-hidden />
           ) : (
             <div className="w-16 sm:w-20" aria-hidden />
           )}
@@ -933,19 +921,7 @@ export default function PageNavbar({
 
         {/* Center: Company Logo */}
         {showBrandLogo && !brandOnLeftMobile ? (
-          <Link to="/" className="flex items-center justify-center">
-            {logoUrl && logoUrl !== DEFAULT_LOGO_PLACEHOLDER && (
-              <img
-                src={logoUrl}
-                alt="Company Logo"
-                className="h-12 w-20 mr-3 sm:h-10 sm:w-10 md:h-12 md:w-12 object-contain"
-                crossOrigin="anonymous"
-                onError={(e) => {
-                  e.target.style.display = "none"
-                }}
-              />
-            )}
-          </Link>
+          <div className="w-16 sm:w-10 md:w-12" aria-hidden />
         ) : (
           <div className="w-16 sm:w-10 md:w-12" aria-hidden />
         )}

@@ -80,6 +80,10 @@ function shouldSuppressGlobalErrorToast(error) {
       "",
   ).toLowerCase();
 
+  if (error?.config?.skipGlobalErrorToast) {
+    return true;
+  }
+
   // Suppress noisy auth/background errors on restaurant module while account is pending/restricted.
   if (currentPath.startsWith("/restaurant")) {
     if (

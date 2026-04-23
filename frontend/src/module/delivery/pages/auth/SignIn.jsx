@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/select"
 import { deliveryAPI } from "@/lib/api"
 import { clearModuleAuth } from "@/lib/utils/auth"
-import { useCompanyName } from "@/lib/hooks/useCompanyName"
 
 // Common country codes
 const countryCodes = [
@@ -36,7 +35,6 @@ const countryCodes = [
 ]
 
 export default function DeliverySignIn() {
-  const companyName = useCompanyName()
   const navigate = useNavigate()
   const [formData, setFormData] = useState({
     phone: "",
@@ -151,17 +149,10 @@ export default function DeliverySignIn() {
 
   return (
     <div className="max-h-screen h-screen bg-white flex flex-col">
-      {/* Top Section - Logo and Badge */}
+      {/* Top Section - Badge */}
       <div className="flex flex-col items-center pt-8 pb-6 px-6">
-        {/* Tastizo wordmark styled like logo font */}
-        <div>
-          <h1 className="text-3xl font-black tracking-tight lowercase text-black">
-            {companyName.toLowerCase()}
-          </h1>
-        </div>
-
         {/* DELIVERY Badge */}
-        <div className="bg-black px-6 py-2 rounded mt-2">
+        <div className="bg-black px-6 py-2 rounded">
           <span className="text-white font-semibold text-sm uppercase tracking-wide">
             DELIVERY
           </span>

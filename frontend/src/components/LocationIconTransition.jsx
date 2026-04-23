@@ -47,9 +47,10 @@ const getCubicBezierPoint = (t, control1X, control1Y, control2X, control2Y, endX
 
 export default function LocationIconTransition() {
   const ctx = useLocationIconTransition()
-  if (!ctx) return null
-
-  const { phase, splashIconRect, navbarIconRef, setPhaseDone } = ctx
+  const phase = ctx?.phase ?? "idle"
+  const splashIconRect = ctx?.splashIconRect ?? null
+  const navbarIconRef = ctx?.navbarIconRef
+  const setPhaseDone = ctx?.setPhaseDone ?? (() => {})
   const [isMobile, setIsMobile] = useState(false)
   const [canAnimate, setCanAnimate] = useState(false)
   const hasAnimated = useRef(false)

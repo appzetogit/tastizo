@@ -22,57 +22,6 @@ export default function Navbar() {
   const { openLocationSelector } = useLocationSelector()
   const { unreadCount } = useUserNotifications()
   const cartCount = getCartCount()
-  const [logoUrl, setLogoUrl] = useState(null)
-  const [companyName, setCompanyName] = useState(null)
-
-  // Load business settings logo
-  useEffect(() => {
-    const loadLogo = async () => {
-      try {
-        const cached = getCachedSettings()
-        if (cached) {
-          if (cached.logo?.url) {
-            setLogoUrl(cached.logo.url)
-          }
-          if (cached.companyName) {
-            setCompanyName(cached.companyName)
-          }
-        } else {
-          const settings = await loadBusinessSettings()
-          if (settings) {
-            if (settings.logo?.url) {
-              setLogoUrl(settings.logo.url)
-            }
-            if (settings.companyName) {
-              setCompanyName(settings.companyName)
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error loading logo:', error)
-      }
-    }
-    loadLogo()
-
-    // Listen for business settings updates
-    const handleSettingsUpdate = () => {
-      const cached = getCachedSettings()
-      if (cached) {
-        if (cached.logo?.url) {
-          setLogoUrl(cached.logo.url)
-        }
-        if (cached.companyName) {
-          setCompanyName(cached.companyName)
-        }
-      }
-    }
-    window.addEventListener('businessSettingsUpdated', handleSettingsUpdate)
-    
-    return () => {
-      window.removeEventListener('businessSettingsUpdated', handleSettingsUpdate)
-    }
-  }, [])
-
   const { main: cityName, sub: stateName } = pickNavbarLocationLines(location)
   const displayMain = cityName === "Select" ? "Select" : cityName
   const displaySub = stateName || "Location"
@@ -117,24 +66,7 @@ export default function Navbar() {
             </Button>
           </div>
 
-          {/* Company Logo or Name - Centered between sections */}
-          <Link to="/user" className="flex items-center justify-center flex-shrink-0">
-            {logoUrl ? (
-              <img
-                src={logoUrl}
-                alt="Company Logo"
-                className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 object-contain"
-                onError={(e) => {
-                  // Hide image if it fails to load
-                  e.target.style.display = 'none'
-                }}
-              />
-            ) : companyName ? (
-              <span className="text-sm sm:text-base md:text-lg font-bold text-gray-900">
-                {companyName}
-              </span>
-            ) : null}
-          </Link>
+          <div className="w-8 sm:w-10 md:w-12 flex-shrink-0" aria-hidden />
 
           {/* Right Side Actions - Profile, Points, Notifications, Cart */}
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">

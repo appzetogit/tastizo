@@ -80,22 +80,6 @@ export default function Footer() {
                 animation: 'fadeInUp 0.5s ease-out'
               }}
             >
-              <div className="flex items-center gap-2 mb-4">
-                {logoUrl && logoUrl !== DEFAULT_LOGO_PLACEHOLDER && (
-                  <img
-                    src={logoUrl}
-                    alt="Company Logo"
-                    className="h-10 w-10 rounded-full object-cover"
-                    crossOrigin="anonymous"
-                    onError={(e) => {
-                      e.target.style.display = "none"
-                    }}
-                  />
-                )}
-                <span className="text-2xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
-                  {companyName}
-                </span>
-              </div>
               <p className="text-slate-300 text-sm leading-relaxed max-w-md">
                 Delivering delicious food to your doorstep. Order from your favorite restaurants
                 and enjoy fresh, hot meals in minutes.
@@ -231,4 +215,3 @@ export default function Footer() {
     </footer>
   )
 }
-

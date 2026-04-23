@@ -13,6 +13,7 @@ export const useDeliveryNotifications = () => {
   const socketRef = useRef(null);
   const audioRef = useRef(null);
   const newOrderRef = useRef(null);
+  const dismissedOrderIdsRef = useRef(new Set());
 
   // Step 2: All state hooks (unconditional)
   const [newOrder, setNewOrder] = useState(null);
@@ -24,7 +25,24 @@ export const useDeliveryNotifications = () => {
   // Step 3: All callbacks before effects (unconditional)
   // Track user interaction for autoplay policy
   const userInteractedRef = useRef(false);
-  
+
+  const normalizeOrderIds = useCallback((orderLike) => {
+    return [
+      orderLike?.orderId,
+      orderLike?.orderMongoId,
+      orderLike?.mongoId,
+      orderLike?._id,
+      orderLike?.id,
+    ].filter(Boolean).map(String);
+  }, []);
+
+  const persistDismissedOrderIds = useCallback(() => {
+    localStorage.setItem(
+      'deliveryDismissedOrderIds',
+      JSON.stringify(Array.from(dismissedOrderIdsRef.current)),
+    );
+  }, []);
+
   const playNotificationSound = useCallback(() => {
     try {
       // Get current selected sound preference from localStorage
@@ -133,6 +151,54 @@ export const useDeliveryNotifications = () => {
       console.warn('Failed to fetch delivery unread notification count:', error?.message || error);
     }
   }, []);
+
+  const stopNotificationSound = useCallback(() => {
+    if (!audioRef.current) return;
+
+    try {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    } catch (error) {
+      console.warn('Error stopping notification sound:', error);
+    }
+  }, []);
+
+  const markOrderDismissed = useCallback((orderLike) => {
+    const ids = normalizeOrderIds(orderLike);
+    if (ids.length === 0) return;
+
+    ids.forEach((id) => dismissedOrderIdsRef.current.add(id));
+    persistDismissedOrderIds();
+
+    const currentIds = normalizeOrderIds(newOrderRef.current || {});
+    if (ids.some((id) => currentIds.includes(id))) {
+      stopNotificationSound();
+      setNewOrder(null);
+    }
+  }, [normalizeOrderIds, persistDismissedOrderIds, stopNotificationSound]);
+
+  const isOrderDismissed = useCallback((orderLike) => {
+    const ids = normalizeOrderIds(orderLike);
+    return ids.some((id) => dismissedOrderIdsRef.current.has(id));
+  }, [normalizeOrderIds]);
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('deliveryDismissedOrderIds') || '[]');
+      dismissedOrderIdsRef.current = new Set(
+        Array.isArray(stored) ? stored.map(String) : [],
+      );
+    } catch (error) {
+      dismissedOrderIdsRef.current = new Set();
+    }
+
+    const handleDismissedOrder = (event) => {
+      markOrderDismissed(event?.detail || {});
+    };
+
+    window.addEventListener('deliveryOrderDismissed', handleDismissedOrder);
+    return () => window.removeEventListener('deliveryOrderDismissed', handleDismissedOrder);
+  }, [markOrderDismissed]);
 
   useEffect(() => {
     refreshUnreadCount();
@@ -382,6 +448,10 @@ export const useDeliveryNotifications = () => {
     });
 
     socketRef.current.on('order_accepted', (payload) => {
+      window.dispatchEvent(new CustomEvent('deliveryOrderAcceptedByOther', {
+        detail: payload
+      }));
+
       const current = newOrderRef.current;
       if (!current) return;
 
@@ -405,10 +475,41 @@ export const useDeliveryNotifications = () => {
       ].filter(Boolean).map(String);
 
       if (acceptedIds.some(id => currentIds.includes(id))) {
+        stopNotificationSound();
         setNewOrder(null);
-        window.dispatchEvent(new CustomEvent('deliveryOrderAcceptedByOther', {
-          detail: payload
-        }));
+      }
+    });
+
+    socketRef.current.on('ORDER_ACCEPTED_BY_OTHER', (payload) => {
+      window.dispatchEvent(new CustomEvent('deliveryOrderAcceptedByOther', {
+        detail: payload
+      }));
+
+      const current = newOrderRef.current;
+      if (!current) return;
+
+      const acceptedBy = payload.acceptedBy?.toString?.() || String(payload.acceptedBy || '');
+      const currentDeliveryId = deliveryPartnerId?.toString?.() || String(deliveryPartnerId || '');
+      if (acceptedBy && currentDeliveryId && acceptedBy === currentDeliveryId) {
+        return;
+      }
+
+      const currentIds = [
+        current.orderId,
+        current.orderMongoId,
+        current.mongoId,
+        current._id
+      ].filter(Boolean).map(String);
+      const acceptedIds = [
+        payload.orderId,
+        payload.mongoId,
+        payload.orderMongoId,
+        payload._id
+      ].filter(Boolean).map(String);
+
+      if (acceptedIds.some(id => currentIds.includes(id))) {
+        stopNotificationSound();
+        setNewOrder(null);
       }
     });
 
@@ -439,7 +540,14 @@ export const useDeliveryNotifications = () => {
         socketRef.current = null;
       }
     };
-  }, [deliveryPartnerId, playNotificationSound]);
+  }, [deliveryPartnerId, playNotificationSound, stopNotificationSound]);
+
+  useEffect(() => {
+    if (!newOrder) return;
+    if (!isOrderDismissed(newOrder)) return;
+    stopNotificationSound();
+    setNewOrder(null);
+  }, [newOrder, isOrderDismissed, stopNotificationSound]);
 
   // Keep ref in sync so order_accepted listener can see current newOrder
   useEffect(() => {
@@ -448,6 +556,7 @@ export const useDeliveryNotifications = () => {
 
   // Helper functions
   const clearNewOrder = () => {
+    stopNotificationSound();
     setNewOrder(null);
   };
 
@@ -458,11 +567,13 @@ export const useDeliveryNotifications = () => {
   return {
     newOrder,
     clearNewOrder,
+    markOrderDismissed,
     orderReady,
     clearOrderReady,
     isConnected,
     unreadCount,
     refreshUnreadCount,
-    playNotificationSound
+    playNotificationSound,
+    stopNotificationSound
   };
 };

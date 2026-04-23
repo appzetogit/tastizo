@@ -3,7 +3,6 @@ import { useLocation } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { TbLocation } from "react-icons/tb"
 import { ChevronDown } from "lucide-react"
-import tastizoLogo from "@/assets/tastizologo.png"
 import { locationAPI } from "@/lib/api"
 import { useLocationIconTransition } from "@/context/LocationIconTransitionContext"
 import { getModuleToken, getUserIdFromToken, isModuleAuthenticated } from "@/lib/utils/auth"
@@ -347,21 +346,7 @@ export default function MobileSplashScreen() {
               </motion.div>
             )}
 
-            <motion.img
-              src={tastizoLogo}
-              alt="tastizo"
-              className="w-48 max-w-[75vw] h-auto object-contain"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{
-                opacity: 1,
-                y: 0,
-                transition: {
-                  delay: showLocationSplash ? 0.15 : 0.1,
-                  duration: 0.5,
-                  ease: [0.25, 0.46, 0.45, 0.94],
-                },
-              }}
-            />
+            <div className="h-12" aria-hidden />
           </motion.div>
         </motion.div>
       )}

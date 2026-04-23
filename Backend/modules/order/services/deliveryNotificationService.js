@@ -238,21 +238,11 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
       }
     }
 
-    // Calculate estimated earnings; use order's delivery fee as fallback when 0 or distance missing
+    // Calculate rider earnings from commission rules, never from customer delivery fee
     const deliveryFeeFromOrder = order.pricing?.deliveryFee ?? 0;
     let estimatedEarnings = await calculateEstimatedEarnings(
       deliveryDistance || 0,
     );
-    const earnedValue =
-      typeof estimatedEarnings === "object"
-        ? (estimatedEarnings.totalEarning ?? 0)
-        : Number(estimatedEarnings) || 0;
-    if (earnedValue <= 0 && deliveryFeeFromOrder > 0) {
-      estimatedEarnings =
-        typeof estimatedEarnings === "object"
-          ? { ...estimatedEarnings, totalEarning: deliveryFeeFromOrder }
-          : deliveryFeeFromOrder;
-    }
 
     // Prepare order notification data
     const orderNotification = {
@@ -348,23 +338,12 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
       notificationSent = true;
     });
 
-    // Also emit to all sockets in the delivery namespace (FALLBACK MUST BE REDACTED)
+    // Do not fallback-broadcast assigned orders to all delivery sockets.
     if (socketsInRoom.length === 0) {
       console.warn(
-        `⚠️ No sockets connected for partner ${normalizedDeliveryPartnerId}. Broadcasting REDACTED payload.`,
+        `⚠️ No sockets connected for partner ${normalizedDeliveryPartnerId}. Skipping global fallback broadcast.`,
       );
 
-      const redactedNotification = redactPII(orderNotification);
-
-      // Broadcast redacted payload as fallback
-      deliveryNamespace.emit("new_order", redactedNotification);
-      deliveryNamespace.emit("play_notification_sound", {
-        type: "new_order",
-        orderId: order.orderId,
-        message: `New order assigned: ${order.orderId}`,
-      });
-      notificationSent = true;
-    } else {
     }
 
     if (notificationSent) {
@@ -522,31 +501,13 @@ export async function notifyMultipleDeliveryBoys(
         typeof estimatedEarnings === "object"
           ? (estimatedEarnings.totalEarning ?? 0)
           : Number(estimatedEarnings) || 0;
-      // Use deliveryFee as fallback if earnings is 0 or invalid
-      if (earnedValue <= 0 && deliveryFeeFromOrder > 0) {
-        estimatedEarnings =
-          typeof estimatedEarnings === "object"
-            ? { ...estimatedEarnings, totalEarning: deliveryFeeFromOrder }
-            : deliveryFeeFromOrder;
-      }
     } catch (earningsError) {
       console.error(
         "❌ Error calculating estimated earnings in notification:",
         earningsError,
       );
       console.error("❌ Error stack:", earningsError.stack);
-      // Fallback to deliveryFee or default
-      estimatedEarnings =
-        deliveryFeeFromOrder > 0
-          ? deliveryFeeFromOrder
-          : {
-              basePayout: 10,
-              distance: deliveryDistance,
-              commissionPerKm: 5,
-              distanceCommission: 0,
-              totalEarning: 10,
-              breakdown: "Default calculation",
-            };
+      estimatedEarnings = await calculateEstimatedEarnings(0);
     }
 
     // Prepare notification payload
@@ -742,17 +703,8 @@ export async function broadcastNewOrderToAllDeliveryBoys(order, phase = "priorit
         typeof estimatedEarnings === "object"
           ? (estimatedEarnings.totalEarning ?? 0)
           : Number(estimatedEarnings) || 0;
-      if (earnedValue <= 0 && deliveryFeeFromOrder > 0) {
-        estimatedEarnings =
-          typeof estimatedEarnings === "object"
-            ? { ...estimatedEarnings, totalEarning: deliveryFeeFromOrder }
-            : deliveryFeeFromOrder;
-      }
     } catch (e) {
-      estimatedEarnings =
-        deliveryFeeFromOrder > 0
-          ? deliveryFeeFromOrder
-          : { totalEarning: 10, breakdown: "Default" };
+      estimatedEarnings = await calculateEstimatedEarnings(0);
     }
 
     const orderNotificationRaw = {

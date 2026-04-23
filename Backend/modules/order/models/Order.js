@@ -513,25 +513,12 @@ orderSchema.pre("save", async function (next) {
   next();
 });
 
-// Post-save middleware to trigger assignment when status changes to preparing or ready
+// Post-save middleware keeps room for future side effects on save.
+// Delivery assignment is now broadcast-based from the restaurant READY flow,
+// so we intentionally do not auto-reserve a rider here.
 orderSchema.post("save", async function (doc) {
   try {
-    // Trigger assignment if order moved to 'preparing' or 'ready' status
-    const assignmentTriggerStatuses = ['preparing', 'ready'];
-    
-    if (assignmentTriggerStatuses.includes(doc.status)) {
-      // Import the trigger service dynamically to avoid circular dependencies
-      const { default: orderAssignmentTriggerService } = await import('./services/orderAssignmentTriggerService.js');
-      
-      // Trigger assignment asynchronously (don't wait for it to complete)
-      setImmediate(async () => {
-        try {
-          await orderAssignmentTriggerService.triggerAssignment(doc._id.toString(), 'status_change');
-        } catch (error) {
-          console.error(`Error in post-save assignment trigger for order ${doc.orderId}:`, error);
-        }
-      });
-    }
+    void doc;
   } catch (error) {
     console.error('Error in order post-save middleware:', error);
   }

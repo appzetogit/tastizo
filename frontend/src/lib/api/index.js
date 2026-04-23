@@ -1023,9 +1023,10 @@ export const deliveryAPI = {
   getOrders: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.DELIVERY.ORDERS, { params });
   },
-  getOrderDetails: (orderId) => {
+  getOrderDetails: (orderId, config = {}) => {
     return apiClient.get(
       API_ENDPOINTS.DELIVERY.ORDER_BY_ID.replace(":orderId", orderId),
+      config,
     );
   },
   getOrderChat: (orderId) => {
@@ -1050,6 +1051,12 @@ export const deliveryAPI = {
     return apiClient.patch(
       API_ENDPOINTS.DELIVERY.ORDER_ACCEPT.replace(":orderId", orderId),
       payload,
+    );
+  },
+  rejectOrder: (orderId, reason = "rejected_by_delivery") => {
+    return apiClient.patch(
+      API_ENDPOINTS.DELIVERY.ORDER_REJECT.replace(":orderId", orderId),
+      { reason },
     );
   },
   confirmReachedPickup: (orderId) => {

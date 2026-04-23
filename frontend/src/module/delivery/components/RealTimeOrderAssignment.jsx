@@ -77,9 +77,9 @@ const RealTimeOrderAssignment = ({
     setStatus('accepting')
     
     try {
-      const response = await deliveryAPI.patch(`/orders/${order.orderMongoId}/accept`, {
-        currentLat: 28.2849, // Would get from GPS
-        currentLng: 76.1209
+      const response = await deliveryAPI.acceptOrder(order.orderMongoId, {
+        lat: 28.2849, // Would get from GPS
+        lng: 76.1209
       })
       
       if (response.data.success) {
@@ -105,9 +105,10 @@ const RealTimeOrderAssignment = ({
     setStatus('rejecting')
     
     try {
-      const response = await deliveryAPI.patch(`/orders/${order.orderMongoId}/reject`, {
-        reason: 'rejected_by_delivery'
-      })
+      const response = await deliveryAPI.rejectOrder(
+        order.orderMongoId,
+        'rejected_by_delivery'
+      )
       
       if (response.data.success) {
         setStatus('expired')

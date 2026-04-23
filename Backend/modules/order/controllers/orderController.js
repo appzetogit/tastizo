@@ -256,6 +256,40 @@ const buildOrderReviewSnapshot = (reviewDoc) => {
   };
 };
 
+const buildOrderResponse = (order, pricingTotal, extra = {}) => ({
+  order: {
+    id: order._id.toString(),
+    orderId: order.orderId,
+    status: order.status,
+    total: pricingTotal,
+  },
+  ...extra,
+});
+
+const recordOrderCreatedEvent = async (order, preparationTime) => {
+  try {
+    await OrderEvent.create({
+      orderId: order._id,
+      eventType: "ORDER_CREATED",
+      data: {
+        initialETA: order.eta
+          ? {
+              min: order.eta.min,
+              max: order.eta.max,
+            }
+          : null,
+        preparationTime,
+      },
+      timestamp: new Date(),
+    });
+  } catch (eventError) {
+    logger.warn("Failed to record order creation event", {
+      orderId: order.orderId,
+      error: eventError.message,
+    });
+  }
+};
+
 const attachSubmittedReviews = async (orders = [], userId) => {
   if (!orders.length || !userId) return orders;
 
@@ -675,19 +709,6 @@ export const createOrder = async (req, res) => {
           (finalMinETA + finalMaxETA) / 2,
         );
 
-        // Create order created event
-        await OrderEvent.create({
-          orderId: order._id,
-          eventType: "ORDER_CREATED",
-          data: {
-            initialETA: {
-              min: finalMinETA,
-              max: finalMaxETA,
-            },
-            preparationTime: maxPreparationTime,
-          },
-          timestamp: new Date(),
-        });
 
         logger.info("✅ ETA calculated for order:", {
           orderId: order.orderId,
@@ -703,21 +724,7 @@ export const createOrder = async (req, res) => {
       // Continue with order creation even if ETA calculation fails
     }
 
-    await order.save();
-
-    // Log order creation for debugging
-    logger.info("Order created successfully:", {
-      orderId: order.orderId,
-      orderMongoId: order._id.toString(),
-      restaurantId: order.restaurantId,
-      userId: order.userId,
-      status: order.status,
-      total: order.pricing.total,
-      eta: order.eta ? `${order.eta.min}-${order.eta.max} mins` : "N/A",
-      paymentMethod: normalizedPaymentMethod,
-    });
-
-    // For wallet payments, deduct balance atomically BEFORE creating order
+    // For wallet payments, deduct balance atomically before persisting the order.
     if (normalizedPaymentMethod === "wallet") {
       try {
         // Atomic deduction
@@ -770,6 +777,7 @@ export const createOrder = async (req, res) => {
 
         // Save order
         await order.save();
+        await recordOrderCreatedEvent(order, maxPreparationTime);
 
         // Create payment record
         try {
@@ -835,19 +843,13 @@ export const createOrder = async (req, res) => {
         // Respond to client
         return res.status(201).json({
           success: true,
-          data: {
-            order: {
-              id: order._id.toString(),
-              orderId: order.orderId,
-              status: order.status,
-              total: pricing.total,
-            },
+          data: buildOrderResponse(order, pricing.total, {
             razorpay: null,
             wallet: {
               balance: updatedWallet.balance,
               deducted: pricing.total,
             },
-          },
+          }),
         });
       } catch (walletError) {
         logger.error("❌ Error processing wallet payment:", walletError);
@@ -858,9 +860,6 @@ export const createOrder = async (req, res) => {
         });
       }
     }
-
-    // Default save for other payment methods (cash, razorpay)
-    await order.save();
 
     // For cash-on-delivery orders, confirm immediately and notify restaurant.
     // Online (Razorpay) orders follow the existing verifyOrderPayment flow.
@@ -907,6 +906,7 @@ export const createOrder = async (req, res) => {
         timestamp: new Date(),
       };
       await order.save();
+      await recordOrderCreatedEvent(order, maxPreparationTime);
 
       // Calculate order settlement and hold escrow for COD payment
       await confirmOrderSettlement(order, userId);
@@ -948,15 +948,7 @@ export const createOrder = async (req, res) => {
       // Respond to client (no Razorpay details for COD)
       return res.status(201).json({
         success: true,
-        data: {
-          order: {
-            id: order._id.toString(),
-            orderId: order.orderId,
-            status: order.status,
-            total: pricing.total,
-          },
-          razorpay: null,
-        },
+        data: buildOrderResponse(order, pricing.total, { razorpay: null }),
       });
     }
 
@@ -981,13 +973,19 @@ export const createOrder = async (req, res) => {
 
         // Update order with Razorpay order ID
         order.payment.razorpayOrderId = razorpayOrder.id;
-        await order.save();
       } catch (razorpayError) {
         logger.error(`Error creating Razorpay order: ${razorpayError.message}`);
-        // Continue with order creation even if Razorpay fails
-        // Payment can be handled later
+        return res.status(502).json({
+          success: false,
+          message:
+            razorpayError.message ||
+            "Failed to initialize online payment. Please try again.",
+        });
       }
     }
+
+    await order.save();
+    await recordOrderCreatedEvent(order, maxPreparationTime);
 
     logger.info(`Order created: ${order.orderId}`, {
       orderId: order.orderId,
@@ -1016,13 +1014,7 @@ export const createOrder = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      data: {
-        order: {
-          id: order._id.toString(),
-          orderId: order.orderId,
-          status: order.status,
-          total: pricing.total,
-        },
+      data: buildOrderResponse(order, pricing.total, {
         razorpay: razorpayOrder
           ? {
               orderId: razorpayOrder.id,
@@ -1031,7 +1023,7 @@ export const createOrder = async (req, res) => {
               key: razorpayKeyId,
             }
           : null,
-      },
+      }),
     });
   } catch (error) {
     logger.error(`Error creating order: ${error.message}`, {
@@ -1101,6 +1093,87 @@ export const verifyOrderPayment = async (req, res) => {
       });
     }
 
+    if (order.payment?.method !== "razorpay") {
+      return res.status(400).json({
+        success: false,
+        message: "This order is not awaiting Razorpay payment verification",
+      });
+    }
+
+    const expectedRazorpayOrderId = order.payment?.razorpayOrderId;
+    if (!expectedRazorpayOrderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order is missing the Razorpay order reference",
+      });
+    }
+
+    if (expectedRazorpayOrderId !== razorpayOrderId) {
+      logger.warn("Razorpay order ID mismatch during payment verification", {
+        orderId: order.orderId,
+        expectedRazorpayOrderId,
+        receivedRazorpayOrderId: razorpayOrderId,
+      });
+      return res.status(400).json({
+        success: false,
+        message: "Payment does not belong to this order",
+      });
+    }
+
+    const existingPaymentByTransaction = await Payment.findOne({
+      transactionId: razorpayPaymentId,
+    });
+
+    if (
+      existingPaymentByTransaction &&
+      existingPaymentByTransaction.orderId.toString() !== order._id.toString()
+    ) {
+      logger.warn("Razorpay payment already linked to another order", {
+        orderId: order.orderId,
+        razorpayPaymentId,
+        existingOrderId: existingPaymentByTransaction.orderId.toString(),
+      });
+      return res.status(409).json({
+        success: false,
+        message: "This payment has already been used for another order",
+      });
+    }
+
+    if (order.payment?.status === "completed") {
+      const existingCompletedPayment =
+        existingPaymentByTransaction ||
+        (await Payment.findOne({
+          orderId: order._id,
+          transactionId: order.payment?.transactionId,
+        }));
+
+      if (
+        existingCompletedPayment &&
+        existingCompletedPayment.transactionId === razorpayPaymentId
+      ) {
+        return res.json({
+          success: true,
+          data: {
+            order: {
+              id: order._id.toString(),
+              orderId: order.orderId,
+              status: order.status,
+            },
+            payment: {
+              id: existingCompletedPayment._id.toString(),
+              paymentId: existingCompletedPayment.paymentId,
+              status: existingCompletedPayment.status,
+            },
+          },
+        });
+      }
+
+      return res.status(409).json({
+        success: false,
+        message: "Payment for this order has already been completed",
+      });
+    }
+
     // Verify payment signature
     const isValid = await verifyPayment(
       razorpayOrderId,
@@ -1116,6 +1189,46 @@ export const verifyOrderPayment = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Invalid payment signature",
+      });
+    }
+
+    const existingOrderPayment =
+      existingPaymentByTransaction ||
+      (await Payment.findOne({
+        orderId: order._id,
+        transactionId: razorpayPaymentId,
+      }));
+
+    if (existingOrderPayment) {
+      if (order.payment?.status !== "completed") {
+        logger.warn("Reconciling order state from existing Razorpay payment", {
+          orderId: order.orderId,
+          razorpayPaymentId,
+        });
+        order.payment.status = "completed";
+        order.payment.razorpayPaymentId = razorpayPaymentId;
+        order.payment.razorpaySignature = razorpaySignature;
+        order.payment.transactionId = razorpayPaymentId;
+        order.status = "confirmed";
+        order.tracking.confirmed = { status: true, timestamp: new Date() };
+        ensureDeliveryOtpForPrepaidOrder(order);
+        await order.save();
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          order: {
+            id: order._id.toString(),
+            orderId: order.orderId,
+            status: order.status,
+          },
+          payment: {
+            id: existingOrderPayment._id.toString(),
+            paymentId: existingOrderPayment.paymentId,
+            status: existingOrderPayment.status,
+          },
+        },
       });
     }
 

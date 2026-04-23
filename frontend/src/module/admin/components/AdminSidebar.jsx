@@ -523,46 +523,10 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
         {/* Header with Logo and Brand */}
         <div className="px-3 py-3 border-b border-neutral-800/60 bg-neutral-900 animate-[fadeIn_0.4s_ease-out]">
           <div className="flex items-center justify-between mb-3">
-            {!isCollapsed && (
-              <div className="flex items-center gap-2 animate-[slideIn_0.3s_ease-out]">
-                <div className="w-24 h-12 rounded-lg flex items-center justify-center shadow-black/20">
-                  {logoUrl && logoUrl !== DEFAULT_LOGO_PLACEHOLDER ? (
-                    <img
-                      src={logoUrl}
-                      alt={companyName || "Company"}
-                      className="w-24 h-10 object-contain"
-                      loading="lazy"
-                      onError={(e) => {
-                        e.target.style.display = "none";
-                      }}
-                    />
-                  ) : companyName ? (
-                    <span className="text-xs font-semibold text-white px-2 truncate">
-                      {companyName}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            )}
+            {!isCollapsed && <div className="w-24 h-12" aria-hidden />}
             {isCollapsed && (
               <div className="w-full flex items-center justify-center">
-                <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shadow-lg shadow-black/20 ring-1 ring-white/10">
-                  {logoUrl && logoUrl !== DEFAULT_LOGO_PLACEHOLDER ? (
-                    <img
-                      src={logoUrl}
-                      alt={companyName || "Company"}
-                      className="w-10 h-10 object-contain"
-                      loading="lazy"
-                      onError={(e) => {
-                        e.target.style.display = "none";
-                      }}
-                    />
-                  ) : companyName ? (
-                    <span className="text-[10px] font-semibold text-white truncate px-1">
-                      {companyName.charAt(0).toUpperCase()}
-                    </span>
-                  ) : null}
-                </div>
+                <div className="w-10 h-10" aria-hidden />
               </div>
             )}
             <div className="flex items-center gap-2">

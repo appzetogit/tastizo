@@ -39,7 +39,9 @@ export default function AcceptedOrderDetails() {
     const fetchOrderData = async () => {
       try {
         setIsLoading(true)
-        const response = await deliveryAPI.getOrderDetails(orderId)
+        const response = await deliveryAPI.getOrderDetails(orderId, {
+          skipGlobalErrorToast: true,
+        })
         if (response.data?.success) {
           setOrder(response.data.data)
         } else {
@@ -47,7 +49,9 @@ export default function AcceptedOrderDetails() {
         }
       } catch (error) {
         console.error("Error fetching order details:", error)
-        toast.error("Error loading order details")
+        if (error?.response?.status !== 403 && error?.response?.status !== 404) {
+          toast.error("Error loading order details")
+        }
       } finally {
         setIsLoading(false)
       }
@@ -370,6 +374,7 @@ export default function AcceptedOrderDetails() {
                   onClick={() => {
                     saveDeliveryOrderStatus(orderId, DELIVERY_ORDER_STATUS.DELIVERED)
                     setOrderStatus(DELIVERY_ORDER_STATUS.DELIVERED)
+                    localStorage.removeItem('deliveryActiveOrder')
                     localStorage.removeItem('activeOrder')
                     window.dispatchEvent(new CustomEvent('activeOrderUpdated'))
                     toast.success("Order marked as Delivered!")

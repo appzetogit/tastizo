@@ -161,6 +161,10 @@ export const getOrders = asyncHandler(async (req, res) => {
     const { status, page = 1, limit = 20, includeDelivered } = req.query;
 
     const currentDeliveryId = delivery._id;
+    const blockedOrderIds = await OrderAssignmentHistory.find({
+      deliveryPartnerId: currentDeliveryId,
+      assignmentStatus: { $in: ["rejected", "expired"] },
+    }).distinct("orderId");
 
     // Base query filters (status / delivery phase)
     const baseFilters = {};
@@ -185,8 +189,39 @@ export const getOrders = asyncHandler(async (req, res) => {
     const visibilityFilter = {
       $or: [
         { deliveryPartnerId: currentDeliveryId },
-        { "assignmentInfo.priorityDeliveryPartnerIds": currentDeliveryId },
-        { "assignmentInfo.expandedDeliveryPartnerIds": currentDeliveryId },
+        {
+          $and: [
+            {
+              $or: [
+                { deliveryPartnerId: { $exists: false } },
+                { deliveryPartnerId: null },
+              ],
+            },
+            {
+              assignmentStatus: {
+                $in: ["pending_assignment", "assigned", "expired", "reassigned"],
+              },
+            },
+            {
+              $or: [
+                { "assignmentInfo.priorityDeliveryPartnerIds": currentDeliveryId },
+                { "assignmentInfo.expandedDeliveryPartnerIds": currentDeliveryId },
+              ],
+            },
+          ],
+        },
+        {
+          $and: [
+            {
+              $or: [
+                { deliveryPartnerId: { $exists: false } },
+                { deliveryPartnerId: null },
+              ],
+            },
+            { status: "ready" },
+            { assignmentStatus: "pending_assignment" },
+          ],
+        },
       ],
     };
 
@@ -194,6 +229,11 @@ export const getOrders = asyncHandler(async (req, res) => {
     const query = {
       ...baseFilters,
       ...visibilityFilter,
+      ...(blockedOrderIds.length
+        ? {
+            _id: { $nin: blockedOrderIds },
+          }
+        : {}),
     };
 
     // Calculate pagination
@@ -263,6 +303,16 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
       return errorResponse(res, 404, "Order not found");
     }
 
+    const hasPreviousRejection = await OrderAssignmentHistory.findOne({
+      orderId: order._id,
+      deliveryPartnerId: delivery._id,
+      assignmentStatus: { $in: ["rejected", "expired"] },
+    }).lean();
+
+    if (hasPreviousRejection) {
+      return errorResponse(res, 403, "Order not found or not available for you");
+    }
+
     // Check if order is assigned to this delivery partner OR if they were notified
     const orderDeliveryPartnerId = order.deliveryPartnerId?.toString();
     const currentDeliveryId = delivery._id.toString();
@@ -278,10 +328,14 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
     // Valid statuses for order acceptance (unassigned orders in these statuses can be viewed by any delivery boy)
     const validAcceptanceStatuses = ["preparing", "ready"];
 
+    const isOpenBroadcastOrder =
+      order.status === "ready" &&
+      order.assignmentStatus === "pending_assignment";
+
     // If order is assigned to this delivery partner, allow access
     if (orderDeliveryPartnerId === currentDeliveryId) {
       // Order is assigned, proceed
-    } else if (!orderDeliveryPartnerId) {
+    } else if (!orderDeliveryPartnerId || isOpenBroadcastOrder) {
       // Order not assigned yet - allow access if:
       // 1. Order is in a valid status for acceptance (preparing/ready), OR
       // 2. This delivery boy was notified about it
@@ -367,6 +421,16 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     const delivery = req.delivery;
     const { orderId } = req.params;
     const { currentLat, currentLng } = req.body; // Delivery boy's current location
+    let acceptanceCommitted = false;
+    let committedOrder = null;
+
+    const returnAcceptedResponse = (message, extras = {}) =>
+      successResponse(res, 200, message || "Order accepted successfully", {
+        order: sanitizeOrderForDelivery(committedOrder || order || null),
+        route: extras.route || null,
+        estimatedEarnings: extras.estimatedEarnings || null,
+        warning: extras.warning || null,
+      });
 
     // Validate orderId
     if (
@@ -425,11 +489,17 @@ export const acceptOrder = asyncHandler(async (req, res) => {
 
       // Reload the updated order
       order = acceptResult.order;
+      committedOrder = acceptResult.order;
+      acceptanceCommitted = true;
     } catch (acceptError) {
       console.error("Error in assignment acceptance:", acceptError);
       
-      // Fallback to legacy logic if new system fails
-      if (orderDeliveryPartnerId && orderDeliveryPartnerId !== currentDeliveryId) {
+      // Fallback to legacy logic only for genuinely accepted orders.
+      if (
+        order.assignmentStatus === "accepted" &&
+        orderDeliveryPartnerId &&
+        orderDeliveryPartnerId !== currentDeliveryId
+      ) {
         return errorResponse(res, 403, "Order is assigned to another delivery partner");
       }
 
@@ -462,6 +532,11 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     // Check if order is in valid state to accept
     const validStatuses = ["preparing", "ready"];
     if (!validStatuses.includes(order.status)) {
+      if (acceptanceCommitted) {
+        return returnAcceptedResponse("Order accepted successfully", {
+          warning: `Order was accepted, but post-accept validation found status '${order.status}'.`,
+        });
+      }
       console.warn(
         `Order ${order.orderId} cannot be accepted. Current status: ${order.status}, Valid statuses: ${validStatuses.join(", ")}`,
         `⚠️ Order ${order.orderId} cannot be accepted. Current status: ${order.status}, Valid statuses: ${validStatuses.join(", ")}`,
@@ -503,6 +578,11 @@ export const acceptOrder = asyncHandler(async (req, res) => {
             hasCoordinates: !!restaurant?.location?.coordinates,
             locationType: typeof restaurant?.location,
           });
+          if (acceptanceCommitted) {
+            return returnAcceptedResponse("Order accepted successfully", {
+              warning: "Order was accepted, but restaurant location was unavailable for route generation.",
+            });
+          }
           return errorResponse(res, 400, "Restaurant location not found");
         }
       }
@@ -517,6 +597,11 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         console.error(
           `❌ Invalid restaurant coordinates: lat=${restaurantLat}, lng=${restaurantLng}`,
         );
+        if (acceptanceCommitted) {
+          return returnAcceptedResponse("Order accepted successfully", {
+            warning: "Order was accepted, but restaurant coordinates were invalid for route generation.",
+          });
+        }
         return errorResponse(
           res,
           400,
@@ -528,6 +613,11 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         `❌ Error getting restaurant location: ${locationError.message}`,
       );
       console.error(`❌ Location error stack: ${locationError.stack}`);
+      if (acceptanceCommitted) {
+        return returnAcceptedResponse("Order accepted successfully", {
+          warning: "Order was accepted, but the restaurant route could not be prepared.",
+        });
+      }
       return errorResponse(
         res,
         500,
@@ -550,6 +640,11 @@ export const acceptOrder = asyncHandler(async (req, res) => {
             deliveryPartner.availability.currentLocation.coordinates;
         } else {
           console.error(`❌ Delivery partner location not found in profile`);
+          if (acceptanceCommitted) {
+            return returnAcceptedResponse("Order accepted successfully", {
+              warning: "Order was accepted, but delivery partner live location was unavailable.",
+            });
+          }
           return errorResponse(
             res,
             400,
@@ -560,6 +655,11 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         console.error(
           `❌ Error fetching delivery partner location: ${deliveryLocationError.message}`,
         );
+        if (acceptanceCommitted) {
+          return returnAcceptedResponse("Order accepted successfully", {
+            warning: "Order was accepted, but delivery partner location could not be loaded.",
+          });
+        }
         return errorResponse(
           res,
           500,
@@ -589,6 +689,11 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         restaurantLatValid: !!(restaurantLat && !isNaN(restaurantLat)),
         restaurantLngValid: !!(restaurantLng && !isNaN(restaurantLng)),
       });
+      if (acceptanceCommitted) {
+        return returnAcceptedResponse("Order accepted successfully", {
+          warning: "Order was accepted, but route coordinates were invalid.",
+        });
+      }
       return errorResponse(
         res,
         400,
@@ -684,6 +789,11 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     ) {
       console.error("❌ Route data validation failed after all fallbacks");
       console.error("❌ Route data:", JSON.stringify(routeData, null, 2));
+      if (acceptanceCommitted) {
+        return returnAcceptedResponse("Order accepted successfully", {
+          warning: "Order was accepted, but route generation failed.",
+        });
+      }
       return errorResponse(
         res,
         500,
@@ -694,6 +804,11 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     // Use order._id (MongoDB ObjectId) - ensure it exists
     if (!order._id) {
       console.error(`❌ Order ${order.orderId} does not have _id field`);
+      if (acceptanceCommitted) {
+        return returnAcceptedResponse("Order accepted successfully", {
+          warning: "Order was accepted, but the updated order payload was incomplete.",
+        });
+      }
       return errorResponse(res, 500, "Order data is invalid");
     }
 
@@ -713,6 +828,11 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     ) {
       console.error("❌ Invalid route coordinates");
       console.error("❌ Route coordinates:", routeToPickup.coordinates);
+      if (acceptanceCommitted) {
+        return returnAcceptedResponse("Order accepted successfully", {
+          warning: "Order was accepted, but route coordinates could not be stored.",
+        });
+      }
       return errorResponse(res, 500, "Invalid route data. Please try again.");
     }
 
@@ -727,6 +847,8 @@ export const acceptOrder = asyncHandler(async (req, res) => {
             "assignmentInfo.deliveryPartnerId": delivery._id.toString(),
             "assignmentInfo.assignedBy": order.assignmentInfo?.assignedBy || "delivery_accept",
             "assignmentInfo.assignedAt": order.assignmentInfo?.assignedAt || new Date(),
+            "assignmentInfo.priorityDeliveryPartnerIds": [],
+            "assignmentInfo.expandedDeliveryPartnerIds": [],
             "assignmentTimings.acceptedAt": new Date(),
             "deliveryState.status": "accepted",
             "deliveryState.acceptedAt": new Date(),
@@ -744,6 +866,12 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         console.error(
           `❌ Order ${orderMongoId} not found after update attempt`,
         );
+        if (acceptanceCommitted) {
+          return returnAcceptedResponse("Order accepted successfully", {
+            route: routeToPickup,
+            warning: "Order was accepted, but the refreshed order could not be loaded.",
+          });
+        }
         return errorResponse(res, 404, "Order not found");
       }
     } catch (updateError) {
@@ -753,6 +881,12 @@ export const acceptOrder = asyncHandler(async (req, res) => {
       console.error("❌ Update error stack:", updateError.stack);
       if (updateError.errors) {
         console.error("❌ Update validation errors:", updateError.errors);
+      }
+      if (acceptanceCommitted) {
+        return returnAcceptedResponse("Order accepted successfully", {
+          route: routeToPickup,
+          warning: "Order was accepted, but some post-accept updates could not be saved.",
+        });
       }
       return errorResponse(
         res,

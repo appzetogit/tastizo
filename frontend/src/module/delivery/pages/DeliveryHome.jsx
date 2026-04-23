@@ -66,78 +66,18 @@ import bikeLogo from "../../../assets/bikelogo.png"
 
 // Ola Maps API Key removed
 
-// Mock restaurants data
-const mockRestaurants = [
-  {
-    id: 1,
-    name: "Hotel Pankaj",
-    address: "Opposite Midway, Behror Locality, Behror",
-    lat: 28.2849,
-    lng: 76.1209,
-    distance: "3.56 km",
-    timeAway: "4 mins",
-    orders: 2,
-    estimatedEarnings: 76.62, // Consistent payment amount
-    pickupDistance: "3.56 km",
-    dropDistance: "12.2 km",
-    payment: "COD",
-    amount: 76.62, // Payment amount (consistent with estimatedEarnings)
-    items: 2,
-    phone: "+911234567890",
-    orderId: "ORD1234567890",
-    customerName: "Rajesh Kumar",
-    customerAddress: "401, 4th Floor, Pushparatna Solitare Building, Janjeerwala Square, New Palasia, Indore",
-    customerPhone: "+919876543210",
-    tripTime: "38 mins",
-    tripDistance: "8.8 kms"
-  },
-  {
-    id: 2,
-    name: "Haldi",
-    address: "B 2, Narnor-Alwar Rd, Indus Valley, Behror",
-    lat: 28.2780,
-    lng: 76.1150,
-    distance: "4.2 km",
-    timeAway: "4 mins",
-    orders: 1,
-    estimatedEarnings: 76.62,
-    pickupDistance: "4.2 km",
-    dropDistance: "8.5 km",
-    payment: "COD",
-    amount: 76.62,
-    items: 3,
-    phone: "+911234567891",
-    orderId: "ORD1234567891",
-    customerName: "Priya Sharma",
-    customerAddress: "Flat 302, Green Valley Apartments, MG Road, Indore",
-    customerPhone: "+919876543211",
-    tripTime: "35 mins",
-    tripDistance: "7.5 kms"
-  },
-  {
-    id: 3,
-    name: "Pandit Ji Samose Wale",
-    address: "Near Govt. Senior Secondary School, Behror Locality, Behror",
-    lat: 28.2870,
-    lng: 76.1250,
-    distance: "5.04 km",
-    timeAway: "6 mins",
-    orders: 1,
-    estimatedEarnings: 76.62,
-    pickupDistance: "5.04 km",
-    dropDistance: "7.8 km",
-    payment: "COD",
-    amount: 76.62,
-    items: 1,
-    phone: "+911234567892",
-    orderId: "ORD1234567892",
-    customerName: "Amit Patel",
-    customerAddress: "House No. 45, Sector 5, Vijay Nagar, Indore",
-    customerPhone: "+919876543212",
-    tripTime: "32 mins",
-    tripDistance: "6.9 kms"
+function readStoredActiveOrder() {
+  try {
+    const stored = localStorage.getItem("deliveryActiveOrder")
+    if (!stored) return null
+
+    const parsed = JSON.parse(stored)
+    return parsed?.restaurantInfo || null
+  } catch (error) {
+    console.warn("Failed to read stored active delivery order:", error)
+    return null
   }
-]
+}
 
 function extractCustomerPhoneFromOrder(order) {
   if (!order) return null
@@ -169,6 +109,32 @@ function extractRestaurantPhoneFromOrder(order) {
     order.restaurant?.ownerPhone ||
     order.restaurantId?.contact?.phone ||
     order.restaurantId?.owner?.phone ||
+    null
+  )
+}
+
+function isOrderLifecycleCompleted(order) {
+  if (!order) return false
+
+  const orderStatus = String(order?.orderStatus || order?.status || "").toLowerCase()
+  const deliveryPhase = String(order?.deliveryPhase || order?.deliveryState?.currentPhase || "").toLowerCase()
+  const deliveryStateStatus = String(order?.deliveryState?.status || "").toLowerCase()
+
+  return (
+    orderStatus === "delivered" ||
+    orderStatus === "completed" ||
+    deliveryPhase === "completed" ||
+    deliveryPhase === "delivered" ||
+    deliveryStateStatus === "delivered" ||
+    deliveryStateStatus === "completed"
+  )
+}
+
+function extractOrderDetailsPayload(response) {
+  return (
+    response?.data?.data?.order ||
+    response?.data?.order ||
+    response?.data?.data ||
     null
   )
 }
@@ -417,14 +383,11 @@ export default function DeliveryHome() {
     transactions: [],
     joiningBonusClaimed: false
   })
-  const [activeOrder, setActiveOrder] = useState(() => {
-    const stored = localStorage.getItem('activeOrder')
-    return stored ? JSON.parse(stored) : null
-  })
+  const [activeOrder, setActiveOrder] = useState(() => readStoredActiveOrder())
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
   
   // Delivery notifications hook
-  const { newOrder, clearNewOrder, orderReady, clearOrderReady, isConnected } = useDeliveryNotifications()
+  const { newOrder, clearNewOrder, markOrderDismissed, orderReady, clearOrderReady, isConnected, stopNotificationSound } = useDeliveryNotifications()
 
   const refreshUnreadNotificationCount = useCallback(async () => {
     try {
@@ -1468,7 +1431,34 @@ export default function DeliveryHome() {
     setShowRejectPopup(true)
   }
 
-  const handleRejectConfirm = () => {    
+  const handleRejectConfirm = async () => {
+    stopNotificationSound()
+    const deniedOrder = selectedRestaurant || newOrder
+    const denyOrderId =
+      selectedRestaurant?.id ||
+      selectedRestaurant?.orderId ||
+      newOrder?.orderMongoId ||
+      newOrder?._id ||
+      newOrder?.orderId
+
+    if (deniedOrder) {
+      markOrderDismissed(deniedOrder)
+      window.dispatchEvent(new CustomEvent('deliveryOrderDismissed', {
+        detail: deniedOrder
+      }))
+    }
+
+    if (denyOrderId) {
+      try {
+        await deliveryAPI.rejectOrder(
+          denyOrderId,
+          rejectReason || 'rejected_by_delivery'
+        )
+      } catch (error) {
+        console.error('Error rejecting order:', error)
+      }
+    }
+
     if (alertAudioRef.current) {
       alertAudioRef.current.pause()
       alertAudioRef.current.currentTime = 0
@@ -1477,10 +1467,11 @@ export default function DeliveryHome() {
     setShowNewOrderPopup(false)
     setIsNewOrderPopupMinimized(false) // Reset minimized state
     setNewOrderDragY(0) // Reset drag position
+    clearNewOrder()
+    setSelectedRestaurant(null)
     setRejectReason("")
     setCountdownSeconds(300)
-    // Here you would typically send the rejection to your backend
-    console.log("Order rejected with reason:", rejectReason)
+    toast.success("Order denied and hidden from your account")
   }
 
   const handleRejectCancel = () => {
@@ -2154,6 +2145,7 @@ export default function DeliveryHome() {
     const threshold = maxSwipe * 0.7 // 70% of max swipe
 
     if (deltaX > threshold) {
+      stopNotificationSound()
       // Stop audio immediately when user accepts
       if (alertAudioRef.current) {
         alertAudioRef.current.pause()
@@ -2500,6 +2492,10 @@ export default function DeliveryHome() {
               return;
             }
 
+            const hasRestaurantCoordinates =
+              Number.isFinite(Number(restaurantInfo?.lat)) &&
+              Number.isFinite(Number(restaurantInfo?.lng));
+
             let routeCoordinates = null;
             let directionsResultForMap = null; // Store directions result for main map rendering
 
@@ -2514,7 +2510,7 @@ export default function DeliveryHome() {
             // Calculate route using Google Maps Directions API (Zomato-style road-based routing)
             // Use LIVE location from delivery boy to restaurant
             // Use restaurantInfo directly (not selectedRestaurant) since state update is async
-            if (restaurantInfo && restaurantInfo.lat && restaurantInfo.lng && currentLocation) {
+            if (restaurantInfo && hasRestaurantCoordinates && currentLocation) {
               console.log('🗺️ Calculating route with Google Maps Directions API...');
               console.log('📍 From (Delivery Boy Live Location):', currentLocation);
               console.log('📍 To (Restaurant):', { lat: restaurantInfo.lat, lng: restaurantInfo.lng });
@@ -4230,6 +4226,15 @@ export default function DeliveryHome() {
     const threshold = maxSwipe * 0.7 // 70% of max swipe
 
     if (deltaX > threshold) {
+      if (!selectedRestaurant?.lat || !selectedRestaurant?.lng) {
+        toast.error("Live order details are still loading. Please wait a moment.")
+        setAcceptButtonProgress(0)
+        acceptButtonSwipeStartX.current = 0
+        acceptButtonSwipeStartY.current = 0
+        acceptButtonIsSwiping.current = false
+        return
+      }
+
       // Animate to completion
       setIsAnimatingToComplete(true)
       setAcceptButtonProgress(1)
@@ -4237,7 +4242,7 @@ export default function DeliveryHome() {
       // Navigate to pickup directions page after animation
       setTimeout(() => {
         navigate("/delivery/pickup-directions", {
-          state: { restaurants: mockRestaurants },
+          state: { restaurants: [selectedRestaurant] },
           replace: false
         })
 
@@ -4332,8 +4337,7 @@ export default function DeliveryHome() {
     }
 
     const handleActiveOrderUpdate = () => {
-      const stored = localStorage.getItem('activeOrder')
-      setActiveOrder(stored ? JSON.parse(stored) : null)
+      setActiveOrder(readStoredActiveOrder())
     }
 
     const handleNotificationUpdate = () => {
@@ -4368,6 +4372,154 @@ export default function DeliveryHome() {
     return `${minutes} mins`
   }, [])
 
+  const formatDistanceValue = useCallback((value) => {
+    if (value == null || value === '') return null
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return `${value.toFixed(2)} km`
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) return null
+      const numeric = Number(trimmed)
+      if (!Number.isNaN(numeric) && !trimmed.toLowerCase().includes('km')) {
+        return `${numeric.toFixed(2)} km`
+      }
+      return trimmed
+    }
+    if (typeof value === 'object') {
+      const nestedValue =
+        value.text ??
+        value.label ??
+        value.distanceText ??
+        value.formatted ??
+        value.value ??
+        value.km ??
+        value.distanceKm
+      return formatDistanceValue(nestedValue)
+    }
+    return null
+  }, [])
+
+  const isUsableDistance = useCallback(
+    (value) => {
+      const formatted = formatDistanceValue(value)
+      return Boolean(
+        formatted &&
+          formatted !== '0 km' &&
+          formatted !== '0.00 km' &&
+          formatted !== 'Calculating...'
+      )
+    },
+    [formatDistanceValue],
+  )
+
+  const resolveDistanceDisplay = useCallback(
+    (...values) => {
+      for (const value of values) {
+        const formatted = formatDistanceValue(value)
+        if (formatted) return formatted
+      }
+      return 'Calculating...'
+    },
+    [formatDistanceValue],
+  )
+
+  const extractEarningsAmount = useCallback((earnings, fallback = 0) => {
+    let amount = 0
+
+    if (earnings != null) {
+      if (typeof earnings === 'number') {
+        amount = earnings
+      } else if (typeof earnings === 'string') {
+        amount = Number(earnings) || 0
+      } else if (typeof earnings === 'object') {
+        amount = Number(
+          earnings.totalEarning ??
+            earnings.amount ??
+            earnings.total ??
+            earnings.basePayout ??
+            0,
+        ) || 0
+      }
+    }
+
+    if (amount > 0) return amount
+
+    if (typeof fallback === 'object' && fallback != null) {
+      return extractEarningsAmount(fallback, 0)
+    }
+
+    return Number(fallback) || 0
+  }, [])
+
+  const extractEarningsBreakdown = useCallback((earnings) => {
+    if (!earnings || typeof earnings !== 'object') return null
+    const breakdown = earnings.breakdown && typeof earnings.breakdown === 'object'
+      ? { ...earnings, ...earnings.breakdown }
+      : earnings
+
+    if (
+      breakdown.basePayout == null &&
+      breakdown.distanceCommission == null &&
+      breakdown.distance == null
+    ) {
+      return null
+    }
+
+    return breakdown
+  }, [])
+
+  const resolveTextDetail = useCallback((...values) => {
+    const placeholders = new Set([
+      'Restaurant address',
+      'Restaurant Address',
+      'Address',
+      'Customer address',
+      'Customer Address',
+    ])
+
+    for (const value of values) {
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (trimmed && !placeholders.has(trimmed)) return trimmed
+      }
+    }
+
+    return null
+  }, [])
+
+  const resolveRestaurantAddress = useCallback((primary, secondary) => {
+    return (
+      resolveTextDetail(
+        primary?.address,
+        primary?.restaurantAddress,
+        primary?.restaurant?.address,
+        primary?.restaurantLocation?.address,
+        primary?.restaurantLocation?.formattedAddress,
+        primary?.restaurantId?.address,
+        primary?.restaurantId?.location?.formattedAddress,
+        primary?.restaurantId?.location?.address,
+        secondary?.address,
+        secondary?.restaurantAddress,
+        secondary?.restaurant?.address,
+        secondary?.restaurantLocation?.address,
+        secondary?.restaurantLocation?.formattedAddress,
+        secondary?.restaurantId?.address,
+        secondary?.restaurantId?.location?.formattedAddress,
+        secondary?.restaurantId?.location?.address,
+      ) || null
+    )
+  }, [resolveTextDetail])
+
+  const isResolvedDistance = useCallback((value) => {
+    const formatted = formatDistanceValue(value)
+    return Boolean(formatted)
+  }, [formatDistanceValue])
+
+  const isResolvedAddress = useCallback((value) => {
+    return Boolean(resolveTextDetail(value))
+  }, [resolveTextDetail])
+
   // Show new order popup when order is received from Socket.IO
   useEffect(() => {
     if (newOrder) {
@@ -4400,31 +4552,15 @@ export default function DeliveryHome() {
       console.log('📦 New order received from Socket.IO:', newOrder)
       
       // Transform newOrder data to match selectedRestaurant format
-      // Extract restaurant address with proper priority
-      let restaurantAddress = 'Restaurant address';
-      if (newOrder.restaurantLocation?.address) {
-        restaurantAddress = newOrder.restaurantLocation.address;
-      } else if (newOrder.restaurantLocation?.formattedAddress) {
-        restaurantAddress = newOrder.restaurantLocation.formattedAddress;
-      } else if (newOrder.restaurantAddress) {
-        restaurantAddress = newOrder.restaurantAddress;
-      }
+      const restaurantAddress = resolveRestaurantAddress(newOrder, null)
       
       // Extract earnings from notification - backend now calculates and sends estimatedEarnings
       const deliveryFee = newOrder.deliveryFee ?? 0;
       const earned = newOrder.estimatedEarnings;
-      let earnedValue = 0;
-      
-      if (earned) {
-        if (typeof earned === 'object' && earned.totalEarning != null) {
-          earnedValue = Number(earned.totalEarning) || 0;
-        } else if (typeof earned === 'number') {
-          earnedValue = earned;
-        }
-      }
-      
-      // Use calculated earnings if available, otherwise fallback to deliveryFee
-      const effectiveEarnings = earnedValue > 0 ? earned : (deliveryFee > 0 ? deliveryFee : 0);
+      const earnedValue = extractEarningsAmount(earned, 0)
+
+      // Only use rider earning fields here. Never substitute customer delivery fee.
+      const effectiveEarnings = earnedValue > 0 ? earned : null;
       
       console.log('💰 Earnings from notification:', {
         earned,
@@ -4463,22 +4599,40 @@ export default function DeliveryHome() {
         pickupDistance = 'Calculating...';
       }
 
+      const resolvedDropDistance = resolveDistanceDisplay(
+        newOrder.deliveryDistance,
+        newOrder.dropDistance,
+        newOrder.distanceToCustomer,
+      )
+
+      if (typeof newOrder === 'object' && newOrder !== null) {
+        newOrder.restaurantName = newOrder.restaurantName || null
+        newOrder.pickupDistance = pickupDistance
+        newOrder.deliveryDistance = resolvedDropDistance
+        newOrder.estimatedEarnings = effectiveEarnings
+        newOrder.deliveryFee = deliveryFee
+        if (!newOrder.restaurantLocation || typeof newOrder.restaurantLocation !== 'object') {
+          newOrder.restaurantLocation = {}
+        }
+        newOrder.restaurantLocation.address = restaurantAddress
+      }
+
       const restaurantData = {
         id: newOrder.orderMongoId || newOrder.orderId,
         orderId: newOrder.orderId,
-        name: newOrder.restaurantName,
+        name: newOrder.restaurantName || null,
         address: restaurantAddress,
         lat: newOrder.restaurantLocation?.latitude,
         lng: newOrder.restaurantLocation?.longitude,
         distance: pickupDistance,
         timeAway: pickupDistance !== 'Calculating...' ? calculateTimeAway(pickupDistance) : 'Calculating...',
-        dropDistance: newOrder.deliveryDistance || 'Calculating...',
+        dropDistance: resolvedDropDistance,
         pickupDistance: pickupDistance,
         estimatedEarnings: effectiveEarnings,
         deliveryFee,
-        amount: earnedValue > 0 ? earnedValue : (deliveryFee > 0 ? deliveryFee : 0),
+        amount: earnedValue > 0 ? earnedValue : null,
         customerName: newOrder.customerName,
-        customerAddress: newOrder.customerLocation?.address || 'Customer address',
+        customerAddress: newOrder.customerLocation?.address || null,
         customerPhone: newOrder.customerPhone || newOrder.userPhone || null,
         customerLat: newOrder.customerLocation?.latitude,
         customerLng: newOrder.customerLocation?.longitude,
@@ -4489,8 +4643,175 @@ export default function DeliveryHome() {
       setSelectedRestaurant(restaurantData)
       setShowNewOrderPopup(true)
       setCountdownSeconds(300) // Reset countdown to 5 minutes
+
+      let isMounted = true
+
+      const hydrateNewOrderDetails = async () => {
+        if (!orderId) return
+
+        try {
+          const response = await deliveryAPI.getOrderDetails(orderId, {
+            skipGlobalErrorToast: true,
+          })
+          const order = extractOrderDetailsPayload(response)
+          if (!isMounted || !order) return
+
+          const responseData = response?.data?.data || {}
+          const restaurantLat =
+            order.restaurantId?.location?.coordinates?.[1] ??
+            order.restaurantId?.location?.latitude ??
+            newOrder.restaurantLocation?.latitude
+          const restaurantLng =
+            order.restaurantId?.location?.coordinates?.[0] ??
+            order.restaurantId?.location?.longitude ??
+            newOrder.restaurantLocation?.longitude
+          const customerLat =
+            order.address?.location?.coordinates?.[1] ??
+            newOrder.customerLocation?.latitude
+          const customerLng =
+            order.address?.location?.coordinates?.[0] ??
+            newOrder.customerLocation?.longitude
+          const currentLocation = riderLocation || lastLocationRef.current
+
+          const livePickupDistance =
+            currentLocation &&
+            currentLocation.length === 2 &&
+            Number.isFinite(Number(restaurantLat)) &&
+            Number.isFinite(Number(restaurantLng))
+              ? `${(calculateDistance(
+                  currentLocation[0],
+                  currentLocation[1],
+                  Number(restaurantLat),
+                  Number(restaurantLng),
+                ) / 1000).toFixed(2)} km`
+              : pickupDistance
+
+          const liveDropDistance =
+            Number.isFinite(Number(restaurantLat)) &&
+            Number.isFinite(Number(restaurantLng)) &&
+            Number.isFinite(Number(customerLat)) &&
+            Number.isFinite(Number(customerLng))
+              ? `${(calculateDistance(
+                  Number(restaurantLat),
+                  Number(restaurantLng),
+                  Number(customerLat),
+                  Number(customerLng),
+                ) / 1000).toFixed(2)} km`
+              : resolveDistanceDisplay(
+                  order.deliveryDistance,
+                  order.dropDistance,
+                  responseData.deliveryDistance,
+                  newOrder.deliveryDistance,
+                  newOrder.dropDistance,
+                  newOrder.distanceToCustomer,
+                )
+
+          const backendEarnings =
+            order.estimatedEarnings ??
+            responseData.estimatedEarnings ??
+            newOrder.estimatedEarnings
+          const backendEarnedValue = extractEarningsAmount(backendEarnings, 0)
+          const hydratedRestaurantAddress = resolveRestaurantAddress(order, newOrder)
+          const hydratedRestaurantName =
+            order.restaurantName?.trim?.() ||
+            order.restaurantId?.name?.trim?.() ||
+            newOrder.restaurantName ||
+            "Restaurant"
+
+          if (typeof newOrder === 'object' && newOrder !== null) {
+            newOrder.restaurantName = hydratedRestaurantName
+            newOrder.pickupDistance = livePickupDistance
+            newOrder.deliveryDistance = liveDropDistance
+            newOrder.estimatedEarnings =
+              backendEarnedValue > 0
+                ? backendEarnings
+                : (newOrder.estimatedEarnings ?? null)
+            if (!newOrder.restaurantLocation || typeof newOrder.restaurantLocation !== 'object') {
+              newOrder.restaurantLocation = {}
+            }
+            newOrder.restaurantLocation.latitude = Number(restaurantLat) || newOrder.restaurantLocation.latitude
+            newOrder.restaurantLocation.longitude = Number(restaurantLng) || newOrder.restaurantLocation.longitude
+            newOrder.restaurantLocation.address = hydratedRestaurantAddress
+            if (!newOrder.customerLocation || typeof newOrder.customerLocation !== 'object') {
+              newOrder.customerLocation = {}
+            }
+            newOrder.customerLocation.latitude = Number(customerLat) || newOrder.customerLocation.latitude
+            newOrder.customerLocation.longitude = Number(customerLng) || newOrder.customerLocation.longitude
+            newOrder.customerLocation.address =
+              order.address?.formattedAddress ||
+              newOrder.customerLocation.address ||
+              'Customer address'
+          }
+
+          setSelectedRestaurant((prev) => {
+            const prevOrderId = prev?.orderId || prev?.id
+            if (!prev || String(prevOrderId) !== String(order.orderId || order._id || orderId)) {
+              return prev
+            }
+
+            return {
+              ...prev,
+              id: order._id || prev.id,
+              orderId: order.orderId || prev.orderId,
+              name: hydratedRestaurantName,
+              address: hydratedRestaurantAddress,
+              lat: Number(restaurantLat) || prev.lat,
+              lng: Number(restaurantLng) || prev.lng,
+              distance: livePickupDistance,
+              pickupDistance: livePickupDistance,
+              timeAway:
+                livePickupDistance !== 'Calculating...'
+                  ? calculateTimeAway(livePickupDistance)
+                  : prev.timeAway,
+              dropDistance: liveDropDistance,
+              estimatedEarnings:
+                backendEarnedValue > 0
+                  ? backendEarnings
+                  : (prev.estimatedEarnings ?? null),
+              amount:
+                backendEarnedValue > 0
+                  ? backendEarnedValue
+                  : (prev.amount ?? null),
+              customerName: order.userId?.name || prev.customerName,
+              customerAddress:
+                order.address?.formattedAddress ||
+                prev.customerAddress,
+              customerPhone:
+                extractCustomerPhoneFromOrder(order) || prev.customerPhone,
+              customerLat: Number(customerLat) || prev.customerLat,
+              customerLng: Number(customerLng) || prev.customerLng,
+              items: order.items || prev.items,
+              total: order.pricing?.total || prev.total,
+            }
+          })
+        } catch (error) {
+          const statusCode = error?.response?.status
+          if (statusCode === 403 || statusCode === 401) {
+            console.warn('Skipping new order hydration because order details are not accessible yet:', {
+              orderId,
+              statusCode,
+            })
+            return
+          }
+
+          console.error('❌ Error hydrating new order popup:', error)
+        }
+      }
+
+      hydrateNewOrderDetails()
+
+      return () => {
+        isMounted = false
+      }
     }
-  }, [newOrder, calculateTimeAway, riderLocation])
+  }, [
+    newOrder,
+    calculateTimeAway,
+    extractEarningsAmount,
+    resolveDistanceDisplay,
+    resolveRestaurantAddress,
+    riderLocation,
+  ])
 
   // Recalculate distance when rider location becomes available
   useEffect(() => {
@@ -4542,7 +4863,9 @@ export default function DeliveryHome() {
       
       const fetchAddress = async () => {
         try {
-          const response = await deliveryAPI.getOrderDetails(orderId)
+          const response = await deliveryAPI.getOrderDetails(orderId, {
+            skipGlobalErrorToast: true,
+          })
           if (response?.data?.success && response?.data?.data) {
             const order = response.data.data.order || response.data.data
             
@@ -4557,6 +4880,17 @@ export default function DeliveryHome() {
             }
             
             if (restaurantAddress && restaurantAddress !== 'Restaurant address' && restaurantAddress !== 'Restaurant Address') {
+              if (
+                newOrder &&
+                (newOrder.orderId === selectedRestaurant?.orderId ||
+                  newOrder.orderMongoId === selectedRestaurant?.id)
+              ) {
+                if (!newOrder.restaurantLocation || typeof newOrder.restaurantLocation !== 'object') {
+                  newOrder.restaurantLocation = {}
+                }
+                newOrder.restaurantLocation.address = restaurantAddress
+              }
+
               setSelectedRestaurant(prev => ({
                 ...prev,
                 address: restaurantAddress
@@ -6343,6 +6677,8 @@ export default function DeliveryHome() {
         if (!orderId) {
           console.log('⚠️ No order ID found in saved data, removing from localStorage');
           localStorage.removeItem('deliveryActiveOrder');
+          localStorage.removeItem('activeOrder');
+          setActiveOrder(null);
           setSelectedRestaurant(null);
           return;
         }
@@ -6351,21 +6687,36 @@ export default function DeliveryHome() {
         let order = null;
         try {
           console.log('🔍 Verifying order exists in database:', orderId);
-          const orderResponse = await deliveryAPI.getOrderDetails(orderId);
+          const orderResponse = await deliveryAPI.getOrderDetails(orderId, {
+            skipGlobalErrorToast: true,
+          });
           
           if (!orderResponse.data?.success || !orderResponse.data?.data) {
             console.log('⚠️ Order not found in database, removing from localStorage');
             localStorage.removeItem('deliveryActiveOrder');
+            localStorage.removeItem('activeOrder');
+            setActiveOrder(null);
             setSelectedRestaurant(null);
             return;
           }
 
-          order = orderResponse.data.data;
+          order = extractOrderDetailsPayload(orderResponse);
+
+          if (!order) {
+            console.log('⚠️ Order payload missing in response, removing from localStorage');
+            localStorage.removeItem('deliveryActiveOrder');
+            localStorage.removeItem('activeOrder');
+            setActiveOrder(null);
+            setSelectedRestaurant(null);
+            return;
+          }
           
           // Check if order is cancelled or deleted
-          if (order.status === 'cancelled' || order.status === 'delivered') {
-            console.log(`⚠️ Order is ${order.status}, removing from localStorage`);
+          if (order.status === 'cancelled' || isOrderLifecycleCompleted(order)) {
+            console.log(`⚠️ Order is ${order.status || order.deliveryState?.currentPhase || 'completed'}, removing from localStorage`);
             localStorage.removeItem('deliveryActiveOrder');
+            localStorage.removeItem('activeOrder');
+            setActiveOrder(null);
             setSelectedRestaurant(null);
             return;
           }
@@ -6376,14 +6727,12 @@ export default function DeliveryHome() {
         } catch (verifyError) {
           // If order doesn't exist (404) or any other error, clear localStorage
           console.log('⚠️ Error verifying order or order not found:', verifyError.response?.status || verifyError.message);
-          if (verifyError.response?.status === 404 || verifyError.response?.status === 403) {
-            console.log('⚠️ Order not found or not assigned, removing from localStorage');
-            localStorage.removeItem('deliveryActiveOrder');
-            setSelectedRestaurant(null);
-            return;
-          }
-          // For other errors (network, etc.), still try to restore but log warning
-          console.warn('⚠️ Could not verify order, but restoring anyway:', verifyError.message);
+          console.log('⚠️ Could not verify saved order, removing stale local data');
+          localStorage.removeItem('deliveryActiveOrder');
+          localStorage.removeItem('activeOrder');
+          setActiveOrder(null);
+          setSelectedRestaurant(null);
+          return;
         }
 
         // Check if order is still valid (not too old - e.g., within 24 hours)
@@ -6392,6 +6741,8 @@ export default function DeliveryHome() {
         if (hoursSinceAccepted > 24) {
           console.log('⚠️ Active order is too old, removing from localStorage');
           localStorage.removeItem('deliveryActiveOrder');
+          localStorage.removeItem('activeOrder');
+          setActiveOrder(null);
           setSelectedRestaurant(null);
           return;
         }
@@ -6426,6 +6777,7 @@ export default function DeliveryHome() {
         // Restore selectedRestaurant state (with merged delivery phase and customer coords when applicable)
         if (restaurantInfoToRestore && Object.keys(restaurantInfoToRestore).length > 0) {
           setSelectedRestaurant(restaurantInfoToRestore);
+          setActiveOrder(restaurantInfoToRestore);
           console.log('✅ Restored selectedRestaurant from localStorage');
         }
 
@@ -6489,6 +6841,8 @@ export default function DeliveryHome() {
         console.error('❌ Error restoring active order:', error);
         // Clear localStorage and state if there's an error
         localStorage.removeItem('deliveryActiveOrder');
+        localStorage.removeItem('activeOrder');
+        setActiveOrder(null);
         setSelectedRestaurant(null);
         setShowReachedDropPopup(false);
         setShowOrderDeliveredAnimation(false);
@@ -6600,6 +6954,8 @@ export default function DeliveryHome() {
   const clearOrderData = useCallback(() => {
     console.log('🧹 Clearing order data...');
     localStorage.removeItem('deliveryActiveOrder');
+    localStorage.removeItem('activeOrder');
+    setActiveOrder(null);
     setSelectedRestaurant(null);
     setShowReachedDropPopup(false);
     setShowOrderDeliveredAnimation(false);
@@ -6676,7 +7032,9 @@ export default function DeliveryHome() {
     
     const verifyOrderInterval = setInterval(async () => {
       try {
-        const orderResponse = await deliveryAPI.getOrderDetails(orderId);
+        const orderResponse = await deliveryAPI.getOrderDetails(orderId, {
+          skipGlobalErrorToast: true,
+        });
         
         if (!orderResponse.data?.success || !orderResponse.data?.data) {
           console.log('⚠️ Order no longer exists, clearing data');
@@ -6684,7 +7042,12 @@ export default function DeliveryHome() {
           return;
         }
 
-        const order = orderResponse.data.data;
+        const order = extractOrderDetailsPayload(orderResponse);
+        if (!order) {
+          console.log('⚠️ Order payload missing, clearing data');
+          clearOrderData();
+          return;
+        }
         
         // Check if order is cancelled, deleted, or delivered/completed
         if (order.status === 'cancelled') {
@@ -6694,10 +7057,7 @@ export default function DeliveryHome() {
         }
 
         // Check if order is delivered/completed - clear it from UI
-        const isOrderDelivered = order.status === 'delivered' || 
-                                order.status === 'completed' ||
-                                order.deliveryState?.currentPhase === 'completed' ||
-                                order.deliveryState?.status === 'delivered'
+        const isOrderDelivered = isOrderLifecycleCompleted(order)
         
         if (isOrderDelivered && !showPaymentPage && !showOrderDeliveredAnimation) {
           console.log('✅ Order is delivered/completed, clearing from UI');
@@ -6905,7 +7265,9 @@ export default function DeliveryHome() {
       try {
         console.log('📋 Fetching order details for restaurant address, orderId:', orderId)
         
-        const response = await deliveryAPI.getOrderDetails(orderId)
+        const response = await deliveryAPI.getOrderDetails(orderId, {
+          skipGlobalErrorToast: true,
+        })
         
         if (response.data?.success && response.data.data) {
           const orderData = response.data.data
@@ -7376,7 +7738,9 @@ export default function DeliveryHome() {
     if (!isOutForDelivery || hasCustomerCoords || !orderId || fetchedOrderDetailsForDropRef.current === orderId) return
 
     fetchedOrderDetailsForDropRef.current = orderId
-    deliveryAPI.getOrderDetails(orderId)
+    deliveryAPI.getOrderDetails(orderId, {
+      skipGlobalErrorToast: true,
+    })
       .then(res => {
         const order = res.data?.data?.order || res.data?.order
         const coords = order?.address?.location?.coordinates
@@ -8313,6 +8677,8 @@ export default function DeliveryHome() {
   }, [mapLoading, riderLocation])
 
   // Render normal feed view when offline or no gig booked
+  const isSelectedRestaurantDelivered = isOrderLifecycleCompleted(selectedRestaurant)
+
   return (
     <div className="min-h-screen bg-[#f6e9dc] overflow-x-hidden flex flex-col" style={{ height: '100vh' }}>
       {/* Top Navigation Bar */}
@@ -9388,45 +9754,15 @@ export default function DeliveryHome() {
                   <div className="mb-5">
                     <p className="text-gray-500 text-sm mb-1">Estimated earnings</p>
                     <p className="text-4xl font-bold text-gray-900 mb-2">
-                      ₹{(() => {
-                        const earnings = newOrder?.estimatedEarnings || selectedRestaurant?.estimatedEarnings || 0;
-                        const fallback = newOrder?.deliveryFee ?? selectedRestaurant?.deliveryFee ?? selectedRestaurant?.amount ?? 0;
-                        let value = 0;
-                        
-                        console.log('💰 Display earnings calculation:', {
-                          earnings,
-                          earningsType: typeof earnings,
-                          newOrderEarnings: newOrder?.estimatedEarnings,
-                          selectedRestaurantEarnings: selectedRestaurant?.estimatedEarnings,
-                          fallback
-                        });
-                        
-                        if (earnings) {
-                          if (typeof earnings === 'object') {
-                            // Handle earnings object
-                            if (earnings.totalEarning != null) {
-                              value = Number(earnings.totalEarning) || 0;
-                            } else if (earnings.basePayout != null) {
-                              // If only basePayout is available, use it
-                              value = Number(earnings.basePayout) || 0;
-                            }
-                          } else if (typeof earnings === 'number') {
-                            value = earnings > 0 ? earnings : 0;
-                          }
-                        }
-                        
-                        // If value is still 0, try fallback
-                        if (value <= 0 && fallback > 0) {
-                          value = Number(fallback);
-                        }
-                        
-                        console.log('💰 Final earnings value to display:', value);
-                        return value > 0 ? value.toFixed(2) : '0.00';
+                      {(() => {
+                        const earnings = newOrder?.estimatedEarnings ?? selectedRestaurant?.estimatedEarnings ?? null
+                        const value = extractEarningsAmount(earnings, 0)
+                        return value > 0 ? `₹${value.toFixed(2)}` : 'Updating...'
                       })()}
                     </p>
                     {/* Earnings Breakdown */}
                     {(() => {
-                      const earnings = newOrder?.estimatedEarnings || selectedRestaurant?.estimatedEarnings || 0;
+                      const earnings = newOrder?.estimatedEarnings ?? selectedRestaurant?.estimatedEarnings ?? null
                       if (typeof earnings === 'object' && earnings.breakdown) {
                         return (
                           <div className="bg-green-50 rounded-lg p-3 mb-2">
@@ -9448,7 +9784,13 @@ export default function DeliveryHome() {
                       return null;
                     })()}
                     <p className="text-gray-400 text-xs">
-                      Pickup: {newOrder?.pickupDistance || selectedRestaurant?.pickupDistance || '0 km'} | Drop: {newOrder?.deliveryDistance || selectedRestaurant?.dropDistance || '0 km'}
+                      Pickup: {(() => {
+                        const pickup = selectedRestaurant?.pickupDistance || newOrder?.pickupDistance
+                        return isResolvedDistance(pickup) ? pickup : 'Updating...'
+                      })()} | Drop: {(() => {
+                        const drop = selectedRestaurant?.dropDistance || newOrder?.deliveryDistance
+                        return isResolvedDistance(drop) ? drop : 'Updating...'
+                      })()}
                     </p>
                   </div>
 
@@ -9469,31 +9811,42 @@ export default function DeliveryHome() {
                     </div>
                     
                     <h3 className="text-lg font-bold text-gray-900 mb-1">
-                      {newOrder?.restaurantName || selectedRestaurant?.name || 'Restaurant'}
+                      {newOrder?.restaurantName || selectedRestaurant?.name || 'Loading restaurant...'}
                     </h3>
                     <p className="text-sm text-gray-600 mb-3 leading-relaxed">
-                      {newOrder?.restaurantLocation?.address || selectedRestaurant?.address || 'Address'}
+                      {(() => {
+                        const address = newOrder?.restaurantLocation?.address || selectedRestaurant?.address
+                        return isResolvedAddress(address) ? address : 'Fetching restaurant details...'
+                      })()}
                     </p>
                     
                     <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-2">
                       <Clock className="w-4 h-4" />
                       <span>
-                        {selectedRestaurant?.timeAway && selectedRestaurant.timeAway !== 'Calculating...' 
-                          ? `${selectedRestaurant.timeAway} away`
-                          : (newOrder?.pickupDistance && newOrder.pickupDistance !== '0 km' && newOrder.pickupDistance !== 'Calculating...'
-                            ? `${calculateTimeAway(newOrder.pickupDistance)} away`
-                            : 'Calculating...')}
+                        {(() => {
+                          if (selectedRestaurant?.timeAway && selectedRestaurant.timeAway !== 'Calculating...') {
+                            return `${selectedRestaurant.timeAway} away`
+                          }
+                          const pickup = newOrder?.pickupDistance
+                          return isResolvedDistance(pickup)
+                            ? `${calculateTimeAway(pickup)} away`
+                            : 'Fetching route...'
+                        })()}
                       </span>
                     </div>
                     
                     <div className="flex items-center gap-1.5 text-gray-500 text-sm">
                       <MapPin className="w-4 h-4" />
                       <span>
-                        {selectedRestaurant?.distance && selectedRestaurant.distance !== '0 km' && selectedRestaurant.distance !== 'Calculating...'
-                          ? `${selectedRestaurant.distance} away`
-                          : (newOrder?.pickupDistance && newOrder.pickupDistance !== '0 km' && newOrder.pickupDistance !== 'Calculating...'
-                            ? `${newOrder.pickupDistance} away`
-                            : 'Calculating...')}
+                        {(() => {
+                          if (isResolvedDistance(selectedRestaurant?.distance)) {
+                            return `${selectedRestaurant.distance} away`
+                          }
+                          if (isResolvedDistance(newOrder?.pickupDistance)) {
+                            return `${newOrder.pickupDistance} away`
+                          }
+                          return 'Fetching route...'
+                        })()}
                       </span>
                     </div>
                   </div>
@@ -9694,7 +10047,7 @@ export default function DeliveryHome() {
       {/* Reached Pickup Popup - shown when order is ready (from order_ready socket) or when rider is within 500m */}
       {/* Don't show if Order ID confirmation popup is showing */}
       <BottomPopup
-        isOpen={showreachedPickupPopup && !showOrderIdConfirmationPopup}
+        isOpen={showreachedPickupPopup && !showOrderIdConfirmationPopup && !isSelectedRestaurantDelivered}
         onClose={() => setShowreachedPickupPopup(false)}
         showCloseButton={false}
         closeOnBackdropClick={false}
@@ -10019,7 +10372,7 @@ export default function DeliveryHome() {
 
       {/* Order ID Confirmation Popup - shown after Reached Pickup swipe is confirmed */}
       <BottomPopup
-        isOpen={showOrderIdConfirmationPopup}
+        isOpen={showOrderIdConfirmationPopup && !isSelectedRestaurantDelivered}
         onClose={() => setShowOrderIdConfirmationPopup(false)}
         showCloseButton={false}
         closeOnBackdropClick={false}
@@ -10171,6 +10524,7 @@ export default function DeliveryHome() {
 
       {/* Start Navigation Button Card - Show when order is out_for_delivery */}
       {selectedRestaurant && 
+       !isSelectedRestaurantDelivered &&
        (selectedRestaurant.orderStatus === 'out_for_delivery' || 
         selectedRestaurant.deliveryPhase === 'en_route_to_delivery') && 
        !showReachedDropPopup && 
@@ -10245,12 +10599,12 @@ export default function DeliveryHome() {
       {/* Reached Drop Popup - shown instantly after Order Picked Up confirmation; slides down when chat opens */}
       <motion.div
         className="fixed bottom-0 left-0 right-0 z-[110] pointer-events-none"
-        style={{ pointerEvents: showReachedDropPopup ? 'auto' : 'none' }}
+        style={{ pointerEvents: showReachedDropPopup && !isSelectedRestaurantDelivered ? 'auto' : 'none' }}
         animate={{ y: isChatOpen ? 120 : 0 }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
       >
         <BottomPopup
-          isOpen={showReachedDropPopup}
+          isOpen={showReachedDropPopup && !isSelectedRestaurantDelivered}
           onClose={() => setShowReachedDropPopup(false)}
           showCloseButton={false}
           closeOnBackdropClick={false}
