@@ -1,10 +1,44 @@
 import Order from '../models/Order.js';
 import orderAssignmentController from './orderAssignmentController.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
+import mongoose from 'mongoose';
 import {
   DELIVERY_NOTIFICATION_EVENTS,
   notifyDeliveryOrderEvent,
 } from '../../delivery/services/deliveryNotificationService.js';
+
+async function resolveRestaurantForAssignment(restaurantId) {
+  if (!restaurantId) return null;
+
+  const rawId = restaurantId?._id?.toString?.() || restaurantId?.toString?.() || restaurantId;
+  if (!rawId) return null;
+
+  let restaurant = null;
+  if (mongoose.Types.ObjectId.isValid(rawId) && rawId.length === 24) {
+    restaurant = await Restaurant.findById(rawId).select('name location restaurantId slug').lean();
+  }
+
+  if (!restaurant) {
+    restaurant = await Restaurant.findOne({
+      $or: [{ restaurantId: rawId }, { slug: rawId }],
+    }).select('name location restaurantId slug').lean();
+  }
+
+  return restaurant;
+}
+
+function getRestaurantCoordinates(restaurant) {
+  const lat = restaurant?.location?.latitude ?? restaurant?.location?.coordinates?.[1];
+  const lng = restaurant?.location?.longitude ?? restaurant?.location?.coordinates?.[0];
+  const restaurantLat = Number(lat);
+  const restaurantLng = Number(lng);
+
+  if (!Number.isFinite(restaurantLat) || !Number.isFinite(restaurantLng)) {
+    return null;
+  }
+
+  return { restaurantLat, restaurantLng };
+}
 
 /**
  * Order Assignment Trigger Service
@@ -20,7 +54,7 @@ class OrderAssignmentTriggerService {
     try {
       console.log(`Triggering assignment for order ${orderId}, reason: ${triggerReason}`);
 
-      const order = await Order.findById(orderId).populate('restaurantId', 'location');
+      const order = await Order.findById(orderId);
       if (!order) {
         console.error(`Order ${orderId} not found for assignment trigger`);
         return null;
@@ -39,22 +73,21 @@ class OrderAssignmentTriggerService {
       }
 
       // Get restaurant coordinates
-      let restaurantLat, restaurantLng, restaurantId;
-      
-      if (order.restaurantId?.location?.coordinates) {
-        [restaurantLng, restaurantLat] = order.restaurantId.location.coordinates;
-        restaurantId = order.restaurantId._id.toString();
-      } else {
-        // Fallback: fetch restaurant separately
-        const restaurant = await Restaurant.findById(order.restaurantId);
-        if (restaurant?.location?.coordinates) {
-          [restaurantLng, restaurantLat] = restaurant.location.coordinates;
-          restaurantId = restaurant._id.toString();
-        } else {
-          console.error(`Restaurant coordinates not found for order ${orderId}`);
-          return null;
-        }
+      const restaurant = await resolveRestaurantForAssignment(order.restaurantId);
+      const coordinates = getRestaurantCoordinates(restaurant);
+
+      if (!restaurant || !coordinates) {
+        console.error(`Restaurant coordinates not found for order ${orderId}`, {
+          orderRestaurantId: order.restaurantId,
+          foundRestaurant: !!restaurant,
+          restaurantName: restaurant?.name,
+          location: restaurant?.location,
+        });
+        return null;
       }
+
+      const { restaurantLat, restaurantLng } = coordinates;
+      const restaurantId = restaurant._id.toString();
 
       // Validate coordinates
       if (!restaurantLat || !restaurantLng || isNaN(restaurantLat) || isNaN(restaurantLng)) {
@@ -157,11 +190,12 @@ class OrderAssignmentTriggerService {
       const pendingOrders = await Order.find({
         status: { $in: ['preparing', 'ready'] },
         assignmentStatus: { $in: ['pending_assignment', 'expired'] },
-        deliveryPartnerId: { $exists: false },
-        'restaurantId.location.coordinates': { $exists: true },
+        $or: [
+          { deliveryPartnerId: { $exists: false } },
+          { deliveryPartnerId: null },
+        ],
         'address.location.coordinates': { $exists: true }
       })
-      .populate('restaurantId', 'location')
       .limit(50) // Process in batches to avoid overwhelming
       .lean();
 

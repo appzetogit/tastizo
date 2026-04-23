@@ -9,6 +9,40 @@ import {
   notifyDeliveryOrderEvent,
 } from '../../delivery/services/deliveryNotificationService.js';
 
+async function resolveRestaurantForAssignment(restaurantId) {
+  if (!restaurantId) return null;
+
+  const Restaurant = (await import('../../restaurant/models/Restaurant.js')).default;
+  const rawId = restaurantId?._id?.toString?.() || restaurantId?.toString?.() || restaurantId;
+  if (!rawId) return null;
+
+  let restaurant = null;
+  if (mongoose.Types.ObjectId.isValid(rawId) && rawId.length === 24) {
+    restaurant = await Restaurant.findById(rawId).select('name location restaurantId slug').lean();
+  }
+
+  if (!restaurant) {
+    restaurant = await Restaurant.findOne({
+      $or: [{ restaurantId: rawId }, { slug: rawId }],
+    }).select('name location restaurantId slug').lean();
+  }
+
+  return restaurant;
+}
+
+function getRestaurantCoordinates(restaurant) {
+  const lat = restaurant?.location?.latitude ?? restaurant?.location?.coordinates?.[1];
+  const lng = restaurant?.location?.longitude ?? restaurant?.location?.coordinates?.[0];
+  const restaurantLat = Number(lat);
+  const restaurantLng = Number(lng);
+
+  if (!Number.isFinite(restaurantLat) || !Number.isFinite(restaurantLng)) {
+    return null;
+  }
+
+  return { restaurantLat, restaurantLng };
+}
+
 /**
  * Order Assignment Controller
  * Handles the complete delivery order assignment flow with timeout/rejection logic
@@ -381,8 +415,7 @@ class OrderAssignmentController {
     try {
       console.log(`Reassigning order ${orderId} from delivery partner ${previousDeliveryPartnerId}, reason: ${reason}`);
 
-      const order = await Order.findById(orderId)
-        .populate('restaurantId', 'name location');
+      const order = await Order.findById(orderId);
 
       if (!order) {
         throw new Error('Order not found');
@@ -394,15 +427,21 @@ class OrderAssignmentController {
         return null;
       }
 
-      // Get restaurant coordinates
-      const restaurantLat = order.restaurantId?.location?.coordinates?.[1];
-      const restaurantLng = order.restaurantId?.location?.coordinates?.[0];
-      const restaurantId = order.restaurantId?._id?.toString();
+      const restaurant = await resolveRestaurantForAssignment(order.restaurantId);
+      const coordinates = getRestaurantCoordinates(restaurant);
 
-      if (!restaurantLat || !restaurantLng) {
-        console.error(`Restaurant coordinates not found for order ${orderId}`);
+      if (!restaurant || !coordinates) {
+        console.error(`Restaurant coordinates not found for order ${orderId}`, {
+          orderRestaurantId: order.restaurantId,
+          foundRestaurant: !!restaurant,
+          restaurantName: restaurant?.name,
+          location: restaurant?.location,
+        });
         return null;
       }
+
+      const { restaurantLat, restaurantLng } = coordinates;
+      const restaurantId = restaurant._id.toString();
 
       // Assign to next available delivery boy
       const result = await this.assignOrderToDelivery(orderId, restaurantLat, restaurantLng, restaurantId, previousDeliveryPartnerId);
@@ -454,7 +493,7 @@ class OrderAssignmentController {
 
       notifyDeliveryOrderEvent({
         orderId,
-        deliveryBoyId,
+        deliveryBoyId: deliveryPartnerId,
         type: DELIVERY_NOTIFICATION_EVENTS.DELIVERY_CANCELLED,
         suffix: "expired",
         metadata: {

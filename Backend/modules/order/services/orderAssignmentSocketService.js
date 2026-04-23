@@ -1,9 +1,69 @@
 import OrderAssignmentHistory from '../models/OrderAssignmentHistory.js';
 import Order from '../models/Order.js';
+import Restaurant from '../../restaurant/models/Restaurant.js';
+import mongoose from 'mongoose';
 import {
   DELIVERY_NOTIFICATION_EVENTS,
   notifyDeliveryOrderEvent,
 } from '../../delivery/services/deliveryNotificationService.js';
+
+async function resolveRestaurantForAssignment(restaurantId) {
+  if (!restaurantId) return null;
+
+  const rawId = restaurantId?._id?.toString?.() || restaurantId?.toString?.() || restaurantId;
+  if (!rawId) return null;
+
+  let restaurant = null;
+  if (mongoose.Types.ObjectId.isValid(rawId) && rawId.length === 24) {
+    restaurant = await Restaurant.findById(rawId)
+      .select('name address location phone mobile ownerPhone primaryContactNumber contactNumber')
+      .lean();
+  }
+
+  if (!restaurant) {
+    restaurant = await Restaurant.findOne({
+      $or: [{ restaurantId: rawId }, { slug: rawId }],
+    })
+      .select('name address location phone mobile ownerPhone primaryContactNumber contactNumber')
+      .lean();
+  }
+
+  return restaurant;
+}
+
+function getRestaurantLocationPayload(restaurant) {
+  const latitude = restaurant?.location?.latitude ?? restaurant?.location?.coordinates?.[1];
+  const longitude = restaurant?.location?.longitude ?? restaurant?.location?.coordinates?.[0];
+  const address =
+    restaurant?.location?.formattedAddress ||
+    restaurant?.location?.address ||
+    restaurant?.address ||
+    [
+      restaurant?.location?.addressLine1,
+      restaurant?.location?.area,
+      restaurant?.location?.city,
+      restaurant?.location?.state,
+      restaurant?.location?.pincode || restaurant?.location?.zipCode,
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+  return {
+    latitude: Number.isFinite(Number(latitude)) ? Number(latitude) : undefined,
+    longitude: Number.isFinite(Number(longitude)) ? Number(longitude) : undefined,
+    address,
+    formattedAddress: restaurant?.location?.formattedAddress,
+  };
+}
+
+function getCustomerLocationPayload(order) {
+  const coordinates = order?.address?.location?.coordinates || [];
+  return {
+    latitude: coordinates[1],
+    longitude: coordinates[0],
+    address: order?.address?.formattedAddress || order?.deliveryAddress,
+  };
+}
 
 /**
  * Order Assignment Socket Service
@@ -39,7 +99,6 @@ class OrderAssignmentSocketService {
       }
 
       const order = await Order.findById(orderId)
-        .populate('restaurantId', 'name address location phone')
         .populate('userId', 'name phone')
         .lean();
 
@@ -48,21 +107,51 @@ class OrderAssignmentSocketService {
         return;
       }
 
+      const restaurant = await resolveRestaurantForAssignment(order.restaurantId);
+      if (!restaurant) {
+        console.error('Restaurant not found for assignment payload:', {
+          orderId,
+          orderRestaurantId: order.restaurantId,
+        });
+        return;
+      }
+
+      const restaurantLocation = getRestaurantLocationPayload(restaurant);
+      const customerLocation = getCustomerLocationPayload(order);
+      const restaurantPhone =
+        restaurant.phone ||
+        restaurant.mobile ||
+        restaurant.primaryContactNumber ||
+        restaurant.contactNumber ||
+        restaurant.ownerPhone;
+
       // Prepare assignment payload
       const assignmentPayload = {
         orderId: order.orderId,
         orderMongoId: order._id.toString(),
         deliveryPartnerId: deliveryPartnerId.toString(),
+        restaurantName: restaurant.name,
+        restaurantAddress: restaurantLocation.address,
+        restaurantLocation,
+        restaurantPhone,
+        customerName: order.userId?.name,
+        customerPhone: order.userId?.phone || order.phoneNumber,
+        customerLocation,
+        deliveryDistance: assignmentData.deliveryDistance,
+        pickupDistance: assignmentData.distance ? `${assignmentData.distance.toFixed(2)} km` : undefined,
+        estimatedEarnings: order.deliveryPartnerEarning?.totalEarning,
+        deliveryFee: order.pricing?.deliveryFee,
+        total: order.pricing?.total,
         restaurant: {
-          id: order.restaurantId._id,
-          name: order.restaurantId.name,
-          address: order.restaurantId.address,
-          phone: order.restaurantId.phone,
-          location: order.restaurantId.location
+          id: restaurant._id,
+          name: restaurant.name,
+          address: restaurantLocation.address,
+          phone: restaurantPhone,
+          location: restaurant.location
         },
         customer: {
-          name: order.userId.name,
-          phone: order.userId.phone
+          name: order.userId?.name,
+          phone: order.userId?.phone || order.phoneNumber
         },
         deliveryAddress: order.address,
         items: order.items,
@@ -84,6 +173,9 @@ class OrderAssignmentSocketService {
       io.of('/delivery')
         .to(`delivery:${deliveryPartnerId}`)
         .emit('NEW_ORDER_ASSIGNMENT', assignmentPayload);
+      io.of('/delivery')
+        .to(`delivery:${deliveryPartnerId}`)
+        .emit('new_order', assignmentPayload);
 
       notifyDeliveryOrderEvent({
         order,
@@ -138,7 +230,7 @@ class OrderAssignmentSocketService {
 
       notifyDeliveryOrderEvent({
         order,
-        deliveryBoyId,
+        deliveryBoyId: deliveryPartnerId,
         type: DELIVERY_NOTIFICATION_EVENTS.DELIVERY_CANCELLED,
         suffix: reason,
         metadata: {
@@ -249,7 +341,7 @@ class OrderAssignmentSocketService {
         if (remainingSeconds === 10) {
           notifyDeliveryOrderEvent({
             orderId,
-            deliveryBoyId,
+            deliveryBoyId: deliveryPartnerId,
             type: DELIVERY_NOTIFICATION_EVENTS.DELIVERY_REQUEST_EXPIRING_SOON,
             metadata: {
               remainingSeconds,

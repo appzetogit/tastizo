@@ -331,6 +331,31 @@ export const useDeliveryNotifications = () => {
       }
     });
 
+    socketRef.current.on('NEW_ORDER_ASSIGNMENT', (assignmentData) => {
+      console.log('ðŸ“¦ New order assignment received via socket:', assignmentData);
+      setNewOrder({
+        ...assignmentData,
+        orderMongoId: assignmentData?.orderMongoId || assignmentData?._id,
+        orderId: assignmentData?.orderId,
+        restaurantName: assignmentData?.restaurantName || assignmentData?.restaurant?.name,
+        restaurantLocation:
+          assignmentData?.restaurantLocation ||
+          assignmentData?.restaurant?.location,
+        restaurantAddress:
+          assignmentData?.restaurantAddress ||
+          assignmentData?.restaurant?.address,
+        customerName: assignmentData?.customerName || assignmentData?.customer?.name,
+        customerPhone: assignmentData?.customerPhone || assignmentData?.customer?.phone,
+        total: assignmentData?.total || assignmentData?.totalAmount || assignmentData?.pricing?.total,
+        pickupDistance:
+          assignmentData?.pickupDistance ||
+          (typeof assignmentData?.distance === 'number'
+            ? `${assignmentData.distance.toFixed(2)} km`
+            : assignmentData?.distance),
+      });
+      playNotificationSound();
+    });
+
     socketRef.current.on('new_order', (orderData) => {
       console.log('📦 New order received via socket:', orderData);
       setNewOrder(orderData);
