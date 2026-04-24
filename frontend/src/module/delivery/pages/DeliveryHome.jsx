@@ -78,12 +78,127 @@ function readStoredActiveOrder() {
   }
 }
 
+function readDismissedDeliveryOrderIds() {
+  try {
+    const stored = JSON.parse(localStorage.getItem("deliveryDismissedOrderIds") || "[]")
+    return new Set(Array.isArray(stored) ? stored.map(String) : [])
+  } catch (error) {
+    console.warn("Failed to read dismissed delivery order ids:", error)
+    return new Set()
+  }
+}
+
+function hasDismissedDeliveryOrder(orderLike) {
+  const dismissedIds = readDismissedDeliveryOrderIds()
+  const candidateIds = [
+    orderLike?.orderId,
+    orderLike?.orderMongoId,
+    orderLike?.mongoId,
+    orderLike?._id,
+    orderLike?.id,
+  ]
+    .filter(Boolean)
+    .map(String)
+
+  return candidateIds.some((id) => dismissedIds.has(id))
+}
+
+function isValidCoordinatePair(lat, lng) {
+  return (
+    Number.isFinite(Number(lat)) &&
+    Number.isFinite(Number(lng)) &&
+    Math.abs(Number(lat)) <= 90 &&
+    Math.abs(Number(lng)) <= 180
+  )
+}
+
+function isLikelyIndiaCoordinatePair(lat, lng) {
+  return (
+    isValidCoordinatePair(lat, lng) &&
+    Number(lat) >= 6 &&
+    Number(lat) <= 38 &&
+    Number(lng) >= 68 &&
+    Number(lng) <= 98
+  )
+}
+
+function extractLatLng(locationLike, options = {}) {
+  if (!locationLike || typeof locationLike !== "object") {
+    return { lat: null, lng: null }
+  }
+
+  const coordinates = Array.isArray(locationLike.coordinates)
+    ? locationLike.coordinates
+    : []
+  const reference = options?.reference || null
+
+  if (locationLike.latitude != null || locationLike.longitude != null || locationLike.lat != null || locationLike.lng != null) {
+    const rawLat =
+      locationLike.latitude ??
+      locationLike.lat ??
+      coordinates[1] ??
+      null
+
+    const rawLng =
+      locationLike.longitude ??
+      locationLike.lng ??
+      coordinates[0] ??
+      null
+
+    return {
+      lat: Number.isFinite(Number(rawLat)) ? Number(rawLat) : null,
+      lng: Number.isFinite(Number(rawLng)) ? Number(rawLng) : null,
+    }
+  }
+
+  const pairGeoJson = { lat: Number(coordinates[1]), lng: Number(coordinates[0]) }
+  const pairLatLng = { lat: Number(coordinates[0]), lng: Number(coordinates[1]) }
+  const geoJsonValid = isValidCoordinatePair(pairGeoJson.lat, pairGeoJson.lng)
+  const latLngValid = isValidCoordinatePair(pairLatLng.lat, pairLatLng.lng)
+
+  if (!geoJsonValid && !latLngValid) {
+    return { lat: null, lng: null }
+  }
+
+  if (geoJsonValid && !latLngValid) {
+    return pairGeoJson
+  }
+
+  if (latLngValid && !geoJsonValid) {
+    return pairLatLng
+  }
+
+  if (reference && isValidCoordinatePair(reference.lat, reference.lng)) {
+    const geoJsonDistance = haversineDistance(reference.lat, reference.lng, pairGeoJson.lat, pairGeoJson.lng)
+    const latLngDistance = haversineDistance(reference.lat, reference.lng, pairLatLng.lat, pairLatLng.lng)
+    return geoJsonDistance <= latLngDistance ? pairGeoJson : pairLatLng
+  }
+
+  const geoJsonIndia = isLikelyIndiaCoordinatePair(pairGeoJson.lat, pairGeoJson.lng)
+  const latLngIndia = isLikelyIndiaCoordinatePair(pairLatLng.lat, pairLatLng.lng)
+  if (geoJsonIndia && !latLngIndia) {
+    return pairGeoJson
+  }
+  if (latLngIndia && !geoJsonIndia) {
+    return pairLatLng
+  }
+
+  return pairGeoJson
+}
+
+function normalizeReferencePoint(pointLike) {
+  if (!pointLike) return null
+  const lat = Number(pointLike.lat)
+  const lng = Number(pointLike.lng)
+  return isValidCoordinatePair(lat, lng) ? { lat, lng } : null
+}
+
 function persistActiveOrderToStorage({
   selectedRestaurant,
   routePolyline = [],
   hasDirectionsAPI = false,
 }) {
-  if (!selectedRestaurant) return
+  if (!selectedRestaurant || !isAcceptedAssignedDeliveryOrder(selectedRestaurant)) return
 
   try {
     const existingRaw = localStorage.getItem("deliveryActiveOrder")
@@ -193,9 +308,12 @@ function getDeliveryProcessStage(order) {
   }
 
   const isPickupPhase =
-    deliveryPhase === "en_route_to_pickup" ||
-    deliveryStateStatus === "accepted" ||
-    ["pending", "preparing", "ready", "accepted"].includes(orderStatus)
+    isAcceptedAssignedDeliveryOrder(order) &&
+    (
+      deliveryPhase === "en_route_to_pickup" ||
+      deliveryStateStatus === "accepted" ||
+      ["pending", "preparing", "ready", "accepted"].includes(orderStatus)
+    )
 
   if (isPickupPhase) {
     return "pickup"
@@ -238,12 +356,16 @@ function buildRestaurantInfoFromOrder(order, fallback = {}) {
   if (!order) return null
 
   const restaurantLocation = order.restaurantId?.location || order.restaurant?.location
-  const restaurantCoords = restaurantLocation?.coordinates || []
-  const restaurantLat = restaurantCoords[1] ?? fallback?.lat
-  const restaurantLng = restaurantCoords[0] ?? fallback?.lng
-  const customerCoords = order.address?.location?.coordinates || []
-  const customerLat = customerCoords[1] ?? fallback?.customerLat
-  const customerLng = customerCoords[0] ?? fallback?.customerLng
+  const restaurantCoords = extractLatLng(restaurantLocation, {
+    reference: normalizeReferencePoint({ lat: fallback?.lat, lng: fallback?.lng }),
+  })
+  const restaurantLat = restaurantCoords.lat ?? fallback?.lat
+  const restaurantLng = restaurantCoords.lng ?? fallback?.lng
+  const customerCoords = extractLatLng(order.address?.location, {
+    reference: normalizeReferencePoint({ lat: restaurantLat, lng: restaurantLng }),
+  })
+  const customerLat = customerCoords.lat ?? fallback?.customerLat
+  const customerLng = customerCoords.lng ?? fallback?.customerLng
 
   const restaurantAddress =
     order.restaurantId?.address ||
@@ -261,6 +383,33 @@ function buildRestaurantInfoFromOrder(order, fallback = {}) {
     fallback?.customerAddress ||
     "Customer Address"
 
+  const pickupDurationMinutes =
+    order.assignmentInfo?.pickupDurationMinutes ??
+    fallback?.pickupDurationMinutes ??
+    null
+  const deliveryDurationMinutes =
+    order.assignmentInfo?.deliveryDurationMinutes ??
+    fallback?.deliveryDurationMinutes ??
+    null
+  const timeAway =
+    Number.isFinite(Number(pickupDurationMinutes)) && Number(pickupDurationMinutes) > 0
+      ? `${Math.max(1, Math.round(Number(pickupDurationMinutes)))} mins`
+      : (fallback?.timeAway || "Calculating...")
+  const normalizedEstimatedEarnings =
+    order.estimatedEarnings ??
+    fallback?.estimatedEarnings ??
+    fallback?.amount ??
+    null
+  const normalizedAmount =
+    typeof normalizedEstimatedEarnings === "object" && normalizedEstimatedEarnings !== null
+      ? Number(
+          normalizedEstimatedEarnings.totalEarning ??
+            normalizedEstimatedEarnings.amount ??
+            normalizedEstimatedEarnings.total ??
+            0,
+        ) || 0
+      : Number(normalizedEstimatedEarnings ?? 0) || 0
+
   return {
     ...fallback,
     id: order._id || fallback?.id || order.orderId,
@@ -274,20 +423,32 @@ function buildRestaurantInfoFromOrder(order, fallback = {}) {
     address: restaurantAddress,
     lat: restaurantLat,
     lng: restaurantLng,
-    distance: fallback?.distance || fallback?.pickupDistance || "Calculating...",
-    timeAway: fallback?.timeAway || "Calculating...",
-    dropDistance: fallback?.dropDistance || "Calculating...",
-    pickupDistance: fallback?.pickupDistance || fallback?.distance || "Calculating...",
+    distance:
+      order.pickupDistance ||
+      order.assignmentInfo?.pickupDistance ||
+      fallback?.distance ||
+      fallback?.pickupDistance ||
+      "Calculating...",
+    timeAway,
+    dropDistance:
+      order.deliveryDistance ||
+      order.assignmentInfo?.deliveryDistance ||
+      fallback?.dropDistance ||
+      "Calculating...",
+    pickupDistance:
+      order.pickupDistance ||
+      order.assignmentInfo?.pickupDistance ||
+      fallback?.pickupDistance ||
+      fallback?.distance ||
+      "Calculating...",
+    pickupDurationMinutes,
+    deliveryDurationMinutes,
     estimatedEarnings:
-      order.estimatedEarnings ||
-      order.pricing?.deliveryFee ||
-      fallback?.estimatedEarnings ||
-      0,
+      normalizedEstimatedEarnings,
     amount:
-      order.pricing?.deliveryFee ||
-      order.estimatedEarnings ||
-      fallback?.amount ||
-      0,
+      normalizedAmount > 0
+        ? normalizedAmount
+        : (Number(fallback?.amount) || null),
     customerName: order.userId?.name || fallback?.customerName || "Customer",
     customerAddress,
     customerPhone: extractCustomerPhoneFromOrder(order) || fallback?.customerPhone || null,
@@ -838,6 +999,13 @@ export default function DeliveryHome() {
   const [showPaymentPage, setShowPaymentPage] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [chatOrderId, setChatOrderId] = useState(null)
+  const [isRestoringActiveOrder, setIsRestoringActiveOrder] = useState(() => {
+    try {
+      return Boolean(localStorage.getItem("deliveryActiveOrder"))
+    } catch {
+      return false
+    }
+  })
   const [deliveryCompletionOtp, setDeliveryCompletionOtp] = useState("")
   const [deliveryCompletionOtpError, setDeliveryCompletionOtpError] = useState("")
   const [isVerifyingDeliveryOtp, setIsVerifyingDeliveryOtp] = useState(false)
@@ -873,6 +1041,10 @@ export default function DeliveryHome() {
   useEffect(() => {
     if (!selectedRestaurant) return
 
+    if (isRestoringActiveOrder) {
+      return
+    }
+
     if (showPaymentPage || showOrderDeliveredAnimation || showCustomerReviewPopup) {
       return
     }
@@ -907,6 +1079,163 @@ export default function DeliveryHome() {
     showPaymentPage,
     showOrderDeliveredAnimation,
     showCustomerReviewPopup,
+    isRestoringActiveOrder,
+  ])
+
+  useEffect(() => {
+    if (!showNewOrderPopup || !selectedRestaurant) return
+    if (isAcceptedAssignedDeliveryOrder(selectedRestaurant)) return
+
+    const hasPlaceholderDetails =
+      !selectedRestaurant.name ||
+      selectedRestaurant.name === "Restaurant" ||
+      !selectedRestaurant.address ||
+      selectedRestaurant.address === "Restaurant Address" ||
+      selectedRestaurant.distance === "Calculating..." ||
+      selectedRestaurant.pickupDistance === "Calculating..." ||
+      selectedRestaurant.timeAway === "Calculating..."
+
+    if (!hasPlaceholderDetails) return
+
+    let isMounted = true
+
+    const hydratePendingOrderDetails = async () => {
+      const orderId = selectedRestaurant.orderId || selectedRestaurant.id
+      if (!orderId) return
+
+      const resolvePendingDistance = (...values) => {
+        for (const value of values) {
+          if (typeof value === "string") {
+            const trimmed = value.trim()
+            if (trimmed && trimmed !== "0 km" && trimmed !== "Calculating...") {
+              return trimmed
+            }
+          }
+
+          if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+            return `${value.toFixed(2)} km`
+          }
+        }
+
+        return null
+      }
+
+      const formatPendingDuration = (value) => {
+        const numeric =
+          typeof value === 'number'
+            ? value
+            : typeof value === 'string'
+              ? Number(value)
+              : Number(value?.durationMinutes ?? value?.minutes ?? value?.value)
+
+        if (!Number.isFinite(numeric) || numeric <= 0) return null
+        return `${Math.max(1, Math.round(numeric))} mins`
+      }
+
+      const mergePendingEarnings = (primary, fallback = null) => {
+        if (primary == null) return fallback
+        if (typeof primary === "number") return primary > 0 ? primary : fallback
+        if (typeof primary === "object") {
+          const amount = Number(
+            primary.totalEarning ?? primary.amount ?? primary.total ?? 0,
+          )
+          return amount > 0 ? primary : fallback
+        }
+        return fallback
+      }
+
+      const extractPendingEarningsAmount = (earnings, fallback = 0) => {
+        if (typeof earnings === "number" && Number.isFinite(earnings)) {
+          return earnings
+        }
+
+        if (earnings && typeof earnings === "object") {
+          const amount = Number(
+            earnings.totalEarning ?? earnings.amount ?? earnings.total ?? fallback,
+          )
+          return Number.isFinite(amount) ? amount : fallback
+        }
+
+        return fallback
+      }
+
+      try {
+        const response = await deliveryAPI.getOrderDetails(orderId, {
+          skipGlobalErrorToast: true,
+        })
+        const order = extractOrderDetailsPayload(response)
+        if (!isMounted || !order) return
+
+        const responseData = response?.data?.data || {}
+        const detailedRestaurantInfo =
+          buildRestaurantInfoFromOrder(order, selectedRestaurant) || selectedRestaurant
+        const hydratedPickupDistance = resolvePendingDistance(
+          order.pickupDistance,
+          order.assignmentInfo?.pickupDistance,
+          responseData.pickupDistance,
+          detailedRestaurantInfo.pickupDistance,
+          detailedRestaurantInfo.distance,
+        )
+        const hydratedDropDistance = resolvePendingDistance(
+          order.deliveryDistance,
+          order.dropDistance,
+          order.assignmentInfo?.deliveryDistance,
+          order.assignmentInfo?.deliveryDistanceText,
+          responseData.deliveryDistance,
+          detailedRestaurantInfo.dropDistance,
+        )
+        const hydratedEarnings = mergePendingEarnings(
+          order.estimatedEarnings ?? responseData.estimatedEarnings ?? null,
+          detailedRestaurantInfo.estimatedEarnings ?? selectedRestaurant.estimatedEarnings ?? null,
+        )
+        const hydratedAmount = extractPendingEarningsAmount(
+          hydratedEarnings,
+          detailedRestaurantInfo.amount ?? selectedRestaurant.amount ?? 0,
+        )
+
+        setSelectedRestaurant((prev) => {
+          const prevOrderId = prev?.orderId || prev?.id
+          if (!prev || String(prevOrderId) !== String(order.orderId || order._id || orderId)) {
+            return prev
+          }
+
+          return {
+            ...prev,
+            ...detailedRestaurantInfo,
+            distance: hydratedPickupDistance || detailedRestaurantInfo.distance || prev.distance,
+            pickupDistance:
+              hydratedPickupDistance || detailedRestaurantInfo.pickupDistance || prev.pickupDistance,
+            dropDistance:
+              hydratedDropDistance || detailedRestaurantInfo.dropDistance || prev.dropDistance,
+            timeAway:
+              formatPendingDuration(
+                order.assignmentInfo?.pickupDurationMinutes ??
+                responseData.pickupDurationMinutes ??
+                detailedRestaurantInfo.pickupDurationMinutes ??
+                prev.pickupDurationMinutes,
+              ) ||
+              detailedRestaurantInfo.timeAway ||
+              prev.timeAway,
+            estimatedEarnings: hydratedEarnings,
+            amount: hydratedAmount > 0 ? hydratedAmount : (prev.amount ?? null),
+          }
+        })
+      } catch (error) {
+        console.warn(
+          "Failed to hydrate pending delivery order details:",
+          error?.response?.data?.message || error?.message || error,
+        )
+      }
+    }
+
+    hydratePendingOrderDetails()
+
+    return () => {
+      isMounted = false
+    }
+  }, [
+    showNewOrderPopup,
+    selectedRestaurant,
   ])
 
   // Reset per-order earnings whenever the active order changes
@@ -1671,6 +2000,16 @@ export default function DeliveryHome() {
     setEarningsGuaranteeIsPlaying(!earningsGuaranteeIsPlaying)
   }
 
+  const stopAllNewOrderSounds = useCallback(() => {
+    stopNotificationSound()
+
+    if (alertAudioRef.current) {
+      alertAudioRef.current.pause()
+      alertAudioRef.current.currentTime = 0
+      alertAudioRef.current = null
+    }
+  }, [stopNotificationSound])
+
   // Reject reasons for order cancellation
   const rejectReasons = [
     "Too far from current location",
@@ -1687,7 +2026,7 @@ export default function DeliveryHome() {
   }
 
   const handleRejectConfirm = async () => {
-    stopNotificationSound()
+    stopAllNewOrderSounds()
     const deniedOrder = selectedRestaurant || newOrder
     const denyOrderId =
       selectedRestaurant?.id ||
@@ -1714,10 +2053,6 @@ export default function DeliveryHome() {
       }
     }
 
-    if (alertAudioRef.current) {
-      alertAudioRef.current.pause()
-      alertAudioRef.current.currentTime = 0
-    }
     setShowRejectPopup(false)
     setShowNewOrderPopup(false)
     setIsNewOrderPopupMinimized(false) // Reset minimized state
@@ -2400,7 +2735,7 @@ export default function DeliveryHome() {
     const threshold = maxSwipe * 0.7 // 70% of max swipe
 
     if (deltaX > threshold) {
-      stopNotificationSound()
+      stopAllNewOrderSounds()
       // Stop audio immediately when user accepts
       if (alertAudioRef.current) {
         alertAudioRef.current.pause()
@@ -2719,8 +3054,18 @@ export default function DeliveryHome() {
                                 (order.address?.street ? `${order.address.street}, ${order.address.city || ''}, ${order.address.state || ''}`.trim() : '') ||
                                 selectedRestaurant?.customerAddress,
                 customerPhone: extractCustomerPhoneFromOrder(order) || selectedRestaurant?.customerPhone || null,
-                customerLat: order.address?.location?.coordinates?.[1],
-              customerLng: order.address?.location?.coordinates?.[0],
+                customerLat: extractLatLng(order.address?.location, {
+                  reference: normalizeReferencePoint({
+                    lat: restaurantLat || selectedRestaurant?.lat,
+                    lng: restaurantLng || selectedRestaurant?.lng,
+                  }),
+                }).lat,
+              customerLng: extractLatLng(order.address?.location, {
+                reference: normalizeReferencePoint({
+                  lat: restaurantLat || selectedRestaurant?.lat,
+                  lng: restaurantLng || selectedRestaurant?.lng,
+                }),
+              }).lng,
               items: order.items || [],
               total: order.pricing?.total || 0,
               paymentMethod: order.paymentMethod ?? order.payment?.method ?? 'razorpay', // backend-resolved first (COD vs Online)
@@ -4623,17 +4968,94 @@ export default function DeliveryHome() {
     return `${minutes} mins`
   }, [])
 
-  const formatDistanceValue = useCallback((value) => {
+  const normalizeDistanceKm = useCallback((rawValue, unitHint = null) => {
+    const numeric = Number(rawValue)
+    if (!Number.isFinite(numeric) || numeric < 0) return null
+
+    const normalizedUnit = typeof unitHint === 'string' ? unitHint.trim().toLowerCase() : ''
+    if (normalizedUnit === 'm' || normalizedUnit === 'meter' || normalizedUnit === 'meters') {
+      return numeric / 1000
+    }
+    if (normalizedUnit === 'km' || normalizedUnit === 'kilometer' || normalizedUnit === 'kilometers') {
+      return numeric
+    }
+
+    // Delivery distances in this UI are short. Large raw numeric values are almost certainly meters.
+    if (numeric > 100) {
+      return numeric / 1000
+    }
+
+    return numeric
+  }, [])
+
+  const parseDistanceKm = useCallback((value) => {
     if (value == null || value === '') return null
     if (typeof value === 'number' && Number.isFinite(value)) {
-      return `${value.toFixed(2)} km`
+      return normalizeDistanceKm(value)
     }
     if (typeof value === 'string') {
       const trimmed = value.trim()
       if (!trimmed) return null
+      const kmMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*km$/i)
+      if (kmMatch) {
+        return normalizeDistanceKm(kmMatch[1], 'km')
+      }
+      const metersMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*m$/i)
+      if (metersMatch) {
+        return normalizeDistanceKm(metersMatch[1], 'm')
+      }
       const numeric = Number(trimmed)
-      if (!Number.isNaN(numeric) && !trimmed.toLowerCase().includes('km')) {
-        return `${numeric.toFixed(2)} km`
+      if (!Number.isNaN(numeric)) {
+        return normalizeDistanceKm(numeric)
+      }
+      return null
+    }
+    if (typeof value === 'object') {
+      return parseDistanceKm(
+        value.km ??
+          value.distanceKm ??
+          value.distance ??
+          value.value ??
+          value.meters ??
+          value.text ??
+          value.label ??
+          value.distanceText ??
+          value.formatted,
+      )
+    }
+    return null
+  }, [normalizeDistanceKm])
+
+  const isReasonableDeliveryDistance = useCallback((value) => {
+    const km = parseDistanceKm(value)
+    return Number.isFinite(km) && km > 0 && km <= 100
+  }, [parseDistanceKm])
+
+  const formatDistanceValue = useCallback((value) => {
+    if (value == null || value === '') return null
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const normalizedKm = normalizeDistanceKm(value)
+      return normalizedKm != null ? `${normalizedKm.toFixed(2)} km` : null
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) return null
+      const lower = trimmed.toLowerCase()
+      const numeric = Number(trimmed)
+      if (!Number.isNaN(numeric) && !lower.includes('km')) {
+        const normalizedKm = normalizeDistanceKm(numeric)
+        return normalizedKm != null ? `${normalizedKm.toFixed(2)} km` : null
+      }
+      const metersMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*m$/i)
+      if (metersMatch) {
+        const normalizedKm = normalizeDistanceKm(metersMatch[1], 'm')
+        return normalizedKm != null ? `${normalizedKm.toFixed(2)} km` : null
+      }
+      const kmMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*km$/i)
+      if (kmMatch) {
+        const normalizedKm = normalizeDistanceKm(kmMatch[1], 'km')
+        if (normalizedKm == null) return null
+        return `${(normalizedKm > 100 ? normalizedKm / 1000 : normalizedKm).toFixed(2)} km`
       }
       return trimmed
     }
@@ -4645,35 +5067,77 @@ export default function DeliveryHome() {
         value.formatted ??
         value.value ??
         value.km ??
-        value.distanceKm
+        value.distanceKm ??
+        value.distance ??
+        value.meters
+      const unitHint =
+        value.unit ??
+        value.units ??
+        (value.meters != null ? 'm' : value.distanceKm != null || value.km != null ? 'km' : null)
+      if ((value.distance != null || value.value != null || value.meters != null) && nestedValue != null) {
+        const normalizedKm = normalizeDistanceKm(nestedValue, unitHint)
+        return normalizedKm != null ? `${normalizedKm.toFixed(2)} km` : null
+      }
       return formatDistanceValue(nestedValue)
     }
     return null
-  }, [])
+  }, [normalizeDistanceKm])
 
   const isUsableDistance = useCallback(
     (value) => {
       const formatted = formatDistanceValue(value)
+      const km = parseDistanceKm(formatted)
       return Boolean(
         formatted &&
           formatted !== '0 km' &&
           formatted !== '0.00 km' &&
-          formatted !== 'Calculating...'
+          formatted !== 'Calculating...' &&
+          Number.isFinite(km) &&
+          km > 0 &&
+          km <= 100
       )
     },
-    [formatDistanceValue],
+    [formatDistanceValue, parseDistanceKm],
   )
 
   const resolveDistanceDisplay = useCallback(
     (...values) => {
+      let placeholder = null
       for (const value of values) {
         const formatted = formatDistanceValue(value)
-        if (formatted) return formatted
+        if (!formatted) continue
+
+        if (
+          formatted === 'Calculating...' ||
+          formatted === 'Updating...' ||
+          formatted === 'Fetching route...'
+        ) {
+          placeholder = placeholder || formatted
+          continue
+        }
+
+        if (!isReasonableDeliveryDistance(formatted)) {
+          continue
+        }
+
+        return formatted
       }
-      return 'Calculating...'
+      return placeholder || 'Calculating...'
     },
-    [formatDistanceValue],
+    [formatDistanceValue, isReasonableDeliveryDistance],
   )
+
+  const formatDurationDisplay = useCallback((value) => {
+    const numeric =
+      typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+          ? Number(value)
+          : Number(value?.durationMinutes ?? value?.minutes ?? value?.value)
+
+    if (!Number.isFinite(numeric) || numeric <= 0) return null
+    return `${Math.max(1, Math.round(numeric))} mins`
+  }, [])
 
   const extractEarningsAmount = useCallback((earnings, fallback = 0) => {
     let amount = 0
@@ -4688,9 +5152,17 @@ export default function DeliveryHome() {
           earnings.totalEarning ??
             earnings.amount ??
             earnings.total ??
-            earnings.basePayout ??
             0,
         ) || 0
+        if (amount <= 0) {
+          const breakdown = earnings.breakdown && typeof earnings.breakdown === 'object'
+            ? { ...earnings, ...earnings.breakdown }
+            : earnings
+          const basePayout = Number(breakdown.basePayout ?? breakdown.base ?? 0) || 0
+          const distanceCommission =
+            Number(breakdown.distanceCommission ?? breakdown.distancePay ?? 0) || 0
+          amount = basePayout + distanceCommission
+        }
       }
     }
 
@@ -4717,8 +5189,113 @@ export default function DeliveryHome() {
       return null
     }
 
-    return breakdown
-  }, [])
+    const normalizedDistance = normalizeDistanceKm(
+      breakdown.distance ?? breakdown.distanceMeters ?? breakdown.tripDistance,
+      breakdown.distanceUnit ?? breakdown.unit,
+    )
+
+    return {
+      ...breakdown,
+      basePayout: Number(breakdown.basePayout ?? breakdown.base ?? 0) || 0,
+      distanceCommission: Number(breakdown.distanceCommission ?? breakdown.distancePay ?? 0) || 0,
+      commissionPerKm: Number(breakdown.commissionPerKm ?? breakdown.perKmCommission ?? 0) || 0,
+      minDistance: Number(breakdown.minDistance ?? breakdown.minimumDistance ?? 0) || 0,
+      distance: normalizedDistance ?? 0,
+    }
+  }, [normalizeDistanceKm])
+
+  const resolveEstimatedEarningsDisplay = useCallback((earnings, ...distanceCandidates) => {
+    const directAmount = extractEarningsAmount(earnings, 0)
+    const breakdown = extractEarningsBreakdown(earnings)
+
+    if (!breakdown) {
+      return directAmount > 0 ? directAmount : null
+    }
+
+    const fallbackDistance = distanceCandidates
+      .map((candidate) => parseDistanceKm(candidate))
+      .find((candidate) => Number.isFinite(candidate) && candidate > 0)
+
+    const effectiveDistance =
+      Number.isFinite(Number(breakdown.distance)) && Number(breakdown.distance) > 0
+        ? Number(breakdown.distance)
+        : (fallbackDistance ?? 0)
+
+    const thresholdDistance = Number(breakdown.minDistance ?? 0) || 0
+    const commissionPerKm = Number(breakdown.commissionPerKm ?? 0) || 0
+    const computedDistanceCommission =
+      effectiveDistance > thresholdDistance && commissionPerKm > 0
+        ? effectiveDistance * commissionPerKm
+        : Number(breakdown.distanceCommission ?? 0) || 0
+
+    const computedTotal = (Number(breakdown.basePayout ?? 0) || 0) + computedDistanceCommission
+
+    if (computedTotal > directAmount) return computedTotal
+    return directAmount > 0 ? directAmount : (computedTotal > 0 ? computedTotal : null)
+  }, [extractEarningsAmount, extractEarningsBreakdown, parseDistanceKm])
+
+  const mergeEstimatedEarnings = useCallback((primary, fallback = null) => {
+    const hasDetailedFields = (value) =>
+      Boolean(
+        value &&
+          typeof value === 'object' &&
+          (
+            (value.breakdown && typeof value.breakdown === 'object') ||
+            value.basePayout != null ||
+            value.base != null ||
+            value.distanceCommission != null ||
+            value.distancePay != null ||
+            value.commissionPerKm != null ||
+            value.perKmCommission != null ||
+            value.minDistance != null ||
+            value.minimumDistance != null ||
+            value.distance != null ||
+            value.distanceMeters != null ||
+            value.tripDistance != null
+          ),
+      )
+
+    const primaryAmount = extractEarningsAmount(primary, 0)
+    const fallbackAmount = extractEarningsAmount(fallback, 0)
+    const primaryHasDetails = hasDetailedFields(primary)
+    const fallbackHasDetails = hasDetailedFields(fallback)
+
+    if (primaryHasDetails && typeof primary === 'object') {
+      if (fallbackHasDetails && typeof fallback === 'object') {
+        const mergedAmount = primaryAmount > 0 ? primaryAmount : fallbackAmount
+        return {
+          ...fallback,
+          ...primary,
+          totalEarning:
+            mergedAmount > 0
+              ? mergedAmount
+              : (primary.totalEarning ?? fallback.totalEarning),
+          amount:
+            mergedAmount > 0
+              ? mergedAmount
+              : (primary.amount ?? fallback.amount),
+        }
+      }
+      return primary
+    }
+
+    if (fallbackHasDetails && typeof fallback === 'object') {
+      const mergedAmount = primaryAmount > 0 ? primaryAmount : fallbackAmount
+      return {
+        ...fallback,
+        totalEarning:
+          mergedAmount > 0
+            ? mergedAmount
+            : (fallback.totalEarning ?? fallback.amount ?? 0),
+        amount:
+          mergedAmount > 0
+            ? mergedAmount
+            : (fallback.amount ?? fallback.totalEarning ?? 0),
+      }
+    }
+
+    return primary ?? fallback ?? null
+  }, [extractEarningsAmount])
 
   const resolveTextDetail = useCallback((...values) => {
     const placeholders = new Set([
@@ -4750,6 +5327,8 @@ export default function DeliveryHome() {
         primary?.restaurantId?.address,
         primary?.restaurantId?.location?.formattedAddress,
         primary?.restaurantId?.location?.address,
+        primary?.location?.formattedAddress,
+        primary?.location?.address,
         secondary?.address,
         secondary?.restaurantAddress,
         secondary?.restaurant?.address,
@@ -4758,14 +5337,43 @@ export default function DeliveryHome() {
         secondary?.restaurantId?.address,
         secondary?.restaurantId?.location?.formattedAddress,
         secondary?.restaurantId?.location?.address,
+        secondary?.location?.formattedAddress,
+        secondary?.location?.address,
       ) || null
     )
   }, [resolveTextDetail])
 
   const isResolvedDistance = useCallback((value) => {
-    const formatted = formatDistanceValue(value)
-    return Boolean(formatted)
-  }, [formatDistanceValue])
+    return isUsableDistance(value)
+  }, [isUsableDistance])
+
+  const resolveDisplayEarnings = useCallback((...values) => {
+    for (const value of values) {
+      const amount = extractEarningsAmount(value, 0)
+      if (amount > 0) return amount
+    }
+    return null
+  }, [extractEarningsAmount])
+
+  const resolveDistanceFromCoordinates = useCallback((origin, destination) => {
+    const originLat = Number(origin?.lat)
+    const originLng = Number(origin?.lng)
+    const destinationLat = Number(destination?.lat)
+    const destinationLng = Number(destination?.lng)
+
+    if (
+      !Number.isFinite(originLat) ||
+      !Number.isFinite(originLng) ||
+      !Number.isFinite(destinationLat) ||
+      !Number.isFinite(destinationLng)
+    ) {
+      return null
+    }
+
+    const distanceInKm = haversineDistance(originLat, originLng, destinationLat, destinationLng) / 1000
+    if (!Number.isFinite(distanceInKm) || distanceInKm < 0) return null
+    return `${distanceInKm.toFixed(2)} km`
+  }, [])
 
   const isResolvedAddress = useCallback((value) => {
     return Boolean(resolveTextDetail(value))
@@ -4775,6 +5383,12 @@ export default function DeliveryHome() {
   useEffect(() => {
     if (newOrder) {
       const orderId = newOrder.orderMongoId || newOrder.orderId;
+
+      if (hasDismissedDeliveryOrder(newOrder)) {
+        console.log('Skipping dismissed order from Socket.IO:', orderId);
+        clearNewOrder();
+        return;
+      }
       
       // Check if this order has already been accepted
       if (acceptedOrderIdsRef.current.has(orderId)) {
@@ -4804,10 +5418,33 @@ export default function DeliveryHome() {
       
       // Transform newOrder data to match selectedRestaurant format
       const restaurantAddress = resolveRestaurantAddress(newOrder, null)
+      const currentReference = normalizeReferencePoint({
+        lat: riderLocation?.[0] ?? lastLocationRef.current?.[0],
+        lng: riderLocation?.[1] ?? lastLocationRef.current?.[1],
+      })
+      const restaurantCoords = extractLatLng(
+        newOrder.restaurantLocation || newOrder.restaurant?.location,
+        { reference: currentReference },
+      )
+      const customerCoords = extractLatLng(
+        newOrder.customerLocation || newOrder.deliveryAddress?.location,
+        { reference: normalizeReferencePoint(restaurantCoords) || currentReference },
+      )
+      const customerAddress =
+        resolveTextDetail(
+          newOrder.customerLocation?.address,
+          newOrder.customerLocation?.formattedAddress,
+          newOrder.deliveryAddress?.formattedAddress,
+          newOrder.deliveryAddress?.address,
+          newOrder.deliveryAddress?.street,
+        ) || null
       
-      // Extract earnings from notification - backend now calculates and sends estimatedEarnings
+      // Extract exact rider earnings from backend payload
       const deliveryFee = newOrder.deliveryFee ?? 0;
-      const earned = newOrder.estimatedEarnings;
+      const earned = mergeEstimatedEarnings(
+        newOrder.estimatedEarnings,
+        selectedRestaurant?.estimatedEarnings,
+      );
       const earnedValue = extractEarningsAmount(earned, 0)
 
       // Only use rider earning fields here. Never substitute customer delivery fee.
@@ -4832,8 +5469,8 @@ export default function DeliveryHome() {
       if (!pickupDistance || pickupDistance === '0 km') {
         // Try to calculate from driver's current location to restaurant
         const currentLocation = riderLocation || lastLocationRef.current;
-        const restaurantLat = newOrder.restaurantLocation?.latitude;
-        const restaurantLng = newOrder.restaurantLocation?.longitude;
+        const restaurantLat = restaurantCoords.lat;
+        const restaurantLng = restaurantCoords.lng;
         
         if (currentLocation && currentLocation.length === 2 && 
             restaurantLat && restaurantLng && 
@@ -4874,35 +5511,52 @@ export default function DeliveryHome() {
         if (!newOrder.restaurantLocation || typeof newOrder.restaurantLocation !== 'object') {
           newOrder.restaurantLocation = {}
         }
+        newOrder.restaurantLocation.latitude = restaurantCoords.lat
+        newOrder.restaurantLocation.longitude = restaurantCoords.lng
         newOrder.restaurantLocation.address = restaurantAddress
+        if (!newOrder.customerLocation || typeof newOrder.customerLocation !== 'object') {
+          newOrder.customerLocation = {}
+        }
+        newOrder.customerLocation.latitude = customerCoords.lat
+        newOrder.customerLocation.longitude = customerCoords.lng
+        newOrder.customerLocation.address = customerAddress
       }
 
       const restaurantData = {
         id: newOrder.orderMongoId || newOrder.orderId,
         orderId: newOrder.orderId,
-        name: newOrder.restaurantName || null,
+        name: newOrder.restaurantName || newOrder.restaurant?.name || 'Restaurant',
         address: restaurantAddress,
-        lat: newOrder.restaurantLocation?.latitude,
-        lng: newOrder.restaurantLocation?.longitude,
+        lat: restaurantCoords.lat,
+        lng: restaurantCoords.lng,
         distance: pickupDistance,
-        timeAway: pickupDistance !== 'Calculating...' ? calculateTimeAway(pickupDistance) : 'Calculating...',
+        timeAway:
+          formatDurationDisplay(
+            newOrder.pickupDurationMinutes ??
+            newOrder.assignmentInfo?.pickupDurationMinutes,
+          ) ||
+          (pickupDistance !== 'Calculating...' ? calculateTimeAway(pickupDistance) : 'Calculating...'),
         dropDistance: resolvedDropDistance,
         pickupDistance: pickupDistance,
+        pickupDurationMinutes:
+          newOrder.pickupDurationMinutes ??
+          newOrder.assignmentInfo?.pickupDurationMinutes ??
+          null,
+        deliveryDurationMinutes:
+          newOrder.deliveryDurationMinutes ??
+          newOrder.assignmentInfo?.deliveryDurationMinutes ??
+          null,
         estimatedEarnings: effectiveEarnings,
         deliveryFee,
         amount: earnedValue > 0 ? earnedValue : null,
         customerName: newOrder.customerName,
-        customerAddress: newOrder.customerLocation?.address || null,
+        customerAddress: customerAddress,
         customerPhone: newOrder.customerPhone || newOrder.userPhone || null,
-        customerLat: newOrder.customerLocation?.latitude,
-        customerLng: newOrder.customerLocation?.longitude,
+        customerLat: customerCoords.lat,
+        customerLng: customerCoords.lng,
         items: newOrder.items || [],
         total: newOrder.total || 0
       }
-      
-      setSelectedRestaurant(restaurantData)
-      setShowNewOrderPopup(true)
-      setCountdownSeconds(300) // Reset countdown to 5 minutes
 
       let isMounted = true
 
@@ -4917,19 +5571,28 @@ export default function DeliveryHome() {
           if (!isMounted || !order) return
 
           const responseData = response?.data?.data || {}
+          const restaurantCoords = extractLatLng(order.restaurantId?.location, {
+            reference: normalizeReferencePoint({
+              lat: riderLocation?.[0] ?? lastLocationRef.current?.[0] ?? newOrder.restaurantLocation?.latitude,
+              lng: riderLocation?.[1] ?? lastLocationRef.current?.[1] ?? newOrder.restaurantLocation?.longitude,
+            }),
+          })
           const restaurantLat =
-            order.restaurantId?.location?.coordinates?.[1] ??
+            restaurantCoords.lat ??
             order.restaurantId?.location?.latitude ??
             newOrder.restaurantLocation?.latitude
           const restaurantLng =
-            order.restaurantId?.location?.coordinates?.[0] ??
+            restaurantCoords.lng ??
             order.restaurantId?.location?.longitude ??
             newOrder.restaurantLocation?.longitude
+          const customerCoords = extractLatLng(order.address?.location, {
+            reference: normalizeReferencePoint({ lat: restaurantLat, lng: restaurantLng }),
+          })
           const customerLat =
-            order.address?.location?.coordinates?.[1] ??
+            customerCoords.lat ??
             newOrder.customerLocation?.latitude
           const customerLng =
-            order.address?.location?.coordinates?.[0] ??
+            customerCoords.lng ??
             newOrder.customerLocation?.longitude
           const currentLocation = riderLocation || lastLocationRef.current
 
@@ -4974,10 +5637,10 @@ export default function DeliveryHome() {
               : null,
           )
 
-          const backendEarnings =
-            order.estimatedEarnings ??
-            responseData.estimatedEarnings ??
-            newOrder.estimatedEarnings
+          const backendEarnings = mergeEstimatedEarnings(
+            order.estimatedEarnings ?? responseData.estimatedEarnings ?? null,
+            newOrder.estimatedEarnings,
+          )
           const backendEarnedValue = extractEarningsAmount(backendEarnings, 0)
           const hydratedRestaurantAddress = resolveRestaurantAddress(order, newOrder)
           const hydratedRestaurantName =
@@ -4990,10 +5653,23 @@ export default function DeliveryHome() {
             newOrder.restaurantName = hydratedRestaurantName
             newOrder.pickupDistance = livePickupDistance
             newOrder.deliveryDistance = liveDropDistance
+            newOrder.pickupDurationMinutes =
+              order.assignmentInfo?.pickupDurationMinutes ??
+              responseData.pickupDurationMinutes ??
+              newOrder.pickupDurationMinutes ??
+              null
+            newOrder.deliveryDurationMinutes =
+              order.assignmentInfo?.deliveryDurationMinutes ??
+              responseData.deliveryDurationMinutes ??
+              newOrder.deliveryDurationMinutes ??
+              null
             newOrder.estimatedEarnings =
               backendEarnedValue > 0
                 ? backendEarnings
-                : (newOrder.estimatedEarnings ?? null)
+                : mergeEstimatedEarnings(
+                    newOrder.estimatedEarnings,
+                    selectedRestaurant?.estimatedEarnings,
+                  )
             if (!newOrder.restaurantLocation || typeof newOrder.restaurantLocation !== 'object') {
               newOrder.restaurantLocation = {}
             }
@@ -5028,14 +5704,32 @@ export default function DeliveryHome() {
               distance: livePickupDistance,
               pickupDistance: livePickupDistance,
               timeAway:
-                livePickupDistance !== 'Calculating...'
+                formatDurationDisplay(
+                  order.assignmentInfo?.pickupDurationMinutes ??
+                  responseData.pickupDurationMinutes ??
+                  prev.pickupDurationMinutes,
+                ) ||
+                (livePickupDistance !== 'Calculating...'
                   ? calculateTimeAway(livePickupDistance)
-                  : prev.timeAway,
+                  : prev.timeAway),
               dropDistance: liveDropDistance,
+              pickupDurationMinutes:
+                order.assignmentInfo?.pickupDurationMinutes ??
+                responseData.pickupDurationMinutes ??
+                prev.pickupDurationMinutes ??
+                null,
+              deliveryDurationMinutes:
+                order.assignmentInfo?.deliveryDurationMinutes ??
+                responseData.deliveryDurationMinutes ??
+                prev.deliveryDurationMinutes ??
+                null,
               estimatedEarnings:
                 backendEarnedValue > 0
                   ? backendEarnings
-                  : (prev.estimatedEarnings ?? null),
+                  : mergeEstimatedEarnings(
+                      prev.estimatedEarnings,
+                      newOrder.estimatedEarnings,
+                    ),
               amount:
                 backendEarnedValue > 0
                   ? backendEarnedValue
@@ -5055,6 +5749,7 @@ export default function DeliveryHome() {
         } catch (error) {
           const statusCode = error?.response?.status
           if (statusCode === 403 || statusCode === 401) {
+            markOrderDismissed(newOrder)
             console.warn('Skipping new order hydration because order details are not accessible yet:', {
               orderId,
               statusCode,
@@ -5066,7 +5761,172 @@ export default function DeliveryHome() {
         }
       }
 
-      hydrateNewOrderDetails()
+      const showNewOrderPopupWithPreload = async () => {
+        let popupRestaurantData = restaurantData
+
+        try {
+          const preloadResponse = await deliveryAPI.getOrderDetails(orderId, {
+            skipGlobalErrorToast: true,
+          })
+          const preloadOrder = extractOrderDetailsPayload(preloadResponse)
+
+          if (preloadOrder) {
+            const preloadData = preloadResponse?.data?.data || {}
+            const preloadRestaurantCoords = extractLatLng(preloadOrder.restaurantId?.location, {
+              reference: normalizeReferencePoint({
+                lat: riderLocation?.[0] ?? lastLocationRef.current?.[0] ?? newOrder.restaurantLocation?.latitude,
+                lng: riderLocation?.[1] ?? lastLocationRef.current?.[1] ?? newOrder.restaurantLocation?.longitude,
+              }),
+            })
+            const preloadRestaurantLat =
+              preloadRestaurantCoords.lat ??
+              preloadOrder.restaurantId?.location?.latitude ??
+              newOrder.restaurantLocation?.latitude
+            const preloadRestaurantLng =
+              preloadRestaurantCoords.lng ??
+              preloadOrder.restaurantId?.location?.longitude ??
+              newOrder.restaurantLocation?.longitude
+            const preloadCustomerCoords = extractLatLng(preloadOrder.address?.location, {
+              reference: normalizeReferencePoint({ lat: preloadRestaurantLat, lng: preloadRestaurantLng }),
+            })
+            const preloadCustomerLat =
+              preloadCustomerCoords.lat ??
+              newOrder.customerLocation?.latitude
+            const preloadCustomerLng =
+              preloadCustomerCoords.lng ??
+              newOrder.customerLocation?.longitude
+            const currentLocation = riderLocation || lastLocationRef.current
+
+            const preloadPickupDistance = resolveDistanceDisplay(
+              preloadOrder.pickupDistance,
+              preloadOrder.assignmentInfo?.pickupDistance,
+              preloadOrder.assignmentInfo?.distanceText,
+              preloadData.pickupDistance,
+              newOrder.pickupDistance,
+              currentLocation &&
+                currentLocation.length === 2 &&
+                Number.isFinite(Number(preloadRestaurantLat)) &&
+                Number.isFinite(Number(preloadRestaurantLng))
+                ? `${(calculateDistance(
+                    currentLocation[0],
+                    currentLocation[1],
+                    Number(preloadRestaurantLat),
+                    Number(preloadRestaurantLng),
+                  ) / 1000).toFixed(2)} km`
+                : pickupDistance,
+            )
+
+            const preloadDropDistance = resolveDistanceDisplay(
+              preloadOrder.deliveryDistance,
+              preloadOrder.dropDistance,
+              preloadOrder.assignmentInfo?.deliveryDistance,
+              preloadOrder.assignmentInfo?.deliveryDistanceText,
+              preloadData.deliveryDistance,
+              newOrder.deliveryDistance,
+              newOrder.dropDistance,
+              newOrder.distanceToCustomer,
+              Number.isFinite(Number(preloadRestaurantLat)) &&
+                Number.isFinite(Number(preloadRestaurantLng)) &&
+                Number.isFinite(Number(preloadCustomerLat)) &&
+                Number.isFinite(Number(preloadCustomerLng))
+                ? `${(calculateDistance(
+                    Number(preloadRestaurantLat),
+                    Number(preloadRestaurantLng),
+                    Number(preloadCustomerLat),
+                    Number(preloadCustomerLng),
+                  ) / 1000).toFixed(2)} km`
+                : null,
+            )
+
+            const preloadEarnings = mergeEstimatedEarnings(
+              preloadOrder.estimatedEarnings ?? preloadData.estimatedEarnings ?? null,
+              newOrder.estimatedEarnings,
+            )
+            const preloadValue = resolveEstimatedEarningsDisplay(
+              preloadEarnings,
+              preloadOrder.deliveryDistance,
+              preloadDropDistance,
+              newOrder.dropDistance,
+              newOrder.distanceToCustomer,
+            )
+            const preloadAddress = resolveRestaurantAddress(preloadOrder, newOrder)
+            const preloadName =
+              preloadOrder.restaurantName?.trim?.() ||
+              preloadOrder.restaurantId?.name?.trim?.() ||
+              newOrder.restaurantName ||
+              "Restaurant"
+
+            if (typeof newOrder === 'object' && newOrder !== null) {
+              newOrder.restaurantName = preloadName
+              newOrder.pickupDistance = preloadPickupDistance
+              newOrder.deliveryDistance = preloadDropDistance
+              newOrder.estimatedEarnings = preloadEarnings
+              if (!newOrder.restaurantLocation || typeof newOrder.restaurantLocation !== 'object') {
+                newOrder.restaurantLocation = {}
+              }
+              newOrder.restaurantLocation.latitude = Number(preloadRestaurantLat) || newOrder.restaurantLocation.latitude
+              newOrder.restaurantLocation.longitude = Number(preloadRestaurantLng) || newOrder.restaurantLocation.longitude
+              newOrder.restaurantLocation.address = preloadAddress
+              if (!newOrder.customerLocation || typeof newOrder.customerLocation !== 'object') {
+                newOrder.customerLocation = {}
+              }
+              newOrder.customerLocation.latitude = Number(preloadCustomerLat) || newOrder.customerLocation.latitude
+              newOrder.customerLocation.longitude = Number(preloadCustomerLng) || newOrder.customerLocation.longitude
+            }
+
+            popupRestaurantData = {
+              ...restaurantData,
+              name: preloadName,
+              address: preloadAddress,
+              lat: Number(preloadRestaurantLat) || restaurantData.lat,
+              lng: Number(preloadRestaurantLng) || restaurantData.lng,
+              distance: preloadPickupDistance,
+              pickupDistance: preloadPickupDistance,
+              timeAway:
+                formatDurationDisplay(
+                  preloadOrder.assignmentInfo?.pickupDurationMinutes ??
+                  preloadData.pickupDurationMinutes ??
+                  newOrder.pickupDurationMinutes,
+                ) ||
+                ((preloadPickupDistance && preloadPickupDistance !== 'Calculating...')
+                  ? calculateTimeAway(preloadPickupDistance)
+                  : restaurantData.timeAway),
+              dropDistance: preloadDropDistance,
+              pickupDurationMinutes:
+                preloadOrder.assignmentInfo?.pickupDurationMinutes ??
+                preloadData.pickupDurationMinutes ??
+                restaurantData.pickupDurationMinutes,
+              deliveryDurationMinutes:
+                preloadOrder.assignmentInfo?.deliveryDurationMinutes ??
+                preloadData.deliveryDurationMinutes ??
+                restaurantData.deliveryDurationMinutes,
+              estimatedEarnings: preloadEarnings,
+              amount: preloadValue ?? (restaurantData.amount ?? null),
+              customerAddress:
+                preloadOrder.address?.formattedAddress ||
+                restaurantData.customerAddress,
+              customerPhone:
+                extractCustomerPhoneFromOrder(preloadOrder) || restaurantData.customerPhone,
+              customerLat: Number(preloadCustomerLat) || restaurantData.customerLat,
+              customerLng: Number(preloadCustomerLng) || restaurantData.customerLng,
+            }
+          }
+        } catch (error) {
+          console.warn(
+            'Failed to preload first-time order earnings/details:',
+            error?.response?.data?.message || error?.message || error,
+          )
+        }
+
+        if (!isMounted) return
+
+        setSelectedRestaurant(popupRestaurantData)
+        setShowNewOrderPopup(true)
+        setCountdownSeconds(300)
+        hydrateNewOrderDetails()
+      }
+
+      showNewOrderPopupWithPreload()
 
       return () => {
         isMounted = false
@@ -5075,9 +5935,14 @@ export default function DeliveryHome() {
   }, [
     newOrder,
     calculateTimeAway,
+    clearNewOrder,
+    extractLatLng,
     extractEarningsAmount,
+    formatDurationDisplay,
+    markOrderDismissed,
     resolveDistanceDisplay,
     resolveRestaurantAddress,
+    resolveTextDetail,
     riderLocation,
   ])
 
@@ -5384,6 +6249,10 @@ export default function DeliveryHome() {
         
         // Filter out orders that are already accepted or delivered
         const pendingOrders = orders.filter(order => {
+          if (hasDismissedDeliveryOrder(order)) {
+            return false
+          }
+
           const orderStatus = order.status
           const deliveryPhase = order.deliveryState?.currentPhase
           
@@ -5452,8 +6321,14 @@ export default function DeliveryHome() {
           if (!pickupDistance || pickupDistance === '0 km' || pickupDistance === 'Calculating...') {
             // Try to calculate from driver's current location to restaurant
             const currentLocation = riderLocation || lastLocationRef.current;
-            const restaurantLat = firstOrder.restaurantId?.location?.coordinates?.[1];
-            const restaurantLng = firstOrder.restaurantId?.location?.coordinates?.[0];
+            const restaurantCoords = extractLatLng(firstOrder.restaurantId?.location, {
+              reference: normalizeReferencePoint({
+                lat: currentLocation?.[0],
+                lng: currentLocation?.[1],
+              }),
+            });
+            const restaurantLat = restaurantCoords.lat;
+            const restaurantLng = restaurantCoords.lng;
             
             if (currentLocation && currentLocation.length === 2 && 
                 restaurantLat && restaurantLng && 
@@ -5481,10 +6356,22 @@ export default function DeliveryHome() {
             orderId: firstOrder.orderId,
             name: firstOrder.restaurantId?.name || 'Restaurant',
             address: restaurantAddress,
-            lat: firstOrder.restaurantId?.location?.coordinates?.[1],
-            lng: firstOrder.restaurantId?.location?.coordinates?.[0],
+            lat: extractLatLng(firstOrder.restaurantId?.location, {
+              reference: normalizeReferencePoint({
+                lat: riderLocation?.[0] ?? lastLocationRef.current?.[0],
+                lng: riderLocation?.[1] ?? lastLocationRef.current?.[1],
+              }),
+            }).lat,
+            lng: extractLatLng(firstOrder.restaurantId?.location, {
+              reference: normalizeReferencePoint({
+                lat: riderLocation?.[0] ?? lastLocationRef.current?.[0],
+                lng: riderLocation?.[1] ?? lastLocationRef.current?.[1],
+              }),
+            }).lng,
             distance: pickupDistance,
-            timeAway: pickupDistance !== 'Calculating...' ? calculateTimeAway(pickupDistance) : 'Calculating...',
+            timeAway:
+              formatDurationDisplay(firstOrder.assignmentInfo?.pickupDurationMinutes) ||
+              (pickupDistance !== 'Calculating...' ? calculateTimeAway(pickupDistance) : 'Calculating...'),
             dropDistance: resolveDistanceDisplay(
               firstOrder.deliveryDistance,
               firstOrder.dropDistance,
@@ -5495,22 +6382,150 @@ export default function DeliveryHome() {
               firstOrder.address?.location?.coordinates ? null : '0 km',
             ),
             pickupDistance: pickupDistance,
-            estimatedEarnings: firstOrder.pricing?.deliveryFee || 0,
+            pickupDurationMinutes: firstOrder.assignmentInfo?.pickupDurationMinutes ?? null,
+            deliveryDurationMinutes: firstOrder.assignmentInfo?.deliveryDurationMinutes ?? null,
+            estimatedEarnings: firstOrder.estimatedEarnings || null,
             customerName: firstOrder.userId?.name || 'Customer',
             customerAddress: firstOrder.address?.formattedAddress || 
                            (firstOrder.address?.street 
                              ? `${firstOrder.address.street}, ${firstOrder.address.city || ''}, ${firstOrder.address.state || ''}`.trim()
                              : 'Customer address'),
             customerPhone: extractCustomerPhoneFromOrder(firstOrder),
-            customerLat: firstOrder.address?.location?.coordinates?.[1],
-            customerLng: firstOrder.address?.location?.coordinates?.[0],
+            customerLat: extractLatLng(firstOrder.address?.location, {
+              reference: normalizeReferencePoint(
+                extractLatLng(firstOrder.restaurantId?.location, {
+                  reference: normalizeReferencePoint({
+                    lat: riderLocation?.[0] ?? lastLocationRef.current?.[0],
+                    lng: riderLocation?.[1] ?? lastLocationRef.current?.[1],
+                  }),
+                }),
+              ),
+            }).lat,
+            customerLng: extractLatLng(firstOrder.address?.location, {
+              reference: normalizeReferencePoint(
+                extractLatLng(firstOrder.restaurantId?.location, {
+                  reference: normalizeReferencePoint({
+                    lat: riderLocation?.[0] ?? lastLocationRef.current?.[0],
+                    lng: riderLocation?.[1] ?? lastLocationRef.current?.[1],
+                  }),
+                }),
+              ),
+            }).lng,
             items: firstOrder.items || [],
             total: firstOrder.pricing?.total || 0,
             payment: firstOrder.payment?.method || 'COD',
-            amount: firstOrder.pricing?.total || 0
+            amount: extractEarningsAmount(firstOrder.estimatedEarnings, 0) || null
+          }
+
+          let popupRestaurantData = restaurantData
+
+          try {
+            const detailResponse = await deliveryAPI.getOrderDetails(orderId, {
+              skipGlobalErrorToast: true,
+            })
+            const detailedOrder = extractOrderDetailsPayload(detailResponse)
+            if (detailedOrder) {
+              const detailResponseData = detailResponse?.data?.data || {}
+              const currentReference = normalizeReferencePoint({
+                lat: riderLocation?.[0] ?? lastLocationRef.current?.[0],
+                lng: riderLocation?.[1] ?? lastLocationRef.current?.[1],
+              })
+              const restaurantCoords = extractLatLng(
+                detailedOrder.restaurantId?.location || detailedOrder.restaurant?.location,
+                { reference: currentReference },
+              )
+              const customerCoords = extractLatLng(
+                detailedOrder.address?.location || detailedOrder.customerLocation,
+                { reference: normalizeReferencePoint(restaurantCoords) || currentReference },
+              )
+              const currentLocation = riderLocation || lastLocationRef.current
+              const coordinatePickupDistance =
+                currentLocation && currentLocation.length === 2
+                  ? resolveDistanceFromCoordinates(
+                      { lat: currentLocation[0], lng: currentLocation[1] },
+                      restaurantCoords,
+                    )
+                  : null
+              const coordinateDropDistance = resolveDistanceFromCoordinates(
+                restaurantCoords,
+                customerCoords,
+              )
+              const detailedRestaurantInfo =
+                buildRestaurantInfoFromOrder(detailedOrder, {
+                  ...restaurantData,
+                  pickupDistance: coordinatePickupDistance || restaurantData.pickupDistance,
+                  distance: coordinatePickupDistance || restaurantData.distance,
+                  dropDistance: coordinateDropDistance || restaurantData.dropDistance,
+                }) || restaurantData
+
+              const enrichedPickupDistance = resolveDistanceDisplay(
+                detailedOrder.pickupDistance,
+                detailedOrder.assignmentInfo?.pickupDistance,
+                detailedOrder.assignmentInfo?.distanceText,
+                detailResponseData?.pickupDistance,
+                detailedRestaurantInfo.pickupDistance,
+                detailedRestaurantInfo.distance,
+                coordinatePickupDistance,
+              )
+              const enrichedDropDistance = resolveDistanceDisplay(
+                detailedOrder.deliveryDistance,
+                detailedOrder.dropDistance,
+                detailedOrder.assignmentInfo?.deliveryDistance,
+                detailedOrder.assignmentInfo?.deliveryDistanceText,
+                detailResponseData?.deliveryDistance,
+                detailedRestaurantInfo.dropDistance,
+                coordinateDropDistance,
+              )
+              const enrichedEarnings = mergeEstimatedEarnings(
+                detailedOrder.estimatedEarnings ?? detailResponseData?.estimatedEarnings ?? null,
+                detailedRestaurantInfo.estimatedEarnings ?? restaurantData.estimatedEarnings ?? null,
+              )
+              const enrichedAmount = extractEarningsAmount(
+                enrichedEarnings,
+                detailedRestaurantInfo.amount ?? restaurantData.amount ?? 0,
+              )
+
+              popupRestaurantData = {
+                ...restaurantData,
+                ...detailedRestaurantInfo,
+                address: resolveRestaurantAddress(detailedOrder, detailedRestaurantInfo) || restaurantData.address,
+                lat: restaurantCoords.lat ?? detailedRestaurantInfo.lat ?? restaurantData.lat,
+                lng: restaurantCoords.lng ?? detailedRestaurantInfo.lng ?? restaurantData.lng,
+                customerLat: customerCoords.lat ?? detailedRestaurantInfo.customerLat ?? restaurantData.customerLat,
+                customerLng: customerCoords.lng ?? detailedRestaurantInfo.customerLng ?? restaurantData.customerLng,
+                distance: enrichedPickupDistance || restaurantData.distance,
+                pickupDistance: enrichedPickupDistance || restaurantData.pickupDistance,
+                dropDistance: enrichedDropDistance || restaurantData.dropDistance,
+                timeAway:
+                  formatDurationDisplay(
+                    detailedOrder.assignmentInfo?.pickupDurationMinutes ??
+                    detailResponseData?.pickupDurationMinutes ??
+                    detailedRestaurantInfo.pickupDurationMinutes ??
+                    restaurantData.pickupDurationMinutes,
+                  ) ||
+                  ((enrichedPickupDistance || restaurantData.pickupDistance) !== 'Calculating...'
+                    ? calculateTimeAway(enrichedPickupDistance || restaurantData.pickupDistance)
+                    : restaurantData.timeAway),
+                estimatedEarnings: enrichedEarnings,
+                amount: enrichedAmount > 0 ? enrichedAmount : restaurantData.amount,
+                customerAddress:
+                  detailedOrder.address?.formattedAddress ||
+                  detailedRestaurantInfo.customerAddress ||
+                  restaurantData.customerAddress,
+                customerPhone:
+                  extractCustomerPhoneFromOrder(detailedOrder) ||
+                  detailedRestaurantInfo.customerPhone ||
+                  restaurantData.customerPhone,
+              }
+            }
+          } catch (error) {
+            console.warn(
+              'Failed to preload assigned order details before showing popup:',
+              error?.response?.data?.message || error?.message || error,
+            )
           }
           
-          setSelectedRestaurant(restaurantData)
+          setSelectedRestaurant(popupRestaurantData)
           setShowNewOrderPopup(true)
           setCountdownSeconds(300) // Reset countdown to 5 minutes
           console.log('✅ Showing pending order notification:', orderId)
@@ -6943,8 +7958,11 @@ export default function DeliveryHome() {
         const savedOrder = localStorage.getItem('deliveryActiveOrder');
         if (!savedOrder) {
           console.log('📦 No active order found in localStorage');
+          setIsRestoringActiveOrder(false);
           return;
         }
+
+        setIsRestoringActiveOrder(true);
 
         const activeOrderData = JSON.parse(savedOrder);
         console.log('📦 Found active order in localStorage:', activeOrderData);
@@ -6958,16 +7976,19 @@ export default function DeliveryHome() {
           localStorage.removeItem('activeOrder');
           setActiveOrder(null);
           setSelectedRestaurant(null);
+          setIsRestoringActiveOrder(false);
           return;
         }
 
         // Verify order still exists in database before restoring
         let order = null;
+        let orderResponseData = null;
         try {
           console.log('🔍 Verifying order exists in database:', orderId);
           const orderResponse = await deliveryAPI.getOrderDetails(orderId, {
             skipGlobalErrorToast: true,
           });
+          orderResponseData = orderResponse?.data?.data || null
           
           if (!orderResponse.data?.success || !orderResponse.data?.data) {
             console.log('⚠️ Order not found in database, removing from localStorage');
@@ -6975,6 +7996,7 @@ export default function DeliveryHome() {
             localStorage.removeItem('activeOrder');
             setActiveOrder(null);
             setSelectedRestaurant(null);
+            setIsRestoringActiveOrder(false);
             return;
           }
 
@@ -6986,6 +8008,7 @@ export default function DeliveryHome() {
             localStorage.removeItem('activeOrder');
             setActiveOrder(null);
             setSelectedRestaurant(null);
+            setIsRestoringActiveOrder(false);
             return;
           }
           
@@ -6996,6 +8019,7 @@ export default function DeliveryHome() {
             localStorage.removeItem('activeOrder');
             setActiveOrder(null);
             setSelectedRestaurant(null);
+            setIsRestoringActiveOrder(false);
             return;
           }
 
@@ -7010,6 +8034,7 @@ export default function DeliveryHome() {
           localStorage.removeItem('activeOrder');
           setActiveOrder(null);
           setSelectedRestaurant(null);
+          setIsRestoringActiveOrder(false);
           return;
         }
 
@@ -7022,6 +8047,7 @@ export default function DeliveryHome() {
           localStorage.removeItem('activeOrder');
           setActiveOrder(null);
           setSelectedRestaurant(null);
+          setIsRestoringActiveOrder(false);
           return;
         }
 
@@ -7029,25 +8055,97 @@ export default function DeliveryHome() {
         let restaurantInfoToRestore = activeOrderData.restaurantInfo || {};
         let destinationForRoute = { lat: restaurantInfoToRestore.lat, lng: restaurantInfoToRestore.lng };
         if (order) {
+          const responseData = orderResponseData || {}
           const deliveryPhase = order.deliveryState?.currentPhase || order.deliveryState?.status || restaurantInfoToRestore.deliveryPhase || '';
-          const coords = order.address?.location?.coordinates; // GeoJSON: [lng, lat]
-          const customerLat = coords?.[1];
-          const customerLng = coords?.[0];
+          const restoredBaseInfo =
+            buildRestaurantInfoFromOrder(order, restaurantInfoToRestore) || restaurantInfoToRestore
+
+          if (!isAcceptedAssignedDeliveryOrder(restoredBaseInfo)) {
+            console.log('âš ï¸ Saved order is not accepted anymore, removing from localStorage');
+            localStorage.removeItem('deliveryActiveOrder');
+            localStorage.removeItem('activeOrder');
+            setActiveOrder(null);
+            setSelectedRestaurant(null);
+            setIsRestoringActiveOrder(false);
+            return;
+          }
+
+          const customerLat = restoredBaseInfo?.customerLat ?? restaurantInfoToRestore?.customerLat ?? null
+          const customerLng = restoredBaseInfo?.customerLng ?? restaurantInfoToRestore?.customerLng ?? null
+          const restoredPickupDistance = resolveDistanceDisplay(
+            order.pickupDistance,
+            order.assignmentInfo?.pickupDistance,
+            responseData.pickupDistance,
+            restoredBaseInfo.pickupDistance,
+            restoredBaseInfo.distance,
+          )
+          const restoredDropDistance = resolveDistanceDisplay(
+            order.deliveryDistance,
+            order.dropDistance,
+            order.assignmentInfo?.deliveryDistance,
+            order.assignmentInfo?.deliveryDistanceText,
+            responseData.deliveryDistance,
+            restoredBaseInfo.dropDistance,
+          )
+          const restoredEarnings = mergeEstimatedEarnings(
+            order.estimatedEarnings ?? responseData.estimatedEarnings ?? null,
+            restoredBaseInfo.estimatedEarnings ??
+              restoredBaseInfo.amount ??
+              null,
+          )
+          const restoredEarningsAmount = extractEarningsAmount(
+            restoredEarnings,
+            restoredBaseInfo.amount ?? 0,
+          )
+          const restoredPickupDurationMinutes =
+            order.assignmentInfo?.pickupDurationMinutes ??
+            responseData.pickupDurationMinutes ??
+            restoredBaseInfo.pickupDurationMinutes ??
+            null
+          const restoredDeliveryDurationMinutes =
+            order.assignmentInfo?.deliveryDurationMinutes ??
+            responseData.deliveryDurationMinutes ??
+            restoredBaseInfo.deliveryDurationMinutes ??
+            null
+          const restoredRestaurantAddress =
+            resolveRestaurantAddress(order, restoredBaseInfo) ||
+            restoredBaseInfo.address
+          const restoredRestaurantName =
+            order.restaurantName?.trim?.() ||
+            order.restaurantId?.name?.trim?.() ||
+            restoredBaseInfo.name
           restaurantInfoToRestore = {
-            ...restaurantInfoToRestore,
-            id: order._id || restaurantInfoToRestore.id || orderId,
-            orderId: order.orderId || restaurantInfoToRestore.orderId || orderId,
-            orderStatus: order.status || restaurantInfoToRestore.orderStatus || restaurantInfoToRestore.status,
-            status: order.status || restaurantInfoToRestore.status || restaurantInfoToRestore.orderStatus,
-            deliveryVerification: order.deliveryVerification || restaurantInfoToRestore.deliveryVerification || null,
+            ...restoredBaseInfo,
+            id: order._id || restoredBaseInfo.id || orderId,
+            orderId: order.orderId || restoredBaseInfo.orderId || orderId,
+            name: restoredRestaurantName || 'Restaurant',
+            address: restoredRestaurantAddress || 'Restaurant Address',
+            orderStatus: order.status || restoredBaseInfo.orderStatus || restoredBaseInfo.status,
+            status: order.status || restoredBaseInfo.status || restoredBaseInfo.orderStatus,
+            deliveryVerification: order.deliveryVerification || restoredBaseInfo.deliveryVerification || null,
             deliveryState: {
-              ...(restaurantInfoToRestore.deliveryState || {}),
+              ...(restoredBaseInfo.deliveryState || {}),
               ...(order.deliveryState || {}),
             },
-            deliveryPhase: deliveryPhase || restaurantInfoToRestore.deliveryPhase,
-            customerPhone: extractCustomerPhoneFromOrder(order) || restaurantInfoToRestore.customerPhone || null,
-            customerName: order.userId?.name || restaurantInfoToRestore.customerName,
-            customerAddress: order.address?.formattedAddress || restaurantInfoToRestore.customerAddress,
+            deliveryPhase: deliveryPhase || restoredBaseInfo.deliveryPhase,
+            distance: restoredPickupDistance,
+            pickupDistance: restoredPickupDistance,
+            dropDistance: restoredDropDistance,
+            pickupDurationMinutes: restoredPickupDurationMinutes,
+            deliveryDurationMinutes: restoredDeliveryDurationMinutes,
+            timeAway:
+              formatDurationDisplay(restoredPickupDurationMinutes) ||
+              (isResolvedDistance(restoredPickupDistance)
+                ? calculateTimeAway(restoredPickupDistance)
+                : (restoredBaseInfo.timeAway || 'Calculating...')),
+            estimatedEarnings: restoredEarnings,
+            amount:
+              restoredEarningsAmount > 0
+                ? restoredEarningsAmount
+                : (restoredBaseInfo.amount ?? null),
+            customerPhone: extractCustomerPhoneFromOrder(order) || restoredBaseInfo.customerPhone || null,
+            customerName: order.userId?.name || restoredBaseInfo.customerName,
+            customerAddress: order.address?.formattedAddress || restoredBaseInfo.customerAddress,
           };
           const isDeliveryPhase = order.status === 'out_for_delivery' ||
             ['en_route_to_delivery', 'at_delivery', 'en_route_to_drop'].includes(deliveryPhase);
@@ -7071,6 +8169,8 @@ export default function DeliveryHome() {
           setActiveOrder(restaurantInfoToRestore);
           console.log('✅ Restored selectedRestaurant from localStorage');
         }
+
+        setIsRestoringActiveOrder(false);
 
         // Wait for map to be ready
         const waitForMap = () => {
@@ -7139,6 +8239,7 @@ export default function DeliveryHome() {
         setShowOrderDeliveredAnimation(false);
         setShowCustomerReviewPopup(false);
         setShowPaymentPage(false);
+        setIsRestoringActiveOrder(false);
       }
     };
 
@@ -7547,8 +8648,12 @@ export default function DeliveryHome() {
         orderId: order.orderId || orderReady.orderId || selectedRestaurant?.orderId,
         name: order.restaurantName || orderReady.restaurantName || order.restaurantId?.name || selectedRestaurant?.name,
         address: restaurantAddress,
-        lat: order.restaurantId?.location?.coordinates?.[1] || orderReady.restaurantLat || selectedRestaurant?.lat,
-        lng: order.restaurantId?.location?.coordinates?.[0] || orderReady.restaurantLng || selectedRestaurant?.lng,
+        lat: extractLatLng(order.restaurantId?.location, {
+          reference: normalizeReferencePoint({ lat: selectedRestaurant?.lat, lng: selectedRestaurant?.lng }),
+        }).lat || orderReady.restaurantLat || selectedRestaurant?.lat,
+        lng: extractLatLng(order.restaurantId?.location, {
+          reference: normalizeReferencePoint({ lat: selectedRestaurant?.lat, lng: selectedRestaurant?.lng }),
+        }).lng || orderReady.restaurantLng || selectedRestaurant?.lng,
         orderStatus: 'ready'
       }
       setSelectedRestaurant(restaurantInfo)
@@ -7826,6 +8931,7 @@ export default function DeliveryHome() {
         showOrderDeliveredAnimation || // Don't show if order is delivered
         showCustomerReviewPopup || // Don't show if showing review popup
         showPaymentPage || // Don't show if showing payment page
+        isRestoringActiveOrder ||
         !selectedRestaurant?.lat || 
         !selectedRestaurant?.lng || 
         !riderLocation || 
@@ -7905,7 +9011,8 @@ export default function DeliveryHome() {
     selectedRestaurant?.status,
     selectedRestaurant?.deliveryPhase,
     selectedRestaurant?.deliveryState?.status,
-    calculateDistanceInMeters
+    calculateDistanceInMeters,
+    isRestoringActiveOrder,
   ])
 
   // CRITICAL: Monitor order status and close all pickup/delivery popups when order is delivered
@@ -10090,27 +11197,55 @@ export default function DeliveryHome() {
                     <p className="text-gray-500 text-sm mb-1">Estimated earnings</p>
                     <p className="text-4xl font-bold text-gray-900 mb-2">
                       {(() => {
-                        const earnings = newOrder?.estimatedEarnings ?? selectedRestaurant?.estimatedEarnings ?? null
-                        const value = extractEarningsAmount(earnings, 0)
-                        return value > 0 ? `₹${value.toFixed(2)}` : 'Updating...'
+                        const earnings = mergeEstimatedEarnings(
+                          newOrder?.estimatedEarnings,
+                          selectedRestaurant?.estimatedEarnings,
+                        )
+                        const value = resolveEstimatedEarningsDisplay(
+                          earnings,
+                          newOrder?.deliveryDistance,
+                          selectedRestaurant?.dropDistance,
+                          newOrder?.dropDistance,
+                          newOrder?.distanceToCustomer,
+                        )
+                        return value != null ? `₹${value.toFixed(2)}` : 'Updating...'
                       })()}
                     </p>
                     {/* Earnings Breakdown */}
                     {(() => {
-                      const earnings = newOrder?.estimatedEarnings ?? selectedRestaurant?.estimatedEarnings ?? null
-                      if (typeof earnings === 'object' && earnings.breakdown) {
+                      const earnings = mergeEstimatedEarnings(
+                        newOrder?.estimatedEarnings,
+                        selectedRestaurant?.estimatedEarnings,
+                      )
+                      const breakdown = extractEarningsBreakdown(earnings)
+                      if (breakdown) {
+                        const candidateDistances = [
+                          breakdown.distance,
+                          newOrder?.deliveryDistance,
+                          selectedRestaurant?.dropDistance,
+                          newOrder?.dropDistance,
+                          newOrder?.distanceToCustomer,
+                        ]
+                        const effectiveDistance =
+                          candidateDistances
+                            .map((candidate) => parseDistanceKm(candidate))
+                            .find((candidate) => Number.isFinite(candidate) && candidate > 0) || 0
+                        const effectiveDistanceCommission =
+                          effectiveDistance > breakdown.minDistance && breakdown.commissionPerKm > 0
+                            ? effectiveDistance * breakdown.commissionPerKm
+                            : breakdown.distanceCommission
                         return (
                           <div className="bg-green-50 rounded-lg p-3 mb-2">
                             <p className="text-green-800 text-xs font-medium mb-1">Earnings Breakdown:</p>
                             <p className="text-green-700 text-xs">
-                              Base: ₹{earnings.basePayout?.toFixed(0) || '0'}
-                              {earnings.distanceCommission > 0 && (
-                                <> + Distance ({earnings.distance?.toFixed(1)} km × ₹{earnings.commissionPerKm?.toFixed(0)}/km) = ₹{earnings.distanceCommission?.toFixed(0)}</>
+                              Base: ₹{breakdown.basePayout?.toFixed(0) || '0'}
+                              {effectiveDistanceCommission > 0 && (
+                                <> + Distance ({effectiveDistance.toFixed(1) || '0.0'} km × ₹{breakdown.commissionPerKm?.toFixed(0) || '0'}/km) = ₹{effectiveDistanceCommission.toFixed(0)}</>
                               )}
                             </p>
-                            {earnings.distance <= earnings.minDistance && earnings.distanceCommission === 0 && (
+                            {effectiveDistance <= breakdown.minDistance && effectiveDistanceCommission === 0 && (
                               <p className="text-green-600 text-xs mt-1">
-                                Note: Distance {earnings.distance?.toFixed(1)} km ≤ {earnings.minDistance} km, per km commission not applicable
+                                Note: Distance {effectiveDistance.toFixed(1) || '0.0'} km ≤ {breakdown.minDistance} km, per km commission not applicable
                               </p>
                             )}
                           </div>
@@ -10128,8 +11263,12 @@ export default function DeliveryHome() {
                           newOrder?.assignmentInfo?.distanceText,
                           newOrder?.assignmentInfo?.distanceKm,
                           newOrder?.assignmentInfo?.distance,
+                          resolveDistanceFromCoordinates(
+                            { lat: riderLocation?.[0] ?? lastLocationRef.current?.[0], lng: riderLocation?.[1] ?? lastLocationRef.current?.[1] },
+                            { lat: selectedRestaurant?.lat ?? newOrder?.restaurantLocation?.latitude, lng: selectedRestaurant?.lng ?? newOrder?.restaurantLocation?.longitude },
+                          ),
                         )
-                        return isResolvedDistance(pickup) ? pickup : 'Updating...'
+                        return isResolvedDistance(pickup) ? pickup : 'Calculating...'
                       })()} | Drop: {(() => {
                         const drop = resolveDistanceDisplay(
                           selectedRestaurant?.dropDistance,
@@ -10139,8 +11278,12 @@ export default function DeliveryHome() {
                           newOrder?.assignmentInfo?.deliveryDistanceText,
                           newOrder?.assignmentInfo?.dropDistance,
                           newOrder?.distanceToCustomer,
+                          resolveDistanceFromCoordinates(
+                            { lat: selectedRestaurant?.lat ?? newOrder?.restaurantLocation?.latitude, lng: selectedRestaurant?.lng ?? newOrder?.restaurantLocation?.longitude },
+                            { lat: selectedRestaurant?.customerLat ?? newOrder?.customerLocation?.latitude, lng: selectedRestaurant?.customerLng ?? newOrder?.customerLocation?.longitude },
+                          ),
                         )
-                        return isResolvedDistance(drop) ? drop : 'Updating...'
+                        return isResolvedDistance(drop) ? drop : 'Calculating...'
                       })()}
                     </p>
                   </div>
@@ -10167,7 +11310,9 @@ export default function DeliveryHome() {
                     <p className="text-sm text-gray-600 mb-3 leading-relaxed">
                       {(() => {
                         const address = resolveRestaurantAddress(newOrder, selectedRestaurant)
-                        return isResolvedAddress(address) ? address : 'Fetching restaurant details...'
+                        return isResolvedAddress(address)
+                          ? address
+                          : (selectedRestaurant?.name || newOrder?.restaurantName || 'Restaurant details unavailable')
                       })()}
                     </p>
                     
@@ -10175,6 +11320,14 @@ export default function DeliveryHome() {
                       <Clock className="w-4 h-4" />
                       <span>
                         {(() => {
+                          const exactDuration = formatDurationDisplay(
+                            selectedRestaurant?.pickupDurationMinutes ??
+                            newOrder?.pickupDurationMinutes ??
+                            newOrder?.assignmentInfo?.pickupDurationMinutes,
+                          )
+                          if (exactDuration) {
+                            return `${exactDuration} away`
+                          }
                           if (selectedRestaurant?.timeAway && selectedRestaurant.timeAway !== 'Calculating...') {
                             return `${selectedRestaurant.timeAway} away`
                           }
@@ -10186,10 +11339,14 @@ export default function DeliveryHome() {
                             newOrder?.assignmentInfo?.distanceText,
                             newOrder?.assignmentInfo?.distanceKm,
                             newOrder?.assignmentInfo?.distance,
+                            resolveDistanceFromCoordinates(
+                              { lat: riderLocation?.[0] ?? lastLocationRef.current?.[0], lng: riderLocation?.[1] ?? lastLocationRef.current?.[1] },
+                              { lat: selectedRestaurant?.lat ?? newOrder?.restaurantLocation?.latitude, lng: selectedRestaurant?.lng ?? newOrder?.restaurantLocation?.longitude },
+                            ),
                           )
                           return isResolvedDistance(pickup)
                             ? `${calculateTimeAway(pickup)} away`
-                            : 'Fetching route...'
+                            : 'Calculating route...'
                         })()}
                       </span>
                     </div>
@@ -10206,8 +11363,12 @@ export default function DeliveryHome() {
                             newOrder?.assignmentInfo?.distanceText,
                             newOrder?.assignmentInfo?.distanceKm,
                             newOrder?.assignmentInfo?.distance,
+                            resolveDistanceFromCoordinates(
+                              { lat: riderLocation?.[0] ?? lastLocationRef.current?.[0], lng: riderLocation?.[1] ?? lastLocationRef.current?.[1] },
+                              { lat: selectedRestaurant?.lat ?? newOrder?.restaurantLocation?.latitude, lng: selectedRestaurant?.lng ?? newOrder?.restaurantLocation?.longitude },
+                            ),
                           )
-                          return isResolvedDistance(pickup) ? `${pickup} away` : 'Fetching route...'
+                          return isResolvedDistance(pickup) ? `${pickup} away` : 'Calculating route...'
                         })()}
                       </span>
                     </div>

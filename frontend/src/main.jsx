@@ -155,6 +155,10 @@ disableAppZoom()
 const originalError = console.error
 console.error = (...args) => {
   const errorStr = args.join(' ')
+  const errorMsg = args
+    .map((arg) => (arg?.message ? arg.message : String(arg ?? '')))
+    .join(' ')
+  const errorName = args.find((arg) => arg && typeof arg === 'object' && arg.name)?.name || ''
   
   // Suppress browser extension errors
   if (

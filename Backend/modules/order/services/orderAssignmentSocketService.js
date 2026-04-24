@@ -1,7 +1,9 @@
 import OrderAssignmentHistory from '../models/OrderAssignmentHistory.js';
 import Order from '../models/Order.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
+import Delivery from '../../delivery/models/Delivery.js';
 import mongoose from 'mongoose';
+import { calculateRoute } from './routeCalculationService.js';
 import {
   DELIVERY_NOTIFICATION_EVENTS,
   notifyDeliveryOrderEvent,
@@ -142,9 +144,58 @@ function getRestaurantLocationPayload(restaurant) {
 function getCustomerLocationPayload(order) {
   const coordinates = order?.address?.location?.coordinates || [];
   return {
-    latitude: coordinates[1],
-    longitude: coordinates[0],
+    latitude: Number.isFinite(Number(coordinates[1])) ? Number(coordinates[1]) : undefined,
+    longitude: Number.isFinite(Number(coordinates[0])) ? Number(coordinates[0]) : undefined,
     address: order?.address?.formattedAddress || order?.deliveryAddress,
+  };
+}
+
+async function getDeliveryPartnerLocation(deliveryPartnerId) {
+  if (!deliveryPartnerId || !mongoose.Types.ObjectId.isValid(String(deliveryPartnerId))) {
+    return null;
+  }
+
+  const deliveryPartner = await Delivery.findById(deliveryPartnerId)
+    .select('availability.currentLocation')
+    .lean();
+
+  const coordinates = deliveryPartner?.availability?.currentLocation?.coordinates || [];
+  const latitude = Number(coordinates[1]);
+  const longitude = Number(coordinates[0]);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return { latitude, longitude };
+}
+
+async function calculateRouteSummary(origin, destination) {
+  const originLat = Number(origin?.latitude);
+  const originLng = Number(origin?.longitude);
+  const destinationLat = Number(destination?.latitude);
+  const destinationLng = Number(destination?.longitude);
+
+  if (
+    !Number.isFinite(originLat) ||
+    !Number.isFinite(originLng) ||
+    !Number.isFinite(destinationLat) ||
+    !Number.isFinite(destinationLng)
+  ) {
+    return null;
+  }
+
+  const route = await calculateRoute(originLat, originLng, destinationLat, destinationLng);
+  if (!route?.success || !Number.isFinite(Number(route.distance))) {
+    return null;
+  }
+
+  return {
+    distanceKm: Math.round(Number(route.distance) * 100) / 100,
+    durationMinutes: Number.isFinite(Number(route.duration))
+      ? Math.max(1, Math.round(Number(route.duration)))
+      : null,
+    method: route.method || 'unknown',
   };
 }
 
@@ -207,10 +258,20 @@ class OrderAssignmentSocketService {
         restaurant.primaryContactNumber ||
         restaurant.contactNumber ||
         restaurant.ownerPhone;
+      const deliveryPartnerLocation = await getDeliveryPartnerLocation(deliveryPartnerId);
+      const pickupRoute = await calculateRouteSummary(
+        deliveryPartnerLocation,
+        restaurantLocation,
+      );
+      const deliveryRoute = await calculateRouteSummary(
+        restaurantLocation,
+        customerLocation,
+      );
       const deliveryDistanceKm =
-        Number.isFinite(Number(assignmentData.deliveryDistance))
+        deliveryRoute?.distanceKm ??
+        (Number.isFinite(Number(assignmentData.deliveryDistance))
           ? Number(assignmentData.deliveryDistance)
-          : calculateDistanceKm(restaurantLocation, customerLocation);
+          : calculateDistanceKm(restaurantLocation, customerLocation));
       const estimatedEarnings =
         await calculateEstimatedDeliveryPartnerEarnings(deliveryDistanceKm);
 
@@ -227,9 +288,21 @@ class OrderAssignmentSocketService {
         customerPhone: order.userId?.phone || order.phoneNumber,
         customerLocation,
         deliveryDistance:
-          deliveryDistanceKm > 0 ? `${deliveryDistanceKm.toFixed(2)} km` : "Calculating...",
+          deliveryDistanceKm > 0 ? `${deliveryDistanceKm.toFixed(2)} km` : undefined,
         deliveryDistanceRaw: deliveryDistanceKm,
-        pickupDistance: assignmentData.distance ? `${assignmentData.distance.toFixed(2)} km` : undefined,
+        pickupDistance:
+          pickupRoute?.distanceKm > 0
+            ? `${pickupRoute.distanceKm.toFixed(2)} km`
+            : (assignmentData.distance ? `${assignmentData.distance.toFixed(2)} km` : undefined),
+        pickupDistanceRaw:
+          pickupRoute?.distanceKm ??
+          (Number.isFinite(Number(assignmentData.distance)) ? Number(assignmentData.distance) : undefined),
+        pickupDurationMinutes: pickupRoute?.durationMinutes ?? null,
+        deliveryDurationMinutes: deliveryRoute?.durationMinutes ?? null,
+        routeSource: {
+          pickup: pickupRoute?.method || null,
+          delivery: deliveryRoute?.method || null,
+        },
         estimatedEarnings,
         deliveryFee: order.pricing?.deliveryFee,
         total: order.pricing?.total,

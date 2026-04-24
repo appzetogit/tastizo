@@ -2,6 +2,7 @@ import Order from "../models/Order.js";
 import Delivery from "../../delivery/models/Delivery.js";
 import Restaurant from "../../restaurant/models/Restaurant.js";
 import mongoose from "mongoose";
+import { calculateRoute } from "./routeCalculationService.js";
 import {
   DELIVERY_NOTIFICATION_EVENTS,
   notifyDeliveryOrderEvent,
@@ -111,6 +112,32 @@ function extractLatLng(location) {
   return null;
 }
 
+async function calculateRouteSummary(origin, destination) {
+  const originPoint = origin ? extractLatLng(origin) : null;
+  const destinationPoint = destination ? extractLatLng(destination) : null;
+
+  if (!originPoint || !destinationPoint) return null;
+
+  const route = await calculateRoute(
+    originPoint.lat,
+    originPoint.lng,
+    destinationPoint.lat,
+    destinationPoint.lng,
+  );
+
+  if (!route?.success || !Number.isFinite(Number(route.distance))) {
+    return null;
+  }
+
+  return {
+    distanceKm: Math.round(Number(route.distance) * 100) / 100,
+    durationMinutes: Number.isFinite(Number(route.duration))
+      ? Math.max(1, Math.round(Number(route.duration)))
+      : null,
+    method: route.method || "unknown",
+  };
+}
+
 /**
  * Notify delivery boy about new order assignment via Socket.IO
  * @param {Object} order - Order document
@@ -206,37 +233,16 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
       }).lean();
     }
 
-    // Calculate distances
-    let pickupDistance = null;
-    let deliveryDistance = null;
-
-    if (deliveryPartner.availability?.currentLocation && restaurant?.location) {
-      const deliveryPoint = extractLatLng(
-        deliveryPartner.availability.currentLocation,
-      );
-      const restaurantPoint = extractLatLng(restaurant.location);
-      const customerPoint = extractLatLng(order.address?.location);
-
-      if (deliveryPoint && restaurantPoint) {
-        // Calculate pickup distance (delivery boy to restaurant)
-        pickupDistance = calculateDistance(
-          deliveryPoint.lat,
-          deliveryPoint.lng,
-          restaurantPoint.lat,
-          restaurantPoint.lng,
-        );
-      }
-
-      if (restaurantPoint && customerPoint) {
-        // Calculate delivery distance (restaurant to customer)
-        deliveryDistance = calculateDistance(
-          restaurantPoint.lat,
-          restaurantPoint.lng,
-          customerPoint.lat,
-          customerPoint.lng,
-        );
-      }
-    }
+    const pickupRoute = await calculateRouteSummary(
+      deliveryPartner.availability?.currentLocation,
+      restaurant?.location,
+    );
+    const deliveryRoute = await calculateRouteSummary(
+      restaurant?.location,
+      order.address?.location,
+    );
+    const pickupDistance = pickupRoute?.distanceKm ?? null;
+    const deliveryDistance = deliveryRoute?.distanceKm ?? null;
 
     // Calculate rider earnings from commission rules, never from customer delivery fee
     const deliveryFeeFromOrder = order.pricing?.deliveryFee ?? 0;
@@ -283,10 +289,12 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
       note: order.note || "",
       pickupDistance: pickupDistance
         ? `${pickupDistance.toFixed(2)} km`
-        : "Distance not available",
+        : undefined,
+      pickupDurationMinutes: pickupRoute?.durationMinutes ?? null,
       deliveryDistance: deliveryDistance
         ? `${deliveryDistance.toFixed(2)} km`
-        : "Calculating...",
+        : undefined,
+      deliveryDurationMinutes: deliveryRoute?.durationMinutes ?? null,
       deliveryDistanceRaw: deliveryDistance || 0, // Raw distance number for calculations
       estimatedEarnings,
     };

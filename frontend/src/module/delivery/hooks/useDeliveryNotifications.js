@@ -43,6 +43,121 @@ export const useDeliveryNotifications = () => {
     );
   }, []);
 
+  const isAnyOrderIdDismissed = useCallback((ids = []) => {
+    return ids
+      .filter(Boolean)
+      .map(String)
+      .some((id) => dismissedOrderIdsRef.current.has(id));
+  }, []);
+
+  const normalizeGeoLocation = useCallback((locationLike, fallbackAddress = null) => {
+    if (!locationLike || typeof locationLike !== 'object') {
+      return fallbackAddress ? { address: fallbackAddress } : null;
+    }
+
+    const coordinates = Array.isArray(locationLike.coordinates)
+      ? locationLike.coordinates
+      : [];
+
+    const longitude =
+      locationLike.longitude ??
+      locationLike.lng ??
+      coordinates[0] ??
+      null;
+
+    const latitude =
+      locationLike.latitude ??
+      locationLike.lat ??
+      coordinates[1] ??
+      null;
+
+    return {
+      ...locationLike,
+      latitude: Number.isFinite(Number(latitude)) ? Number(latitude) : null,
+      longitude: Number.isFinite(Number(longitude)) ? Number(longitude) : null,
+      address:
+        locationLike.address ??
+        locationLike.formattedAddress ??
+        fallbackAddress ??
+        null,
+      formattedAddress:
+        locationLike.formattedAddress ??
+        locationLike.address ??
+        fallbackAddress ??
+        null,
+    };
+  }, []);
+
+  const normalizeIncomingOrderPayload = useCallback((payload = {}) => {
+    const deliveryAddressObject =
+      payload?.deliveryAddress && typeof payload.deliveryAddress === 'object'
+        ? payload.deliveryAddress
+        : null;
+
+    const fallbackDeliveryAddress =
+      typeof payload?.deliveryAddress === 'string'
+        ? payload.deliveryAddress
+        : null;
+
+    return {
+      ...payload,
+      mongoId: payload?.mongoId || payload?.orderMongoId || payload?._id,
+      orderMongoId: payload?.orderMongoId || payload?.mongoId || payload?._id,
+      orderId: payload?.orderId,
+      restaurantName:
+        payload?.restaurantName ||
+        payload?.restaurant?.name ||
+        payload?.restaurantId?.name,
+      restaurantAddress:
+        payload?.restaurantAddress ||
+        payload?.restaurant?.address ||
+        payload?.restaurantLocation?.address ||
+        payload?.restaurantLocation?.formattedAddress,
+      restaurantLocation: normalizeGeoLocation(
+        payload?.restaurantLocation ||
+          payload?.restaurant?.location ||
+          payload?.restaurantId?.location,
+        payload?.restaurantAddress ||
+          payload?.restaurant?.address ||
+          payload?.restaurantName,
+      ),
+      customerName:
+        payload?.customerName ||
+        payload?.customer?.name ||
+        payload?.userId?.name,
+      customerPhone:
+        payload?.customerPhone ||
+        payload?.customer?.phone ||
+        payload?.userPhone ||
+        payload?.userId?.phone,
+      customerLocation: normalizeGeoLocation(
+        payload?.customerLocation || deliveryAddressObject?.location,
+        deliveryAddressObject?.formattedAddress ||
+          deliveryAddressObject?.address ||
+          fallbackDeliveryAddress,
+      ),
+      deliveryAddress: deliveryAddressObject
+        ? {
+            ...deliveryAddressObject,
+            location: normalizeGeoLocation(
+              deliveryAddressObject?.location,
+              deliveryAddressObject?.formattedAddress ||
+                deliveryAddressObject?.address,
+            ),
+          }
+        : payload?.deliveryAddress,
+      total:
+        payload?.total ||
+        payload?.totalAmount ||
+        payload?.pricing?.total,
+      pickupDistance:
+        payload?.pickupDistance ||
+        (typeof payload?.distance === 'number'
+          ? `${payload.distance.toFixed(2)} km`
+          : payload?.distance),
+    };
+  }, [normalizeGeoLocation]);
+
   const playNotificationSound = useCallback(() => {
     try {
       // Get current selected sound preference from localStorage
@@ -399,39 +514,35 @@ export const useDeliveryNotifications = () => {
 
     socketRef.current.on('NEW_ORDER_ASSIGNMENT', (assignmentData) => {
       console.log('ðŸ“¦ New order assignment received via socket:', assignmentData);
-      setNewOrder({
-        ...assignmentData,
-        orderMongoId: assignmentData?.orderMongoId || assignmentData?._id,
-        orderId: assignmentData?.orderId,
-        restaurantName: assignmentData?.restaurantName || assignmentData?.restaurant?.name,
-        restaurantLocation:
-          assignmentData?.restaurantLocation ||
-          assignmentData?.restaurant?.location,
-        restaurantAddress:
-          assignmentData?.restaurantAddress ||
-          assignmentData?.restaurant?.address,
-        customerName: assignmentData?.customerName || assignmentData?.customer?.name,
-        customerPhone: assignmentData?.customerPhone || assignmentData?.customer?.phone,
-        total: assignmentData?.total || assignmentData?.totalAmount || assignmentData?.pricing?.total,
-        pickupDistance:
-          assignmentData?.pickupDistance ||
-          (typeof assignmentData?.distance === 'number'
-            ? `${assignmentData.distance.toFixed(2)} km`
-            : assignmentData?.distance),
-      });
+      const assignmentIds = normalizeOrderIds(assignmentData || {});
+      if (isAnyOrderIdDismissed(assignmentIds)) {
+        console.log('Ignoring dismissed order assignment:', assignmentIds);
+        return;
+      }
+      setNewOrder(normalizeIncomingOrderPayload(assignmentData));
       playNotificationSound();
     });
 
     socketRef.current.on('new_order', (orderData) => {
       console.log('📦 New order received via socket:', orderData);
-      setNewOrder(orderData);
+      const orderIds = normalizeOrderIds(orderData || {});
+      if (isAnyOrderIdDismissed(orderIds)) {
+        console.log('Ignoring dismissed broadcast order:', orderIds);
+        return;
+      }
+      setNewOrder(normalizeIncomingOrderPayload(orderData));
       playNotificationSound();
     });
 
     // New order available for ALL delivery boys - show in UI so it appears in available orders list in real time
     socketRef.current.on('new_order_available', (orderData) => {
       console.log('📦 New order available (showing in UI):', orderData?.orderId || orderData?.orderMongoId, 'phase:', orderData?.phase);
-      setNewOrder(orderData);
+      const orderIds = normalizeOrderIds(orderData || {});
+      if (isAnyOrderIdDismissed(orderIds)) {
+        console.log('Ignoring dismissed available order:', orderIds);
+        return;
+      }
+      setNewOrder(normalizeIncomingOrderPayload(orderData));
       playNotificationSound();
     });
 
@@ -540,7 +651,15 @@ export const useDeliveryNotifications = () => {
         socketRef.current = null;
       }
     };
-  }, [deliveryPartnerId, playNotificationSound, stopNotificationSound]);
+  }, [
+    deliveryPartnerId,
+    isAnyOrderIdDismissed,
+    normalizeGeoLocation,
+    normalizeIncomingOrderPayload,
+    normalizeOrderIds,
+    playNotificationSound,
+    stopNotificationSound,
+  ]);
 
   useEffect(() => {
     if (!newOrder) return;

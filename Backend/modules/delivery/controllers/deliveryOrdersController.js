@@ -150,6 +150,96 @@ function sanitizeOrderForDelivery(order) {
   };
 }
 
+function getGeoPointCoordinates(point) {
+  const coordinates = point?.coordinates || [];
+  const latitude = Number(point?.latitude ?? coordinates[1]);
+  const longitude = Number(point?.longitude ?? coordinates[0]);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return { latitude, longitude };
+}
+
+function formatDistanceKm(distanceKm) {
+  return Number.isFinite(Number(distanceKm)) && Number(distanceKm) > 0
+    ? `${Number(distanceKm).toFixed(2)} km`
+    : null;
+}
+
+async function calculateExactRouteSummary(origin, destination) {
+  const originCoords = getGeoPointCoordinates(origin);
+  const destinationCoords = getGeoPointCoordinates(destination);
+
+  if (!originCoords || !destinationCoords) {
+    return null;
+  }
+
+  const route = await calculateRoute(
+    originCoords.latitude,
+    originCoords.longitude,
+    destinationCoords.latitude,
+    destinationCoords.longitude,
+  );
+
+  if (!route?.success || !Number.isFinite(Number(route.distance))) {
+    return null;
+  }
+
+  return {
+    distanceKm: Math.round(Number(route.distance) * 100) / 100,
+    durationMinutes: Number.isFinite(Number(route.duration))
+      ? Math.max(1, Math.round(Number(route.duration)))
+      : null,
+    method: route.method || "unknown",
+  };
+}
+
+async function calculateDeliveryEarningsSummary(deliveryDistanceKm) {
+  try {
+    const commissionResult = await DeliveryBoyCommission.calculateCommission(
+      Number.isFinite(Number(deliveryDistanceKm)) ? Number(deliveryDistanceKm) : 0,
+    );
+
+    const breakdown = commissionResult?.breakdown || {};
+    const rule = commissionResult?.rule || {};
+    const normalizedDistance =
+      Number.isFinite(Number(deliveryDistanceKm)) && Number(deliveryDistanceKm) > 0
+        ? Math.round(Number(deliveryDistanceKm) * 100) / 100
+        : 0;
+    const totalEarning =
+      normalizedDistance <= 0
+        ? Number(breakdown.basePayout || 0)
+        : Number(commissionResult?.commission || 0);
+
+    return {
+      basePayout: Math.round(Number(breakdown.basePayout || 0) * 100) / 100,
+      distance: normalizedDistance,
+      commissionPerKm:
+        Math.round(Number(breakdown.commissionPerKm || 0) * 100) / 100,
+      distanceCommission:
+        Math.round(Number(breakdown.distanceCommission || 0) * 100) / 100,
+      totalEarning: Math.round(totalEarning * 100) / 100,
+      breakdown: {
+        basePayout: Math.round(Number(breakdown.basePayout || 0) * 100) / 100,
+        distance: normalizedDistance,
+        commissionPerKm:
+          Math.round(Number(breakdown.commissionPerKm || 0) * 100) / 100,
+        distanceCommission:
+          Math.round(Number(breakdown.distanceCommission || 0) * 100) / 100,
+        minDistance: Number(rule.minDistance || 0),
+        maxDistance: rule.maxDistance == null ? null : Number(rule.maxDistance),
+      },
+      minDistance: Number(rule.minDistance || 0),
+      maxDistance: rule.maxDistance == null ? null : Number(rule.maxDistance),
+    };
+  } catch (error) {
+    logger.warn(`Failed to calculate exact delivery earnings: ${error.message}`);
+    return null;
+  }
+}
+
 /**
  * Get Delivery Partner Orders
  * GET /api/delivery/orders
@@ -396,9 +486,48 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
         /* ignore */
       }
     }
+    const deliveryPartner = await Delivery.findById(delivery._id)
+      .select("availability.currentLocation")
+      .lean();
+    const pickupRoute = await calculateExactRouteSummary(
+      deliveryPartner?.availability?.currentLocation,
+      order?.restaurantId?.location,
+    );
+    const deliveryRoute = await calculateExactRouteSummary(
+      order?.restaurantId?.location,
+      order?.address?.location,
+    );
+    const estimatedEarnings = await calculateDeliveryEarningsSummary(
+      deliveryRoute?.distanceKm,
+    );
+
     const orderWithPayment = sanitizeOrderForDelivery({
       ...order,
       paymentMethod,
+      pickupDistance:
+        formatDistanceKm(pickupRoute?.distanceKm) ||
+        order?.pickupDistance ||
+        order?.assignmentInfo?.pickupDistance,
+      deliveryDistance:
+        formatDistanceKm(deliveryRoute?.distanceKm) ||
+        order?.deliveryDistance ||
+        order?.assignmentInfo?.deliveryDistance,
+      assignmentInfo: {
+        ...(order.assignmentInfo || {}),
+        pickupDistance:
+          formatDistanceKm(pickupRoute?.distanceKm) ||
+          order?.assignmentInfo?.pickupDistance ||
+          null,
+        pickupDurationMinutes: pickupRoute?.durationMinutes ?? null,
+        pickupRouteMethod: pickupRoute?.method || null,
+        deliveryDistance:
+          formatDistanceKm(deliveryRoute?.distanceKm) ||
+          order?.assignmentInfo?.deliveryDistance ||
+          null,
+        deliveryDurationMinutes: deliveryRoute?.durationMinutes ?? null,
+        deliveryRouteMethod: deliveryRoute?.method || null,
+      },
+      estimatedEarnings: estimatedEarnings || order?.estimatedEarnings || null,
     });
 
     return successResponse(res, 200, "Order details retrieved successfully", {
