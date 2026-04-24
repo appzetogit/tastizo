@@ -918,11 +918,6 @@ Order again from this restaurant in the ${companyName} app.`
         )}
       </div>
 
-      {/* Footer Branding */}
-      <div className="flex justify-center mt-8 mb-4">
-        <h1 className="text-4xl font-black text-gray-200 tracking-tighter italic">appzeto</h1>
-      </div>
-
       {/* Rating & Feedback Modal */}
       {ratingModal.open && ratingModal.order && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200">

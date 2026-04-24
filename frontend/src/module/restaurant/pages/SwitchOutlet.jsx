@@ -43,6 +43,16 @@ function buildOutletsFromRestaurant(restaurant) {
   ]
 }
 
+function getStoredRestaurantOnlineStatus() {
+  try {
+    const savedStatus = localStorage.getItem("restaurant_online_status")
+    if (savedStatus == null) return null
+    return JSON.parse(savedStatus)
+  } catch {
+    return null
+  }
+}
+
 export default function SwitchOutlet() {
   const navigate = useNavigate()
   const [showOffline, setShowOffline] = useState(false)
@@ -64,7 +74,19 @@ export default function SwitchOutlet() {
         if (cancelled) return
         const data = res?.data?.data?.restaurant ?? res?.data?.restaurant
         if (data) {
-          setOutlets(buildOutletsFromRestaurant(data))
+          const builtOutlets = buildOutletsFromRestaurant(data)
+          const storedStatus = getStoredRestaurantOnlineStatus()
+
+          if (typeof storedStatus === "boolean") {
+            setOutlets(
+              builtOutlets.map((outlet) => ({
+                ...outlet,
+                status: storedStatus ? "online" : "offline",
+              })),
+            )
+          } else {
+            setOutlets(builtOutlets)
+          }
         } else {
           setOutlets([])
         }
@@ -165,26 +187,26 @@ export default function SwitchOutlet() {
   }
 
   const handleStatusToggle = async (outlet, nextChecked) => {
-    const prevStatus = outlet.status
     const nextStatus = nextChecked ? "online" : "offline"
+
     setOutlets((prev) =>
       prev.map((o) => (o.id === outlet.id ? { ...o, status: nextStatus } : o)),
     )
+
     try {
-      await restaurantAPI.updateDeliveryStatus(nextChecked)
       localStorage.setItem("restaurant_online_status", JSON.stringify(nextChecked))
       window.dispatchEvent(
         new CustomEvent("restaurantStatusChanged", {
           detail: { isOnline: nextChecked },
         }),
       )
+
+      await restaurantAPI.updateDeliveryStatus(nextChecked)
       toast.success(`Outlet marked ${nextChecked ? "online" : "offline"}`)
     } catch (error) {
-      setOutlets((prev) =>
-        prev.map((o) => (o.id === outlet.id ? { ...o, status: prevStatus } : o)),
-      )
+      console.error("Error updating outlet status in backend:", error)
       toast.error(
-        error?.response?.data?.message || "Failed to update outlet status. Please try again.",
+        error?.response?.data?.message || "Outlet status saved locally. Backend sync failed.",
       )
     }
   }

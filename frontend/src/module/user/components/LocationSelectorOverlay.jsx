@@ -2990,10 +2990,36 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     navigateAfterClose("/")
   }
 
-  const buildLocationDataFromAddress = (address) => {
+  const getAddressId = (address) =>
+    address?.id || address?._id || address?.addressId || null
+
+  const getAddressCoordinates = (address) => {
     const coordinates = address?.location?.coordinates || []
-    const longitude = coordinates[0] ?? address?.longitude ?? null
-    const latitude = coordinates[1] ?? address?.latitude ?? null
+    const longitude =
+      coordinates[0] ??
+      address?.longitude ??
+      address?.location?.longitude ??
+      null
+    const latitude =
+      coordinates[1] ??
+      address?.latitude ??
+      address?.location?.latitude ??
+      null
+
+    return {
+      latitude:
+        latitude != null && Number.isFinite(Number(latitude))
+          ? Number(latitude)
+          : null,
+      longitude:
+        longitude != null && Number.isFinite(Number(longitude))
+          ? Number(longitude)
+          : null,
+    }
+  }
+
+  const buildLocationDataFromAddress = (address) => {
+    const { latitude, longitude } = getAddressCoordinates(address)
     const formattedAddress = cleanLocationDisplayLine(
       [
         address?.additionalDetails,
@@ -3031,27 +3057,37 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     try {
       const locationData = buildLocationDataFromAddress(address)
       const { longitude, latitude } = locationData
+      const addressId = getAddressId(address)
+      const hasValidCoords =
+        Number.isFinite(latitude) && Number.isFinite(longitude)
 
-      if (address?.id) {
-        await setDefaultAddress(address.id)
-        localStorage.setItem("selectedUserAddressId", address.id)
+      if (addressId) {
+        try {
+          await setDefaultAddress(addressId)
+          localStorage.setItem("selectedUserAddressId", addressId)
+        } catch (defaultError) {
+          console.warn("Failed to mark saved address as default:", defaultError)
+        }
       }
 
       localStorage.setItem("userLocationMode", "manual")
 
-      if (latitude && longitude) {
-        // Update location in backend
-        await userAPI.updateLocation({
-          latitude,
-          longitude,
-          address: locationData.address,
-          city: locationData.city,
-          state: locationData.state,
-          area: locationData.area,
-          postalCode: locationData.zipCode,
-          street: locationData.street,
-          formattedAddress: locationData.formattedAddress
-        })
+      if (hasValidCoords) {
+        try {
+          await userAPI.updateLocation({
+            latitude,
+            longitude,
+            address: locationData.address,
+            city: locationData.city,
+            state: locationData.state,
+            area: locationData.area,
+            postalCode: locationData.zipCode,
+            street: locationData.street,
+            formattedAddress: locationData.formattedAddress
+          })
+        } catch (locationUpdateError) {
+          console.warn("Failed to sync selected address to backend:", locationUpdateError)
+        }
       }
 
       // Update the location in localStorage with this address
@@ -3068,7 +3104,9 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       }
 
       // Update map position to show selected address
-      setMapPosition([latitude, longitude])
+      if (hasValidCoords) {
+        setMapPosition([latitude, longitude])
+      }
 
       // Update address form data with selected address
       setAddressFormData({
@@ -3083,7 +3121,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
       // Update Google Maps to show selected address, but do not re-persist from reverse geocode here.
       // The selected saved address is the source of truth and should never be downgraded to city-level.
-      if (googleMapRef.current && window.google && window.google.maps) {
+      if (hasValidCoords && googleMapRef.current && window.google && window.google.maps) {
         try {
           googleMapRef.current.panTo({ lat: latitude, lng: longitude })
           googleMapRef.current.setZoom(17)
@@ -3537,7 +3575,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                     const IconComponent = getAddressIcon(address)
                     return (
                       <div
-                        key={address.id}
+                        key={getAddressId(address) || `${address.label || "address"}-${index}`}
                         className="px-4 sm:px-6 lg:px-8"
                         style={{ animation: `slideUp 0.3s ease-out ${0.25 + index * 0.05}s both` }}
                       >
@@ -3545,6 +3583,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                           className={`py-4 ${index !== 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''}`}
                         >
                           <button
+                            type="button"
                             onClick={() => handleSelectSavedAddress(address)}
                             className="w-full flex items-start gap-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors p-2 -m-2"
                           >

@@ -56,6 +56,52 @@ const formatFullAddress = (address) => {
   return ""
 }
 
+const parseTimeToMinutes = (timeValue) => {
+  if (!timeValue) return null
+  const normalized = String(timeValue).trim().toLowerCase()
+  const match = normalized.match(/^(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?$/i)
+  if (!match) return null
+
+  let hours = parseInt(match[1], 10)
+  const minutes = parseInt(match[2] || "0", 10)
+  const meridiem = (match[3] || "").toLowerCase()
+
+  if (meridiem === "pm" && hours < 12) hours += 12
+  if (meridiem === "am" && hours === 12) hours = 0
+
+  return hours * 60 + minutes
+}
+
+const isRestaurantOpenNow = (openingTime, closingTime, openDays) => {
+  if (!openingTime || !closingTime) return null
+
+  const now = new Date()
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  const today = dayNames[now.getDay()]
+
+  if (Array.isArray(openDays) && openDays.length > 0) {
+    const normalizedDays = openDays
+      .map((day) => (typeof day === "string" ? day.trim().slice(0, 3) : ""))
+      .filter(Boolean)
+
+    if (normalizedDays.length > 0 && !normalizedDays.includes(today)) {
+      return false
+    }
+  }
+
+  const openMinutes = parseTimeToMinutes(openingTime)
+  const closeMinutes = parseTimeToMinutes(closingTime)
+  if (openMinutes == null || closeMinutes == null) return null
+
+  const currentMinutes = now.getHours() * 60 + now.getMinutes()
+
+  if (closeMinutes <= openMinutes) {
+    return currentMinutes >= openMinutes || currentMinutes < closeMinutes
+  }
+
+  return currentMinutes >= openMinutes && currentMinutes < closeMinutes
+}
+
 export default function Cart() {
   const navigate = useNavigate()
 
@@ -739,6 +785,29 @@ export default function Cart() {
 
   // Restaurant name from data or cart
   const restaurantName = restaurantData?.name || cart[0]?.restaurant || "Restaurant"
+  const restaurantOpeningTime =
+    restaurantData?.deliveryTimings?.openingTime ||
+    restaurantData?.onboarding?.step2?.deliveryTimings?.openingTime ||
+    restaurantData?.openingTime ||
+    restaurantData?.diningConfig?.basicDetails?.openingTime ||
+    ""
+  const restaurantClosingTime =
+    restaurantData?.deliveryTimings?.closingTime ||
+    restaurantData?.onboarding?.step2?.deliveryTimings?.closingTime ||
+    restaurantData?.closingTime ||
+    restaurantData?.diningConfig?.basicDetails?.closingTime ||
+    ""
+  const restaurantOpenDays =
+    restaurantData?.openDays ||
+    restaurantData?.onboarding?.step2?.openDays ||
+    []
+  const restaurantScheduleOpen = isRestaurantOpenNow(
+    restaurantOpeningTime,
+    restaurantClosingTime,
+    restaurantOpenDays,
+  )
+  const isRestaurantOffline = restaurantData?.isAcceptingOrders === false
+  const isRestaurantUnavailable = isRestaurantOffline || restaurantScheduleOpen === false
 
   // Handler to select address by label (used in address picker list to switch location)
   const handleSelectAddressByLabel = async (label) => {
@@ -918,6 +987,15 @@ export default function Cart() {
   const handlePlaceOrder = async () => {
     if (!isModuleAuthenticated("user")) {
       navigate("/user/auth/sign-in", { state: { from: "/user/cart" } })
+      return
+    }
+
+    if (isRestaurantUnavailable) {
+      toast.error(
+        isRestaurantOffline
+          ? "This restaurant is offline right now."
+          : "This restaurant is currently closed.",
+      )
       return
     }
 
@@ -2138,10 +2216,22 @@ export default function Cart() {
                 </div>
               </div>
 
+              {isRestaurantUnavailable && (
+                <div className="mb-3 rounded-lg bg-black px-4 py-3 text-center text-sm font-semibold text-white">
+                  {isRestaurantOffline
+                    ? `${restaurantName} is offline right now`
+                    : `${restaurantName} is currently closed`}
+                </div>
+              )}
+
               <Button
                 size="lg"
                 onClick={handlePlaceOrder}
-                disabled={isPlacingOrder || (selectedPaymentMethod === "wallet" && walletBalance < total)}
+                disabled={
+                  isPlacingOrder ||
+                  isRestaurantUnavailable ||
+                  (selectedPaymentMethod === "wallet" && walletBalance < total)
+                }
                 className="w-full bg-[#2A9C64] hover:bg-[#238654] dark:bg-[#2A9C64] dark:hover:bg-[#238654] text-white px-6 md:px-10 h-14 md:h-16 rounded-lg md:rounded-xl text-base md:text-lg font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {(selectedPaymentMethod === "razorpay" || selectedPaymentMethod === "wallet") && (
@@ -2153,9 +2243,13 @@ export default function Cart() {
                 <span className="font-bold text-base md:text-lg">
                   {isPlacingOrder
                     ? "Processing..."
+                    : isRestaurantUnavailable
+                      ? isRestaurantOffline
+                        ? "Restaurant Offline"
+                        : "Restaurant Closed"
                     : !isModuleAuthenticated("user")
                       ? "Login to Continue"
-                    : selectedPaymentMethod === "razorpay"
+                      : selectedPaymentMethod === "razorpay"
                       ? "Select Payment"
                       : selectedPaymentMethod === "wallet"
                         ? walletBalance >= total

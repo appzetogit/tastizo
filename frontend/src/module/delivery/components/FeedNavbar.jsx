@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Bell, HelpCircle, ArrowRight, Phone, Ambulance, AlertTriangle, Shield, ShieldCheck } from "lucide-react";
+import { Bell, HelpCircle, ArrowRight, Package, Phone, Ambulance, AlertTriangle, Shield, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { deliveryAPI } from "@/lib/api";
 import { useCompanyName } from "@/lib/hooks/useCompanyName";
@@ -240,6 +240,106 @@ export default function FeedNavbar({ className = "" }) {
   const [showEmergencyPopup, setShowEmergencyPopup] = useState(false);
   const [showHelpPopup, setShowHelpPopup] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [hasAssignedOrder, setHasAssignedOrder] = useState(false);
+  const [assignedOrderId, setAssignedOrderId] = useState(null);
+
+  const isAcceptedAssignedOrder = React.useCallback((order) => {
+    if (!order) return false;
+
+    const orderId = order?.orderId || order?._id || order?.id;
+    const orderStatus = String(
+      order?.orderStatus || order?.status || ""
+    ).toLowerCase();
+    const deliveryPhase = String(
+      order?.deliveryPhase || order?.deliveryState?.currentPhase || ""
+    ).toLowerCase();
+    const deliveryStateStatus = String(
+      order?.deliveryState?.status || ""
+    ).toLowerCase();
+
+    const isCompleted =
+      !orderId ||
+      orderStatus === "delivered" ||
+      orderStatus === "completed" ||
+      orderStatus === "cancelled" ||
+      deliveryPhase === "completed" ||
+      deliveryPhase === "delivered" ||
+      deliveryStateStatus === "delivered" ||
+      deliveryStateStatus === "completed";
+
+    if (isCompleted) return false;
+
+    return (
+      deliveryStateStatus === "accepted" ||
+      deliveryStateStatus === "reached_pickup" ||
+      deliveryStateStatus === "order_confirmed" ||
+      deliveryPhase === "en_route_to_pickup" ||
+      deliveryPhase === "at_pickup" ||
+      deliveryPhase === "en_route_to_delivery" ||
+      deliveryPhase === "at_delivery" ||
+      String(order?.assignmentStatus || "").toLowerCase() === "accepted"
+    );
+  }, []);
+
+  const syncAssignedOrderState = React.useCallback(async () => {
+    try {
+      const savedOrder = localStorage.getItem("deliveryActiveOrder");
+      if (savedOrder) {
+        const parsed = JSON.parse(savedOrder);
+        const restaurantInfo = parsed?.restaurantInfo || {};
+        const orderId = parsed?.orderId || restaurantInfo?.orderId || restaurantInfo?.id;
+        const orderStatus = String(
+          restaurantInfo?.orderStatus || restaurantInfo?.status || ""
+        ).toLowerCase();
+        const deliveryPhase = String(
+          restaurantInfo?.deliveryPhase || restaurantInfo?.deliveryState?.currentPhase || ""
+        ).toLowerCase();
+        const deliveryStateStatus = String(
+          restaurantInfo?.deliveryState?.status || ""
+        ).toLowerCase();
+
+        if (
+          isAcceptedAssignedOrder({
+            ...restaurantInfo,
+            orderId,
+            orderStatus,
+            deliveryPhase,
+            deliveryState: {
+              ...(restaurantInfo?.deliveryState || {}),
+              status: deliveryStateStatus,
+            },
+          })
+        ) {
+          setAssignedOrderId(orderId);
+          setHasAssignedOrder(true);
+          return;
+        }
+      }
+
+      const ordersResponse = await deliveryAPI.getOrders({
+        limit: 20,
+        page: 1,
+        includeDelivered: false,
+      });
+
+      const orders = ordersResponse?.data?.data?.orders || [];
+      const activeAssignedOrder = orders.find((order) => {
+        return isAcceptedAssignedOrder(order);
+      });
+
+      const backendOrderId =
+        activeAssignedOrder?.orderId ||
+        activeAssignedOrder?._id ||
+        null;
+
+      setAssignedOrderId(backendOrderId ? String(backendOrderId) : null);
+      setHasAssignedOrder(Boolean(backendOrderId));
+    } catch (error) {
+      console.warn("Failed to read assigned delivery order from storage:", error);
+      setAssignedOrderId(null);
+      setHasAssignedOrder(false);
+    }
+  }, [isAcceptedAssignedOrder]);
 
   const fetchUnreadNotifications = async () => {
     try {
@@ -261,6 +361,37 @@ export default function FeedNavbar({ className = "" }) {
       window.removeEventListener("deliveryNotificationReceived", handleUpdate);
     };
   }, []);
+
+  useEffect(() => {
+    syncAssignedOrderState();
+
+    const handleAssignedOrderUpdate = () => {
+      void syncAssignedOrderState();
+    };
+    const handleStorage = (event) => {
+      if (!event?.key || event.key === "deliveryActiveOrder") {
+        void syncAssignedOrderState();
+      }
+    };
+
+    void syncAssignedOrderState();
+    window.addEventListener("activeOrderUpdated", handleAssignedOrderUpdate);
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleAssignedOrderUpdate);
+
+    return () => {
+      window.removeEventListener("activeOrderUpdated", handleAssignedOrderUpdate);
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleAssignedOrderUpdate);
+    };
+  }, [syncAssignedOrderState]);
+
+  const handleAssignedOrderClick = () => {
+    navigate("/delivery");
+    window.dispatchEvent(new CustomEvent("openAssignedOrder", {
+      detail: { orderId: assignedOrderId }
+    }));
+  };
 
   // Fetch emergency help numbers
   useEffect(() => {
@@ -380,6 +511,19 @@ export default function FeedNavbar({ className = "" }) {
 
       {/* Right Icons */}
       <div className="flex items-center gap-3">
+        {hasAssignedOrder && (
+          <button
+            onClick={handleAssignedOrderClick}
+            className="h-10 px-3 rounded-full bg-green-50 border border-green-200 flex items-center justify-center gap-1.5 hover:bg-green-100 transition-colors"
+            title="Assigned Order"
+          >
+            <Package className="w-4 h-4 text-green-700" />
+            <span className="text-[11px] font-semibold text-green-700 whitespace-nowrap">
+              Assigned
+            </span>
+          </button>
+        )}
+
         {/* Notifications */}
         <button
           onClick={() => navigate("/delivery/notifications")}

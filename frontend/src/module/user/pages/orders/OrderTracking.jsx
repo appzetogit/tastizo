@@ -68,6 +68,97 @@ const getOrderTrackingStatus = (order) => {
 
 const isTerminalOrderStatus = (status) => status === "delivered" || status === "cancelled";
 
+const isOrderPickedUp = (order) => {
+  return Boolean(
+    order?.tracking?.outForDelivery?.status === true ||
+    order?.tracking?.out_for_delivery?.status === true ||
+    order?.status === "out_for_delivery" ||
+    order?.deliveryState?.currentPhase === "en_route_to_delivery" ||
+    order?.deliveryState?.currentPhase === "at_delivery" ||
+    order?.deliveryState?.status === "order_confirmed"
+  );
+};
+
+const toTitleCase = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const getDeliveryPartnerSnapshot = (deliveryPartner) => {
+  if (!deliveryPartner || typeof deliveryPartner !== "object") return null;
+
+  const profilePhoto =
+    deliveryPartner.profileImage?.url ||
+    deliveryPartner.profileImage ||
+    deliveryPartner.avatar ||
+    null;
+
+  return {
+    _id: deliveryPartner._id || null,
+    name: deliveryPartner.name || "Delivery Partner",
+    phone: deliveryPartner.phone || "",
+    email: deliveryPartner.email || "",
+    avatar: profilePhoto,
+    profilePhoto,
+    vehicleType: deliveryPartner.vehicle?.type || "",
+    vehicleNumber: deliveryPartner.vehicle?.number || "",
+    vehicleModel: deliveryPartner.vehicle?.model || "",
+  };
+};
+
+const mapApiOrderToTrackingOrder = (apiOrder, restaurantCoords, previousOrder = null) => ({
+  id: apiOrder.orderId || apiOrder._id,
+  mongoId: apiOrder._id,
+  restaurant: apiOrder.restaurantName || "Restaurant",
+  restaurantId: apiOrder.restaurantId || null,
+  restaurantImage:
+    apiOrder.restaurantId?.profileImage?.url ||
+    apiOrder.restaurantId?.profileImage ||
+    previousOrder?.restaurantImage ||
+    null,
+  restaurantPhone: resolveRestaurantPhone(apiOrder),
+  userId: apiOrder.userId || null,
+  userName: apiOrder.userName || apiOrder.userId?.name || apiOrder.userId?.fullName || "",
+  userPhone: apiOrder.userPhone || apiOrder.userId?.phone || "",
+  address: {
+    street: apiOrder.address?.street || "",
+    city: apiOrder.address?.city || "",
+    state: apiOrder.address?.state || "",
+    zipCode: apiOrder.address?.zipCode || "",
+    additionalDetails: apiOrder.address?.additionalDetails || "",
+    formattedAddress:
+      apiOrder.address?.formattedAddress ||
+      (apiOrder.address?.street && apiOrder.address?.city
+        ? `${apiOrder.address.street}${apiOrder.address.additionalDetails ? `, ${apiOrder.address.additionalDetails}` : ""}, ${apiOrder.address.city}${apiOrder.address.state ? `, ${apiOrder.address.state}` : ""}${apiOrder.address.zipCode ? ` ${apiOrder.address.zipCode}` : ""}`
+        : apiOrder.address?.city || ""),
+    coordinates: apiOrder.address?.location?.coordinates || null
+  },
+  restaurantLocation: restaurantCoords
+    ? { coordinates: restaurantCoords }
+    : previousOrder?.restaurantLocation || { coordinates: null },
+  items: apiOrder.items?.map(item => ({
+    name: item.name,
+    quantity: item.quantity,
+    price: item.price
+  })) || [],
+  total: apiOrder.pricing?.total || 0,
+  paymentMethod: apiOrder.payment?.method || apiOrder.paymentMethod || "",
+  status: apiOrder.status || "pending",
+  deliveryPartner: getDeliveryPartnerSnapshot(apiOrder.deliveryPartnerId),
+  deliveryPartnerId: apiOrder.deliveryPartnerId?._id || apiOrder.deliveryPartnerId || apiOrder.assignmentInfo?.deliveryPartnerId || null,
+  assignmentInfo: apiOrder.assignmentInfo || null,
+  tracking: apiOrder.tracking || {},
+  deliveryState: apiOrder.deliveryState || null,
+  deliveryInstructions: apiOrder.deliveryInstructions || "",
+  deliveryAddress: apiOrder.deliveryAddress || undefined,
+  phoneNumber: apiOrder.phoneNumber || undefined,
+  deliveryVerification: apiOrder.deliveryVerification || null,
+  review: apiOrder.review || null,
+  rating: apiOrder.rating || apiOrder.review?.rating || null,
+  hasReview: Boolean(apiOrder.hasReview || apiOrder.review?.rating || apiOrder.rating)
+});
+
 // Real Delivery Map Component with User Live Location
 const DeliveryMap = ({ orderId, order, isVisible }) => {
   const { location: userLocation } = useUserLocation() // Get user's live location
@@ -122,6 +213,12 @@ const DeliveryMap = ({ orderId, order, isVisible }) => {
   };
 
   const getCustomerCoords = () => {
+    if (order?.address?.location?.coordinates) {
+      return {
+        lat: order.address.location.coordinates[1],
+        lng: order.address.location.coordinates[0]
+      };
+    }
     if (order?.address?.coordinates) {
       return {
         lat: order.address.coordinates[1],
@@ -295,6 +392,7 @@ export default function OrderTracking() {
 
             const transformedOrder = {
               ...apiOrder,
+              deliveryPartner: getDeliveryPartnerSnapshot(apiOrder.deliveryPartnerId),
               restaurantLocation: restaurantCoords ? {
                 coordinates: restaurantCoords
               } : order.restaurantLocation,
@@ -402,54 +500,7 @@ export default function OrderTracking() {
           console.log('📍 Customer coordinates:', apiOrder.address?.location?.coordinates);
 
           // Transform API order to match component structure
-          const transformedOrder = {
-            id: apiOrder.orderId || apiOrder._id,
-            mongoId: apiOrder._id,
-            restaurant: apiOrder.restaurantName || 'Restaurant',
-            restaurantId: apiOrder.restaurantId || null, // Include restaurantId for location access
-            restaurantPhone: resolveRestaurantPhone(apiOrder),
-            userId: apiOrder.userId || null, // Include user data for phone number
-            userName: apiOrder.userName || apiOrder.userId?.name || apiOrder.userId?.fullName || '',
-            userPhone: apiOrder.userPhone || apiOrder.userId?.phone || '',
-            address: {
-              street: apiOrder.address?.street || '',
-              city: apiOrder.address?.city || '',
-              state: apiOrder.address?.state || '',
-              zipCode: apiOrder.address?.zipCode || '',
-              additionalDetails: apiOrder.address?.additionalDetails || '',
-              formattedAddress: apiOrder.address?.formattedAddress ||
-                (apiOrder.address?.street && apiOrder.address?.city
-                  ? `${apiOrder.address.street}${apiOrder.address.additionalDetails ? `, ${apiOrder.address.additionalDetails}` : ''}, ${apiOrder.address.city}${apiOrder.address.state ? `, ${apiOrder.address.state}` : ''}${apiOrder.address.zipCode ? ` ${apiOrder.address.zipCode}` : ''}`
-                  : apiOrder.address?.city || ''),
-              coordinates: apiOrder.address?.location?.coordinates || null
-            },
-            restaurantLocation: {
-              coordinates: restaurantCoords
-            },
-            items: apiOrder.items?.map(item => ({
-              name: item.name,
-              quantity: item.quantity,
-              price: item.price
-            })) || [],
-            total: apiOrder.pricing?.total || 0,
-            paymentMethod: apiOrder.payment?.method || apiOrder.paymentMethod || "",
-            status: apiOrder.status || 'pending',
-            deliveryPartner: apiOrder.deliveryPartnerId ? {
-              name: apiOrder.deliveryPartnerId.name || 'Delivery Partner',
-              avatar: null
-            } : null,
-            deliveryPartnerId: apiOrder.deliveryPartnerId?._id || apiOrder.deliveryPartnerId || apiOrder.assignmentInfo?.deliveryPartnerId || null,
-            assignmentInfo: apiOrder.assignmentInfo || null,
-            tracking: apiOrder.tracking || {},
-            deliveryState: apiOrder.deliveryState || null,
-            deliveryInstructions: apiOrder.deliveryInstructions || "",
-            deliveryAddress: apiOrder.deliveryAddress || undefined,
-            phoneNumber: apiOrder.phoneNumber || undefined,
-            deliveryVerification: apiOrder.deliveryVerification || null,
-            review: apiOrder.review || null,
-            rating: apiOrder.rating || apiOrder.review?.rating || null,
-            hasReview: Boolean(apiOrder.hasReview || apiOrder.review?.rating || apiOrder.rating)
-          }
+          const transformedOrder = mapApiOrderToTrackingOrder(apiOrder, restaurantCoords)
 
           setOrder(transformedOrder)
           setOrderStatus(getOrderTrackingStatus(apiOrder))
@@ -663,6 +714,15 @@ export default function OrderTracking() {
     window.location.href = `tel:${telPhone}`;
   };
 
+  const handleCallDeliveryPartner = () => {
+    const telPhone = normalizeTelPhone(order?.deliveryPartner?.phone);
+    if (!telPhone) {
+      toast.error("Delivery partner contact number not available");
+      return;
+    }
+    window.location.href = `tel:${telPhone}`;
+  };
+
   const handleOpenDeliveryInstructions = () => {
     setDeliveryInstructionsText(order?.deliveryInstructions ?? "");
     setShowDeliveryInstructionsDialog(true);
@@ -757,54 +817,7 @@ export default function OrderTracking() {
           }
         }
 
-        const transformedOrder = {
-          id: apiOrder.orderId || apiOrder._id,
-          mongoId: apiOrder._id,
-          restaurant: apiOrder.restaurantName || 'Restaurant',
-          restaurantId: apiOrder.restaurantId || null, // Include restaurantId for location access
-          restaurantPhone: resolveRestaurantPhone(apiOrder),
-          userId: apiOrder.userId || null, // Include user data for phone number
-          userName: apiOrder.userName || apiOrder.userId?.name || apiOrder.userId?.fullName || '',
-          userPhone: apiOrder.userPhone || apiOrder.userId?.phone || '',
-          address: {
-            street: apiOrder.address?.street || '',
-            city: apiOrder.address?.city || '',
-            state: apiOrder.address?.state || '',
-            zipCode: apiOrder.address?.zipCode || '',
-            additionalDetails: apiOrder.address?.additionalDetails || '',
-            formattedAddress: apiOrder.address?.formattedAddress ||
-              (apiOrder.address?.street && apiOrder.address?.city
-                ? `${apiOrder.address.street}${apiOrder.address.additionalDetails ? `, ${apiOrder.address.additionalDetails}` : ''}, ${apiOrder.address.city}${apiOrder.address.state ? `, ${apiOrder.address.state}` : ''}${apiOrder.address.zipCode ? ` ${apiOrder.address.zipCode}` : ''}`
-                : apiOrder.address?.city || ''),
-            coordinates: apiOrder.address?.location?.coordinates || null
-          },
-          restaurantLocation: {
-            coordinates: restaurantCoords
-          },
-          items: apiOrder.items?.map(item => ({
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price
-          })) || [],
-          total: apiOrder.pricing?.total || 0,
-          paymentMethod: apiOrder.payment?.method || apiOrder.paymentMethod || "",
-          status: apiOrder.status || 'pending',
-          deliveryPartner: apiOrder.deliveryPartnerId ? {
-            name: apiOrder.deliveryPartnerId.name || 'Delivery Partner',
-            avatar: null
-          } : null,
-          tracking: apiOrder.tracking || {},
-          deliveryPartnerId: apiOrder.deliveryPartnerId?._id || apiOrder.deliveryPartnerId || apiOrder.assignmentInfo?.deliveryPartnerId || null,
-          assignmentInfo: apiOrder.assignmentInfo || null,
-          deliveryState: apiOrder.deliveryState || null,
-          deliveryInstructions: apiOrder.deliveryInstructions || "",
-          deliveryAddress: apiOrder.deliveryAddress || undefined,
-          phoneNumber: apiOrder.phoneNumber || undefined,
-          deliveryVerification: apiOrder.deliveryVerification || null,
-          review: apiOrder.review || null,
-          rating: apiOrder.rating || apiOrder.review?.rating || null,
-          hasReview: Boolean(apiOrder.hasReview || apiOrder.review?.rating || apiOrder.rating)
-        }
+        const transformedOrder = mapApiOrderToTrackingOrder(apiOrder, restaurantCoords, order)
         setOrder(transformedOrder)
         setOrderStatus(getOrderTrackingStatus(apiOrder))
       }
@@ -879,6 +892,15 @@ export default function OrderTracking() {
   const shouldShowMap = order !== null && !isTerminalOrderStatus(orderStatus)
   const deliveryOtp = order?.deliveryVerification?.otp || ""
   const shouldShowDeliveryOtp = Boolean(deliveryOtp)
+  const hasAcceptedPickup = isOrderPickedUp(order)
+  const deliveryPartnerName = order?.deliveryPartner?.name || "Delivery Partner"
+  const deliveryPartnerPhone = order?.deliveryPartner?.phone || ""
+  const deliveryPartnerPhoneLabel = deliveryPartnerPhone || "Phone number not available"
+  const deliveryPartnerVehicleType = toTitleCase(order?.deliveryPartner?.vehicleType)
+  const deliveryPartnerVehicleNumber = order?.deliveryPartner?.vehicleNumber || ""
+  const deliveryPartnerMeta = [deliveryPartnerVehicleType, deliveryPartnerVehicleNumber].filter(Boolean).join(" • ")
+  const deliveryPartnerInitial = deliveryPartnerName.trim().charAt(0).toUpperCase() || "D"
+  const hasDeliveryPartnerCard = hasAcceptedPickup && Boolean(order?.deliveryPartner)
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#0a0a0a]">
@@ -1058,14 +1080,6 @@ export default function OrderTracking() {
 
         {/* Food Cooking Status - Show until delivery partner accepts pickup */}
         {(() => {
-          // Delivery partner has accepted / picked up only when out_for_delivery or tracking confirms (not when restaurant just marks 'ready')
-          const hasAcceptedPickup = order?.tracking?.outForDelivery?.status === true ||
-            order?.tracking?.out_for_delivery?.status === true ||
-            order?.status === 'out_for_delivery' ||
-            order?.deliveryState?.currentPhase === 'en_route_to_delivery' ||
-            order?.deliveryState?.currentPhase === 'at_delivery' ||
-            order?.deliveryState?.status === 'order_confirmed'
-
           // Show "Food is Cooking" until delivery partner accepts pickup
           if (['preparing', 'prepared'].includes(orderStatus) && !hasAcceptedPickup) {
             return (
@@ -1095,7 +1109,7 @@ export default function OrderTracking() {
 
         {/* Delivery Partner Safety */}
         <motion.button
-          className="w-full bg-white rounded-xl p-4 shadow-sm flex items-center gap-3"
+          className={`${orderStatus === 'delivered' ? 'hidden' : 'flex'} w-full bg-white rounded-xl p-4 shadow-sm items-center gap-3`}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
@@ -1110,7 +1124,7 @@ export default function OrderTracking() {
 
         {/* Delivery Details Banner */}
         <motion.div
-          className="bg-yellow-50 rounded-xl p-4 text-center"
+          className={`${orderStatus === 'delivered' ? 'hidden' : 'block'} bg-yellow-50 rounded-xl p-4 text-center`}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.65 }}
@@ -1155,82 +1169,112 @@ export default function OrderTracking() {
         )}
 
         {/* Contact & Address Section */}
-        <motion.div
-          className="bg-white rounded-xl shadow-sm overflow-hidden"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
-        >
-          <SectionItem
-            icon={Phone}
-            title={
-              order?.userName ||
-              order?.userId?.fullName ||
-              order?.userId?.name ||
-              profile?.fullName ||
-              profile?.name ||
-              'Customer'
-            }
-            subtitle={
-              order?.userPhone ||
-              order?.userId?.phone ||
-              profile?.phone ||
-              defaultAddress?.phone ||
-              'Phone number not available'
-            }
-            showArrow={false}
-          />
-          <SectionItem
-            icon={HomeIcon}
-            title="Delivery at Location"
-            subtitle={(() => {
-              // Priority 1: Use order address formattedAddress (live location address)
-              if (order?.address?.formattedAddress && order.address.formattedAddress !== "Select location") {
-                return order.address.formattedAddress
-              }
+        {orderStatus !== 'delivered' && (
+          <motion.div
+            className="overflow-hidden rounded-[28px] bg-white shadow-[0_18px_45px_rgba(15,23,42,0.08)] ring-1 ring-emerald-100/70"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.7 }}
+          >
+            {hasDeliveryPartnerCard ? (
+              <div className="border-b border-dashed border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-lime-50 p-5">
+                <div className="mb-4 flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-700">
+                      On the way
+                    </p>
+                    <p className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
+                      {deliveryPartnerName}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Your delivery partner is heading to your location
+                    </p>
+                  </div>
+                  <motion.button
+                    type="button"
+                    onClick={handleCallDeliveryPartner}
+                    className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-emerald-600 shadow-lg shadow-emerald-600/20"
+                    whileTap={{ scale: 0.92 }}
+                  >
+                    <Phone className="h-5 w-5 text-white" />
+                  </motion.button>
+                </div>
 
-              // Priority 2: Build full address from order address parts
-              if (order?.address) {
-                const orderAddressParts = []
-                if (order.address.street) orderAddressParts.push(order.address.street)
-                if (order.address.additionalDetails) orderAddressParts.push(order.address.additionalDetails)
-                if (order.address.city) orderAddressParts.push(order.address.city)
-                if (order.address.state) orderAddressParts.push(order.address.state)
-                if (order.address.zipCode) orderAddressParts.push(order.address.zipCode)
-                if (orderAddressParts.length > 0) {
-                  return orderAddressParts.join(', ')
+                <div className="flex items-center gap-4">
+                  <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-2xl bg-emerald-100 text-emerald-800 ring-4 ring-white">
+                    {order?.deliveryPartner?.profilePhoto ? (
+                      <img
+                        src={order.deliveryPartner.profilePhoto}
+                        alt={deliveryPartnerName}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-lg font-semibold">
+                        {deliveryPartnerInitial}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
+                        {deliveryPartnerVehicleType || "Vehicle pending"}
+                      </span>
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
+                        {deliveryPartnerVehicleNumber || "Number pending"}
+                      </span>
+                    </div>
+                    <p className="truncate text-sm font-medium text-slate-600">
+                      {deliveryPartnerPhoneLabel}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <SectionItem
+                icon={Phone}
+                title={
+                  order?.userName ||
+                  order?.userId?.fullName ||
+                  order?.userId?.name ||
+                  profile?.fullName ||
+                  profile?.name ||
+                  'Customer'
                 }
-              }
-
-              // Priority 3: Use defaultAddress formattedAddress (live location address)
-              if (defaultAddress?.formattedAddress && defaultAddress.formattedAddress !== "Select location") {
-                return defaultAddress.formattedAddress
-              }
-
-              // Priority 4: Build full address from defaultAddress parts
-              if (defaultAddress) {
-                const defaultAddressParts = []
-                if (defaultAddress.street) defaultAddressParts.push(defaultAddress.street)
-                if (defaultAddress.additionalDetails) defaultAddressParts.push(defaultAddress.additionalDetails)
-                if (defaultAddress.city) defaultAddressParts.push(defaultAddress.city)
-                if (defaultAddress.state) defaultAddressParts.push(defaultAddress.state)
-                if (defaultAddress.zipCode) defaultAddressParts.push(defaultAddress.zipCode)
-                if (defaultAddressParts.length > 0) {
-                  return defaultAddressParts.join(', ')
+                subtitle={
+                  order?.userPhone ||
+                  order?.userId?.phone ||
+                  profile?.phone ||
+                  defaultAddress?.phone ||
+                  'Phone number not available'
                 }
-              }
-
-              return 'Add delivery address'
-            })()}
-            showArrow={false}
-          />
-          <SectionItem
-            icon={MessageSquare}
-            title="Add delivery instructions"
-            subtitle={order?.deliveryInstructions ? order.deliveryInstructions : ""}
-            onClick={handleOpenDeliveryInstructions}
-          />
-        </motion.div>
+                showArrow={false}
+              />
+            )}
+            <motion.button
+              type="button"
+              onClick={handleOpenDeliveryInstructions}
+              className="w-full p-4 text-left transition-colors hover:bg-emerald-50/60"
+              whileTap={{ scale: 0.99 }}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
+                  <MessageSquare className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-base font-semibold text-slate-900">Delivery instructions</p>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      {order?.deliveryInstructions ? "Saved" : "Optional"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    {order?.deliveryInstructions || "Add gate code, landmark, floor, or any note the rider should follow."}
+                  </p>
+                </div>
+              </div>
+            </motion.button>
+          </motion.div>
+        )}
 
         {/* Chat with delivery partner */}
         {orderStatus !== 'delivered' && hasAssignedDeliveryPartner(order) && (
@@ -1261,7 +1305,14 @@ export default function OrderTracking() {
           transition={{ delay: 0.75 }}
         >
           <div className="flex items-center gap-3 p-4 border-b border-dashed border-gray-200">
-            <div className="w-12 h-12 rounded-full bg-orange-100 overflow-hidden flex items-center justify-center">
+            <div className="relative w-12 h-12 rounded-full bg-orange-100 overflow-hidden flex items-center justify-center">
+              {order?.restaurantImage && (
+                <img
+                  src={order.restaurantImage}
+                  alt={order.restaurant || "Restaurant"}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              )}
               <span className="text-2xl">🍔</span>
             </div>
             <div className="flex-1">
@@ -1322,21 +1373,24 @@ export default function OrderTracking() {
 
       {/* Delivery Instructions Dialog */}
       <Dialog open={showDeliveryInstructionsDialog} onOpenChange={setShowDeliveryInstructionsDialog}>
-        <DialogContent className="sm:max-w-xl w-[95%] max-w-[600px]">
+        <DialogContent className="w-[95%] max-w-[600px] overflow-hidden rounded-[28px] border-0 bg-white p-0 shadow-[0_24px_80px_rgba(15,23,42,0.22)] sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-gray-900">
-              Add delivery instructions
+            <DialogTitle className="bg-gradient-to-r from-emerald-600 to-green-600 px-6 py-5 text-xl font-bold text-white">
+              Delivery instructions
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-5 py-4 px-2">
-            <p className="text-sm text-gray-500">
-              Add notes for the delivery partner (e.g. gate code, landmark, leave at door).
+          <div className="space-y-5 px-6 py-6">
+            <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-900">
+              Add a short note the rider can follow at drop-off, like gate number, landmark, floor, or whether they should call on arrival.
+            </div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+              Visible to your delivery partner
             </p>
             <Textarea
               value={deliveryInstructionsText}
               onChange={(e) => setDeliveryInstructionsText(e.target.value)}
               placeholder="e.g. Leave at the security desk, Call when you arrive"
-              className="w-full min-h-[100px] resize-none border-2 border-gray-300 rounded-lg px-4 py-3 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none transition-colors disabled:bg-gray-100"
+              className="min-h-[136px] w-full resize-none rounded-3xl border-2 border-amber-300 bg-amber-50/30 px-5 py-4 text-sm leading-6 text-slate-700 shadow-inner shadow-amber-100 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 focus:outline-none disabled:bg-gray-100"
               disabled={isSavingInstructions}
             />
             <div className="flex gap-3 pt-2">
@@ -1344,14 +1398,14 @@ export default function OrderTracking() {
                 variant="outline"
                 onClick={() => setShowDeliveryInstructionsDialog(false)}
                 disabled={isSavingInstructions}
-                className="flex-1"
+                className="h-12 flex-1 rounded-2xl border-slate-200 text-slate-700"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleSaveDeliveryInstructions}
                 disabled={isSavingInstructions}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                className="h-12 flex-1 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700"
               >
                 {isSavingInstructions ? (
                   <>

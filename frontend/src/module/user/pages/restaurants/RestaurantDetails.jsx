@@ -46,6 +46,52 @@ import { getCompanyNameAsync } from "@/lib/utils/businessSettings"
 import { shareWithFallback } from "@/lib/utils/shareBridge"
 import { isModuleAuthenticated } from "@/lib/utils/auth"
 
+function parseTimeToMinutes(timeValue) {
+  if (!timeValue) return null
+  const normalized = String(timeValue).trim().toLowerCase()
+  const match = normalized.match(/^(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?$/i)
+  if (!match) return null
+
+  let hours = parseInt(match[1], 10)
+  const minutes = parseInt(match[2] || "0", 10)
+  const meridiem = (match[3] || "").toLowerCase()
+
+  if (meridiem === "pm" && hours < 12) hours += 12
+  if (meridiem === "am" && hours === 12) hours = 0
+
+  return hours * 60 + minutes
+}
+
+function isRestaurantOpenNow(openingTime, closingTime, openDays) {
+  if (!openingTime || !closingTime) return null
+
+  const now = new Date()
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  const today = dayNames[now.getDay()]
+
+  if (Array.isArray(openDays) && openDays.length > 0) {
+    const normalizedDays = openDays
+      .map((day) => (typeof day === "string" ? day.trim().slice(0, 3) : ""))
+      .filter(Boolean)
+
+    if (normalizedDays.length > 0 && !normalizedDays.includes(today)) {
+      return false
+    }
+  }
+
+  const openMinutes = parseTimeToMinutes(openingTime)
+  const closeMinutes = parseTimeToMinutes(closingTime)
+  if (openMinutes == null || closeMinutes == null) return null
+
+  const currentMinutes = now.getHours() * 60 + now.getMinutes()
+
+  if (closeMinutes <= openMinutes) {
+    return currentMinutes >= openMinutes || currentMinutes < closeMinutes
+  }
+
+  return currentMinutes >= openMinutes && currentMinutes < closeMinutes
+}
+
 
 
 export default function RestaurantDetails() {
@@ -184,6 +230,21 @@ export default function RestaurantDetails() {
             images: apiRestaurant.images?.length > 0 ? apiRestaurant.images : ["https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800"],
             offers: apiRestaurant.offers || [],
             restaurantId: apiRestaurant._id || apiRestaurant.id,
+            isAcceptingOrders: apiRestaurant.isAcceptingOrders !== false,
+            openingTime:
+              apiRestaurant.deliveryTimings?.openingTime ||
+              apiRestaurant.onboarding?.step2?.deliveryTimings?.openingTime ||
+              apiRestaurant.diningConfig?.basicDetails?.openingTime ||
+              "",
+            closingTime:
+              apiRestaurant.deliveryTimings?.closingTime ||
+              apiRestaurant.onboarding?.step2?.deliveryTimings?.closingTime ||
+              apiRestaurant.diningConfig?.basicDetails?.closingTime ||
+              "",
+            openDays:
+              apiRestaurant.openDays ||
+              apiRestaurant.onboarding?.step2?.openDays ||
+              [],
           }
 
           const restaurantId = baseData.id
@@ -385,6 +446,15 @@ export default function RestaurantDetails() {
     if (isOutOfService) {
       toast.error('You are outside the service zone. Please select a location within the service area.');
       return;
+    }
+
+    if (isRestaurantUnavailable) {
+      toast.error(
+        isRestaurantOffline
+          ? 'This restaurant is offline right now.'
+          : 'This restaurant is currently closed.',
+      )
+      return
     }
 
     // If item has variations: add opens global variant picker (same on every page)
@@ -1031,8 +1101,17 @@ export default function RestaurantDetails() {
     return () => clearInterval(interval)
   }, [highlightOffers.length])
 
-  // Only show grayscale when user is out of service (not based on restaurant availability)
-  const shouldShowGrayscale = isOutOfService
+  const scheduleOpen = isRestaurantOpenNow(
+    restaurant?.openingTime,
+    restaurant?.closingTime,
+    restaurant?.openDays,
+  )
+  const isRestaurantOffline = restaurant?.isAcceptingOrders === false
+  const isRestaurantClosedBySchedule = scheduleOpen === false
+  const isRestaurantUnavailable = isRestaurantOffline || isRestaurantClosedBySchedule
+  const unavailableReason = isRestaurantOffline ? "Offline" : "Closed"
+
+  const shouldShowGrayscale = isOutOfService || isRestaurantUnavailable
 
     return (
     <AnimatedPage
@@ -1064,6 +1143,11 @@ export default function RestaurantDetails() {
         </div>
       ) : (
         <>
+      {isRestaurantUnavailable && (
+        <div className="sticky top-0 z-40 bg-black text-white px-4 py-2 text-center text-sm font-semibold tracking-wide">
+          Restaurant {unavailableReason}
+        </div>
+      )}
 
       {/* Header - Back, Search, Menu (like reference image) */}
       <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 max-md:pt-[max(1.25rem,calc(1.25rem+env(safe-area-inset-top,0px)))] md:pt-6 lg:pt-7 pb-2 md:pb-3 bg-white dark:bg-[#1a1a1a]">
@@ -1187,9 +1271,9 @@ export default function RestaurantDetails() {
               </button>
             </div>
             <div className="flex flex-col items-end">
-              <Badge className="bg-green-500 text-white mb-1 flex items-center gap-1 px-2 py-1">
+              <Badge className={`${isRestaurantUnavailable ? 'bg-black text-white' : 'bg-green-500 text-white'} mb-1 flex items-center gap-1 px-2 py-1`}>
                 <Star className="h-3 w-3 fill-white" />
-                {restaurant?.rating ?? 4.5}
+                {isRestaurantUnavailable ? unavailableReason : (restaurant?.rating ?? 4.5)}
               </Badge>
               <span className="text-xs text-gray-500">By {(restaurant.reviews || 0).toLocaleString()}+</span>
             </div>
@@ -1209,7 +1293,7 @@ export default function RestaurantDetails() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
               <Clock className="h-4 w-4" />
-              <span>{restaurant?.deliveryTime || "25-30 mins"}</span>
+              <span>{isRestaurantUnavailable ? `Restaurant ${unavailableReason.toLowerCase()}` : (restaurant?.deliveryTime || "25-30 mins")}</span>
             </div>
           </div>
 

@@ -1578,7 +1578,7 @@ export const getOrderDetails = async (req, res) => {
         userId,
       })
         .populate("restaurantId", restaurantContactSelect)
-        .populate("deliveryPartnerId", "name email phone")
+        .populate("deliveryPartnerId", "name email phone profileImage vehicle")
         .populate("userId", "name fullName phone email")
         .lean();
     }
@@ -1590,7 +1590,7 @@ export const getOrderDetails = async (req, res) => {
         userId,
       })
         .populate("restaurantId", restaurantContactSelect)
-        .populate("deliveryPartnerId", "name email phone")
+        .populate("deliveryPartnerId", "name email phone profileImage vehicle")
         .populate("userId", "name fullName phone email")
         .lean();
     }

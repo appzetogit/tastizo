@@ -68,6 +68,52 @@ const placeholders = [
 
 const MOBILE_STICKY_SEARCH_HEIGHT = 60
 
+function parseTimeToMinutes(timeValue) {
+  if (!timeValue) return null
+  const normalized = String(timeValue).trim().toLowerCase()
+  const match = normalized.match(/^(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?$/i)
+  if (!match) return null
+
+  let hours = parseInt(match[1], 10)
+  const minutes = parseInt(match[2] || "0", 10)
+  const meridiem = (match[3] || "").toLowerCase()
+
+  if (meridiem === "pm" && hours < 12) hours += 12
+  if (meridiem === "am" && hours === 12) hours = 0
+
+  return hours * 60 + minutes
+}
+
+function isRestaurantOpenNow(openingTime, closingTime, openDays) {
+  if (!openingTime || !closingTime) return null
+
+  const now = new Date()
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  const today = dayNames[now.getDay()]
+
+  if (Array.isArray(openDays) && openDays.length > 0) {
+    const normalizedDays = openDays
+      .map((day) => (typeof day === "string" ? day.trim().slice(0, 3) : ""))
+      .filter(Boolean)
+
+    if (normalizedDays.length > 0 && !normalizedDays.includes(today)) {
+      return false
+    }
+  }
+
+  const openMinutes = parseTimeToMinutes(openingTime)
+  const closeMinutes = parseTimeToMinutes(closingTime)
+  if (openMinutes == null || closeMinutes == null) return null
+
+  const currentMinutes = now.getHours() * 60 + now.getMinutes()
+
+  if (closeMinutes <= openMinutes) {
+    return currentMinutes >= openMinutes || currentMinutes < closeMinutes
+  }
+
+  return currentMinutes >= openMinutes && currentMinutes < closeMinutes
+}
+
 // Restaurant Image Carousel Component
 const RestaurantImageCarousel = React.memo(({ restaurant, priority = false }) => {
   const images = useMemo(() => {
@@ -1106,6 +1152,28 @@ export default function Home() {
             ? Math.round(rawRating * 10) / 10
             : null
 
+          const openingTime =
+            restaurant.deliveryTimings?.openingTime ||
+            restaurant.onboarding?.step2?.deliveryTimings?.openingTime ||
+            restaurant.diningConfig?.basicDetails?.openingTime ||
+            ""
+
+          const closingTime =
+            restaurant.deliveryTimings?.closingTime ||
+            restaurant.onboarding?.step2?.deliveryTimings?.closingTime ||
+            restaurant.diningConfig?.basicDetails?.closingTime ||
+            ""
+
+          const openDays =
+            restaurant.openDays ||
+            restaurant.onboarding?.step2?.openDays ||
+            restaurant.deliveryTimings?.openDays ||
+            []
+
+          const scheduleOpen = isRestaurantOpenNow(openingTime, closingTime, openDays)
+          const acceptsOrders = restaurant.isAcceptingOrders !== false
+          const isCurrentlyOpen = (restaurant.isActive !== false) && acceptsOrders && (scheduleOpen ?? true)
+
           return {
             id: restaurant.restaurantId || restaurant._id,
             name: restaurant.name,
@@ -1127,7 +1195,11 @@ export default function Home() {
             restaurantId: restaurant.restaurantId,
             location: restaurant.location, // Store location for distance recalculation
             isActive: restaurant.isActive !== false, // Default to true if not specified
-            isAcceptingOrders: restaurant.isAcceptingOrders !== false, // Default to true if not specified
+            isAcceptingOrders: acceptsOrders, // Default to true if not specified
+            openingTime,
+            closingTime,
+            openDays,
+            isCurrentlyOpen,
             isPureVeg: isPureVegRestaurant,
           }
         })
@@ -1136,8 +1208,8 @@ export default function Home() {
         if (userLat && userLng) {
           transformedRestaurants.sort((a, b) => {
             // Available restaurants first, then unavailable
-            const aAvailable = a.isActive && a.isAcceptingOrders
-            const bAvailable = b.isActive && b.isAcceptingOrders
+            const aAvailable = a.isCurrentlyOpen
+            const bAvailable = b.isCurrentlyOpen
 
             if (aAvailable !== bAvailable) {
               return aAvailable ? -1 : 1 // Available restaurants come first
@@ -1338,8 +1410,8 @@ export default function Home() {
       // This ensures all restaurants in zone are shown, but nearby ones appear first
       filtered.sort((a, b) => {
         // Available restaurants first, then unavailable
-        const aAvailable = a.isActive && a.isAcceptingOrders
-        const bAvailable = b.isActive && b.isAcceptingOrders
+        const aAvailable = a.isCurrentlyOpen
+        const bAvailable = b.isCurrentlyOpen
 
         if (aAvailable !== bAvailable) {
           return aAvailable ? -1 : 1 // Available restaurants come first
@@ -2375,6 +2447,7 @@ export default function Home() {
             <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3  gap-3 sm:gap-4 lg:gap-5 xl:gap-6 pt-1 sm:pt-1.5 lg:pt-2 items-stretch ${isLoadingFilterResults || loadingRestaurants ? 'opacity-50' : 'opacity-100'} transition-opacity duration-300`}>
               {filteredRestaurants.map((restaurant, index) => {
                 const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
+                const isRestaurantClosed = !restaurant.isCurrentlyOpen
                 // Direct favorite check - isFavorite is already memoized in context
                 const favorite = isFavorite(restaurantSlug)
 
@@ -2481,9 +2554,15 @@ export default function Home() {
                               {/* Delivery Time & Distance */}
                               <div className="flex items-center gap-1 text-sm lg:text-base text-gray-500 mb-2 lg:mb-3 transition-opacity duration-300 opacity-70 group-hover:opacity-100">
                                 <Clock className="h-4 w-4 lg:h-5 lg:w-5 text-gray-500 dark:text-gray-400" strokeWidth={1.5} />
-                                <span className="font-medium dark:text-gray-300 text-gray-700">{restaurant.deliveryTime}</span>
-                                <span className="mx-1">|</span>
+                                <span className={`font-medium ${isRestaurantClosed ? "text-red-600 dark:text-red-400" : "dark:text-gray-300 text-gray-700"}`}>
+                                  {isRestaurantClosed ? "Closed" : restaurant.deliveryTime}
+                                </span>
+                                {!isRestaurantClosed && (
+                                  <span className="mx-1">|</span>
+                                )}
+                                {!isRestaurantClosed && (
                                 <span className="font-medium dark:text-gray-300 text-gray-700">{restaurant.distance}</span>
+                                )}
                               </div>
 
                               {/* Offer Badge */}
