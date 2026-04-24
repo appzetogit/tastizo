@@ -60,7 +60,6 @@ import {
 } from "../utils/liveTrackingPolyline"
 // import dropLocationBanner from "../../../assets/droplocationbanner.png" // File not found - commented out
 import alertSound from "../../../assets/audio/alert.mp3"
-import originalSound from "../../../assets/audio/original.mp3"
 import bikeLogo from "../../../assets/bikelogo.png"
 
 // Ola Maps API Key removed
@@ -1732,6 +1731,84 @@ export default function DeliveryHome() {
     }
   }, [])
 
+  const ensureAlertAudio = useCallback(() => {
+    let audio = alertAudioRef.current
+
+    if (!audio) {
+      audio = new Audio(alertSound)
+      audio.preload = 'auto'
+      alertAudioRef.current = audio
+    } else {
+      const currentSrc = audio.currentSrc || audio.src || ''
+      const nextFileName = alertSound.split('/').pop()
+
+      if (!currentSrc.includes(nextFileName)) {
+        audio.pause()
+        audio.src = alertSound
+        audio.load()
+      }
+    }
+
+    audio.volume = 1
+    audio.loop = true
+    audio.muted = false
+
+    return audio
+  }, [])
+
+  const stopPopupAlertAudio = useCallback(() => {
+    if (!alertAudioRef.current) return
+
+    try {
+      alertAudioRef.current.pause()
+      alertAudioRef.current.currentTime = 0
+      alertAudioRef.current.muted = false
+    } catch (error) {
+      console.warn('[NewOrder] Error stopping popup alert audio:', error)
+    }
+  }, [])
+
+  useEffect(() => {
+    const primeAudioOnInteraction = () => {
+      userInteractedRef.current = true
+
+      try {
+        const audio = ensureAlertAudio()
+        audio.muted = true
+        audio.currentTime = 0
+
+        const playPromise = audio.play()
+        if (playPromise?.then) {
+          playPromise
+            .then(() => {
+              audio.pause()
+              audio.currentTime = 0
+              audio.muted = false
+            })
+            .catch(() => {
+              audio.muted = false
+            })
+        } else {
+          audio.pause()
+          audio.currentTime = 0
+          audio.muted = false
+        }
+      } catch (error) {
+        console.warn('[NewOrder] Failed to prime alert audio:', error)
+      }
+    }
+
+    document.addEventListener('click', primeAudioOnInteraction, { once: true })
+    document.addEventListener('touchstart', primeAudioOnInteraction, { once: true })
+    document.addEventListener('keydown', primeAudioOnInteraction, { once: true })
+
+    return () => {
+      document.removeEventListener('click', primeAudioOnInteraction)
+      document.removeEventListener('touchstart', primeAudioOnInteraction)
+      document.removeEventListener('keydown', primeAudioOnInteraction)
+    }
+  }, [ensureAlertAudio])
+
   // Play alert sound function - plays until countdown ends (30 seconds)
   const playAlertSound = async () => {
     // Only play if user has interacted with the page (browser autoplay policy)
@@ -1741,15 +1818,15 @@ export default function DeliveryHome() {
     }
     
     try {
-      // Get selected alert sound preference from localStorage
-      const selectedSound = localStorage.getItem('delivery_alert_sound') || 'zomato_tone'
-      const soundFile = selectedSound === 'original' ? originalSound : alertSound
+      const audio = ensureAlertAudio()
+      const selectedSound = 'zomato_tone'
+      const soundFile = alertSound
       
       console.log('🔊 Playing alert sound:', {
         selectedSound,
         soundType: selectedSound === 'original' ? 'Original' : 'Zomato Tone',
         soundFile,
-        originalSoundPath: originalSound,
+        originalSoundPath: alertSound,
         alertSoundPath: alertSound
       })
       
@@ -1759,8 +1836,8 @@ export default function DeliveryHome() {
         return null
       }
       
-      // Use selected sound file from assets
-      const audio = new Audio(soundFile)
+      // Reuse the primed audio element so browser autoplay policy allows playback
+      audio.currentTime = 0
       
       // Add load event listener to verify file loads
       audio.addEventListener('loadeddata', () => {
@@ -1862,9 +1939,7 @@ export default function DeliveryHome() {
           if (prev <= 1) {
             // Stop audio when countdown reaches 0
             if (alertAudioRef.current) {
-              alertAudioRef.current.pause()
-              alertAudioRef.current.currentTime = 0
-              alertAudioRef.current = null
+              stopPopupAlertAudio()
               console.log('[NewOrder] 🔇 Audio stopped (countdown ended)')
             }
             // Auto-close when countdown reaches 0
@@ -1895,11 +1970,7 @@ export default function DeliveryHome() {
   useEffect(() => {
     if (showNewOrderPopup && (newOrder || selectedRestaurant)) {
       // Stop any existing audio first
-      if (alertAudioRef.current) {
-        alertAudioRef.current.pause()
-        alertAudioRef.current.currentTime = 0
-        alertAudioRef.current = null
-      }
+      stopPopupAlertAudio()
 
       // Play alert sound when popup appears
       const playAudio = async () => {
@@ -1960,12 +2031,41 @@ export default function DeliveryHome() {
       // Stop audio when popup closes
       if (alertAudioRef.current) {
         console.log('[NewOrder] 🔇 Stopping audio (popup closed)')
-        alertAudioRef.current.pause()
-        alertAudioRef.current.currentTime = 0
-        alertAudioRef.current = null
+        stopPopupAlertAudio()
       }
     }
-  }, [showNewOrderPopup, selectedRestaurant])
+  }, [showNewOrderPopup, selectedRestaurant, newOrder, stopPopupAlertAudio])
+
+  useEffect(() => {
+    if (!showNewOrderPopup || (!newOrder && !selectedRestaurant)) return
+    if (alertAudioRef.current) return
+
+    const retryPopupAudio = async () => {
+      if (!showNewOrderPopup || alertAudioRef.current) return
+
+      userInteractedRef.current = true
+
+      try {
+        const audio = await playAlertSound()
+        if (audio) {
+          alertAudioRef.current = audio
+          console.log("[NewOrder] Audio started after retry interaction")
+        }
+      } catch (error) {
+        console.warn("[NewOrder] Retry interaction could not start audio:", error)
+      }
+    }
+
+    document.addEventListener("click", retryPopupAudio)
+    document.addEventListener("touchstart", retryPopupAudio)
+    document.addEventListener("keydown", retryPopupAudio)
+
+    return () => {
+      document.removeEventListener("click", retryPopupAudio)
+      document.removeEventListener("touchstart", retryPopupAudio)
+      document.removeEventListener("keydown", retryPopupAudio)
+    }
+  }, [showNewOrderPopup, newOrder, selectedRestaurant])
 
   // Reset countdown when popup closes
   useEffect(() => {
@@ -2002,13 +2102,8 @@ export default function DeliveryHome() {
 
   const stopAllNewOrderSounds = useCallback(() => {
     stopNotificationSound()
-
-    if (alertAudioRef.current) {
-      alertAudioRef.current.pause()
-      alertAudioRef.current.currentTime = 0
-      alertAudioRef.current = null
-    }
-  }, [stopNotificationSound])
+    stopPopupAlertAudio()
+  }, [stopNotificationSound, stopPopupAlertAudio])
 
   // Reject reasons for order cancellation
   const rejectReasons = [
@@ -2738,9 +2833,7 @@ export default function DeliveryHome() {
       stopAllNewOrderSounds()
       // Stop audio immediately when user accepts
       if (alertAudioRef.current) {
-        alertAudioRef.current.pause()
-        alertAudioRef.current.currentTime = 0
-        alertAudioRef.current = null
+        stopPopupAlertAudio()
         console.log('[NewOrder] 🔇 Audio stopped (order accepted)')
       }
 
@@ -2826,9 +2919,7 @@ export default function DeliveryHome() {
           if (response.data?.success && response.data.data) {
             // Stop audio immediately when order is successfully accepted
             if (alertAudioRef.current) {
-              alertAudioRef.current.pause()
-              alertAudioRef.current.currentTime = 0
-              alertAudioRef.current = null
+              stopPopupAlertAudio()
               console.log('[NewOrder] 🔇 Audio stopped (order accepted successfully)')
             }
             
@@ -8460,9 +8551,7 @@ export default function DeliveryHome() {
       if (!acceptedIds.some(id => currentIds.includes(id))) return;
 
       if (alertAudioRef.current) {
-        alertAudioRef.current.pause();
-        alertAudioRef.current.currentTime = 0;
-        alertAudioRef.current = null;
+        stopPopupAlertAudio();
       }
 
       acceptedIds.forEach(id => acceptedOrderIdsRef.current.add(id));

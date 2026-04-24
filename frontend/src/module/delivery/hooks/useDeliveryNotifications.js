@@ -3,7 +3,6 @@ import io from 'socket.io-client';
 import { API_BASE_URL } from '@/lib/api/config';
 import { deliveryAPI } from '@/lib/api';
 import alertSound from '@/assets/audio/alert.mp3';
-import originalSound from '@/assets/audio/original.mp3';
 
 export const useDeliveryNotifications = () => {
   // CRITICAL: All hooks must be called unconditionally and in the same order every render
@@ -160,9 +159,7 @@ export const useDeliveryNotifications = () => {
 
   const playNotificationSound = useCallback(() => {
     try {
-      // Get current selected sound preference from localStorage
-      const selectedSound = localStorage.getItem('delivery_alert_sound') || 'zomato_tone';
-      const soundFile = selectedSound === 'original' ? originalSound : alertSound;
+      const soundFile = alertSound;
       
       // Update audio source if preference changed or initialize if not exists
       if (audioRef.current) {
@@ -173,7 +170,7 @@ export const useDeliveryNotifications = () => {
           audioRef.current.pause();
           audioRef.current.src = newSrc;
           audioRef.current.load();
-          console.log('🔊 Audio source updated to:', selectedSound === 'original' ? 'Original' : 'Zomato Tone');
+          console.log('🔊 Delivery notification sound synced with restaurant alert tone');
         }
       } else {
         // Initialize audio if not exists
@@ -229,14 +226,12 @@ export const useDeliveryNotifications = () => {
   
   // Initialize audio on mount - use selected preference from localStorage
   useEffect(() => {
-    // Get selected alert sound preference from localStorage
-    const selectedSound = localStorage.getItem('delivery_alert_sound') || 'zomato_tone';
-    const soundFile = selectedSound === 'original' ? originalSound : alertSound;
+    const soundFile = alertSound;
     
     if (!audioRef.current) {
       audioRef.current = new Audio(soundFile);
       audioRef.current.volume = 0.7;
-      console.log('🔊 Audio initialized with:', selectedSound === 'original' ? 'Original' : 'Zomato Tone');
+      console.log('🔊 Delivery notification sound initialized with restaurant alert tone');
     } else {
       // Update audio source if preference changed
       const currentSrc = audioRef.current.src;
@@ -245,7 +240,7 @@ export const useDeliveryNotifications = () => {
         audioRef.current.pause();
         audioRef.current.src = newSrc;
         audioRef.current.load();
-        console.log('🔊 Audio updated to:', selectedSound === 'original' ? 'Original' : 'Zomato Tone');
+        console.log('🔊 Delivery notification sound updated to restaurant alert tone');
       }
     }
     

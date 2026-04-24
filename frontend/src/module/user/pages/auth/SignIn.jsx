@@ -17,7 +17,6 @@ import { firebaseAuth, googleProvider, ensureFirebaseInitialized } from "@/lib/f
 import { performGoogleSignIn } from "@/lib/utils/googleSignIn"
 import { setAuthData } from "@/lib/utils/auth"
 import { registerFcmTokenForLoggedInUser } from "@/lib/notifications/fcmWeb"
-import loginBanner from "@/assets/loginbanner.jpg"
 
 // Common country codes
 const countryCodes = [
@@ -468,13 +467,21 @@ export default function SignIn() {
       {/* Mobile: Top Section - Banner Image */}
       {/* Desktop: Left Section - Banner Image */}
       {/* Mobile: Top Section */}
-      <div className="relative md:hidden w-full shrink-0 flex items-center justify-center" style={{ height: "45vh", minHeight: "300px", backgroundColor: "#2B9C64" }}>
-        <div className="h-24" aria-hidden />
+      <div className="relative md:hidden w-full shrink-0 overflow-hidden flex items-center justify-center" style={{ height: "45vh", minHeight: "300px", backgroundColor: "#2B9C64" }}>
+        <img
+          src="/image.png"
+          alt="Login"
+          className="h-1/2 w-auto max-w-[80%] object-contain"
+        />
       </div>
 
       {/* Desktop: Left Section */}
-      <div className="relative hidden md:flex md:w-1/2 md:min-h-full shrink-0 items-center justify-center" style={{ backgroundColor: "#2B9C64" }}>
-        <div className="h-32" aria-hidden />
+      <div className="relative hidden md:flex md:w-1/2 md:min-h-full shrink-0 overflow-hidden items-center justify-center" style={{ backgroundColor: "#2B9C64" }}>
+        <img
+          src="/image.png"
+          alt="Login"
+          className="h-1/2 w-auto max-w-[80%] object-contain"
+        />
       </div>
 
       {/* Mobile: Bottom Section - White Login Form; Desktop: Right Section - Login Form */}
