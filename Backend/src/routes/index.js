@@ -17,6 +17,7 @@ import { requireRoles } from '../core/roles/role.middleware.js';
 import { getQueuesController } from '../controllers/admin.controller.js';
 import webhookRoutes from '../core/payments/routes/webhook.routes.js';
 import searchRoutes from '../modules/food/search/routes/search.routes.js';
+import locationRoutes from '../modules/location/routes/location.routes.js';
 
 const router = express.Router();
 
@@ -26,6 +27,7 @@ const mountFoodRoutes = (basePath) => {
     router.use(`${basePath}/food/restaurant`, restaurantRoutes);
     router.use(`${basePath}/food`, landingRoutes);
     router.use(`${basePath}/food/search`, searchRoutes);
+    router.use(`${basePath}/food/location`, locationRoutes);
     router.get(`${basePath}/food/dining/categories/public`, getPublicDiningCategories);
     router.get(`${basePath}/food/dining/restaurants/public`, getPublicDiningRestaurants);
     router.get(`${basePath}/food/admin/business-settings/public`, businessSettingsController.getBusinessSettings);

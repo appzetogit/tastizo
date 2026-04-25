@@ -2176,7 +2176,12 @@ export const userAPI = {
     return apiClient.post("/fcm-tokens/test", { platform }, { contextModule: "user" });
   },
 };
-export const locationAPI = createStubAPI();
+export const locationAPI = {
+  reverseGeocode: (lat, lng, options = {}) =>
+    apiClient.get("/food/location/reverse", {
+      params: { lat, lng, ...(options || {}) },
+    }),
+};
 export const zoneAPI = {
   /** Public: detect active service zone for a lat/lng point. */
   detectZone: (lat, lng) =>

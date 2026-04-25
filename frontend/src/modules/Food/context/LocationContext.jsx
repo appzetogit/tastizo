@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
-import { userAPI } from "@food/api"
+import { locationAPI, userAPI } from "@food/api"
 import { useProfile } from "@food/context/ProfileContext"
 import {
   DELIVERY_MODE_STORAGE_KEY,
@@ -43,18 +43,129 @@ const getStoredSelectedAddressId = () => {
   }
 }
 
-const getPosition = () =>
+const getPositionWithRetry = (forceFresh = true, options = {}, retryCount = 0) =>
   new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error("Geolocation is not supported"))
       return
     }
 
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
+    const effectiveOptions = {
+      ...options,
+      maximumAge: forceFresh ? 0 : (options.maximumAge || 60000),
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve(position)
+      },
+      (error) => {
+        if (!forceFresh && error?.code === 3 && retryCount === 0 && options.enableHighAccuracy) {
+          getPositionWithRetry(
+            forceFresh,
+            {
+              enableHighAccuracy: false,
+              timeout: 5000,
+              maximumAge: 300000,
+            },
+            1,
+          )
+            .then(resolve)
+            .catch(reject)
+          return
+        }
+
+        reject(error)
+      },
+      effectiveOptions,
+    )
+  })
+
+const getPreciseFreshPosition = (options = {}) =>
+  new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation is not supported"))
+      return
+    }
+
+    const targetAccuracy = Number(options.targetAccuracy) || 35
+    const watchWindowMs = Number(options.watchWindowMs) || 12000
+    const maxWaitMs = Number(options.maxWaitMs) || 30000
+    const geoOptions = {
       enableHighAccuracy: true,
-      timeout: 15000,
+      timeout: maxWaitMs,
       maximumAge: 0,
-    })
+      ...options,
+    }
+
+    let settled = false
+    let watchId = null
+    let bestPosition = null
+    let bestAccuracy = Number.POSITIVE_INFINITY
+    let resolveTimer = null
+    let hardTimeout = null
+
+    const finish = (position, error = null) => {
+      if (settled) return
+      settled = true
+      if (watchId != null) {
+        navigator.geolocation.clearWatch(watchId)
+      }
+      if (resolveTimer) clearTimeout(resolveTimer)
+      if (hardTimeout) clearTimeout(hardTimeout)
+
+      if (position) {
+        resolve(position)
+        return
+      }
+      reject(error || new Error("Unable to fetch precise location"))
+    }
+
+    const considerPosition = (position) => {
+      const accuracy = Number(position?.coords?.accuracy)
+      if (!Number.isFinite(accuracy)) {
+        if (!bestPosition) bestPosition = position
+        return
+      }
+
+      if (!bestPosition || accuracy < bestAccuracy) {
+        bestPosition = position
+        bestAccuracy = accuracy
+      }
+
+      if (accuracy <= targetAccuracy) {
+        finish(position)
+      }
+    }
+
+    hardTimeout = setTimeout(() => {
+      finish(bestPosition, new Error("Precise location timeout"))
+    }, maxWaitMs)
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        considerPosition(position)
+        if (settled) return
+
+        resolveTimer = setTimeout(() => {
+          finish(bestPosition)
+        }, watchWindowMs)
+
+        watchId = navigator.geolocation.watchPosition(
+          (nextPosition) => {
+            considerPosition(nextPosition)
+          },
+          () => {
+            finish(bestPosition)
+          },
+          geoOptions,
+        )
+      },
+      (error) => {
+        reject(error)
+      },
+      geoOptions,
+    )
   })
 
 const buildRichLocation = ({ latitude, longitude, payload = {}, sourceType = "gps" }) => {
@@ -108,6 +219,7 @@ const buildRichLocation = ({ latitude, longitude, payload = {}, sourceType = "gp
     zipCode,
     latitude,
     longitude,
+    accuracy: Number(payload.accuracy) || null,
     address: formattedAddress,
     formattedAddress,
     sourceType,
@@ -116,14 +228,19 @@ const buildRichLocation = ({ latitude, longitude, payload = {}, sourceType = "gp
 
 const reverseGeocode = async (latitude, longitude, sourceType = "gps") => {
   try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${latitude}&lon=${longitude}`,
-      {
-        headers: { Accept: "application/json", "Accept-Language": "en" },
-      },
-    )
-    const data = await response.json()
-    const built = buildRichLocation({ latitude, longitude, payload: data, sourceType })
+    const response = await locationAPI.reverseGeocode(latitude, longitude, { force: true })
+    const raw = response?.data?.data
+    const result = Array.isArray(raw?.results) ? raw.results[0] : raw
+    const payload = {
+      display_name: result?.formatted_address || "",
+      address: result?.address_components || {},
+      city: result?.address_components?.city || "",
+      state: result?.address_components?.state || "",
+      zipCode: result?.address_components?.postcode || "",
+      area: result?.address_components?.area || "",
+      street: result?.address_components?.road || "",
+    }
+    const built = buildRichLocation({ latitude, longitude, payload, sourceType })
     if (built.formattedAddress) return built
   } catch {}
 
@@ -214,19 +331,34 @@ export function LocationProvider({ children }) {
   )
 
   const requestLocation = useCallback(
-    async () => {
+    async (options = {}) => {
+      const { skipDatabaseUpdate = false } = options
       setLoading(true)
       setError(null)
       try {
-        const position = await getPosition()
+        const position = await getPreciseFreshPosition({
+          timeout: 30000,
+          maximumAge: 0,
+          targetAccuracy: 35,
+          watchWindowMs: 12000,
+          maxWaitMs: 30000,
+        }).catch(() =>
+          getPositionWithRetry(true, {
+            enableHighAccuracy: true,
+            timeout: 30000,
+            maximumAge: 0,
+          }),
+        )
         const latitude = Number(position.coords.latitude)
         const longitude = Number(position.coords.longitude)
+        const accuracy = Number(position.coords.accuracy)
         const geocoded = await reverseGeocode(latitude, longitude, "gps")
         const refinedLocation =
           geocoded ||
           ({
             latitude,
             longitude,
+            accuracy: Number.isFinite(accuracy) ? accuracy : null,
             city: "",
             state: "",
             zipCode: "",
@@ -237,6 +369,10 @@ export function LocationProvider({ children }) {
             formattedAddress: "",
             sourceType: "gps",
           })
+
+        if (Number.isFinite(accuracy)) {
+          refinedLocation.accuracy = accuracy
+        }
 
         if (!refinedLocation?.formattedAddress) {
           const fallbackLocation = readStoredLocation()
@@ -250,16 +386,22 @@ export function LocationProvider({ children }) {
           }
         }
 
-        await applyLocation(refinedLocation, { mode: "current", selectedAddress: null })
+        await applyLocation(refinedLocation, {
+          mode: "current",
+          selectedAddress: null,
+          syncBackend: !skipDatabaseUpdate,
+        })
         return refinedLocation
       } catch (err) {
         const fallbackLocation = readStoredLocation()
         if (fallbackLocation?.latitude && fallbackLocation?.longitude) {
-          setLocation(fallbackLocation)
-          setDeliveryAddressMode(getStoredMode())
-          setSelectedAddressId(getStoredSelectedAddressId())
-          setPermissionGranted(true)
-          setLoading(false)
+          await applyLocation(fallbackLocation, {
+            mode: getStoredMode(),
+            selectedAddress: addresses.find(
+              (item) => String(getAddressId(item)) === String(getStoredSelectedAddressId()),
+            ),
+            syncBackend: false,
+          })
           return fallbackLocation
         }
         setError(err?.message || "Unable to fetch location")
