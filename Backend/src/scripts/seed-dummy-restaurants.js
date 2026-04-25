@@ -1,9 +1,9 @@
 import dotenv from "dotenv";
 import mongoose from "mongoose";
-import { connectDB, disconnectDB } from "../src/config/db.js";
-import { FoodRestaurant } from "../src/modules/food/restaurant/models/restaurant.model.js";
-import { FoodItem } from "../src/modules/food/admin/models/food.model.js";
-import { FoodCategory } from "../src/modules/food/admin/models/category.model.js";
+import { connectDB, disconnectDB } from "../config/db.js";
+import { FoodRestaurant } from "../modules/food/restaurant/models/restaurant.model.js";
+import { FoodItem } from "../modules/food/admin/models/food.model.js";
+import { FoodCategory } from "../modules/food/admin/models/category.model.js";
 
 dotenv.config();
 
