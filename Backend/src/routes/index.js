@@ -30,7 +30,6 @@ router.use('/v1/food/auth', authRoutes);
 
 // Backward-compatible auth routes (legacy)
 router.use('/v1/auth', authRoutes);
-router.use('/auth', authRoutes);
 router.use('/v1/food/delivery', deliveryRoutes);
 router.use('/v1/food/restaurant', restaurantRoutes);
 // Landing & hero-banners for Food user app (paths start with /food/hero-banners/...)
@@ -39,25 +38,19 @@ router.use('/v1/food/search', searchRoutes);
 router.get('/v1/food/dining/categories/public', getPublicDiningCategories);
 router.get('/v1/food/dining/restaurants/public', getPublicDiningRestaurants);
 router.use('/v1/uploads', uploadRoutes);
-// Legacy routes for old frontend build without /v1
 
+// Mark business-settings/public as truly public (must be before protected admin block)
+router.get('/v1/food/admin/business-settings/public', businessSettingsController.getBusinessSettings);
 
-// Legacy routes for old frontend build without /v1
-router.get('/food/admin/business-settings/public', businessSettingsController.getBusinessSettings);
+router.use('/v1/food/admin', authMiddleware, requireRoles('ADMIN'), restaurantAdminRoutes);
+router.use('/v1/food/user', authMiddleware, requireRoles('USER'), userRoutes);
+router.use('/v1/food/notifications', authMiddleware, requireRoles('USER', 'RESTAURANT', 'DELIVERY_PARTNER'), notificationRoutes);
+router.use('/v1/food/orders', authMiddleware, requireRoles('USER'), orderUserRoutes);
+router.use('/v1/food/payments', authMiddleware, paymentRoutes);
+router.use('/v1/payments/webhook', webhookRoutes); // ✅ NEW: Public Webhook
+router.use('/v1/fcm-tokens', fcmRoutes);
+router.use('/fcm-tokens', fcmRoutes);
 
-router.use('/food/auth', authRoutes);
-router.use('/food/delivery', deliveryRoutes);
-router.use('/food/restaurant', restaurantRoutes);
-router.use('/food', landingRoutes);
-router.use('/food/search', searchRoutes);
-router.get('/food/dining/categories/public', getPublicDiningCategories);
-router.get('/food/dining/restaurants/public', getPublicDiningRestaurants);
-
-router.use('/food/admin', authMiddleware, requireRoles('ADMIN'), restaurantAdminRoutes);
-router.use('/food/user', authMiddleware, requireRoles('USER'), userRoutes);
-router.use('/food/notifications', authMiddleware, requireRoles('USER', 'RESTAURANT', 'DELIVERY_PARTNER'), notificationRoutes);
-router.use('/food/orders', authMiddleware, requireRoles('USER'), orderUserRoutes);
-router.use('/food/payments', authMiddleware, paymentRoutes);
 // router.get('/v1/env/public', getPublicEnvController);
 // router.get('/env/public', getPublicEnvController);
 
