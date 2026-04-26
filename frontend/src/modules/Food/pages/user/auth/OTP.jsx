@@ -8,7 +8,7 @@ import { authAPI, userAPI } from "@food/api"
 import { setAuthData as setUserAuthData } from "@food/utils/auth"
 
 const OTP_LENGTH = 4
-const BRAND_GREEN = "#2A9C64"
+const BRAND_GREEN = "#7e3866"
 
 export default function OTP() {
   const navigate = useNavigate()

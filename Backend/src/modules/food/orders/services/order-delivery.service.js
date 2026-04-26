@@ -1030,8 +1030,22 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
   enqueueOrderEvent('delivery_completed', {
     orderMongoId: order._id?.toString?.(),
     orderId: order._id.toString(),
+    restaurantId:
+      order.restaurantId?._id?.toString?.() ||
+      order.restaurantId?.toString?.() ||
+      null,
     deliveryPartnerId,
-    payMethod,
+    riderEarning: Number(order.riderEarning ?? tx?.amounts?.riderShare ?? 0) || 0,
+    commissionAmount:
+      Number(
+        tx?.amounts?.restaurantCommission ??
+          order.pricing?.restaurantCommission ??
+          0,
+      ) || 0,
+    platformProfit:
+      Number(tx?.amounts?.platformNetProfit ?? order.platformProfit ?? 0) || 0,
+    total: Number(tx?.amounts?.totalCustomerPaid ?? order.pricing?.total ?? 0) || 0,
+    paymentMethod: payMethod,
     prevPayStatus,
     paymentStatus: order.payment?.status,
   });

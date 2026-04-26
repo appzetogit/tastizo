@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
-import { connectDB, disconnectDB } from '../src/config/db.js';
-import { FoodAdmin } from '../src/core/admin/admin.model.js';
+import { connectDB, disconnectDB } from '../config/db.js';
+import { FoodAdmin } from '../core/admin/admin.model.js';
 
 dotenv.config();
 

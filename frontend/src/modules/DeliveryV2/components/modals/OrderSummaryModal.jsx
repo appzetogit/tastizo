@@ -1,13 +1,25 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle, ArrowRight, Wallet, History, Star } from 'lucide-react';
+import { formatCurrency } from '@food/utils/currency';
 
 /**
  * OrderSummaryModal - Ported to Original White/Green Theme.
  * Post-delivery success screen.
  */
 export const OrderSummaryModal = ({ order, onDone }) => {
-  const earnings = order?.earnings || order?.riderEarning || (order?.orderAmount * 0.1) || 0;
+  const earnings = Number(
+    order?.earnings ??
+      order?.riderEarning ??
+      order?.deliveryEarning ??
+      order?.earningAmount ??
+      order?.payout ??
+      order?.deliveryFee ??
+      order?.pricing?.deliveryFee ??
+      0,
+  );
+  const formatMoney = (value) =>
+    formatCurrency(Number(value) || 0, "\u20B9").replace("\u20B9 ", "\u20B9");
 
   return (
     <div className="fixed inset-0 z-160 bg-green-500 overflow-y-auto">
@@ -32,7 +44,7 @@ export const OrderSummaryModal = ({ order, onDone }) => {
               <Star className="w-4 h-4 text-orange-400 fill-orange-400" />
             </div>
             
-            <p className="text-gray-950 text-5xl sm:text-6xl font-bold mb-5 sm:mb-6 tracking-tighter">â‚¹{Number(earnings).toFixed(2)}</p>
+            <p className="text-gray-950 text-5xl sm:text-6xl font-bold mb-5 sm:mb-6 tracking-tighter">{formatMoney(earnings)}</p>
             
             <div className="flex items-center justify-center gap-3 py-3 bg-green-50 rounded-2xl text-green-700 text-sm font-bold border border-green-100">
               <Wallet className="w-5 h-5" />

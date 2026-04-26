@@ -39,6 +39,7 @@ import { orderAPI, restaurantAPI } from "@food/api"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { useUserNotifications } from "@food/hooks/useUserNotifications"
 import { RESTAURANT_PIN_SVG, CUSTOMER_PIN_SVG, RIDER_BIKE_SVG } from "@food/constants/mapIcons"
+import { formatCurrency } from "@food/utils/currency"
 
 // Fallback definitions in case imports fail at runtime or are shadowed
 const DEFAULT_CUSTOMER_PIN = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="#10B981"><path d="M12 2C8.13 2 5 5.13 5 9c0 4.17 4.42 9.92 6.24 12.11.4.48 1.08.48 1.52 0C14.58 18.92 19 13.17 19 9c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5 14.5 7.62 14.5 9 13.38 11.5 12 11.5z"/><circle cx="12" cy="9" r="3" fill="#FFFFFF"/></svg>`;
@@ -2048,7 +2049,7 @@ export default function OrderTracking() {
                         <p className="text-sm text-gray-500 mt-0.5">Quantity: {item.quantity}</p>
                       </div>
                     </div>
-                    <p className="font-semibold text-gray-900">â‚¹{((item?.price || 0) * (item?.quantity || 0)).toFixed(2)}</p>
+                    <p className="font-semibold text-gray-900">{formatCurrency((item?.price || 0) * (item?.quantity || 0), "\u20B9").replace("\u20B9 ", "\u20B9")}</p>
                   </div>
                 ))}
               </div>
@@ -2060,43 +2061,43 @@ export default function OrderTracking() {
               
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-600">Item Total</span>
-                <span className="text-gray-900 font-medium">â‚¹{Number(order?.subtotal || 0).toFixed(2)}</span>
+                <span className="text-gray-900 font-medium">{formatCurrency(order?.subtotal || 0, "\u20B9").replace("\u20B9 ", "\u20B9")}</span>
               </div>
 
               {Number(order?.packagingFee) > 0 && (
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600">Packaging Charges</span>
-                  <span className="text-gray-900 font-medium">â‚¹{Number(order.packagingFee).toFixed(2)}</span>
+                  <span className="text-gray-900 font-medium">{formatCurrency(order.packagingFee, "\u20B9").replace("\u20B9 ", "\u20B9")}</span>
                 </div>
               )}
 
               {Number(order?.platformFee) > 0 && (
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600">Platform Fee</span>
-                  <span className="text-gray-900 font-medium">â‚¹{Number(order.platformFee).toFixed(2)}</span>
+                  <span className="text-gray-900 font-medium">{formatCurrency(order.platformFee, "\u20B9").replace("\u20B9 ", "\u20B9")}</span>
                 </div>
               )}
 
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-600">Delivery Fee</span>
-                <span className="text-gray-900 font-medium">â‚¹{Number(order?.deliveryFee || 0).toFixed(2)}</span>
+                <span className="text-gray-900 font-medium">{formatCurrency(order?.deliveryFee || 0, "\u20B9").replace("\u20B9 ", "\u20B9")}</span>
               </div>
 
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-600">GST</span>
-                <span className="text-gray-900 font-medium">â‚¹{Number(order?.gst || 0).toFixed(2)}</span>
+                <span className="text-gray-900 font-medium">{formatCurrency(order?.gst || 0, "\u20B9").replace("\u20B9 ", "\u20B9")}</span>
               </div>
 
               {Number(order?.discount) > 0 && (
                 <div className="flex justify-between items-center text-sm text-green-600 font-medium">
                   <span>Discount Applied</span>
-                  <span>-â‚¹{Number(order.discount).toFixed(2)}</span>
+                  <span>-{formatCurrency(order.discount, "\u20B9").replace("\u20B9 ", "\u20B9")}</span>
                 </div>
               )}
 
               <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center">
                 <span className="text-base font-bold text-gray-900 dark:text-white">Total Amount</span>
-                <span className="text-lg font-bold text-gray-900 dark:text-white">â‚¹{Number(order?.totalAmount || 0).toFixed(2)}</span>
+                <span className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(order?.totalAmount || 0, "\u20B9").replace("\u20B9 ", "\u20B9")}</span>
               </div>
             </div>
 

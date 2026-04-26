@@ -486,11 +486,6 @@ export const verifyUserOtpAndLogin = async (
   const trimmedName = typeof name === "string" ? name.trim() : "";
   const existingUser = await FoodUser.findOne({ phone });
 
-  // For first-time signup, require name before OTP verification so OTP is not consumed prematurely.
-  if (!existingUser && !trimmedName) {
-    throw new ValidationError("Name is required for first-time signup");
-  }
-
   const result = await verifyOtp(phone, otp);
 
   if (!result.valid) {
@@ -498,9 +493,9 @@ export const verifyUserOtpAndLogin = async (
   }
 
   let userDoc = existingUser;
-  
-  // Ensure user exists and mark as verified on successful OTP.
-  // Check if user is new or hasn't provided a name yet
+
+  // Keep OTP verification and first-run profile completion in one session.
+  // New users can finish their name after login from the onboarding UI.
   const needsNamePrompt = !userDoc || !userDoc.name || String(userDoc.name).trim() === "" || String(userDoc.name).toLowerCase() === "null";
   const isNewUser = needsNamePrompt;
 

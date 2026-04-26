@@ -166,36 +166,56 @@ export const useOrderManager = () => {
       throw new Error('Missing order id');
     }
     try {
-      // 1. Verify OTP first (if not already verified by modal)
-      const verifyRes = await deliveryAPI.verifyDropOtp(orderId, otp);
-      
-      if (verifyRes?.data?.success) {
-        let finalOrder = verifyRes.data?.data?.order || activeOrder;
-        
-        try {
-          // 2. Mark as complete
-          const completeRes = await deliveryAPI.completeDelivery(orderId, { 
-            otp, 
-            rating: 5,
-            paymentMethod: paymentMethodOverride // Pass 'cash' or 'qr' if provided
-          });
-          if (completeRes.data?.success && completeRes.data?.data?.order) {
-            finalOrder = completeRes.data.data.order;
-          }
-        } catch (completeErr) {
-          console.warn('Complete call failed, but OTP was verified.', completeErr);
-          // If already completed, we proceed to show the summary with whatever we have
+      const otpAlreadyVerified = !!activeOrder?.deliveryVerification?.dropOtp?.verified;
+      let finalOrder = activeOrder;
+
+      // 1. Verify OTP only if this order has not already been verified.
+      if (!otpAlreadyVerified) {
+        const verifyRes = await deliveryAPI.verifyDropOtp(orderId, otp);
+        if (!verifyRes?.data?.success) {
+          toast.error('Invalid OTP. Please check with customer.');
+          throw new Error('Invalid OTP');
         }
-        
-        // Update local order state so Summary Modal shows 'delivered' status
-        if (finalOrder) setActiveOrder(finalOrder);
-        
-        updateTripStatus('COMPLETED');
-        // toast.success('Delivery Success!');
-      } else {
-        toast.error('Invalid OTP. Please check with customer.');
-        throw new Error('Invalid OTP');
+        finalOrder = verifyRes.data?.data?.order || finalOrder;
       }
+
+      try {
+        // 2. Mark as complete
+        const completeRes = await deliveryAPI.completeDelivery(orderId, {
+          ...(otp ? { otp } : {}),
+          rating: 5,
+          paymentMethod: paymentMethodOverride,
+        });
+        if (completeRes.data?.success && completeRes.data?.data?.order) {
+          const completedOrder = completeRes.data.data.order;
+          finalOrder = {
+            ...(activeOrder || {}),
+            ...(finalOrder || {}),
+            ...completedOrder,
+            pricing: completedOrder?.pricing || finalOrder?.pricing || activeOrder?.pricing,
+            earnings:
+              completedOrder?.earnings ??
+              finalOrder?.earnings ??
+              activeOrder?.earnings ??
+              completedOrder?.riderEarning ??
+              finalOrder?.riderEarning ??
+              activeOrder?.riderEarning ??
+              completedOrder?.deliveryFee ??
+              finalOrder?.deliveryFee ??
+              activeOrder?.deliveryFee ??
+              completedOrder?.pricing?.deliveryFee ??
+              finalOrder?.pricing?.deliveryFee ??
+              activeOrder?.pricing?.deliveryFee ??
+              0,
+          };
+        }
+      } catch (completeErr) {
+        console.warn('Complete call failed after verification step.', completeErr);
+        throw completeErr;
+      }
+
+      if (finalOrder) setActiveOrder(finalOrder);
+      updateTripStatus('COMPLETED');
     } catch (error) {
       console.error('Completion Error:', error);
       toast.error(

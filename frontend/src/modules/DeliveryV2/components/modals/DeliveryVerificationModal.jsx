@@ -5,8 +5,12 @@ import {
   QrCode, Loader2, Info, X, RefreshCw, Package
 } from 'lucide-react';
 import { deliveryAPI } from '@food/api';
+import { formatCurrency } from '@food/utils/currency';
 import { toast } from 'sonner';
 import { ActionSlider } from '@/modules/DeliveryV2/components/ui/ActionSlider';
+
+const formatMoney = (value) =>
+  formatCurrency(Number(value) || 0, "\u20B9").replace("\u20B9 ", "\u20B9");
 
 const Backdrop = ({ onClose }) => (
   <motion.div 
@@ -263,9 +267,9 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
                  <p className="text-amber-700 text-[10px] font-bold uppercase tracking-widest mb-1">
                     {isPaid ? "Amount Paid Online" : "Cash to Collect"}
                  </p>
-                 <p className="text-amber-950 text-3xl sm:text-4xl font-bold">â‚¹{amountToCollect.toFixed(2)}</p>
+                 <p className="text-amber-950 text-3xl sm:text-4xl font-bold">{formatMoney(amountToCollect)}</p>
                </div>
-               {isPaid && <div className="bg-green-500 text-white px-4 py-2 rounded-full text-[10px] font-bold">PAID âœ“</div>}
+               {isPaid && <div className="bg-green-500 text-white px-4 py-2 rounded-full text-[10px] font-bold">PAID</div>}
              </div>
 
               {!isPaid && (
@@ -302,7 +306,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
             <ActionSlider 
             key="action-payment"
             label={isCashPayment ? "Slide to Confirm Cash" : "Slide to Complete Order"} 
-            successLabel="Delivered! âœ“"
+            successLabel="Delivered!"
             disabled={!isPaid && !isCashPayment}
             onConfirm={async () => {
                 try {
@@ -331,7 +335,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
               onClick={e => e.stopPropagation()}
             >
               <h3 className="text-gray-950 font-bold text-xl mb-2">Scan to Pay</h3>
-              <p className="text-gray-500 text-sm mb-8 font-medium">Order Total: â‚¹{amountToCollect.toFixed(2)}</p>
+              <p className="text-gray-500 text-sm mb-8 font-medium">Order Total: {formatMoney(amountToCollect)}</p>
               
               <div className="flex flex-col items-center gap-6 bg-gray-50 rounded-3xl border-2 border-gray-100 p-6 mb-8 w-full">
                  <img 

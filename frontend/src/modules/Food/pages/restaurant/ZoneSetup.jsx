@@ -144,6 +144,10 @@ export default function ZoneSetup() {
   const loadGoogleMaps = async () => {
     try {
       debugLog("?? Starting Google Maps load...")
+      if (mapInstanceRef.current) {
+        setMapLoading(false)
+        return
+      }
       
       // Fetch API key from database
       let apiKey = null
@@ -165,56 +169,29 @@ export default function ZoneSetup() {
       }
       
       setGoogleMapsApiKey(apiKey)
-      
-      // Wait for Google Maps to be loaded from main.jsx if it's loading
-      let retries = 0
-      const maxRetries = 100 // Wait up to 10 seconds
-      
-      debugLog("?? Waiting for Google Maps to load from main.jsx...")
-      while (!window.google && retries < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-        retries++
-      }
-
-      // Wait for mapRef to be available (retry mechanism)
-      let refRetries = 0
-      const maxRefRetries = 50 // Wait up to 5 seconds for ref
-      while (!mapRef.current && refRetries < maxRefRetries) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-        refRetries++
-      }
-
       if (!mapRef.current) {
-        debugError("? mapRef.current is still null after waiting")
+        debugError("? mapRef.current is null")
         setMapLoading(false)
-        alert("Failed to initialize map container. Please refresh the page.")
         return
       }
 
       // If Google Maps is already loaded, use it directly
       if (window.google && window.google.maps) {
-        debugLog("? Google Maps already loaded from main.jsx, initializing map...")
+        debugLog("? Google Maps already available, initializing map...")
         initializeMap(window.google)
         return
       }
 
-      // If Google Maps is not loaded yet and we have an API key, use Loader as fallback
-      if (apiKey) {
-        debugLog("?? Google Maps not loaded from main.jsx, loading with Loader...")
-        const loader = new Loader({
-          apiKey: apiKey,
-          version: "weekly",
-          libraries: ["places"]
-        })
+      debugLog("?? Loading Google Maps with Loader...")
+      const loader = new Loader({
+        apiKey,
+        version: "weekly",
+        libraries: ["places"]
+      })
 
-        const google = await loader.load()
-        debugLog("? Google Maps loaded via Loader, initializing map...")
-        initializeMap(google)
-      } else {
-        debugError("? No API key available")
-        setMapLoading(false)
-        alert("Google Maps API key not found. Please contact administrator.")
-      }
+      const google = await loader.load()
+      debugLog("? Google Maps loaded via Loader, initializing map...")
+      initializeMap(google)
     } catch (error) {
       debugError("? Error loading Google Maps:", error)
       setMapLoading(false)

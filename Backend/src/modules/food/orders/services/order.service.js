@@ -108,6 +108,38 @@ async function getRiderEarning(distanceKm) {
   return Math.round(earning);
 }
 
+function extractLatLng(locationLike) {
+  if (!locationLike) return null;
+
+  const coords = locationLike?.coordinates || locationLike?.location?.coordinates;
+  if (Array.isArray(coords) && coords.length >= 2) {
+    const lng = Number(coords[0]);
+    const lat = Number(coords[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+  }
+
+  const lat = Number(
+    locationLike?.latitude ??
+      locationLike?.lat ??
+      locationLike?.location?.latitude ??
+      locationLike?.location?.lat,
+  );
+  const lng = Number(
+    locationLike?.longitude ??
+      locationLike?.lng ??
+      locationLike?.location?.longitude ??
+      locationLike?.location?.lng,
+  );
+
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { lat, lng };
+  }
+
+  return null;
+}
+
 /** Append-only food_order_payments row; never blocks main flow on failure */
 // 🗑️ Deprecated in favor of FoodTransaction system.
 
@@ -212,21 +244,35 @@ export async function createOrder(userId, dto) {
   };
 
   let distanceKm = null;
-  if (
-    restaurant.location?.coordinates?.length === 2 &&
-    dto.address?.location?.coordinates?.length === 2
-  ) {
-    const [rLng, rLat] = restaurant.location.coordinates;
-    const [dLng, dLat] = dto.address.location.coordinates;
-    const d = haversineKm(rLat, rLng, dLat, dLng);
+  const restaurantCoords = extractLatLng(restaurant.location);
+  const deliveryCoords = extractLatLng(dto.address) || extractLatLng(dto.address?.location);
+
+  if (restaurantCoords && deliveryCoords) {
+    const d = haversineKm(
+      restaurantCoords.lat,
+      restaurantCoords.lng,
+      deliveryCoords.lat,
+      deliveryCoords.lng,
+    );
     distanceKm = Number.isFinite(d) ? d : null;
   } else {
-    console.warn(
-      `Food order: distance not available, rider earning set to 0`,
-    );
+    console.warn("Food order: distance not available, rider earning set to 0", {
+      restaurantCoords,
+      deliveryCoords,
+      restaurantLocation: restaurant.location || null,
+      addressLocation: dto.address?.location || null,
+      addressLatLng: {
+        latitude: dto.address?.latitude ?? null,
+        longitude: dto.address?.longitude ?? null,
+      },
+    });
   }
 
-  const riderEarning = await getRiderEarning(distanceKm);
+  const computedRiderEarning = await getRiderEarning(distanceKm);
+  const riderEarning =
+    computedRiderEarning > 0
+      ? computedRiderEarning
+      : Math.max(0, Number(normalizedPricing.deliveryFee || 0));
   
   // Calculate restaurant commission from subtotal
   const { commissionAmount: restaurantCommission } = await foodTransactionService.getRestaurantCommissionSnapshot({

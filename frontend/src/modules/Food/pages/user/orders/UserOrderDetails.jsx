@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { getCompanyNameAsync } from "@food/utils/businessSettings"
+import { formatCurrency } from "@food/utils/currency"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -275,8 +276,8 @@ export default function UserOrderDetails() {
       const tableData = items.map(item => [
         item.variantName ? `${item.name || 'Item'} (${item.variantName})` : (item.name || 'Item'),
         String(item.quantity || item.qty || 1),
-        `?${Number(item.price || 0).toFixed(2)}`,
-        `?${Number((item.price || 0) * (item.quantity || item.qty || 1)).toFixed(2)}`
+        `${formatCurrency(item.price || 0, "\u20B9").replace("\u20B9 ", "\u20B9")}`,
+        `${formatCurrency((item.price || 0) * (item.quantity || item.qty || 1), "\u20B9").replace("\u20B9 ", "\u20B9")}`
       ])
 
       autoTable(doc, {
@@ -301,7 +302,7 @@ export default function UserOrderDetails() {
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
       doc.text('Total:', 145, finalY + 10, { align: 'right' })
-      doc.text(`?${Number(pricing.total || 0).toFixed(2)}`, 195, finalY + 10, { align: 'right' })
+      doc.text(formatCurrency(pricing.total || 0, "\u20B9").replace("\u20B9 ", "\u20B9"), 195, finalY + 10, { align: "right" })
 
       // Save PDF instantly
       const fileName = `Order_Summary_${orderIdDisplay}_${Date.now()}.pdf`
@@ -512,9 +513,7 @@ export default function UserOrderDetails() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">GST (govt. taxes)</span>
-              <span className="text-gray-800">
-                â‚¹{Number(pricing.tax || 0).toFixed(2)}
-              </span>
+              <span className="text-gray-800">{formatCurrency(pricing.tax || 0).replace("? ", "?")}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400 font-medium">Delivery fee</span>
@@ -524,27 +523,21 @@ export default function UserOrderDetails() {
                 </span>
               )}
               <span className="text-[#7e3866] font-medium uppercase">
-                {pricing.deliveryFee ? `â‚¹${Number(pricing.deliveryFee).toFixed(2)}` : "Free"}
+                {pricing.deliveryFee ? formatCurrency(pricing.deliveryFee, "\u20B9").replace("\u20B9 ", "\u20B9") : "Free"}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Platform fee</span>
-              <span className="text-gray-800">
-                â‚¹{Number(pricing.platformFee || 0).toFixed(2)}
-              </span>
+              <span className="text-gray-800">{formatCurrency(pricing.platformFee || 0, "\u20B9").replace("\u20B9 ", "\u20B9")}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Subscription / other fees</span>
-              <span className="text-gray-800">
-                â‚¹{Number(pricing.subscriptionFee || 0).toFixed(2)}
-              </span>
+              <span className="text-gray-800">{formatCurrency(pricing.subscriptionFee || 0, "\u20B9").replace("\u20B9 ", "\u20B9")}</span>
             </div>
 
             <div className="border-t border-gray-100 my-2 pt-2 flex justify-between items-center">
               <span className="font-bold text-gray-800">Paid</span>
-              <span className="font-bold text-gray-800">
-                â‚¹{Number(pricing.total || 0).toFixed(2)}
-              </span>
+              <span className="font-bold text-gray-800">{formatCurrency(pricing.total || 0, "\u20B9").replace("\u20B9 ", "\u20B9")}</span>
             </div>
           </div>
 

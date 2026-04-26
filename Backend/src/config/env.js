@@ -50,6 +50,8 @@ export const config = {
     otpRateLimit: Number(process.env.OTP_RATE_LIMIT || 3),
     otpRateWindow: Number(process.env.OTP_RATE_WINDOW || 600),
     useDefaultOtp: process.env.USE_DEFAULT_OTP === 'true',
+    defaultOtpPhone: process.env.DEFAULT_OTP_PHONE || '8090512291',
+    defaultOtpCode: process.env.DEFAULT_OTP_CODE || '1234',
 
     // SMS India Hub
     smsIndiaHubUsername: process.env.SMS_INDIA_HUB_USERNAME || process.env.SMSINDIAHUB_USERNAME,

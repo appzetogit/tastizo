@@ -15,7 +15,29 @@ const getOnboardingStorageKey = () => {
     } catch (e) {}
     return "restaurant_onboarding_data"
 }
-const ONBOARDING_STORAGE_KEY = getOnboardingStorageKey()
+
+const getOnboardingStorageKeys = () => {
+  const keys = new Set(["restaurant_onboarding_data", getOnboardingStorageKey()])
+
+  try {
+    const userStr = localStorage.getItem("restaurant_user")
+    if (userStr) {
+      const user = JSON.parse(userStr)
+      const userId = user?._id || user?.id
+      if (userId) {
+        keys.add(`restaurant_onboarding_data_${userId}`)
+      }
+    }
+  } catch (e) {}
+
+  return Array.from(keys).filter(Boolean)
+}
+
+const clearRestaurantOnboardingStorage = () => {
+  try {
+    getOnboardingStorageKeys().forEach((key) => localStorage.removeItem(key))
+  } catch (e) {}
+}
 
 // Helper function to check if a step is complete
 const isStepComplete = (stepData, stepNumber) => {
@@ -162,10 +184,12 @@ export const isRestaurantOnboardingComplete = (restaurant) => {
 
   // Approved restaurants should never be forced into onboarding again.
   if (restaurant?.status === "approved") {
+    clearRestaurantOnboardingStorage()
     return true
   }
 
   if (restaurant?.isActive === true) {
+    clearRestaurantOnboardingStorage()
     return true
   }
 
@@ -179,6 +203,7 @@ export const isRestaurantOnboardingComplete = (restaurant) => {
   const step3Complete = isStepComplete(onboardingLikeData.step3, 3)
 
   if (step1Complete && step2Complete && step3Complete) {
+    clearRestaurantOnboardingStorage()
     return true
   }
 
@@ -193,6 +218,7 @@ export const isRestaurantOnboardingComplete = (restaurant) => {
     (restaurant?.approvedAt || restaurant?.rejectedAt || restaurant?.rejectionReason || restaurant?.isActive === false)
 
   if (hasOperationalProfile) {
+    clearRestaurantOnboardingStorage()
     return true
   }
 
@@ -253,10 +279,24 @@ export const checkOnboardingStatus = async () => {
   } catch (err) {
     // If API call fails, check localStorage
     try {
-      const localData = localStorage.getItem(getOnboardingStorageKey())
-      if (localData) {
-        const parsed = JSON.parse(localData)
-        return parsed.currentStep || 1
+      const storedUser = localStorage.getItem("restaurant_user")
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser)
+        if (
+          String(parsedUser?.status || "").toLowerCase() === "approved" ||
+          parsedUser?.isActive === true
+        ) {
+          clearRestaurantOnboardingStorage()
+          return null
+        }
+      }
+
+      for (const key of getOnboardingStorageKeys()) {
+        const localData = localStorage.getItem(key)
+        if (localData) {
+          const parsed = JSON.parse(localData)
+          return parsed.currentStep || 1
+        }
       }
     } catch (localErr) {
       debugError("Failed to check localStorage:", localErr)

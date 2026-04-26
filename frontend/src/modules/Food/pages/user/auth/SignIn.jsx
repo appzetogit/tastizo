@@ -9,7 +9,7 @@ import { authAPI } from "@food/api"
 import logoNew from "@food/assets/logo.png"
 
 const REMEMBER_LOGIN_KEY = "user_login_phone"
-const TASTIZO_BG = "#2A9C64"
+const TASTIZO_BG = "#7e3866"
 const headingWords = ["India's", "#1", "Food", "Delivery", "and", "Dining", "App"]
 
 export default function SignIn() {
@@ -218,7 +218,7 @@ export default function SignIn() {
                   />
                   <span
                     className={`flex h-5 w-5 items-center justify-center rounded-md transition-colors ${
-                      rememberLogin ? "bg-[#2A9C64] text-white" : "border border-[#cfc7bf] bg-white text-transparent"
+                      rememberLogin ? "bg-[#7e3866] text-white" : "border border-[#cfc7bf] bg-white text-transparent"
                     }`}
                   >
                     <Check className="h-3.5 w-3.5" />
@@ -228,7 +228,7 @@ export default function SignIn() {
 
                 <Button
                   type="submit"
-                  className="mt-2 h-14 w-full rounded-2xl bg-[#2A9C64] text-lg font-bold text-white transition-all hover:bg-[#238653] active:scale-[0.99]"
+                  className="mt-2 h-14 w-full rounded-2xl bg-[#7e3866] text-lg font-bold text-white transition-all hover:bg-[#238653] active:scale-[0.99]"
                   disabled={isLoading}
                 >
                   {isLoading ? (

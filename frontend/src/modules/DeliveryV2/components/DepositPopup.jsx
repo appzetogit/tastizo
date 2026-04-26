@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { IndianRupee, Loader2 } from "lucide-react"
 import { deliveryAPI } from "@food/api"
+import { formatCurrency } from "@food/utils/currency"
 import { initRazorpayPayment } from "@food/utils/razorpay"
 import { toast } from "sonner"
 import { getCompanyNameAsync } from "@food/utils/businessSettings"
@@ -11,6 +12,8 @@ export default function DepositPopup({ onSuccess, cashInHand = 0 }) {
   const [processing, setProcessing] = useState(false)
 
   const cashInHandNum = Number(cashInHand) || 0
+  const formatMoney = (value) =>
+    formatCurrency(Number(value) || 0, "\u20B9").replace("\u20B9 ", "\u20B9")
 
   const handleAmountChange = (e) => {
     const v = e.target.value.replace(/[^0-9.]/g, "")
@@ -20,15 +23,15 @@ export default function DepositPopup({ onSuccess, cashInHand = 0 }) {
   const handleDeposit = async () => {
     const amt = parseFloat(amount)
     if (!amount || isNaN(amt) || amt < 1) {
-      toast.error("Enter a valid amount (minimum ?1)")
+      toast.error("Enter a valid amount (minimum \u20B91)")
       return
     }
     if (amt > 500000) {
-      toast.error("Maximum deposit is ?5,00,000")
+      toast.error("Maximum deposit is \u20B95,00,000")
       return
     }
     if (cashInHandNum > 0 && amt > cashInHandNum) {
-      toast.error(`Deposit amount cannot exceed cash in hand (?${cashInHandNum.toFixed(2)})`)
+      toast.error(`Deposit amount cannot exceed cash in hand (${formatMoney(cashInHandNum)})`)
       return
     }
 
@@ -62,7 +65,7 @@ export default function DepositPopup({ onSuccess, cashInHand = 0 }) {
         currency: rp.currency || "INR",
         order_id: rp.orderId,
         name: companyName,
-        description: `Cash limit deposit - ?${amt.toFixed(2)}`,
+        description: `Cash limit deposit - ${formatMoney(amt)}`,
         prefill: { name, email, contact: phone },
         handler: async (res) => {
           try {
@@ -73,7 +76,7 @@ export default function DepositPopup({ onSuccess, cashInHand = 0 }) {
               amount: amt
             })
             if (verifyRes?.data?.success) {
-              toast.success(`Deposit of ?${amt.toFixed(2)} successful. Available limit updated.`)
+              toast.success(`Deposit of ${formatMoney(amt)} successful. Available limit updated.`)
               setAmount("")
               window.dispatchEvent(new CustomEvent("deliveryWalletStateUpdated"))
               if (onSuccess) onSuccess()
@@ -102,7 +105,7 @@ export default function DepositPopup({ onSuccess, cashInHand = 0 }) {
   return (
     <div className="flex flex-col p-4 space-y-4">
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">Amount (?)</label>
+        <label className="block text-sm font-medium text-slate-700 mb-2">Amount (\u20B9)</label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
             <IndianRupee className="w-4 h-4" />
@@ -118,7 +121,7 @@ export default function DepositPopup({ onSuccess, cashInHand = 0 }) {
         </div>
         {cashInHandNum > 0 && (
           <p className="text-xs text-slate-500 mt-1">
-            Cash in hand: ₹{cashInHandNum.toFixed(2)}. Deposit cannot exceed this.
+            Cash in hand: {formatMoney(cashInHandNum)}. Deposit cannot exceed this.
           </p>
         )}
       </div>
@@ -131,7 +134,7 @@ export default function DepositPopup({ onSuccess, cashInHand = 0 }) {
         {loading || processing ? (
           <Loader2 className="w-4 h-4 animate-spin" />
         ) : null}
-        {loading ? "Creating…" : processing ? "Complete payment…" : "Deposit"}
+        {loading ? "Creating..." : processing ? "Complete payment..." : "Deposit"}
       </button>
     </div>
   )

@@ -226,6 +226,28 @@ const buildRichLocation = ({ latitude, longitude, payload = {}, sourceType = "gp
   }
 }
 
+const buildPreciseGpsFallbackLocation = ({ latitude, longitude, accuracy = null, sourceType = "gps" }) => {
+  const safeLatitude = Number(latitude)
+  const safeLongitude = Number(longitude)
+  const coordLabel = `${safeLatitude.toFixed(8)}, ${safeLongitude.toFixed(8)}`
+
+  return {
+    label: "",
+    street: "",
+    additionalDetails: coordLabel,
+    area: "Current location",
+    city: "",
+    state: "",
+    zipCode: "",
+    latitude: safeLatitude,
+    longitude: safeLongitude,
+    accuracy: Number.isFinite(Number(accuracy)) ? Number(accuracy) : null,
+    address: coordLabel,
+    formattedAddress: coordLabel,
+    sourceType,
+  }
+}
+
 const reverseGeocode = async (latitude, longitude, sourceType = "gps") => {
   try {
     const response = await locationAPI.reverseGeocode(latitude, longitude, { force: true })
@@ -355,18 +377,10 @@ export function LocationProvider({ children }) {
         const geocoded = await reverseGeocode(latitude, longitude, "gps")
         const refinedLocation =
           geocoded ||
-          ({
+          buildPreciseGpsFallbackLocation({
             latitude,
             longitude,
-            accuracy: Number.isFinite(accuracy) ? accuracy : null,
-            city: "",
-            state: "",
-            zipCode: "",
-            street: "",
-            additionalDetails: "",
-            area: "",
-            address: "",
-            formattedAddress: "",
+            accuracy,
             sourceType: "gps",
           })
 
@@ -375,15 +389,10 @@ export function LocationProvider({ children }) {
         }
 
         if (!refinedLocation?.formattedAddress) {
-          const fallbackLocation = readStoredLocation()
-          if (fallbackLocation?.latitude && fallbackLocation?.longitude) {
-            await applyLocation(fallbackLocation, {
-              mode: getStoredMode(),
-              selectedAddress: addresses.find((item) => String(getAddressId(item)) === String(getStoredSelectedAddressId())),
-              syncBackend: false,
-            })
-            return fallbackLocation
-          }
+          refinedLocation.formattedAddress = `${latitude.toFixed(8)}, ${longitude.toFixed(8)}`
+          refinedLocation.address = refinedLocation.formattedAddress
+          refinedLocation.additionalDetails =
+            refinedLocation.additionalDetails || refinedLocation.formattedAddress
         }
 
         await applyLocation(refinedLocation, {

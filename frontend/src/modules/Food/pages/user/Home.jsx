@@ -1511,7 +1511,7 @@ export default function Home() {
           normalizedUserCity !== "current location" &&
           normalizedUserCity !== "unknown city" &&
           normalizedUserCity !== "select location";
-        if (hasUsableUserCity) {
+        if (hasUsableUserCity && !effectiveZoneId && !params.lat && !params.lng) {
           params.city = String(effectiveLocation.city).trim();
         }
 
@@ -1587,7 +1587,12 @@ export default function Home() {
             return restaurantCity === userCity;
           });
 
-          const transformedRestaurants = strictCityRestaurants
+          const restaurantsForDisplay =
+            hasUsableUserCity && strictCityRestaurants.length === 0
+              ? restaurantsArray
+              : strictCityRestaurants;
+
+          const transformedRestaurants = restaurantsForDisplay
             .filter((restaurant) => {
               const name = (restaurant.restaurantName || restaurant.name || "").toLowerCase()
               return true
@@ -2677,7 +2682,7 @@ export default function Home() {
                     >
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black text-amber-500 tracking-widest uppercase mb-0.5">Budget</span>
-                        <span className="text-sm font-black text-amber-600 dark:text-amber-400">Under â‚¹{under250PriceLimit}</span>
+                        <span className="text-sm font-black text-amber-600 dark:text-amber-400">Under {"\u20B9"}{under250PriceLimit}</span>
                       </div>
                       <div className="w-10 h-10 p-1.5 rounded-xl bg-white dark:bg-[#1a1a1a] shadow-sm group-hover:scale-110 transition-transform">
                         <IndianRupee className="w-full h-full text-amber-500" />

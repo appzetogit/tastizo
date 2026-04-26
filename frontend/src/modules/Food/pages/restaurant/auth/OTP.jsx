@@ -7,6 +7,7 @@ import { restaurantAPI } from "@food/api"
 import {
   setAuthData as setRestaurantAuthData,
   setRestaurantPendingPhone,
+  clearRestaurantPendingPhone,
 } from "@food/utils/auth"
 import { checkOnboardingStatus, isRestaurantOnboardingComplete } from "@food/utils/onboardingUtils"
 
@@ -128,24 +129,21 @@ export default function RestaurantOTP() {
 
       if (accessToken && restaurant) {
         setRestaurantAuthData("restaurant", accessToken, restaurant, data?.refreshToken)
+        clearRestaurantPendingPhone()
         window.dispatchEvent(new Event("restaurantAuthChanged"))
         sessionStorage.removeItem("restaurantAuthData")
         toast.success("Verification successful!")
 
         setTimeout(async () => {
-          if (authData?.isSignUp) {
-            navigate("/food/restaurant/onboarding", { replace: true })
-          } else {
-            const onboardingComplete = isRestaurantOnboardingComplete(restaurant)
-            if (!onboardingComplete) {
-              const incompleteStep = await checkOnboardingStatus()
-              if (incompleteStep) {
-                navigate(`/food/restaurant/onboarding?step=${incompleteStep}`, { replace: true })
-                return
-              }
+          const onboardingComplete = isRestaurantOnboardingComplete(restaurant)
+          if (!onboardingComplete) {
+            const incompleteStep = await checkOnboardingStatus()
+            if (incompleteStep) {
+              navigate(`/food/restaurant/onboarding?step=${incompleteStep}`, { replace: true })
+              return
             }
-            navigate("/food/restaurant", { replace: true })
           }
+          navigate("/food/restaurant", { replace: true })
         }, 800)
       }
     } catch (err) {

@@ -103,7 +103,7 @@ export default function SuperAppPortal() {
           <motion.div 
             animate={{ rotate: [0, 10, -10, 0] }}
             transition={{ duration: 4, repeat: Infinity }}
-            className="w-6 h-6 bg-gradient-to-br from-[#7e3866] to-[#5a2849] rounded-lg flex items-center justify-center shadow-lg"
+            className="w-6 h-6 bg-gradient-to-br from-[#7e3866] to-[#55254b] rounded-lg flex items-center justify-center shadow-lg"
           >
              <span className="text-white text-[10px] font-black italic">F</span>
           </motion.div>

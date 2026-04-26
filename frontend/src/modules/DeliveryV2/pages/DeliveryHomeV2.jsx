@@ -622,10 +622,12 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         const nextIncomingOrder = availableOrders.find((order) => {
           const dispatchStatus = String(order?.dispatch?.status || '').toLowerCase();
           const orderStatus = String(order?.orderStatus || order?.status || '').toLowerCase();
-          return (
-            ['unassigned', 'assigned'].includes(dispatchStatus) &&
-            ['confirmed', 'preparing', 'ready_for_pickup'].includes(orderStatus)
-          );
+          const hasAcceptedStatus = ['confirmed', 'preparing', 'ready_for_pickup'].includes(orderStatus);
+          const isDispatchEligible =
+            !dispatchStatus ||
+            ['unassigned', 'assigned', 'offered', 'offer_sent', 'pending'].includes(dispatchStatus);
+
+          return hasAcceptedStatus && isDispatchEligible;
         });
 
         if (!cancelled && nextIncomingOrder) {
@@ -638,6 +640,8 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
               nextIncomingOrder?.orderMongoId;
             return prevId === nextId && prev ? prev : nextIncomingOrder;
           });
+        } else if (!cancelled) {
+          setIncomingOrder(null);
         }
       } catch (error) {
         console.warn('[DeliveryHomeV2] Available order fallback sync failed:', error?.message || error);
