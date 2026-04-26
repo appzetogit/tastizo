@@ -529,6 +529,7 @@ export default function Dining() {
           <PageNavbar
             textColor="dark"
             zIndex={20}
+            showLogo={false}
             onNavClick={(e) => e.stopPropagation()}
           />
         </div>

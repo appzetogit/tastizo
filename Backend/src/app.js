@@ -13,6 +13,15 @@ import { healthCheck } from './config/health.js';
 import { config } from './config/env.js';
 
 const app = express();
+const corsOptions = {
+    origin: (origin, callback) => {
+        if (!origin || config.corsOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+
+        return callback(new Error('Not allowed by CORS'));
+    }
+};
 
 // Trust first proxy (essential for express-rate-limit if behind a proxy)
 app.set('trust proxy', 1);
@@ -41,7 +50,7 @@ app.use(helmet({
     noSniff: true,
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
 }));
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(morgan('dev'));
 app.use(express.json({
     verify: (req, res, buf) => {

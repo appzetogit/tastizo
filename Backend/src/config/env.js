@@ -3,6 +3,23 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const sanitizeEnvValue = (value) => (value ? String(value).trim().replace(/^['"]|['"]$/g, '') : '');
+const parseOriginList = (value, fallback = []) => {
+    const rawValue = sanitizeEnvValue(value);
+    if (!rawValue) return fallback;
+
+    return rawValue
+        .split(',')
+        .map((origin) => sanitizeEnvValue(origin))
+        .filter(Boolean);
+};
+
+const defaultCorsOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://tastizo.com',
+    'https://www.tastizo.com',
+    'https://api.tastizo.com'
+];
 const backendUrl = sanitizeEnvValue(process.env.BACKEND_URL);
 const resolvedAppleRedirectUri =
     sanitizeEnvValue(process.env.APPLE_USER_REDIRECT_URI) ||
@@ -88,6 +105,7 @@ export const config = {
 
     // Frontend / OAuth
     frontendUrl: process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:5173',
+    corsOrigins: parseOriginList(process.env.CORS_ORIGINS, defaultCorsOrigins),
     appleClientId: process.env.APPLE_CLIENT_ID,
     appleTeamId: process.env.APPLE_TEAM_ID,
     appleKeyId: process.env.APPLE_KEY_ID,
@@ -96,7 +114,7 @@ export const config = {
     appleRedirectUri: resolvedAppleRedirectUri,
 
     // Socket.io
-    socketCorsOrigin: process.env.SOCKET_CORS_ORIGIN || '*',
+    socketCorsOrigin: parseOriginList(process.env.SOCKET_CORS_ORIGIN, defaultCorsOrigins),
 
     // Razorpay (payments)
     razorpayKeyId: process.env.RAZORPAY_KEY_ID,
