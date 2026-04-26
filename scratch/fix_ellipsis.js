@@ -5,20 +5,6 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..');
 
-const REPLACEMENTS = [
-    { target: '₹', replacement: '₹' },  // Rupee
-    { target: '–', replacement: '–' },  // En Dash
-    { target: '—', replacement: '—' },  // Em Dash
-    { target: ''', replacement: "'" },  // Smart Quote
-    { target: '"', replacement: '"' },  // Smart Quote Open
-    { target: '"', replacement: '"' },  // Smart Quote Close
-    { target: '✔', replacement: '✔' },  // Check mark
-    { target: '•', replacement: '•' },  // Bullet
-    { target: '...', replacement: '...' }, // Ellipsis
-    { target: '─', replacement: '─' },  // Box drawing
-    { target: '🌐', replacement: '🌐' }, // Globe emoji
-];
-
 function walkDir(dir, callback) {
     fs.readdirSync(dir).forEach(f => {
         let dirPath = path.join(dir, f);
@@ -41,11 +27,9 @@ function fixFile(filePath) {
         let content = fs.readFileSync(filePath, 'utf8');
         let modified = false;
 
-        for (const { target, replacement } of REPLACEMENTS) {
-            if (content.includes(target)) {
-                content = content.split(target).join(replacement);
-                modified = true;
-            }
+        if (content.includes('...')) {
+            content = content.split('...').join('...');
+            modified = true;
         }
 
         if (modified) {
@@ -57,6 +41,6 @@ function fixFile(filePath) {
     }
 }
 
-console.log(`Starting global fix for multiple broken UTF-8 sequences (V3)...`);
+console.log(`Starting global fix for ... -> ...`);
 walkDir(ROOT_DIR, fixFile);
 console.log('Finished global fix.');

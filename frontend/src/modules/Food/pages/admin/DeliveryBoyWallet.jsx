@@ -183,7 +183,7 @@ export default function DeliveryBoyWallet() {
           {loading ? (
             <div className="py-20 text-center">
               <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-4" />
-              <p className="text-slate-600">Loading wallets"¦</p>
+              <p className="text-slate-600">Loading wallets...</p>
             </div>
           ) : (
             <div className="overflow-x-auto">

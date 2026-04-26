@@ -2247,7 +2247,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                   <div className="absolute z-50 left-0 right-0 mt-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] shadow-xl overflow-hidden">
                     {isKeywordSearching && (
                       <div className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">
-                        Searching"¦
+                        Searching...
                       </div>
                     )}
 
