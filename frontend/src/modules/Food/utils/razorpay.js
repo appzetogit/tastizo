@@ -121,7 +121,7 @@ export const initRazorpayPayment = async (options) => {
     // Open Razorpay modal
     razorpay.open();
     
-    console.log('âœ… Razorpay checkout opened successfully');
+    console.log('✅ Razorpay checkout opened successfully');
     console.log('Razorpay options:', {
       key: razorpayOptions.key ? 'Present' : 'Missing',
       amount: razorpayOptions.amount,
