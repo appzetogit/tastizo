@@ -398,7 +398,7 @@ export default function Coupons() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Min Order Value (â‚¹)</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Min Order Value (₹)</label>
                 <input
                   type="number"
                   min="0"
@@ -412,7 +412,7 @@ export default function Coupons() {
               </div>
 
                 <div title={formData.discountType === "flat-price" ? "Max discount is not applicable for flat coupons" : ""}>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Max Discount (â‚¹, optional)</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Max Discount (₹, optional)</label>
                 <input
                   type="number"
                   min="0"
@@ -614,7 +614,7 @@ export default function Coupons() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-sm text-slate-700">
-                          {Number(offer.minOrderValue) ? `\u20B9${Number(offer.minOrderValue)}` : "â€”"}
+                          {Number(offer.minOrderValue) ? `\u20B9${Number(offer.minOrderValue)}` : "—"}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

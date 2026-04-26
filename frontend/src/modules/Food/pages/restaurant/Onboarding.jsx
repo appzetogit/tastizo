@@ -17,14 +17,14 @@ import { restaurantAPI, zoneAPI, uploadAPI, api } from "@food/api"
 import { MobileTimePicker } from "@mui/x-date-pickers/MobileTimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns"
-import { determineStepToShow } from "@food/utils/onboardingUtils"
+import { determineStepToShow, isRestaurantOnboardingComplete } from "@food/utils/onboardingUtils"
 import { toast } from "sonner"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { clearModuleAuth, clearAuthData } from "@food/utils/auth"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 import { EMAIL_REGEX } from "@/shared/utils/emailValidation"
-const debugLog = (...args) => {}
+const debugLog = (...args) => console.log('[Onboarding]', ...args)
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
@@ -1150,20 +1150,39 @@ export default function RestaurantOnboarding() {
                 bankData.accountHolderName || data.accountHolderName || prev.accountHolderName || "",
               accountType: normalizeAccountTypeValue(bankData.accountType || data.accountType || prev.accountType || ""),
             }))
+            
+            // If already onboarded, redirect to dashboard unless editing
+            if (!searchParams.get("edit")) {
+              const isComplete = isRestaurantOnboardingComplete(data);
+              if (isComplete) {
+                debugLog("Restaurant already onboarded, redirecting to dashboard");
+                navigate("/restaurant", { replace: true });
+                return;
+              }
+            }
 
-          // Only determine step automatically if not specified in URL
+          // Determine step automatically if not specified in URL
           const stepParam = searchParams.get("step")
           if (!stepParam) {
-            // If already registered/pending, stay on step 1 for editing
+            const stepToShow = determineStepToShow({
+              step1: onboardingData.step1 || data,
+              step2: onboardingData.step2 || data,
+              step3: onboardingData.step3 || data,
+            })
+            
+            // For pending/approved, we don't want to jump ahead if they came here to edit,
+            // but we also don't want to force step 1 if they were at step 3.
+            // If they are pending/approved, they are "done" with the initial flow, 
+            // so we default to 1 for editing unless they have a clear incomplete step.
             if (data.status === "approved" || data.status === "pending") {
-               setStep(1)
-            } else {
-               const stepToShow = determineStepToShow({ step1: data, step2: data, step3: data })
-               // Only overwrite if backend says we are further along (step > 1) 
-               // or if we are currently at step 1 and backend has data
-               if (stepToShow > 1) {
-                  setStep(stepToShow)
+               // Only jump if it's a clear incomplete step and we aren't editing existing data
+               if (stepToShow > 1 && !hasExistingRestaurantProfile) {
+                 setStep(stepToShow)
+               } else {
+                 setStep(1)
                }
+            } else {
+               setStep(stepToShow)
             }
           }
         } else {

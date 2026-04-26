@@ -130,6 +130,7 @@ export const createOrUpdateOtp = async (phone) => {
         logger.info(`Default OTP mode enabled - OTP is ${otp} for phone ${phone}`);
     } else {
         otp = generateOtpCode();
+        logger.info(`OTP generated for ${phone}: ${otp}`);
     }
 
     let ttlMs;
@@ -192,7 +193,7 @@ export const verifyOtp = async (phone, otp) => {
 
     record.attempts += 1;
 
-    if (record.otp !== otp) {
+    if (record.otp !== normalizedOtp) {
         await record.save();
         return { valid: false, reason: 'Invalid OTP' };
     }

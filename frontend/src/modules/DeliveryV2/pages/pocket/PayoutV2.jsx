@@ -137,7 +137,7 @@ export const PayoutV2 = () => {
                         </span>
                       </div>
                       <p className="text-gray-900 text-xl font-bold mb-1">
-                        â‚¹{withdrawal.amount}
+                        ₹{withdrawal.amount}
                       </p>
                       <p className="text-gray-500 text-[11px] font-medium">
                         Requested: {withdrawal.date}

@@ -64,7 +64,7 @@ export default function AdminNotifications() {
                       <span>{item?.timeLabel || "N/A"}</span>
                       {item?.metaLabel ? (
                         <>
-                          <span>â€¢</span>
+                          <span>•</span>
                           <span>{item.metaLabel}</span>
                         </>
                       ) : null}

@@ -705,7 +705,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
   return (
     <div className="relative h-screen w-full bg-white text-gray-900 overflow-hidden flex flex-col">
-      {/* â”€â”€â”€ 1. TOP HEADER (Premium Dark Gray) â”€â”€â”€ */}
+      {/* ─── 1. TOP HEADER (Premium Dark Gray) ─── */}
       {currentTab !== 'history' && (
       <div className="absolute top-0 inset-x-0 bg-[#121212]/95 backdrop-blur-2xl shadow-2xl z-[200] safe-top pb-2 border-b border-white/10">
         <div className="flex items-center justify-between px-4 py-2">
@@ -755,7 +755,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
           </div>
         </div>
 
-        {/* â”€â”€â”€ LIVE STATUS / PROGRESS BADGE (MATCHED PRO) â”€â”€â”€ */}
+        {/* ─── LIVE STATUS / PROGRESS BADGE (MATCHED PRO) ─── */}
         <AnimatePresence>
           {currentTab === 'feed' && (
             <motion.div 
@@ -828,7 +828,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       </div>
       )}
 
-      {/* â”€â”€â”€ 2. MAIN CONTENT â”€â”€â”€ */}
+      {/* ─── 2. MAIN CONTENT ─── */}
       <div className={`flex-1 relative overflow-y-auto ${currentTab === 'history' ? 'pt-0' : 'pt-[120px]'} no-scrollbar`}>
          {currentTab === 'feed' ? (
            <div className="absolute inset-0 top-[-120px]">
@@ -974,7 +974,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                                         msg.toLowerCase().includes('another partner') ||
                                         (err?.response?.status === 403);
                         if (isTaken) {
-                          // Dismiss modal â€” the order is no longer available
+                          // Dismiss modal — the order is no longer available
                           setIncomingOrder(null);
                           clearNewOrder();
                         }
@@ -1019,7 +1019,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                             <div>
                                <h3 className="text-gray-950 text-2xl font-bold uppercase">Handover Drop</h3>
                                <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mt-1.5 ${isWithinRange ? 'text-green-600' : 'text-orange-500'}`}>
-                                 {isWithinRange ? 'Ready - Swipe to Arrive âˆš' : `${(distanceToTarget / 1000).toFixed(1)} km â€¢ ${eta || '--'} min Arrival`}
+                                 {isWithinRange ? 'Ready - Swipe to Arrive âˆš' : `${(distanceToTarget / 1000).toFixed(1)} km • ${eta || '--'} min Arrival`}
                                </p>
                             </div>
                           </div>
@@ -1071,7 +1071,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         </AnimatePresence>
       )}
 
-      {/* â”€â”€â”€ MODALS RESTORED FROM OLD UI â”€â”€â”€ */}
+      {/* ─── MODALS RESTORED FROM OLD UI ─── */}
       <BottomPopup isOpen={showEmergencyPopup} title="Emergency Help" onClose={() => setShowEmergencyPopup(false)}>
          <div className="grid gap-4 py-2">
            {emergencyOptions.map((opt, i) => (
@@ -1198,7 +1198,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         </motion.div>
       )}
 
-      {/* â”€â”€â”€ 3. BOTTOM NAV (Fixed - Compact Pro) â”€â”€â”€ */}
+      {/* ─── 3. BOTTOM NAV (Fixed - Compact Pro) ─── */}
       <div className="bg-white border-t border-gray-100 px-8 py-3 pb-6 flex justify-between items-center z-[200] shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
          <button onClick={() => navigate('/food/delivery/feed')} className={`flex flex-col items-center gap-1 transition-all ${currentTab === 'feed' ? 'text-gray-950 scale-110' : 'text-gray-400 opacity-70'}`}>
             <LayoutGrid className="w-6 h-6" /><span className="text-[11px] font-medium font-sans">Feed</span>

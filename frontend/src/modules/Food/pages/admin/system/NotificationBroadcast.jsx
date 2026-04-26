@@ -82,21 +82,21 @@ export default function NotificationBroadcast() {
         ownerType,
         ownerId: String(item?._id || item?.id || ""),
         label: String(item?.name || item?.phone || "User").trim(),
-        subLabel: [item?.phone, item?.email].filter(Boolean).join(" â€¢ "),
+        subLabel: [item?.phone, item?.email].filter(Boolean).join(" • "),
       }));
 
       const restaurants = normalizeRecipients(restaurantsRes, "RESTAURANT", (item, ownerType) => ({
         ownerType,
         ownerId: String(item?._id || item?.id || ""),
         label: String(item?.restaurantName || item?.ownerName || "Restaurant").trim(),
-        subLabel: [item?.ownerPhone, item?.ownerEmail].filter(Boolean).join(" â€¢ "),
+        subLabel: [item?.ownerPhone, item?.ownerEmail].filter(Boolean).join(" • "),
       }));
 
       const deliveryPartners = normalizeRecipients(deliveryRes, "DELIVERY_PARTNER", (item, ownerType) => ({
         ownerType,
         ownerId: String(item?._id || item?.id || ""),
         label: String(item?.name || item?.phone || "Delivery Partner").trim(),
-        subLabel: [item?.phone, item?.email].filter(Boolean).join(" â€¢ "),
+        subLabel: [item?.phone, item?.email].filter(Boolean).join(" • "),
       }));
 
       setAllRecipients([...customers, ...restaurants, ...deliveryPartners]);
@@ -292,7 +292,7 @@ export default function NotificationBroadcast() {
                           </div>
                           <div className="text-xs text-slate-500">
                             {recipient.ownerType.replaceAll("_", " ")}
-                            {recipient.subLabel ? ` â€¢ ${recipient.subLabel}` : ""}
+                            {recipient.subLabel ? ` • ${recipient.subLabel}` : ""}
                           </div>
                         </div>
                       </label>

@@ -614,7 +614,7 @@ export default function OrdersPage({ statusKey = "all" }) {
 
       const title = "New order received"
       const body = payload?.restaurantName
-        ? `${payload.restaurantName} â€¢ ${orderId}`
+        ? `${payload.restaurantName} • ${orderId}`
         : `Order ${orderId}`
 
       activeOrderAlertRef.current = payload || { orderId }

@@ -7,12 +7,12 @@ import './shared/styles/global.css'
 
 const NATIVE_LAST_ROUTE_KEY = 'native_last_route'
 
-// â”€â”€â”€ Quick-spicy Food Module Initialization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Quick-spicy Food Module Initialization ───────────────────────────────────
 
-// Load food module business settings (favicon, title) â€” non-critical
+// Load food module business settings (favicon, title) — non-critical
 import('./modules/Food/utils/businessSettings.js')
   .then(({ loadBusinessSettings }) => loadBusinessSettings())
-  .catch(() => { /* Silently fail â€” settings load when admin authenticates */ })
+  .catch(() => { /* Silently fail — settings load when admin authenticates */ })
 
 // Apply saved theme
 const savedTheme = localStorage.getItem('appTheme') || 'light'
@@ -77,7 +77,7 @@ function bootstrapNativeHashRoute() {
 
 bootstrapNativeHashRoute()
 
-// â”€â”€â”€ Suppress known non-critical errors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Suppress known non-critical errors ──────────────────────────────────────
 
 const originalError = console.error
 console.error = (...args) => {
@@ -135,7 +135,7 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 })
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { AppProviders } from './app/providers.jsx'
 

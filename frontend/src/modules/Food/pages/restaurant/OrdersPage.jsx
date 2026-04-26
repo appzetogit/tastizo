@@ -532,7 +532,7 @@ export default function OrdersPage() {
                     <div className="text-right">
                       <p className="text-gray-500 text-[10px] md:text-xs mb-0.5">Amount</p>
                       <p className="text-gray-900 font-bold text-sm md:text-base">
-                        â‚¹{order.amount?.toFixed(2) || '0.00'}
+                        ₹{order.amount?.toFixed(2) || '0.00'}
                       </p>
                     </div>
                   </div>

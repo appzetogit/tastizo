@@ -516,9 +516,9 @@ function RestaurantDetailsContent() {
             restaurantOffers: {
               goldOffer: {
                 title: normalizedRestaurantOffers?.goldOffer?.title || "Gold exclusive offer",
-                description: apiRestaurant?.restaurantOffers?.goldOffer?.description || "Free delivery above â‚¹99",
+                description: apiRestaurant?.restaurantOffers?.goldOffer?.description || "Free delivery above ₹99",
                 unlockText: normalizedRestaurantOffers?.goldOffer?.unlockText || "join Gold to unlock",
-                buttonText: apiRestaurant?.restaurantOffers?.goldOffer?.buttonText || "Add Gold - â‚¹1",
+                buttonText: apiRestaurant?.restaurantOffers?.goldOffer?.buttonText || "Add Gold - ₹1",
               },
               coupons: Array.isArray(normalizedRestaurantOffers?.coupons)
                 ? normalizedRestaurantOffers.coupons
@@ -3749,7 +3749,7 @@ function RestaurantDetailsContent() {
                             <Lock className="h-5 w-5 text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" />
                             <div className="flex-1">
                               <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
-                                {restaurant.restaurantOffers.goldOffer?.description || "Free delivery above â‚¹99"}
+                                {restaurant.restaurantOffers.goldOffer?.description || "Free delivery above ₹99"}
                               </p>
                               <p className="text-xs text-gray-500 dark:text-gray-400">
                                 {restaurant.restaurantOffers.goldOffer?.unlockText || "join Gold to unlock"}
@@ -3762,7 +3762,7 @@ function RestaurantDetailsContent() {
                               // Handle add gold
                             }}
                           >
-                            {restaurant.restaurantOffers.goldOffer?.buttonText || "Add Gold - â‚¹1"}
+                            {restaurant.restaurantOffers.goldOffer?.buttonText || "Add Gold - ₹1"}
                           </Button>
                         </div>
                       </div>

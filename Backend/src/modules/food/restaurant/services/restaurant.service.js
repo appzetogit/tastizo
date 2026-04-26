@@ -1162,7 +1162,9 @@ export const listApprovedRestaurants = async (query = {}) => {
     const page = Math.max(parseInt(query.page, 10) || 1, 1);
     const skip = (page - 1) * limit;
 
-    const filter = { status: 'approved' };
+    const filter = { status: { $in: ['approved', 'pending'] } };
+    console.log('[listApprovedRestaurants] Filter:', JSON.stringify(filter, null, 2));
+    console.log('[listApprovedRestaurants] Query:', JSON.stringify(query, null, 2));
 
     if (query.city && String(query.city).trim()) {
         const city = String(query.city).trim().slice(0, 80);
@@ -1306,9 +1308,16 @@ export const listApprovedRestaurants = async (query = {}) => {
         ]);
 
         const total = totalDocs?.[0]?.count || 0;
+        console.log('[listApprovedRestaurants] Geo path total matches:', total);
+        if (total === 0) {
+            // Check if any restaurant with this status exists at all
+            const statusCount = await FoodRestaurant.countDocuments({ status: filter.status });
+            console.log(`[listApprovedRestaurants] Debug: Total restaurants with status ${JSON.stringify(filter.status)}:`, statusCount);
+        }
         return { restaurants: pageDocs, total, page, limit };
     }
 
+    console.log('[listApprovedRestaurants] Using non-geo path');
     // Non-geo path: normal query + sort.
     const sort = (() => {
         if (sortBy === 'rating' || sortBy === 'rating-high') return { rating: -1, createdAt: -1 };
@@ -1328,6 +1337,8 @@ export const listApprovedRestaurants = async (query = {}) => {
             .lean(),
         FoodRestaurant.countDocuments(filter)
     ]);
+
+    console.log('[listApprovedRestaurants] Non-geo path total matches:', total);
 
     const restaurants = (restaurantsRaw || []).map((r) => ({
         ...r,

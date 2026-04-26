@@ -70,9 +70,9 @@ import {
 } from "@food/components/user/UserLayout";
 import PageNavbar from "@food/components/user/PageNavbar";
 
-const debugLog = (...args) => { };
-const debugWarn = (...args) => { };
-const debugError = (...args) => { };
+const debugLog = (...args) => console.log('[Home]', ...args);
+const debugWarn = (...args) => console.warn('[Home]', ...args);
+const debugError = (...args) => console.error('[Home]', ...args);
 
 // Import shared food images - prevents duplication
 import { foodImages } from "@food/constants/images";
@@ -1109,7 +1109,7 @@ export default function Home() {
   const [activeFilterTab, setActiveFilterTab] = useState("sort");
   const categoryScrollRef = useRef(null);
   const gsapAnimationsRef = useRef([]);
-  // Show skeletons immediately while loading â€” delayed toggles caused visible layout swap (CLS).
+  // Show skeletons immediately while loading — delayed toggles caused visible layout swap (CLS).
   const showBannerSkeleton = loadingBanners;
   const showCategorySkeleton = loadingRealCategories || loadingMenuCategories;
   const showExploreSkeleton = loadingLandingConfig;
@@ -1529,7 +1529,7 @@ export default function Home() {
           response.data.data.restaurants
         ) {
           const restaurantsArray = response.data.data.restaurants;
-          debugLog(`Fetched ${restaurantsArray.length} restaurants from API`);
+          debugLog(`Fetched ${restaurantsArray.length} restaurants from API:`, restaurantsArray);
 
           if (restaurantsArray.length === 0) {
             debugWarn("No restaurants found in API response");
@@ -2429,7 +2429,7 @@ export default function Home() {
           >
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-[#7e3866] rounded-b-full rounded-t-sm shadow-md border-t-4 border-orange-200 flex flex-col items-center justify-center p-1">
               <span className="text-[10px] sm:text-xs font-bold text-white text-center leading-tight">UNDER</span>
-              <span className="text-sm sm:text-base font-extrabold text-white">â‚¹200</span>
+              <span className="text-sm sm:text-base font-extrabold text-white">₹200</span>
               <div className="w-10 h-3.5 bg-white rounded-full mt-1 flex items-center justify-center">
                 <span className="text-[8px] font-bold text-[#7e3866]">Explore</span>
               </div>
@@ -3179,7 +3179,7 @@ export default function Home() {
                             {/* Featured Dish Badge - Top Left */}
                             <div className="absolute top-4 left-4 flex items-center z-10 transform transition-transform duration-300 group-hover:scale-105">
                               <div className="bg-black/70 backdrop-blur-lg text-white px-4 py-1.5 rounded-full text-[11px] font-medium tracking-tight flex items-center shadow-2xl border border-white/20">
-                                {restaurant.featuredDish} â€¢ â‚¹
+                                {restaurant.featuredDish} • ₹
                                 {restaurant.featuredPrice}
                               </div>
                             </div>
@@ -3584,7 +3584,7 @@ export default function Home() {
                           }`}>
                         <span
                           className={`text-sm font-medium ${activeFilters.has("price-under-200") ? "text-[#7e3866]" : "text-gray-700 dark:text-gray-300"}`}>
-                          Under â‚¹200
+                          Under ₹200
                         </span>
                       </button>
                       <button
@@ -3595,7 +3595,7 @@ export default function Home() {
                           }`}>
                         <span
                           className={`text-sm font-medium ${activeFilters.has("price-under-500") ? "text-[#7e3866]" : "text-gray-700 dark:text-gray-300"}`}>
-                          Under â‚¹500
+                          Under ₹500
                         </span>
                       </button>
                     </div>

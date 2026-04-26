@@ -25,7 +25,7 @@ const initialState = {
   // Zone & address (minimize zone/address API calls; home/cart/checkout read from here)
   zoneId: null,
   selectedAddressId: null,
-  // Order tracking cache: { [orderId]: { order, tracking } } â€“ Firebase listener updates this
+  // Order tracking cache: { [orderId]: { order, tracking } } – Firebase listener updates this
   orderTrackingByOrderId: {},
 }
 
@@ -33,7 +33,7 @@ const foodSlice = createSlice({
   name: 'food',
   initialState,
   reducers: {
-    // â€”â€” Cart â€”â€”
+    // —— Cart ——
     addToCart(state, action) {
       const { id, restaurantId, quantity = 1, ...rest } = action.payload || {}
       if (!id) return
@@ -62,7 +62,7 @@ const foodSlice = createSlice({
       state.cart.items = Array.isArray(action.payload) ? action.payload : []
     },
 
-    // â€”â€” Restaurants â€”â€”
+    // —— Restaurants ——
     setRestaurantsList(state, action) {
       state.restaurants.list = Array.isArray(action.payload)
         ? action.payload
@@ -72,7 +72,7 @@ const foodSlice = createSlice({
       state.restaurants.selectedRestaurantId = action.payload ?? null
     },
 
-    // â€”â€” Orders â€”â€”
+    // —— Orders ——
     setOrdersList(state, action) {
       state.orders.list = Array.isArray(action.payload) ? action.payload : []
     },

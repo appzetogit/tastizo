@@ -3,12 +3,20 @@ import { getFoodDisplayPrice, getFoodVariants } from "./foodVariants"
 export const getMenuFromResponse = (response) =>
   response?.data?.data?.menu || response?.data?.menu || null
 
+const getImageUrl = (img) => {
+  if (!img) return "";
+  if (typeof img === 'string') return img;
+  if (img.url) return img.url;
+  if (Array.isArray(img) && img.length > 0) return getImageUrl(img[0]);
+  return "";
+};
+
 const normalizeItem = (item = {}, sectionName = "", subsectionName = "") => ({
   ...item,
   id: String(item?.id || item?._id || ""),
   sectionName,
   subsectionName,
-  image: item?.image || item?.images?.[0] || "",
+  image: getImageUrl(item?.image) || getImageUrl(item?.images),
   name: item?.name || "Unnamed Item",
   category: item?.category || sectionName || "Varieties",
   foodType: item?.foodType || "Non-Veg",

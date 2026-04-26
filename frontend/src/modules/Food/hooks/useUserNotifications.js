@@ -180,7 +180,7 @@ export const useUserNotifications = (options = {}) => {
       toast.dismiss(DROP_OTP_TOAST_ID);
       toast.message(title, {
         id: DROP_OTP_TOAST_ID,
-        description: parts.join(' â€” ') || 'Handover OTP from your delivery partner.',
+        description: parts.join(' — ') || 'Handover OTP from your delivery partner.',
         duration: 12_000
       });
     });

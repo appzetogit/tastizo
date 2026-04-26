@@ -32,6 +32,14 @@ const OptimizedImage = React.memo(({
   const imgRef = useRef(null)
   const observerRef = useRef(null)
 
+  // Extract URL if src is an object
+  const resolvedSrc = useMemo(() => {
+    if (!src) return '';
+    if (typeof src === 'string') return src;
+    if (src.url) return src.url;
+    return '';
+  }, [src]);
+
   // Check if image URL supports optimization (external URLs)
   const supportsOptimization = (imageSrc) => {
     if (!imageSrc || typeof imageSrc !== 'string' || imageSrc === '') return false
@@ -54,21 +62,21 @@ const OptimizedImage = React.memo(({
 
   // Generate responsive srcset
   const srcSet = useMemo(() => {
-    if (!supportsOptimization(src)) return undefined
+    if (!supportsOptimization(resolvedSrc)) return undefined
     const sizesArr = [400, 600, 800, 1200, 1600]
     return sizesArr
-      .map(size => `${appendImageParams(src, { w: size, q: 80 })} ${size}w`)
+      .map(size => `${appendImageParams(resolvedSrc, { w: size, q: 80 })} ${size}w`)
       .join(', ')
-  }, [src])
+  }, [resolvedSrc])
 
   // Generate WebP srcset
   const webPSrcSet = useMemo(() => {
-    if (!supportsOptimization(src)) return undefined
+    if (!supportsOptimization(resolvedSrc)) return undefined
     const sizesArr = [400, 600, 800, 1200, 1600]
     return sizesArr
-      .map(size => `${appendImageParams(src, { w: size, q: 80, format: 'webp' })} ${size}w`)
+      .map(size => `${appendImageParams(resolvedSrc, { w: size, q: 80, format: 'webp' })} ${size}w`)
       .join(', ')
-  }, [src])
+  }, [resolvedSrc])
 
   // Intersection Observer for lazy loading
   useEffect(() => {
@@ -115,8 +123,8 @@ const OptimizedImage = React.memo(({
   // Default blur placeholder (tiny gray square)
   const defaultBlurDataURL = blurDataURL || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2U1ZTdlYiIvPjwvc3ZnPg=='
 
-  // Don't render if src is empty or null
-  if (!src || src === '') {
+  // Don't render if resolvedSrc is empty or null
+  if (!resolvedSrc || resolvedSrc === '') {
     return (
       <div className={`relative overflow-hidden ${className}`}>
         <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800">
@@ -126,7 +134,7 @@ const OptimizedImage = React.memo(({
     )
   }
 
-  const imageSrc = hasError ? 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23e5e7eb" width="400" height="300"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle"%3EImage not found%3C/text%3E%3C/svg%3E' : src
+  const imageSrc = hasError ? 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23e5e7eb" width="400" height="300"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle"%3EImage not found%3C/text%3E%3C/svg%3E' : resolvedSrc
 
   return (
     <div className={`relative overflow-hidden ${className}`} ref={imgRef}>

@@ -6,9 +6,10 @@ import RestaurantNavbar from "@food/components/restaurant/RestaurantNavbar"
 import { restaurantAPI } from "@food/api"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { Loader } from "@googlemaps/js-api-loader"
-const debugLog = (...args) => {}
-const debugWarn = (...args) => {}
-const debugError = (...args) => {}
+
+const debugLog = (...args) => console.log("[ZoneSetup]", ...args)
+const debugWarn = (...args) => console.warn("[ZoneSetup]", ...args)
+const debugError = (...args) => console.error("[ZoneSetup]", ...args)
 
 const parseCoordinate = (value) => {
   const parsed = Number(value)
@@ -175,8 +176,8 @@ export default function ZoneSetup() {
         return
       }
 
-      // If Google Maps is already loaded, use it directly
-      if (window.google && window.google.maps) {
+      // If Google Maps is already fully loaded, use it directly
+      if (window.google && window.google.maps && window.google.maps.Map) {
         debugLog("? Google Maps already available, initializing map...")
         initializeMap(window.google)
         return
@@ -199,45 +200,88 @@ export default function ZoneSetup() {
     }
   }
 
+  const reverseGeocode = (lat, lng) => {
+    return new Promise((resolve) => {
+      if (!window.google || !window.google.maps || !window.google.maps.Geocoder) {
+        debugWarn("? Geocoder not available")
+        resolve(`${lat.toFixed(6)}, ${lng.toFixed(6)}`)
+        return
+      }
+
+      const geocoder = new window.google.maps.Geocoder()
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status === "OK" && results[0]) {
+          resolve(results[0].formatted_address)
+        } else {
+          debugWarn("? Geocode failed:", status)
+          resolve(`${lat.toFixed(6)}, ${lng.toFixed(6)}`)
+        }
+      })
+    })
+  }
+
   const initializeMap = (google) => {
     try {
       if (!mapRef.current) {
-        debugError("? mapRef.current is null in initializeMap")
+        debugError("❌ mapRef.current is null in initializeMap")
         setMapLoading(false)
         return
       }
 
-      debugLog("?? Initializing map...")
+      debugLog("🔄 Initializing map...")
+      
+      // Get Map constructor safely from either the passed object or the window
+      let MapConstructor = null;
+      if (google?.maps?.Map) {
+        MapConstructor = google.maps.Map;
+      } else if (window?.google?.maps?.Map) {
+        MapConstructor = window.google.maps.Map;
+      }
+
+      if (typeof MapConstructor !== "function") {
+        debugError("❌ google.maps.Map is not a constructor. Checking again in 500ms...");
+        setTimeout(() => {
+          if (window.google?.maps?.Map) {
+            initializeMap(window.google);
+          } else {
+            setMapLoading(false);
+            alert("Failed to initialize Google Maps. Please refresh the page or check your internet connection.");
+          }
+        }, 500);
+        return;
+      }
+
       // Initial location (India center)
       const initialLocation = { lat: 20.5937, lng: 78.9629 }
 
-      // Create map
-      const map = new google.maps.Map(mapRef.current, {
+      const map = new MapConstructor(mapRef.current, {
         center: initialLocation,
         zoom: 5,
         mapTypeControl: true,
         mapTypeControlOptions: {
-          style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
-          position: google.maps.ControlPosition.TOP_RIGHT,
-          mapTypeIds: [google.maps.MapTypeId.ROADMAP, google.maps.MapTypeId.SATELLITE]
+          style: 1, // google.maps.MapTypeControlStyle.HORIZONTAL_BAR
+          position: 2, // google.maps.ControlPosition.TOP_RIGHT
+          mapTypeIds: ["roadmap", "satellite"]
         },
         zoomControl: true,
         streetViewControl: false,
         fullscreenControl: true,
         scrollwheel: true,
-        gestureHandling: 'greedy',
+        gestureHandling: "greedy",
         disableDoubleClickZoom: false,
       })
 
       mapInstanceRef.current = map
-      debugLog("? Map initialized successfully")
+      debugLog("✅ Map initialized successfully")
 
       // Add click listener to place marker
-      map.addListener('click', (event) => {
+      map.addListener('click', async (event) => {
         const lat = event.latLng.lat()
         const lng = event.latLng.lng()
-        // Maps geocode API disabled - use coordinates as address (no external API call)
-        const address = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+        
+        // Use reverse geocoding to get address
+        const address = await reverseGeocode(lat, lng)
+        
         setLocationSearch(address)
         setSelectedAddress(address)
         setSelectedLocation({ lat, lng, address })
@@ -245,11 +289,11 @@ export default function ZoneSetup() {
       })
 
       setMapLoading(false)
-      debugLog("? Map loading complete")
+      debugLog("✅ Map loading complete")
     } catch (error) {
-      debugError("? Error in initializeMap:", error)
+      debugError("❌ Error in initializeMap:", error)
       setMapLoading(false)
-      alert("Failed to initialize map. Please refresh the page.")
+      alert(`Failed to initialize map: ${error.message}. Please refresh the page.`)
     }
   }
 
@@ -285,14 +329,24 @@ export default function ZoneSetup() {
     })
 
     // Update location when marker is dragged
-    marker.addListener('dragend', (event) => {
+    marker.addListener('dragend', async (event) => {
       const newLat = event.latLng.lat()
       const newLng = event.latLng.lng()
-      // Maps geocode API disabled - use coordinates as address (no external API call)
-      const newAddress = `${newLat.toFixed(6)}, ${newLng.toFixed(6)}`
+      
+      // Use reverse geocoding to get address
+      const newAddress = await reverseGeocode(newLat, newLng)
+      
       setLocationSearch(newAddress)
       setSelectedAddress(newAddress)
       setSelectedLocation({ lat: newLat, lng: newLng, address: newAddress })
+      
+      // Update info window content
+      infoWindow.setContent(`
+        <div style="padding: 8px; max-width: 250px;">
+          <strong>Restaurant Location</strong><br/>
+          <small>${newAddress}</small>
+        </div>
+      `)
     })
 
     markerRef.current = marker
@@ -457,4 +511,3 @@ export default function ZoneSetup() {
     </div>
   )
 }
-

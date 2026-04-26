@@ -9,7 +9,7 @@ import { authAPI } from "@food/api"
 import logoNew from "@food/assets/logo.png"
 
 const REMEMBER_LOGIN_KEY = "user_login_phone"
-const TASTIZO_BG = "#7e3866"
+const TASTIZO_BG = "#2a9c64"
 const headingWords = ["India's", "#1", "Food", "Delivery", "and", "Dining", "App"]
 
 export default function SignIn() {
@@ -122,11 +122,11 @@ export default function SignIn() {
       className="min-h-screen flex items-start justify-center overflow-hidden"
       style={{ backgroundColor: TASTIZO_BG }}
     >
-      <div className="mx-auto flex min-h-screen w-full max-w-[390px] flex-col overflow-hidden">
+      <div className="mx-auto flex min-h-screen w-full sm:max-w-[400px] flex-col overflow-hidden">
         <div className="flex flex-1 flex-col bg-white">
           <div>
             <div
-              className="flex min-h-[360px] items-center justify-center rounded-b-[2rem] pt-6 pb-10"
+              className="flex min-h-[360px] w-full items-center justify-center rounded-b-[2rem] pt-6 pb-10"
               style={{ backgroundColor: TASTIZO_BG }}
             >
               <img
@@ -218,7 +218,7 @@ export default function SignIn() {
                   />
                   <span
                     className={`flex h-5 w-5 items-center justify-center rounded-md transition-colors ${
-                      rememberLogin ? "bg-[#7e3866] text-white" : "border border-[#cfc7bf] bg-white text-transparent"
+                      rememberLogin ? "bg-[#2a9c64] text-white" : "border border-[#cfc7bf] bg-white text-transparent"
                     }`}
                   >
                     <Check className="h-3.5 w-3.5" />
@@ -228,7 +228,7 @@ export default function SignIn() {
 
                 <Button
                   type="submit"
-                  className="mt-2 h-14 w-full rounded-2xl bg-[#7e3866] text-lg font-bold text-white transition-all hover:bg-[#238653] active:scale-[0.99]"
+                  className="mt-2 h-14 w-full rounded-2xl bg-[#2a9c64] text-lg font-bold text-white transition-all hover:bg-[#238653] active:scale-[0.99]"
                   disabled={isLoading}
                 >
                   {isLoading ? (
@@ -251,11 +251,11 @@ export default function SignIn() {
                 <Link to="/profile/terms" className="underline underline-offset-2 hover:text-black transition-colors">
                   Terms of Service
                 </Link>
-                <span>â€¢</span>
+                <span>•</span>
                 <Link to="/profile/privacy" className="underline underline-offset-2 hover:text-black transition-colors">
                   Privacy Policy
                 </Link>
-                <span>â€¢</span>
+                <span>•</span>
                 <Link to="/profile/refund" className="underline underline-offset-2 hover:text-black transition-colors">
                   Content Policy
                 </Link>

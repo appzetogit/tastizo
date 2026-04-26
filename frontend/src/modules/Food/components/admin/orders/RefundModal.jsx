@@ -46,7 +46,7 @@ export default function RefundModal({ isOpen, onOpenChange, order, onConfirm, is
     }
 
     if (amount > maxAmount) {
-      setError(`Refund à¤°à¤¾à¤¶à¤¿ à¤•à¥à¤² à¤°à¤¾à¤¶à¤¿ (â‚¹${maxAmount.toFixed(2)}) à¤¸à¥‡ à¤…à¤§à¤¿à¤• à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¤¤à¥€`)
+      setError(`Refund à¤°à¤¾à¤¶à¤¿ à¤•à¥à¤² à¤°à¤¾à¤¶à¤¿ (₹${maxAmount.toFixed(2)}) à¤¸à¥‡ à¤…à¤§à¤¿à¤• à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¤¤à¥€`)
       return
     }
 
@@ -104,7 +104,7 @@ export default function RefundModal({ isOpen, onOpenChange, order, onConfirm, is
               <p className="text-sm text-red-600 mt-1">{error}</p>
             )}
             <p className="text-xs text-slate-500">
-              Maximum refundable amount: â‚¹{maxAmount.toFixed(2)}
+              Maximum refundable amount: ₹{maxAmount.toFixed(2)}
             </p>
           </div>
 

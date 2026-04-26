@@ -6,8 +6,8 @@ const debugLog = (...args) => {}
 const debugError = (...args) => {}
 
 const formatCurrency = (amount) => {
-  if (amount == null) return "â‚¹0.00"
-  return `â‚¹${Number(amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  if (amount == null) return "₹0.00"
+  return `₹${Number(amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 export default function DeliveryBoyWallet() {
@@ -183,7 +183,7 @@ export default function DeliveryBoyWallet() {
           {loading ? (
             <div className="py-20 text-center">
               <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-4" />
-              <p className="text-slate-600">Loading walletsâ€¦</p>
+              <p className="text-slate-600">Loading wallets"¦</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -233,10 +233,10 @@ export default function DeliveryBoyWallet() {
                         <tr key={w.walletId || w.deliveryId || i} className="hover:bg-slate-50 transition-colors">
                           <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-500">{(page - 1) * limit + i + 1}</td>
                           <td className="px-4 py-4 whitespace-nowrap">
-                            <span className="text-sm font-semibold text-slate-800">{w.name || "â€”"}</span>
+                            <span className="text-sm font-semibold text-slate-800">{w.name || "—"}</span>
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-600">
-                            {w.phone || w.deliveryIdString || "â€”"}
+                            {w.phone || w.deliveryIdString || "—"}
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap">
                             <span className={`text-sm font-semibold ${remaining <= 0 ? "text-red-600" : "text-emerald-600"}`}>

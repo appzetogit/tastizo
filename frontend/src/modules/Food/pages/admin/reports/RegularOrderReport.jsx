@@ -346,7 +346,7 @@ export default function RegularOrderReport() {
   )
 
   const formatAmount = (amount) =>
-    `â‚¹${Number(amount || 0).toLocaleString("en-IN", {
+    `₹${Number(amount || 0).toLocaleString("en-IN", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`

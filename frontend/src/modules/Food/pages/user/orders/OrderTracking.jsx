@@ -426,7 +426,7 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
 
 /**
  * Backend uses `orderStatus` (created, confirmed, preparing, ready_for_pickup, picked_up, delivered, cancelled_*).
- * This page used to read legacy `status` only â€” so UI never updated. Map canonical + legacy values to tracking steps.
+ * This page used to read legacy `status` only — so UI never updated. Map canonical + legacy values to tracking steps.
  */
 function mapBackendOrderStatusToUi(raw) {
   const s = String(raw || "").toLowerCase()
@@ -629,7 +629,7 @@ export default function OrderTracking() {
   // DATA FETCHING & POLLING STABILITY (FIXED FOR HAMMERING)
   // --------------------------------------------------------------------------
 
-  // Socket notifications include order ids â€” keep a set so events match this page.
+  // Socket notifications include order ids — keep a set so events match this page.
   useEffect(() => {
     const s = trackingOrderIdsRef.current
     s.add(String(orderId))
@@ -1026,7 +1026,7 @@ export default function OrderTracking() {
     terminalPollStopRef.current = ui === 'delivered' || ui === 'cancelled'
   }, [order])
 
-  // Post-checkout splash only â€” real status comes from API / poll / socket.
+  // Post-checkout splash only — real status comes from API / poll / socket.
   useEffect(() => {
     if (!confirmed) return
     const timer1 = setTimeout(() => setShowConfirmation(false), 3000)

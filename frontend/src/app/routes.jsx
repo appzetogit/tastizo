@@ -11,7 +11,7 @@ const AuthApp = lazy(() => import('../modules/auth/routes'))
 const PageLoader = () => <AppShellSkeleton />
 
 /**
- * FoodAppWrapper â€” Quick-spicy App. à¤•à¥‹ /food prefix à¤•à¥‡ à¤¸à¤¾à¤¥ render à¤•à¤°à¤¤à¤¾ à¤¹à¥ˆ.
+ * FoodAppWrapper — Quick-spicy App. à¤•à¥‹ /food prefix à¤•à¥‡ à¤¸à¤¾à¤¥ render à¤•à¤°à¤¤à¤¾ à¤¹à¥ˆ.
  * 
  * Quick-spicy à¤•à¥€ App.jsx à¤®à¥‡à¤‚ routes /restaurant, /usermain, /admin, /delivery
  * à¤œà¥ˆà¤¸à¥‡ hain (bina /food prefix ke). Yahan hum useLocation se /food ke baad wala

@@ -221,21 +221,21 @@ export const PocketStatementV2 = () => {
                                <div className="mb-2">
                                   <p className="text-[10px] text-gray-400 font-bold uppercase">Earning</p>
                                   <p className="text-sm font-bold text-black">
-                                     â‚¹{amounts.earning}
+                                     ₹{amounts.earning}
                                   </p>
                                </div>
                                {amounts.bonus > 0 && (
                                   <div className="mb-2">
                                      <p className="text-[10px] text-emerald-500 font-bold uppercase">Bonus</p>
                                      <p className="text-sm font-bold text-emerald-600">
-                                        + â‚¹{amounts.bonus}
+                                        + ₹{amounts.bonus}
                                      </p>
                                   </div>
                                )}
                                <div className="pt-2 border-t border-gray-50">
                                   <p className="text-[10px] text-gray-800 font-bold uppercase">Total</p>
                                   <p className="text-base font-bold text-[#ff8100]">
-                                     â‚¹{amounts.total}
+                                     ₹{amounts.total}
                                   </p>
                                </div>
                             </div>

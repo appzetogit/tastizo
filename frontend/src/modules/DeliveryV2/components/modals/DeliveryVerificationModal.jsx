@@ -45,7 +45,7 @@ const DeliveryInstructionsPanel = ({ note }) => {
       </div>
       <div className="bg-orange-50 px-5 py-4">
         <p className="text-sm font-bold text-gray-950 leading-relaxed wrap-break-word">
-          â€œ{text}â€
+          "{text}"
         </p>
       </div>
     </div>

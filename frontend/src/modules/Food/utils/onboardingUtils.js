@@ -1,7 +1,7 @@
 import { api, restaurantAPI } from "@food/api"
-const debugLog = (...args) => {}
+const debugLog = (...args) => console.log('[OnboardingUtils]', ...args)
 const debugWarn = (...args) => {}
-const debugError = (...args) => {}
+const debugError = (...args) => console.error('[OnboardingUtils]', ...args)
 
 
 const getOnboardingStorageKey = () => {
@@ -44,16 +44,17 @@ const isStepComplete = (stepData, stepNumber) => {
   if (!stepData) return false
 
   if (stepNumber === 1) {
-    return (
+    const isStep1DataValid = 
       stepData.restaurantName &&
       typeof stepData.pureVegRestaurant === "boolean" &&
       stepData.ownerName &&
       stepData.ownerEmail &&
       stepData.ownerPhone &&
       stepData.primaryContactNumber &&
-      stepData.location?.area &&
-      stepData.location?.city
-    )
+      (stepData.location?.area || stepData.area) &&
+      (stepData.location?.city || stepData.city)
+
+    return Boolean(isStep1DataValid)
   }
 
   if (stepNumber === 2) {
@@ -182,13 +183,19 @@ const buildOnboardingLikeDataFromRestaurant = (restaurant) => {
 export const isRestaurantOnboardingComplete = (restaurant) => {
   if (!restaurant) return false
 
-  // Approved restaurants should never be forced into onboarding again.
-  if (restaurant?.status === "approved") {
-    clearRestaurantOnboardingStorage()
-    return true
+  const status = String(restaurant?.status || "").toLowerCase()
+  
+  // If the restaurant is approved or pending, they have already submitted their 
+  // initial profile. We shouldn't force them back into onboarding unless they 
+  // are completely missing basic information.
+  if (status === "approved" || status === "pending") {
+    if (restaurant?.name || restaurant?.restaurantName) {
+      clearRestaurantOnboardingStorage()
+      return true
+    }
   }
 
-  if (restaurant?.isActive === true) {
+  if (restaurant?.isActive === true || restaurant?.isAcceptingOrders === true) {
     clearRestaurantOnboardingStorage()
     return true
   }
@@ -210,19 +217,25 @@ export const isRestaurantOnboardingComplete = (restaurant) => {
   // Some older or migrated restaurant accounts have complete live profile data
   // without a reliable onboarding.completedSteps value.
   const hasOperationalProfile =
-    Boolean(String(restaurant?.name || "").trim()) &&
-    Boolean(String(restaurant?.restaurantId || "").trim()) &&
-    Boolean(String(restaurant?.slug || "").trim()) &&
+    Boolean(String(restaurant?.name || restaurant?.restaurantName || "").trim()) &&
+    Boolean(String(restaurant?.ownerPhone || "").trim()) &&
     step1Complete &&
     step2Complete &&
-    (restaurant?.approvedAt || restaurant?.rejectedAt || restaurant?.rejectionReason || restaurant?.isActive === false)
+    (restaurant?.status === "pending" || restaurant?.status === "approved" || restaurant?.approvedAt || restaurant?.rejectedAt || restaurant?.rejectionReason)
+
+  debugLog("Final check:", {
+    isApproved: restaurant?.status === "approved",
+    isPending: restaurant?.status === "pending",
+    step1Complete,
+    step2Complete,
+    step3Complete,
+    hasOperationalProfile,
+  })
 
   if (hasOperationalProfile) {
     clearRestaurantOnboardingStorage()
     return true
   }
-
-  return false
 }
 
 // Determine which step to show based on completeness

@@ -230,19 +230,19 @@ export const generatePayRate = (slot) => {
 
   // Adjust based on time of day
   if (startHour >= 6 && startHour < 11) {
-    // Breakfast: â‚¹70-â‚¹100
+    // Breakfast: ₹70-₹100
     baseMin = 70
     baseMax = 100
   } else if (startHour >= 11 && startHour < 15) {
-    // Lunch: â‚¹90-â‚¹120
+    // Lunch: ₹90-₹120
     baseMin = 90
     baseMax = 120
   } else if (startHour >= 15 && startHour < 19) {
-    // Afternoon: â‚¹100-â‚¹130
+    // Afternoon: ₹100-₹130
     baseMin = 100
     baseMax = 130
   } else {
-    // Evening: â‚¹110-â‚¹140
+    // Evening: ₹110-₹140
     baseMin = 110
     baseMax = 140
   }
