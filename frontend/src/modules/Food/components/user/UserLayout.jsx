@@ -109,17 +109,22 @@ export default function UserLayout() {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
   }, [location.pathname, location.search, location.hash])
 
-  useUserNotifications()
-
-  // Note: Authentication checks and redirects are handled by ProtectedRoute components
-  // UserLayout should not interfere with authentication redirects
-
-  // Show bottom navigation only on home page, dining page, under-250 page, and profile page
   const path = location.pathname.startsWith("/food")
     ? location.pathname.substring(5) || "/"
     : location.pathname
   const normalizedPath =
     path.length > 1 ? path.replace(/\/+$/, "") : path
+
+  const shouldEnableUserNotifications =
+    normalizedPath !== "/user/address-selector" &&
+    normalizedPath !== "/address-selector"
+
+  useUserNotifications({ enabled: shouldEnableUserNotifications })
+
+  // Note: Authentication checks and redirects are handled by ProtectedRoute components
+  // UserLayout should not interfere with authentication redirects
+
+  // Show bottom navigation only on home page, dining page, under-250 page, and profile page
 
   const isProfileRoot =
     normalizedPath === "/profile" ||
