@@ -74,7 +74,7 @@ export const useUserNotifications = () => {
 
     socketRef.current = io(socketUrl, {
       path: '/socket.io/',
-      transports: ['polling', 'websocket'],
+      transports: ['websocket'],
       reconnection: true,
       auth: { token }
     });

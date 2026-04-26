@@ -17,9 +17,6 @@ const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
-// Enable Maps if API Key is available, otherwise fallback to coordinates-only mode
-const MAPS_ENABLED = !!import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-
 function cleanLocationDisplayLine(str) {
   if (!str || typeof str !== "string") return ""
   return str.replace(/,\s*India\s*$/i, "").trim()
@@ -276,7 +273,6 @@ export default function AddressSelectorPage() {
 
   // Load Google Maps API key
   useEffect(() => {
-    if (!MAPS_ENABLED) return
     import('@food/utils/googleMapsApiKey.js').then(({ getGoogleMapsApiKey }) => {
       getGoogleMapsApiKey().then(key => {
         setGOOGLE_MAPS_API_KEY(key)
@@ -326,7 +322,7 @@ export default function AddressSelectorPage() {
 
   // Map Initialization logic
   useEffect(() => {
-    if (!MAPS_ENABLED || !showAddressForm || !mapContainerRef.current || !GOOGLE_MAPS_API_KEY) return
+    if (!showAddressForm || !mapContainerRef.current || !GOOGLE_MAPS_API_KEY) return
 
     let isMounted = true
     setMapLoading(true)

@@ -35,6 +35,16 @@ const roomNames = {
     tracking: (orderId) => `tracking:${String(orderId)}`
 };
 
+function isAllowedSocketOrigin(origin) {
+    if (!origin) return true;
+
+    const allowedOrigins = Array.isArray(config.socketCorsOrigin)
+        ? config.socketCorsOrigin
+        : [config.socketCorsOrigin].filter(Boolean);
+
+    return allowedOrigins.includes(origin);
+}
+
 /**
  * Initializes Socket.IO with the provided HTTP server.
  * When REDIS_ENABLED=true and REDIS_URL is set, attaches Redis adapter for horizontal scaling.
@@ -44,8 +54,19 @@ const roomNames = {
 export const initSocket = async (server) => {
     io = new Server(server, {
         cors: {
-            origin: config.socketCorsOrigin,
-            methods: ['GET', 'POST']
+            origin: (origin, callback) => {
+                if (isAllowedSocketOrigin(origin)) {
+                    return callback(null, true);
+                }
+
+                return callback(new Error('Not allowed by Socket.IO CORS'));
+            },
+            methods: ['GET', 'POST'],
+            credentials: true
+        },
+        allowRequest: (req, callback) => {
+            const origin = req?.headers?.origin || null;
+            callback(null, isAllowedSocketOrigin(origin));
         }
     });
 
