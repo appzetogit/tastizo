@@ -370,9 +370,6 @@ export async function listDiningRestaurantsPublic(query = {}) {
 
     if (zoneIdValue && mongoose.Types.ObjectId.isValid(zoneIdValue)) {
         restaurantAndConditions.push({ zoneId: new mongoose.Types.ObjectId(zoneIdValue) });
-    } else {
-        // Optional: If you want to force zone-only, you could return empty here or throw error
-        // But the user said "only their zone strictly", usually implies if they HAVE a zone.
     }
 
     if (restaurantAndConditions.length > 0) {

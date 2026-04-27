@@ -24,11 +24,6 @@ const foodHeroBannerSchema = new mongoose.Schema(
             ref: 'FoodRestaurant',
             default: []
         },
-        zoneId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'FoodZone',
-            index: true
-        },
         sortOrder: {
             type: Number,
             default: 0,

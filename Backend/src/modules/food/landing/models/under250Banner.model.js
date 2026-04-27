@@ -20,9 +20,7 @@ const foodUnder250BannerSchema = new mongoose.Schema(
             type: String
         },
         zoneId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'FoodZone',
-            index: true
+            type: String
         },
         sortOrder: {
             type: Number,

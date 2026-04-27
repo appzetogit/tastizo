@@ -165,7 +165,17 @@ export const searchUnified = async (query = {}, options = {}) => {
         }
     };
 
-    // Strict enforcement: no fallback if results are empty in the zone.
+    // FALLBACK: If results are empty and a zoneId was provided, try one more time without zoneId 
+    // to ensure user sees SOMETHING if their current zone has no matches.
+    if (results.length === 0 && zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
+        console.log(`[Search-Service] No results in zone ${zoneId}. Trying global fallback...`);
+        const fallbackResults = await searchUnified({ ...query, zoneId: null }, options);
+        if (fallbackResults.data.total > 0) {
+            fallbackResults.data.wasFallback = true;
+            return fallbackResults;
+        }
+    }
+
     return finalResult;
 };
 
@@ -184,7 +194,15 @@ export const getAdminCategories = async (query = {}) => {
     };
 
     if (query.zoneId && mongoose.Types.ObjectId.isValid(query.zoneId)) {
-        filter.zoneId = new mongoose.Types.ObjectId(query.zoneId);
+        filter.$and = [
+            {
+                $or: [
+                    { zoneId: new mongoose.Types.ObjectId(query.zoneId) },
+                    { zoneId: { $exists: false } },
+                    { zoneId: null }
+                ]
+            }
+        ];
     }
 
     const categories = await FoodCategory.find(filter).sort({ sortOrder: 1, name: 1 }).lean();
