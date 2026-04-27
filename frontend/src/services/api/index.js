@@ -269,6 +269,22 @@ export const adminAPI = {
       params,
       contextModule: "admin",
     }),
+  /** Get a single delivery partner by ID */
+  getDeliveryPartnerById: (id) =>
+    apiClient.get(`/food/admin/delivery/${id}`, {
+      contextModule: "admin",
+    }),
+  /** Create a new delivery partner directly from admin panel */
+  addDeliveryPartner: (data) =>
+    apiClient.post("/food/admin/delivery", data, {
+      contextModule: "admin",
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  /** Deactivate/Reject a delivery partner */
+  deleteDeliveryPartner: (id) =>
+    apiClient.patch(`/food/admin/delivery/${id}/reject`, {}, {
+      contextModule: "admin",
+    }),
   getDeliverymanReviews: (params = {}) =>
     apiClient.get("/food/admin/delivery/reviews", {
       params,

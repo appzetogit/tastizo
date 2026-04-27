@@ -10,7 +10,11 @@ import { sendResponse } from '../../../../utils/response.js';
 /** Public hero banners for user home: active only, sorted, with linkedRestaurants populated for click-through */
 export const getPublicHeroBannersController = async (req, res, next) => {
     try {
-        const docs = await FoodHeroBanner.find({ isActive: true })
+        const { zoneId } = req.query;
+        const filter = { isActive: true };
+        if (zoneId) filter.zoneId = zoneId;
+
+        const docs = await FoodHeroBanner.find(filter)
             .sort({ sortOrder: 1, createdAt: -1 })
             .populate({
                 path: 'linkedRestaurantIds',
@@ -34,7 +38,11 @@ export const getPublicHeroBannersController = async (req, res, next) => {
 
 export const getPublicUnder250BannersController = async (req, res, next) => {
     try {
-        const docs = await FoodUnder250Banner.find({ isActive: true }).sort({ sortOrder: 1, createdAt: -1 }).lean();
+        const { zoneId } = req.query;
+        const filter = { isActive: true };
+        if (zoneId) filter.zoneId = zoneId;
+
+        const docs = await FoodUnder250Banner.find(filter).sort({ sortOrder: 1, createdAt: -1 }).lean();
         return sendResponse(res, 200, 'Under 250 banners fetched', { banners: docs });
     } catch (error) {
         next(error);
@@ -43,7 +51,11 @@ export const getPublicUnder250BannersController = async (req, res, next) => {
 
 export const getPublicDiningBannersController = async (req, res, next) => {
     try {
-        const docs = await FoodDiningBanner.find({ isActive: true }).sort({ sortOrder: 1, createdAt: -1 }).lean();
+        const { zoneId } = req.query;
+        const filter = { isActive: true };
+        if (zoneId) filter.zoneId = zoneId;
+
+        const docs = await FoodDiningBanner.find(filter).sort({ sortOrder: 1, createdAt: -1 }).lean();
         return sendResponse(res, 200, 'Dining banners fetched', { banners: docs });
     } catch (error) {
         next(error);
@@ -52,7 +64,11 @@ export const getPublicDiningBannersController = async (req, res, next) => {
 
 export const getPublicExploreIconsController = async (req, res, next) => {
     try {
-        const docs = await FoodExploreIcon.find({ isActive: true }).sort({ sortOrder: 1, createdAt: -1 }).lean();
+        const { zoneId } = req.query;
+        const filter = { isActive: true };
+        if (zoneId) filter.zoneId = zoneId;
+
+        const docs = await FoodExploreIcon.find(filter).sort({ sortOrder: 1, createdAt: -1 }).lean();
         const items = docs.map(({ targetPath, sortOrder, ...rest }) => ({ ...rest, link: targetPath, order: sortOrder }));
         return sendResponse(res, 200, 'Explore icons fetched', { items });
     } catch (error) {
@@ -63,7 +79,8 @@ export const getPublicExploreIconsController = async (req, res, next) => {
 
 export const getPublicGourmetController = async (req, res, next) => {
     try {
-        const docs = await getPublicGourmetRestaurants();
+        const { zoneId } = req.query;
+        const docs = await getPublicGourmetRestaurants(zoneId);
         const restaurants = (docs || []).map((d) => ({
             ...(d.restaurant || {}),
             _id: d.restaurant?._id || d.restaurantId,
@@ -77,11 +94,15 @@ export const getPublicGourmetController = async (req, res, next) => {
 
 export const getPublicLandingSettingsController = async (req, res, next) => {
     try {
+        const { zoneId } = req.query;
         const settings = await getLandingSettings();
         const ids = settings?.recommendedRestaurantIds || [];
         let recommendedRestaurants = [];
         if (Array.isArray(ids) && ids.length > 0) {
-            recommendedRestaurants = await FoodRestaurant.find({ _id: { $in: ids }, status: 'approved' })
+            const restaurantFilter = { _id: { $in: ids }, status: 'approved' };
+            if (zoneId) restaurantFilter.zoneId = zoneId;
+
+            recommendedRestaurants = await FoodRestaurant.find(restaurantFilter)
                 .select('restaurantName area city profileImage coverImages menuImages slug rating cuisines pureVegRestaurant')
                 .lean();
         }

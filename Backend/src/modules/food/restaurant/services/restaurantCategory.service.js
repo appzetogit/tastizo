@@ -77,10 +77,8 @@ export async function listRestaurantCategories(restaurantId, query = {}) {
                         { $or: APPROVED_CATEGORY_FILTER }
                     ]
                 },
-                {
-                    restaurantId: context.restaurantId,
-                    $or: APPROVED_CATEGORY_FILTER
-                }
+                { restaurantId: context.restaurantId },
+                { createdByRestaurantId: context.restaurantId }
             ]
         }
         : {
@@ -122,7 +120,7 @@ export async function listRestaurantCategories(restaurantId, query = {}) {
         FoodCategory.countDocuments(filter)
     ]);
 
-    const statsById = await backfillLegacyCategoryWorkflow(list);
+    const statsById = (withCounts || !compact) ? await backfillLegacyCategoryWorkflow(list, context.restaurantId) : new Map();
     const restaurantIds = !compact
         ? Array.from(
             new Set(
@@ -188,7 +186,7 @@ export async function listPublicCategories(query = {}) {
         FoodCategory.countDocuments(filter)
     ]);
 
-    await backfillLegacyCategoryWorkflow(list);
+    // backfillLegacyCategoryWorkflow not needed for public categories without counts
     const categories = list.map((category) => serializeCategoryForResponse(category));
 
     return { categories, total, page, limit };

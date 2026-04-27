@@ -42,7 +42,7 @@ export const getCategoryApprovalStatus = (category = {}) => {
     return category?.isApproved === false ? 'pending' : 'approved';
 };
 
-const buildCategoryStatsMap = async (categoryIds = []) => {
+const buildCategoryStatsMap = async (categoryIds = [], restaurantId = null) => {
     const validIds = Array.from(
         new Set(
             (categoryIds || [])
@@ -57,8 +57,13 @@ const buildCategoryStatsMap = async (categoryIds = []) => {
 
     if (!validIds.length) return new Map();
 
+    const matchStage = { categoryId: { $in: validIds } };
+    if (restaurantId && mongoose.Types.ObjectId.isValid(String(restaurantId))) {
+        matchStage.restaurantId = new mongoose.Types.ObjectId(String(restaurantId));
+    }
+
     const stats = await FoodItem.aggregate([
-        { $match: { categoryId: { $in: validIds } } },
+        { $match: matchStage },
         {
             $group: {
                 _id: '$categoryId',
@@ -80,11 +85,11 @@ const buildCategoryStatsMap = async (categoryIds = []) => {
     return new Map(stats.map((item) => [String(item._id), item]));
 };
 
-export const backfillLegacyCategoryWorkflow = async (categories = []) => {
+export const backfillLegacyCategoryWorkflow = async (categories = [], restaurantId = null) => {
     const list = Array.isArray(categories) ? categories.filter(Boolean) : [];
     if (!list.length) return new Map();
 
-    const statsById = await buildCategoryStatsMap(list.map((category) => category?._id || category?.id));
+    const statsById = await buildCategoryStatsMap(list.map((category) => category?._id || category?.id), restaurantId);
     const writes = [];
 
     for (const category of list) {

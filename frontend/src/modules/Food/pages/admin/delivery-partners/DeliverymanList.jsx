@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react"
-import { Search, Download, ChevronDown, Eye, User, Star, ArrowUpDown, Settings, FileText, FileSpreadsheet, Loader2, Check, Columns, ExternalLink, Calendar, MapPin, CreditCard, Mail, Phone, Bike, FileCheck, Pencil, Save, Trash2, X } from "lucide-react"
+import { Link } from "react-router-dom"
+import { Search, Download, ChevronDown, Eye, User, Star, ArrowUpDown, Settings, FileText, FileSpreadsheet, Loader2, Check, Columns, ExternalLink, Calendar, MapPin, CreditCard, Mail, Phone, Bike, FileCheck, Pencil, Save, Trash2, X, Plus } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
@@ -414,8 +415,15 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
                 title="Export as Excel"
               >
                 <FileSpreadsheet className="w-4 h-4" />
-                <span className="text-black font-bold">Excel</span>
+                <span className="text-black font-bold hidden sm:inline">Excel</span>
               </button>
+              <Link
+                to="/admin/food/delivery-partners/add"
+                className="px-4 py-2.5 text-sm font-bold rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">Add Delivery Boy</span>
+              </Link>
               <button 
                 onClick={() => setIsSettingsOpen(true)}
                 className="p-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-all"

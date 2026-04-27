@@ -1,7 +1,9 @@
-import { useState } from "react"
-import { Upload, Calendar, Eye, EyeOff, Settings } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Upload, Calendar, Settings } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
 import { EMAIL_REGEX } from "@/shared/utils/emailValidation"
+import { adminAPI } from "@food/api"
+import { toast } from "sonner"
 
 export default function AddDeliveryman() {
   const [formData, setFormData] = useState({
@@ -11,24 +13,48 @@ export default function AddDeliveryman() {
     deliverymanType: "",
     zone: "",
     vehicle: "",
+    vehicleNumber: "",
     identityType: "Passport",
     identityNumber: "",
     age: "",
     birthdate: "",
-    phone: "+1",
-    password: "",
-    confirmPassword: "",
+    phone: "+91",
   })
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [formErrors, setFormErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [zones, setZones] = useState([])
+  const [files, setFiles] = useState({
+    profilePhoto: null,
+    identityImage: null,
+    drivingLicense: null
+  })
+
+  useEffect(() => {
+    fetchZones()
+  }, [])
+
+  const fetchZones = async () => {
+    try {
+      const response = await adminAPI.getZones({ limit: 1000 })
+      if (response.data?.success && response.data.data?.zones) {
+        setZones(response.data.data.zones)
+      }
+    } catch (error) {
+      console.error("Error fetching zones:", error)
+    }
+  }
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     if (formErrors[field]) {
       setFormErrors(prev => ({ ...prev, [field]: "" }))
+    }
+  }
+
+  const handleFileChange = (field, e) => {
+    if (e.target.files && e.target.files[0]) {
+      setFiles(prev => ({ ...prev, [field]: e.target.files[0] }))
     }
   }
 
@@ -44,12 +70,11 @@ export default function AddDeliveryman() {
     if (!formData.deliverymanType) errors.deliverymanType = "Deliveryman type is required"
     if (!formData.zone) errors.zone = "Zone is required"
     if (!formData.vehicle) errors.vehicle = "Vehicle is required"
+    if (!formData.vehicleNumber.trim()) errors.vehicleNumber = "Vehicle number is required"
     if (!formData.identityNumber.trim()) errors.identityNumber = "Identity number is required"
     if (!formData.age || parseInt(formData.age) < 18) errors.age = "Age must be at least 18"
     if (!formData.birthdate) errors.birthdate = "Birthdate is required"
     if (!formData.phone || formData.phone.length < 10) errors.phone = "Valid phone number is required"
-    if (!formData.password || formData.password.length < 8) errors.password = "Password must be at least 8 characters"
-    if (formData.password !== formData.confirmPassword) errors.confirmPassword = "Passwords do not match"
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -59,11 +84,43 @@ export default function AddDeliveryman() {
     if (!validateForm()) return
     
     setIsSubmitting(true)
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    setIsSubmitting(false)
-    setShowSuccessDialog(true)
-    handleReset()
+    try {
+      const dataToSend = new FormData();
+      Object.keys(formData).forEach(key => {
+        dataToSend.append(key, formData[key]);
+      });
+      // Ensure name is passed instead of firstName/lastName for the backend
+      dataToSend.append("name", `${formData.firstName} ${formData.lastName}`);
+
+      if (files.profilePhoto) {
+        dataToSend.append("profilePhoto", files.profilePhoto);
+      }
+      if (files.drivingLicense) {
+        dataToSend.append("drivingLicensePhoto", files.drivingLicense);
+      }
+      if (files.identityImage) {
+        if (formData.identityType === "Passport") {
+          dataToSend.append("panPhoto", files.identityImage); // Fallback mapping based on what backend routes typically expect
+        } else if (formData.identityType === "National ID") {
+          dataToSend.append("aadharPhoto", files.identityImage);
+        } else {
+          dataToSend.append("drivingLicensePhoto", files.identityImage);
+        }
+      }
+
+      const response = await adminAPI.addDeliveryPartner(dataToSend);
+      if (response?.data?.success || response?.success) {
+        toast.success("Deliveryman added successfully!");
+        setShowSuccessDialog(true)
+        handleReset()
+      } else {
+        toast.error(response?.data?.message || response?.message || "Failed to add deliveryman.");
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to add deliveryman.");
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleReset = () => {
@@ -74,13 +131,17 @@ export default function AddDeliveryman() {
       deliverymanType: "",
       zone: "",
       vehicle: "",
+      vehicleNumber: "",
       identityType: "Passport",
       identityNumber: "",
       age: "",
       birthdate: "",
-      phone: "+1",
-      password: "",
-      confirmPassword: "",
+      phone: "+91",
+    })
+    setFiles({
+      profilePhoto: null,
+      identityImage: null,
+      drivingLicense: null
     })
   }
 
@@ -173,8 +234,11 @@ export default function AddDeliveryman() {
                     className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   >
                     <option value="">Select Zone</option>
-                    <option value="asia">Asia</option>
-                    <option value="europe">Europe</option>
+                    {zones.map((z) => (
+                      <option key={z._id || z.id} value={z._id || z.id}>
+                        {z.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -182,10 +246,25 @@ export default function AddDeliveryman() {
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
                     Image <span className="text-red-500">*</span>
                   </label>
-                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer">
-                    <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-blue-600 mb-1">Click to upload Or drag and drop</p>
-                    <p className="text-xs text-slate-500">JPG, JPEG, PNG, Gif Image size: Max 2 MB (1:1)</p>
+                  <div className="relative border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer overflow-hidden">
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => handleFileChange("profilePhoto", e)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                    />
+                    {files.profilePhoto ? (
+                      <div>
+                        <p className="text-sm font-medium text-blue-600 mb-1 truncate">{files.profilePhoto.name}</p>
+                        <p className="text-xs text-slate-500">File selected</p>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                        <p className="text-sm font-medium text-blue-600 mb-1">Click to upload Or drag and drop</p>
+                        <p className="text-xs text-slate-500">JPG, JPEG, PNG, Gif Image size: Max 2 MB (1:1)</p>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -208,6 +287,19 @@ export default function AddDeliveryman() {
                     <option value="car">Car</option>
                     <option value="motorcycle">Motorcycle</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Vehicle Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.vehicleNumber}
+                    onChange={(e) => handleInputChange("vehicleNumber", e.target.value)}
+                    placeholder="Ex: AB-12-CD-3456"
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
                 </div>
 
                 <div>
@@ -242,10 +334,25 @@ export default function AddDeliveryman() {
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
                     Identity Image
                   </label>
-                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer">
-                    <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-blue-600 mb-1">Select a file or Drag & Drop here</p>
-                    <p className="text-xs text-slate-500">Pdf, doc, jpg. File size: max 2 MB</p>
+                  <div className="relative border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer overflow-hidden">
+                    <input 
+                      type="file" 
+                      accept=".pdf,.doc,.jpg,.jpeg,.png"
+                      onChange={(e) => handleFileChange("identityImage", e)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                    />
+                    {files.identityImage ? (
+                      <div>
+                        <p className="text-sm font-medium text-blue-600 mb-1 truncate">{files.identityImage.name}</p>
+                        <p className="text-xs text-slate-500">File selected</p>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                        <p className="text-sm font-medium text-blue-600 mb-1">Select a file or Drag & Drop here</p>
+                        <p className="text-xs text-slate-500">Pdf, doc, jpg. File size: max 2 MB</p>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -288,11 +395,18 @@ export default function AddDeliveryman() {
                     Driving license
                   </label>
                   <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        type="file"
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    <div className="relative flex-1 border-2 border-dashed border-slate-300 rounded-lg p-3 text-center hover:border-blue-500 transition-colors cursor-pointer overflow-hidden bg-white">
+                      <input 
+                        type="file" 
+                        accept=".pdf,.doc,.jpg,.jpeg,.png"
+                        onChange={(e) => handleFileChange("drivingLicense", e)}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
                       />
+                      {files.drivingLicense ? (
+                        <p className="text-sm font-medium text-blue-600 truncate">{files.drivingLicense.name}</p>
+                      ) : (
+                        <p className="text-sm text-slate-500">Choose file</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -309,59 +423,15 @@ export default function AddDeliveryman() {
                   </label>
                   <div className="flex items-center gap-2">
                     <div className="px-3 py-2.5 border border-slate-300 rounded-l-lg bg-slate-50 text-sm">
-                      +1
+                      +91
                     </div>
                     <input
                       type="tel"
-                      value={formData.phone.replace("+1", "")}
-                      onChange={(e) => handleInputChange("phone", "+1" + e.target.value)}
+                      value={formData.phone.replace("+91", "")}
+                      onChange={(e) => handleInputChange("phone", "+91" + e.target.value)}
                       placeholder="Enter phone number"
                       className="flex-1 px-4 py-2.5 border border-slate-300 border-l-0 rounded-r-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Password <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={formData.password}
-                      onChange={(e) => handleInputChange("password", e.target.value)}
-                      placeholder="Ex: 8+ Character"
-                      className="w-full px-4 py-2.5 pr-10 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Confirm Password <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? "text" : "password"}
-                      value={formData.confirmPassword}
-                      onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
-                      placeholder="Ex: 8+ Character"
-                      className="w-full px-4 py-2.5 pr-10 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    >
-                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
                   </div>
                 </div>
               </div>

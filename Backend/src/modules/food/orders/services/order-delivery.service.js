@@ -980,7 +980,19 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
   
   const tx = await FoodTransaction.findOne({ orderId: order._id }).lean();
   const prevPayStatus = String(tx?.payment?.status || order?.payment?.status || '');
-  const payMethod = String(tx?.payment?.method || order?.payment?.method || order?.paymentMethod || '');
+  let overrideMethod = body.paymentMethod;
+  if (overrideMethod === 'qr') overrideMethod = 'razorpay_qr';
+  const payMethod = String(overrideMethod || tx?.payment?.method || order?.payment?.method || order?.paymentMethod || '');
+
+  // Update order's payment method if rider manually changed it at drop-off
+  if (overrideMethod && overrideMethod !== (order.payment?.method || order.paymentMethod)) {
+    order.paymentMethod = overrideMethod;
+    if (order.payment) {
+      order.payment.method = overrideMethod;
+    } else {
+      order.payment = { method: overrideMethod };
+    }
+  }
 
   if (payMethod === 'razorpay_qr') {
     const syncedPayment = await syncRazorpayQrPayment(order);

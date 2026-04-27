@@ -65,11 +65,7 @@ export default function DeliverySignIn() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col relative overflow-hidden font-['Poppins']">
-      {/* Decorative Background Elements */}
-      <div className="absolute top-0 left-0 w-full h-[600px] bg-gradient-to-b from-[#2A9C64]/10 via-[#2A9C64]/5 to-transparent pointer-events-none" />
-      <div className="absolute top-[-100px] right-[-100px] w-[500px] h-[500px] bg-[#2A9C64]/5 rounded-full blur-[120px] pointer-events-none animate-pulse" />
-      <div className="absolute bottom-[-100px] left-[-100px] w-[400px] h-[400px] bg-[#2A9C64]/5 rounded-full blur-[120px] pointer-events-none" />
+    <div className="min-h-screen bg-[#2A9C64] flex flex-col relative font-['Poppins']">
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative z-10">
@@ -105,8 +101,7 @@ export default function DeliverySignIn() {
           </div>
 
           {/* Login Card */}
-          <div className="bg-white/80 dark:bg-[#1a1a1a]/80 backdrop-blur-2xl rounded-[3rem] p-8 sm:p-12 shadow-[0_40px_80px_-20px_rgba(126,56,102,0.2)] dark:shadow-none border border-white/20 dark:border-gray-800 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-transparent via-[#2A9C64]/20 to-transparent" />
+          <div className="bg-white rounded-2xl p-8 sm:p-12 shadow-lg border border-gray-100">
 
             <div className="mb-10 text-center sm:text-left">
               <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-2 font-['Outfit'] tracking-tight">

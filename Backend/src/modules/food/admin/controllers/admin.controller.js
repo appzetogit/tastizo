@@ -1527,3 +1527,91 @@ export async function getExpiredFssaiNotifications(req, res, next) {
         next(error);
     }
 }
+
+export async function createDeliveryPartner(req, res, next) {
+    try {
+        const { FoodDeliveryPartner } = await import('../../delivery/models/deliveryPartner.model.js');
+        const { uploadImageBuffer } = await import('../../../../services/cloudinary.service.js');
+
+        const {
+            firstName, lastName, name,
+            email, phone,
+            deliverymanType, zone, vehicle,
+            identityType, identityNumber,
+            age, birthdate, vehicleNumber,
+        } = req.body;
+
+        const partnerName = name || `${firstName || ''} ${lastName || ''}`.trim();
+        const partnerPhone = String(phone || '').trim();
+
+        if (!partnerName) {
+            return res.status(400).json({ success: false, message: 'Name is required' });
+        }
+        if (!partnerPhone || partnerPhone.length < 10) {
+            return res.status(400).json({ success: false, message: 'Valid phone number is required' });
+        }
+
+        // Check for duplicate phone
+        const existingPhone = await FoodDeliveryPartner.findOne({ phone: partnerPhone });
+        if (existingPhone && existingPhone.status !== 'rejected') {
+            return res.status(409).json({ success: false, message: 'A delivery partner with this phone already exists' });
+        }
+        if (existingPhone) {
+            await FoodDeliveryPartner.deleteMany({ phone: partnerPhone });
+        }
+
+        // Check for duplicate vehicle number
+        if (vehicleNumber) {
+            const existingVehicle = await FoodDeliveryPartner.findOne({ vehicleNumber: String(vehicleNumber).trim() });
+            if (existingVehicle && existingVehicle.status !== 'rejected') {
+                return res.status(409).json({ success: false, message: 'A delivery partner with this vehicle number already exists' });
+            }
+            if (existingVehicle) {
+                await FoodDeliveryPartner.deleteMany({ vehicleNumber: String(vehicleNumber).trim() });
+            }
+        }
+
+        // Handle image uploads — normalize req.files from upload.any() (array) to object keyed by fieldname
+        const images = {};
+        const filesRaw = req.files || [];
+        const files = Array.isArray(filesRaw)
+            ? filesRaw.reduce((acc, f) => { acc[f.fieldname] = [f]; return acc; }, {})
+            : filesRaw;
+
+        if (files.profilePhoto?.[0]) {
+            images.profilePhoto = await uploadImageBuffer(files.profilePhoto[0].buffer, 'food/delivery/profile');
+        }
+        if (files.aadharPhoto?.[0]) {
+            images.aadharPhoto = await uploadImageBuffer(files.aadharPhoto[0].buffer, 'food/delivery/aadhar');
+        }
+        if (files.panPhoto?.[0]) {
+            images.panPhoto = await uploadImageBuffer(files.panPhoto[0].buffer, 'food/delivery/pan');
+        }
+        if (files.drivingLicensePhoto?.[0]) {
+            images.drivingLicensePhoto = await uploadImageBuffer(files.drivingLicensePhoto[0].buffer, 'food/delivery/license');
+        }
+
+        const partner = await FoodDeliveryPartner.create({
+            name: partnerName,
+            phone: partnerPhone,
+            email: email ? String(email).trim() : undefined,
+            vehicleType: vehicle || deliverymanType || undefined,
+            zoneId: zone || undefined,
+            identityType: identityType || undefined,
+            identityNumber: identityNumber || undefined,
+            age: age ? Number(age) : undefined,
+            birthdate: birthdate || undefined,
+            vehicleNumber: vehicleNumber ? String(vehicleNumber).trim() : undefined,
+            status: 'approved',
+            ...images,
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Delivery partner added successfully',
+            data: { delivery: partner }
+        });
+    } catch (error) {
+        next(error);
+    }
+}

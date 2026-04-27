@@ -174,6 +174,7 @@ router.get('/delivery/support-tickets/stats', adminController.getSupportTicketSt
 router.get('/delivery/support-tickets', adminController.getSupportTickets);
 router.patch('/delivery/support-tickets/:id', adminController.updateSupportTicket);
 router.get('/delivery/partners', adminController.getDeliveryPartners);
+router.post('/delivery', upload.any(), adminController.createDeliveryPartner);
 router.get('/delivery/:id', adminController.getDeliveryPartnerById);
 router.patch('/delivery/:id/approve', adminController.approveDeliveryPartner);
 router.patch('/delivery/:id/reject', adminController.rejectDeliveryPartner);

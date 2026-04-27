@@ -1380,7 +1380,9 @@ export default function OrdersMain() {
         markOrderAsShown(newOrder);
         setPopupOrder(newOrder);
         setShowNewOrderPopup(true);
-        setCountdown(240); // Reset countdown to 4 minutes
+        const orderTime = new Date(newOrder.updatedAt || newOrder.createdAt || Date.now()).getTime();
+        const elapsedSeconds = Math.floor((Date.now() - orderTime) / 1000);
+        setCountdown(Math.max(0, 240 - elapsedSeconds));
         requestOrdersRefresh();
       }
     }
@@ -1575,7 +1577,9 @@ export default function OrdersMain() {
             markOrderAsShown({ orderId, _id: orderToPopup._id });
             setPopupOrder(orderForPopup);
             setShowNewOrderPopup(true);
-            setCountdown(240);
+            const orderTime = new Date(orderForPopup.updatedAt || orderForPopup.createdAt || Date.now()).getTime();
+            const elapsedSeconds = Math.floor((Date.now() - orderTime) / 1000);
+            setCountdown(Math.max(0, 240 - elapsedSeconds));
           }
         }
       } catch (error) {
@@ -1612,13 +1616,39 @@ export default function OrdersMain() {
 
   // Countdown timer
   useEffect(() => {
-    if (showNewOrderPopup && countdown > 0) {
-      const timer = setInterval(() => {
-        setCountdown((prev) => prev - 1);
-      }, 1000);
-      return () => clearInterval(timer);
+    if (showNewOrderPopup) {
+      if (countdown > 0) {
+        const timer = setInterval(() => {
+          setCountdown((prev) => prev - 1);
+        }, 1000);
+        return () => clearInterval(timer);
+      } else if (countdown <= 0) {
+        // Auto-reject order when timer runs out
+        const activeOrder = popupOrder || newOrder;
+        if (activeOrder) {
+          const orderId = activeOrder.orderMongoId || activeOrder.orderId || activeOrder._id;
+          if (orderId) {
+            restaurantAPI.rejectOrder(orderId, "Restaurant did not accept in time")
+              .then(() => {
+                toast.error(`Order #${activeOrder.orderId || orderId} automatically rejected due to timeout.`);
+                requestOrdersRefresh();
+              })
+              .catch(err => debugError("Error auto-rejecting:", err));
+          }
+        }
+        
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        }
+        setShowRejectPopup(false);
+        setShowNewOrderPopup(false);
+        setPopupOrder(null);
+        if (typeof clearNewOrder === 'function') clearNewOrder();
+        setRejectReason("");
+      }
     }
-  }, [showNewOrderPopup, countdown]);
+  }, [showNewOrderPopup, countdown, popupOrder, newOrder]);
 
   useEffect(() => {
     if (!showNewOrderPopup) {

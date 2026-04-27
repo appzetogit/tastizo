@@ -1163,6 +1163,11 @@ export const listApprovedRestaurants = async (query = {}) => {
     const skip = (page - 1) * limit;
 
     const filter = { status: { $in: ['approved', 'pending'] } };
+    
+    if (query.zoneId && mongoose.Types.ObjectId.isValid(query.zoneId)) {
+        filter.zoneId = new mongoose.Types.ObjectId(query.zoneId);
+    }
+
     console.log('[listApprovedRestaurants] Filter:', JSON.stringify(filter, null, 2));
     console.log('[listApprovedRestaurants] Query:', JSON.stringify(query, null, 2));
 

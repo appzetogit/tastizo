@@ -74,6 +74,14 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
     setBaselineDirections(null);
   }, [tripStatus, activeOrder?._id]);
 
+  // Ensure we don't keep old directions if target is lost
+  useEffect(() => {
+    if (!activeOrder) {
+      setDirections(null);
+      setBaselineDirections(null);
+    }
+  }, [activeOrder]);
+
   const parsePoint = useCallback((raw) => {
     if (!raw) return null;
     const lat = parseFloat(raw.lat ?? raw.latitude);
@@ -221,7 +229,7 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
     travelMode: 'DRIVING',
   } : null;
 
-  const baselineServiceOptions = (restaurantPoint && customerPoint) ? {
+  const baselineServiceOptions = (restaurantPoint && customerPoint && (tripStatus === 'PICKING_UP' || tripStatus === 'REACHED_PICKUP')) ? {
     origin: restaurantPoint,
     destination: customerPoint,
     travelMode: 'DRIVING',
@@ -247,11 +255,11 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
           <DirectionsService options={baselineServiceOptions} callback={baselineDirectionsCallback} />
         )}
 
-        {remainingPath.length > 0 && (
+        {directionsServiceOptions && remainingPath.length > 0 && (
           <Polyline path={remainingPath} options={{ strokeColor: '#22c55e', strokeOpacity: 0.98, strokeWeight: 7, zIndex: 12 }} />
         )}
 
-        {baselineDirections && (
+        {baselineServiceOptions && baselineDirections && (
           <Polyline
             path={baselineDirections.routes[0].overview_path}
             options={{
