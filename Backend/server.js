@@ -16,6 +16,7 @@ const SHUTDOWN_TIMEOUT_MS = 10000;
 let server = null;
 let expireOffersInterval = null;
 let fssaiExpiryInterval = null;
+let autoCancelInterval = null;
 
 const gracefulShutdown = async (signal) => {
     logger.info(`${signal} received, starting graceful shutdown`);
@@ -30,6 +31,7 @@ const gracefulShutdown = async (signal) => {
             await closeBullMQConnection();
             if (expireOffersInterval) clearInterval(expireOffersInterval);
             if (fssaiExpiryInterval) clearInterval(fssaiExpiryInterval);
+            if (autoCancelInterval) clearInterval(autoCancelInterval);
             logger.info('Graceful shutdown complete');
             process.exit(0);
         } catch (err) {
@@ -106,6 +108,17 @@ const startServer = async () => {
         };
         runFssaiExpirySync();
         fssaiExpiryInterval = setInterval(runFssaiExpirySync, 60 * 60 * 1000);
+
+        const runAutoCancel = async () => {
+            try {
+                const { autoCancelStaleOrders } = await import('./src/modules/food/orders/services/order.service.js');
+                await autoCancelStaleOrders();
+            } catch (err) {
+                logger.error(`Auto cancel stale orders error: ${err.message}`);
+            }
+        };
+        runAutoCancel();
+        autoCancelInterval = setInterval(runAutoCancel, 10 * 60 * 1000);
 
         process.on('SIGINT', () => gracefulShutdown('SIGINT'));
         process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

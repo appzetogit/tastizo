@@ -72,7 +72,7 @@ const loadingRestaurantCards = Array.from({ length: 6 }, (_, index) => `restaura
 function DiningCategorySkeleton({ index }) {
   return (
     <motion.div
-      className={`relative h-[114px] sm:h-[148px] md:h-[160px] overflow-hidden rounded-[22px] border border-[#efe2d3] bg-[linear-gradient(180deg,#fdfafc_0%,#f9f3f7_100%)] shadow-[0_1px_2px_rgba(60,15,61,0.05)] ${shimmerClassName}`}
+      className={`relative h-[114px] sm:h-[148px] md:h-[160px] overflow-hidden rounded-[22px] border border-[#efe2d3] bg-[linear-gradient(180deg,#f2faf6_0%,#f9f3f7_100%)] shadow-[0_1px_2px_rgba(60,15,61,0.05)] ${shimmerClassName}`}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.04 }}
@@ -82,7 +82,7 @@ function DiningCategorySkeleton({ index }) {
         <div className="mt-3 h-4 w-24 rounded-full bg-[#ead2bc]" />
         <div className="mt-2 h-4 w-20 rounded-full bg-[#f3e3d4]" />
       </div>
-      <div className="absolute inset-x-0 bottom-0 h-[64%] rounded-b-[18px] bg-[radial-gradient(circle_at_25%_20%,rgba(126,56,102,0.1),transparent_30%),linear-gradient(180deg,#fcf4f9_0%,#f5e8f1_100%)]">
+      <div className="absolute inset-x-0 bottom-0 h-[64%] rounded-b-[18px] bg-[radial-gradient(circle_at_25%_20%,rgba(126,56,102,0.1),transparent_30%),linear-gradient(180deg,#f2faf6_0%,#e6f2eb_100%)]">
         <div className="absolute bottom-3 left-3 h-14 w-14 rounded-full bg-white/45 blur-md" />
       </div>
     </motion.div>
@@ -101,7 +101,7 @@ function DiningRestaurantSkeleton({ index }) {
         <div className={`relative h-48 overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(126,56,102,0.12),transparent_28%),linear-gradient(135deg,#fcf6fa_0%,#f9edf5_100%)] sm:h-56 md:h-60 lg:h-64 xl:h-72 ${shimmerClassName}`}>
           <div className="absolute left-4 top-4 h-8 w-28 rounded-lg bg-black/10" />
           <div className="absolute right-4 top-4 h-9 w-9 rounded-lg bg-white/60" />
-          <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-r from-[#7e3866] to-transparent/20">
+          <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-r from-[#2A9C64] to-transparent/20">
             <div className="flex h-full flex-col justify-end pl-4 pb-4 sm:pl-5 sm:pb-5">
               <div className="h-2.5 w-24 rounded-full bg-white/35" />
               <div className="mt-2 h-px w-24 bg-white/25" />
@@ -541,7 +541,7 @@ export default function Dining() {
         >
           {/* Enhanced Search Bar (Matching Home Style) */}
           <div className="relative bg-gray-50 dark:bg-[#1a1a1a] rounded-xl border border-gray-200 dark:border-gray-800 p-2 flex items-center shadow-inner group">
-            <Search className="h-4 w-4 text-[#7e3866] ml-2 shrink-0" strokeWidth={2.5} />
+            <Search className="h-4 w-4 text-[#2A9C64] ml-2 shrink-0" strokeWidth={2.5} />
             <div className="flex-1 px-3">
               <Input
                 value={heroSearch}
@@ -561,7 +561,7 @@ export default function Dining() {
             <div className="flex items-center gap-3 pr-2">
               <div className="h-4 w-[1px] bg-gray-200 dark:bg-gray-700" />
               <button className="flex items-center justify-center p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
-                <Mic className="h-4 w-4 text-[#7e3866]" strokeWidth={2.5} />
+                <Mic className="h-4 w-4 text-[#2A9C64]" strokeWidth={2.5} />
               </button>
             </div>
           </div>
@@ -784,7 +784,7 @@ export default function Dining() {
                       variant="outline"
                       onClick={() => toggleFilter(filter.id)}
                       className={`h-7 sm:h-8 px-2 sm:px-3 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-medium ${isActive
-                        ? 'bg-[#7e3866] text-white border border-[#7e3866] hover:bg-[#55254b]'
+                        ? 'bg-[#2A9C64] text-white border border-[#2A9C64] hover:bg-[#1E7A4A]'
                         : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
                         }`}
                     >
@@ -965,7 +965,7 @@ export default function Dining() {
                           </motion.div>
 
                           {/* Blue Section - Bottom 40% */}
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-[#7e3866] to-transparent" style={{ height: '40%' }}>
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-[#2A9C64] to-transparent" style={{ height: '40%' }}>
                             <div className="h-full flex flex-col justify-end">
                               <div className="pl-4 sm:pl-5 pb-4 sm:pb-5">
                                 <p className="text-white text-xs sm:text-sm font-medium uppercase tracking-wide mb-1">
@@ -997,7 +997,7 @@ export default function Dining() {
                                   className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white line-clamp-1"
                                   variants={{
                                     rest: {},
-                                    hover: { color: "#7e3866" }
+                                    hover: { color: "#2A9C64" }
                                   }}
                                   transition={{ duration: 0.3 }}
                                 >
@@ -1187,7 +1187,7 @@ export default function Dining() {
                           </Button>
 
                           {/* Blue Section - Bottom 40% */}
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-[#7e3866] to-transparent" style={{ height: '40%' }}>
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-[#2A9C64] to-transparent" style={{ height: '40%' }}>
                             <div className="h-full flex flex-col justify-end">
                               <div className="pl-4 sm:pl-5 pb-4 sm:pb-5">
                                 <p className="text-white text-xs sm:text-sm font-medium uppercase tracking-wide mb-1">
@@ -1283,7 +1283,7 @@ export default function Dining() {
                   setSortBy(null)
                   setSelectedCuisine(null)
                 }}
-                className="text-[#7e3866] font-medium text-sm md:text-base"
+                className="text-[#2A9C64] font-medium text-sm md:text-base"
               >
                 Clear all
               </button>
@@ -1307,11 +1307,11 @@ export default function Dining() {
                     <button
                       key={tab.id}
                       onClick={() => setActiveFilterTab(tab.id)}
-                      className={`flex flex-col items-center gap-1 py-4 px-2 text-center relative transition-colors ${isActive ? 'bg-white dark:bg-[#1a1a1a] text-[#7e3866]' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      className={`flex flex-col items-center gap-1 py-4 px-2 text-center relative transition-colors ${isActive ? 'bg-white dark:bg-[#1a1a1a] text-[#2A9C64]' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
                         }`}
                     >
                       {isActive && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#7e3866] rounded-r" />
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#2A9C64] rounded-r" />
                       )}
                       <Icon className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.5} />
                       <span className="text-xs md:text-sm font-medium leading-tight">{tab.label}</span>
@@ -1336,11 +1336,11 @@ export default function Dining() {
                           key={option.id || 'relevance'}
                           onClick={() => setSortBy(option.id)}
                           className={`px-4 md:px-5 py-3 md:py-4 rounded-xl border text-left transition-colors ${sortBy === option.id
-                            ? 'border-[#7e3866] bg-[#F9F9FB] dark:bg-[#7e3866]/20'
-                            : 'border-gray-200 dark:border-gray-700 hover:border-[#7e3866]'
+                            ? 'border-[#2A9C64] bg-[#F9F9FB] dark:bg-[#2A9C64]/20'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-[#2A9C64]'
                             }`}
                         >
-                          <span className={`text-sm md:text-base font-medium ${sortBy === option.id ? 'text-[#7e3866]' : 'text-gray-700 dark:text-gray-300'}`}>
+                          <span className={`text-sm md:text-base font-medium ${sortBy === option.id ? 'text-[#2A9C64]' : 'text-gray-700 dark:text-gray-300'}`}>
                             {option.label}
                           </span>
                         </button>
@@ -1357,22 +1357,22 @@ export default function Dining() {
                       <button
                         onClick={() => toggleFilter('delivery-under-30')}
                         className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('delivery-under-30')
-                          ? 'border-[#7e3866] bg-[#F9F9FB] dark:bg-[#7e3866]/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-[#7e3866]'
+                          ? 'border-[#2A9C64] bg-[#F9F9FB] dark:bg-[#2A9C64]/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-[#2A9C64]'
                           }`}
                       >
-                        <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-30') ? 'text-[#7e3866]' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
-                        <span className={`text-sm font-medium ${activeFilters.has('delivery-under-30') ? 'text-[#7e3866]' : 'text-gray-700 dark:text-gray-300'}`}>Under 30 mins</span>
+                        <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-30') ? 'text-[#2A9C64]' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
+                        <span className={`text-sm font-medium ${activeFilters.has('delivery-under-30') ? 'text-[#2A9C64]' : 'text-gray-700 dark:text-gray-300'}`}>Under 30 mins</span>
                       </button>
                       <button
                         onClick={() => toggleFilter('delivery-under-45')}
                         className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('delivery-under-45')
-                          ? 'border-[#7e3866] bg-[#F9F9FB] dark:bg-[#7e3866]/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-[#7e3866]'
+                          ? 'border-[#2A9C64] bg-[#F9F9FB] dark:bg-[#2A9C64]/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-[#2A9C64]'
                           }`}
                       >
-                        <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-45') ? 'text-[#7e3866]' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
-                        <span className={`text-sm font-medium ${activeFilters.has('delivery-under-45') ? 'text-[#7e3866]' : 'text-gray-700 dark:text-gray-300'}`}>Under 45 mins</span>
+                        <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-45') ? 'text-[#2A9C64]' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
+                        <span className={`text-sm font-medium ${activeFilters.has('delivery-under-45') ? 'text-[#2A9C64]' : 'text-gray-700 dark:text-gray-300'}`}>Under 45 mins</span>
                       </button>
                     </div>
                   </div>
@@ -1386,32 +1386,32 @@ export default function Dining() {
                       <button
                         onClick={() => toggleFilter('rating-35-plus')}
                         className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('rating-35-plus')
-                          ? 'border-[#7e3866] bg-[#F9F9FB] dark:bg-[#7e3866]/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-[#7e3866]'
+                          ? 'border-[#2A9C64] bg-[#F9F9FB] dark:bg-[#2A9C64]/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-[#2A9C64]'
                           }`}
                       >
-                        <Star className={`h-6 w-6 ${activeFilters.has('rating-35-plus') ? 'text-[#7e3866] fill-[#7e3866]' : 'text-gray-400 dark:text-gray-500'}`} />
-                        <span className={`text-sm font-medium ${activeFilters.has('rating-35-plus') ? 'text-[#7e3866]' : 'text-gray-700 dark:text-gray-300'}`}>Rated 3.5+</span>
+                        <Star className={`h-6 w-6 ${activeFilters.has('rating-35-plus') ? 'text-[#2A9C64] fill-[#2A9C64]' : 'text-gray-400 dark:text-gray-500'}`} />
+                        <span className={`text-sm font-medium ${activeFilters.has('rating-35-plus') ? 'text-[#2A9C64]' : 'text-gray-700 dark:text-gray-300'}`}>Rated 3.5+</span>
                       </button>
                       <button
                         onClick={() => toggleFilter('rating-4-plus')}
                         className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('rating-4-plus')
-                          ? 'border-[#7e3866] bg-[#F9F9FB] dark:bg-[#7e3866]/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-[#7e3866]'
+                          ? 'border-[#2A9C64] bg-[#F9F9FB] dark:bg-[#2A9C64]/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-[#2A9C64]'
                           }`}
                       >
-                        <Star className={`h-6 w-6 ${activeFilters.has('rating-4-plus') ? 'text-[#7e3866] fill-[#7e3866]' : 'text-gray-400 dark:text-gray-500'}`} />
-                        <span className={`text-sm font-medium ${activeFilters.has('rating-4-plus') ? 'text-[#7e3866]' : 'text-gray-700 dark:text-gray-300'}`}>Rated 4.0+</span>
+                        <Star className={`h-6 w-6 ${activeFilters.has('rating-4-plus') ? 'text-[#2A9C64] fill-[#2A9C64]' : 'text-gray-400 dark:text-gray-500'}`} />
+                        <span className={`text-sm font-medium ${activeFilters.has('rating-4-plus') ? 'text-[#2A9C64]' : 'text-gray-700 dark:text-gray-300'}`}>Rated 4.0+</span>
                       </button>
                       <button
                         onClick={() => toggleFilter('rating-45-plus')}
                         className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('rating-45-plus')
-                          ? 'border-[#7e3866] bg-[#F9F9FB] dark:bg-[#7e3866]/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-[#7e3866]'
+                          ? 'border-[#2A9C64] bg-[#F9F9FB] dark:bg-[#2A9C64]/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-[#2A9C64]'
                           }`}
                       >
-                        <Star className={`h-6 w-6 ${activeFilters.has('rating-45-plus') ? 'text-[#7e3866] fill-[#7e3866]' : 'text-gray-400 dark:text-gray-500'}`} />
-                        <span className={`text-sm font-medium ${activeFilters.has('rating-45-plus') ? 'text-[#7e3866]' : 'text-gray-700 dark:text-gray-300'}`}>Rated 4.5+</span>
+                        <Star className={`h-6 w-6 ${activeFilters.has('rating-45-plus') ? 'text-[#2A9C64] fill-[#2A9C64]' : 'text-gray-400 dark:text-gray-500'}`} />
+                        <span className={`text-sm font-medium ${activeFilters.has('rating-45-plus') ? 'text-[#2A9C64]' : 'text-gray-700 dark:text-gray-300'}`}>Rated 4.5+</span>
                       </button>
                     </div>
                   </div>
@@ -1425,22 +1425,22 @@ export default function Dining() {
                       <button
                         onClick={() => toggleFilter('distance-under-1km')}
                         className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('distance-under-1km')
-                          ? 'border-[#7e3866] bg-[#F9F9FB] dark:bg-[#7e3866]/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-[#7e3866]'
+                          ? 'border-[#2A9C64] bg-[#F9F9FB] dark:bg-[#2A9C64]/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-[#2A9C64]'
                           }`}
                       >
-                        <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-1km') ? 'text-[#7e3866]' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
-                        <span className={`text-sm font-medium ${activeFilters.has('distance-under-1km') ? 'text-[#7e3866]' : 'text-gray-700 dark:text-gray-300'}`}>Under 1 km</span>
+                        <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-1km') ? 'text-[#2A9C64]' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
+                        <span className={`text-sm font-medium ${activeFilters.has('distance-under-1km') ? 'text-[#2A9C64]' : 'text-gray-700 dark:text-gray-300'}`}>Under 1 km</span>
                       </button>
                       <button
                         onClick={() => toggleFilter('distance-under-2km')}
                         className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('distance-under-2km')
-                          ? 'border-[#7e3866] bg-[#F9F9FB] dark:bg-[#7e3866]/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-[#7e3866]'
+                          ? 'border-[#2A9C64] bg-[#F9F9FB] dark:bg-[#2A9C64]/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-[#2A9C64]'
                           }`}
                       >
-                        <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-2km') ? 'text-[#7e3866]' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
-                        <span className={`text-sm font-medium ${activeFilters.has('distance-under-2km') ? 'text-[#7e3866]' : 'text-gray-700 dark:text-gray-300'}`}>Under 2 km</span>
+                        <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-2km') ? 'text-[#2A9C64]' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
+                        <span className={`text-sm font-medium ${activeFilters.has('distance-under-2km') ? 'text-[#2A9C64]' : 'text-gray-700 dark:text-gray-300'}`}>Under 2 km</span>
                       </button>
                     </div>
                   </div>
@@ -1454,20 +1454,20 @@ export default function Dining() {
                       <button
                         onClick={() => toggleFilter('price-under-200')}
                         className={`px-4 py-3 rounded-xl border text-left transition-colors ${activeFilters.has('price-under-200')
-                          ? 'border-[#7e3866] bg-[#7e3866]/10 dark:bg-[#7e3866]/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-[#7e3866]'
+                          ? 'border-[#2A9C64] bg-[#2A9C64]/10 dark:bg-[#2A9C64]/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-[#2A9C64]'
                           }`}
                       >
-                        <span className={`text-sm font-medium ${activeFilters.has('price-under-200') ? 'text-[#7e3866]' : 'text-gray-700 dark:text-gray-300'}`}>Under ₹200</span>
+                        <span className={`text-sm font-medium ${activeFilters.has('price-under-200') ? 'text-[#2A9C64]' : 'text-gray-700 dark:text-gray-300'}`}>Under ₹200</span>
                       </button>
                       <button
                         onClick={() => toggleFilter('price-under-500')}
                         className={`px-4 py-3 rounded-xl border text-left transition-colors ${activeFilters.has('price-under-500')
-                          ? 'border-[#7e3866] bg-[#7e3866]/10 dark:bg-[#7e3866]/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-[#7e3866]'
+                          ? 'border-[#2A9C64] bg-[#2A9C64]/10 dark:bg-[#2A9C64]/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-[#2A9C64]'
                           }`}
                       >
-                        <span className={`text-sm font-medium ${activeFilters.has('price-under-500') ? 'text-[#7e3866]' : 'text-gray-700 dark:text-gray-300'}`}>Under ₹500</span>
+                        <span className={`text-sm font-medium ${activeFilters.has('price-under-500') ? 'text-[#2A9C64]' : 'text-gray-700 dark:text-gray-300'}`}>Under ₹500</span>
                       </button>
                     </div>
                   </div>
@@ -1483,11 +1483,11 @@ export default function Dining() {
                           key={cuisine}
                           onClick={() => setSelectedCuisine(selectedCuisine === cuisine ? null : cuisine)}
                           className={`px-4 py-3 rounded-xl border text-center transition-colors ${selectedCuisine === cuisine
-                            ? 'border-[#7e3866] bg-[#F9F9FB] dark:bg-[#7e3866]/20'
-                            : 'border-gray-200 dark:border-gray-700 hover:border-[#7e3866]'
+                            ? 'border-[#2A9C64] bg-[#F9F9FB] dark:bg-[#2A9C64]/20'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-[#2A9C64]'
                             }`}
                         >
-                          <span className={`text-sm font-medium ${selectedCuisine === cuisine ? 'text-[#7e3866]' : 'text-gray-700 dark:text-gray-300'}`}>
+                          <span className={`text-sm font-medium ${selectedCuisine === cuisine ? 'text-[#2A9C64]' : 'text-gray-700 dark:text-gray-300'}`}>
                             {cuisine}
                           </span>
                         </button>
@@ -1509,7 +1509,7 @@ export default function Dining() {
               <button
                 onClick={() => setIsFilterOpen(false)}
                 className={`flex-1 py-3 md:py-4 font-semibold rounded-xl transition-colors text-sm md:text-base ${activeFilters.size > 0 || sortBy || selectedCuisine
-                  ? 'bg-[#7e3866] text-white hover:bg-[#55254b]'
+                  ? 'bg-[#2A9C64] text-white hover:bg-[#1E7A4A]'
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                   }`}
               >

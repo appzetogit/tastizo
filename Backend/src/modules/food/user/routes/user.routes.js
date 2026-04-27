@@ -33,10 +33,6 @@ import {
     createSupportTicketController,
     listMySupportTicketsController
 } from '../controllers/supportTicket.controller.js';
-import {
-    getCategoriesController,
-    getCategoryByIdController
-} from '../controllers/category.controller.js';
 
 const router = express.Router();
 
@@ -70,9 +66,5 @@ router.put('/addresses/:addressId', updateAddressController);
 router.patch('/addresses/:addressId', updateAddressController);
 router.delete('/addresses/:addressId', deleteAddressController);
 router.patch('/addresses/:addressId/default', setDefaultAddressController);
-
-// Categories (Public - No auth required for basic listing)
-router.get('/categories', getCategoriesController);
-router.get('/categories/:id', getCategoryByIdController);
 
 export default router;

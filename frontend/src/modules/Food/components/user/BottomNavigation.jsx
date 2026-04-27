@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import api from "@food/api"
 
 export default function BottomNavigation() {
-  const activeGold = "#c89b3c"
+  const activeGold = "#2A9C64"
   const location = useLocation()
   const pathname = location.pathname
   const [under250PriceLimit, setUnder250PriceLimit] = useState(250)
@@ -51,12 +51,12 @@ export default function BottomNavigation() {
         <Link
           to="/"
           className={`flex flex-1 flex-col items-center gap-1.5 px-2 sm:px-3 py-2 transition-all duration-200 relative ${isDelivery
-              ? "text-[#c89b3c]"
+              ? "text-[#2A9C64]"
               : "text-gray-600 dark:text-gray-400"
             }`}
         >
-          < Truck className={`h-5 w-5 ${isDelivery ? "text-[#c89b3c] fill-[#c89b3c]/10" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
-          <span className={`text-xs sm:text-sm font-medium ${isDelivery ? "text-[#c89b3c] font-bold" : "text-gray-600 dark:text-gray-400"}`}>
+          < Truck className={`h-5 w-5 ${isDelivery ? "text-[#2A9C64] fill-[#2A9C64]/10" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
+          <span className={`text-xs sm:text-sm font-medium ${isDelivery ? "text-[#2A9C64] font-bold" : "text-gray-600 dark:text-gray-400"}`}>
             Delivery
           </span>
           {isDelivery && (
@@ -71,12 +71,12 @@ export default function BottomNavigation() {
         <Link
           to="/food/user/dining"
           className={`flex flex-1 flex-col items-center gap-1.5 px-2 sm:px-3 py-2 transition-all duration-200 relative ${isDining
-              ? "text-[#c89b3c]"
+              ? "text-[#2A9C64]"
               : "text-gray-600 dark:text-gray-400"
             }`}
         >
-          <UtensilsCrossed className={`h-5 w-5 ${isDining ? "text-[#c89b3c]" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
-          <span className={`text-xs sm:text-sm font-medium ${isDining ? "text-[#c89b3c] font-bold" : "text-gray-600 dark:text-gray-400"}`}>
+          <UtensilsCrossed className={`h-5 w-5 ${isDining ? "text-[#2A9C64]" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
+          <span className={`text-xs sm:text-sm font-medium ${isDining ? "text-[#2A9C64] font-bold" : "text-gray-600 dark:text-gray-400"}`}>
             Dining
           </span>
           {isDining && (
@@ -91,12 +91,12 @@ export default function BottomNavigation() {
         <Link
           to="/food/user/under-250"
           className={`flex flex-1 flex-col items-center gap-1.5 px-2 sm:px-3 py-2 transition-all duration-200 relative ${isUnder250
-              ? "text-[#c89b3c]"
+              ? "text-[#2A9C64]"
               : "text-gray-600 dark:text-gray-400"
             }`}
         >
-          <Tag className={`h-5 w-5 ${isUnder250 ? "text-[#c89b3c] fill-[#c89b3c]/10" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
-          <span className={`text-xs sm:text-sm font-medium ${isUnder250 ? "text-[#c89b3c] font-bold" : "text-gray-600 dark:text-gray-400"}`}>
+          <Tag className={`h-5 w-5 ${isUnder250 ? "text-[#2A9C64] fill-[#2A9C64]/10" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
+          <span className={`text-xs sm:text-sm font-medium ${isUnder250 ? "text-[#2A9C64] font-bold" : "text-gray-600 dark:text-gray-400"}`}>
             Under ₹{under250PriceLimit}
           </span>
           {isUnder250 && (
@@ -111,12 +111,12 @@ export default function BottomNavigation() {
         <Link
           to="/food/user/profile"
           className={`flex flex-1 flex-col items-center gap-1.5 px-2 sm:px-3 py-2 transition-all duration-200 relative ${isProfile
-              ? "text-[#c89b3c]"
+              ? "text-[#2A9C64]"
               : "text-gray-600 dark:text-gray-400"
             }`}
         >
-          <User className={`h-5 w-5 ${isProfile ? "text-[#c89b3c] fill-[#c89b3c]/10" : "text-gray-600 dark:text-gray-400"}`} />
-          <span className={`text-xs sm:text-sm font-medium ${isProfile ? "text-[#c89b3c] font-bold" : "text-gray-600 dark:text-gray-400"}`}>
+          <User className={`h-5 w-5 ${isProfile ? "text-[#2A9C64] fill-[#2A9C64]/10" : "text-gray-600 dark:text-gray-400"}`} />
+          <span className={`text-xs sm:text-sm font-medium ${isProfile ? "text-[#2A9C64] font-bold" : "text-gray-600 dark:text-gray-400"}`}>
             Profile
           </span>
           {isProfile && (

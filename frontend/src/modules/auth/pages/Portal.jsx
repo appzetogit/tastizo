@@ -103,7 +103,7 @@ export default function SuperAppPortal() {
           <motion.div 
             animate={{ rotate: [0, 10, -10, 0] }}
             transition={{ duration: 4, repeat: Infinity }}
-            className="w-6 h-6 bg-gradient-to-br from-[#7e3866] to-[#55254b] rounded-lg flex items-center justify-center shadow-lg"
+            className="w-6 h-6 bg-gradient-to-br from-[#2A9C64] to-[#1E7A4A] rounded-lg flex items-center justify-center shadow-lg"
           >
              <span className="text-white text-[10px] font-black italic">F</span>
           </motion.div>
@@ -117,7 +117,7 @@ export default function SuperAppPortal() {
           className="text-5xl md:text-7xl font-black text-[#1A202C] tracking-tight leading-none"
         >
           Welcome to <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#7e3866] via-[#a64a85] to-[#7e3866] bg-[length:200%_auto] animate-gradient block mt-2">Tastizo</span>
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#2A9C64] via-[#a64a85] to-[#2A9C64] bg-[length:200%_auto] animate-gradient block mt-2">Tastizo</span>
         </motion.h1>
 
         <motion.p 

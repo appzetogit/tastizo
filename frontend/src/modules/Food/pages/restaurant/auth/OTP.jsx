@@ -22,7 +22,7 @@ export default function RestaurantOTP() {
   const inputRefs = useRef([])
   const hasSubmittedRef = useRef(false)
 
-  const primaryColor = "#7e3866"
+  const primaryColor = "#2A9C64"
 
   useEffect(() => {
     const stored = sessionStorage.getItem("restaurantAuthData")
@@ -190,9 +190,9 @@ export default function RestaurantOTP() {
   return (
     <div className="min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col relative overflow-hidden font-['Poppins']">
       {/* Decorative Background Elements */}
-      <div className="absolute top-0 left-0 w-full h-[600px] bg-gradient-to-b from-[#7e3866]/10 via-[#7e3866]/5 to-transparent pointer-events-none" />
-      <div className="absolute top-[-100px] right-[-100px] w-[500px] h-[500px] bg-[#7e3866]/5 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-100px] left-[-100px] w-[400px] h-[400px] bg-[#7e3866]/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-0 left-0 w-full h-[600px] bg-gradient-to-b from-[#2A9C64]/10 via-[#2A9C64]/5 to-transparent pointer-events-none" />
+      <div className="absolute top-[-100px] right-[-100px] w-[500px] h-[500px] bg-[#2A9C64]/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-100px] left-[-100px] w-[400px] h-[400px] bg-[#2A9C64]/5 rounded-full blur-[120px] pointer-events-none" />
       
       {/* Header / Back */}
       <div className="relative z-20 px-6 py-8 flex items-center">
@@ -200,7 +200,7 @@ export default function RestaurantOTP() {
           whileHover={{ x: -4 }}
           whileTap={{ scale: 0.9 }}
           onClick={() => navigate("/food/restaurant/login")}
-          className="p-3 bg-white dark:bg-[#1a1a1a] shadow-xl shadow-[#7e3866]/10 rounded-2xl text-[#7e3866] border border-[#7e3866]/5 outline-none"
+          className="p-3 bg-white dark:bg-[#1a1a1a] shadow-xl shadow-[#2A9C64]/10 rounded-2xl text-[#2A9C64] border border-[#2A9C64]/5 outline-none"
         >
           <ArrowLeft className="w-5 h-5" />
         </motion.button>
@@ -218,17 +218,17 @@ export default function RestaurantOTP() {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 200, damping: 15 }}
-              className="w-20 h-20 bg-[#7e3866] rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-[#7e3866]/30 relative"
+              className="w-20 h-20 bg-[#2A9C64] rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-[#2A9C64]/30 relative"
             >
               <ShieldCheck className="text-white w-10 h-10" />
             </motion.div>
             
-            <h1 className="text-4xl font-black text-[#7e3866] font-['Outfit'] tracking-tight mb-3">
+            <h1 className="text-4xl font-black text-[#2A9C64] font-['Outfit'] tracking-tight mb-3">
               Verify Account
             </h1>
             <p className="text-gray-500 dark:text-gray-400 font-medium">
               We've sent a 4-digit code to <br />
-              <span className="text-[#7e3866] font-bold">{contactInfo}</span>
+              <span className="text-[#2A9C64] font-bold">{contactInfo}</span>
             </p>
           </div>
 
@@ -246,13 +246,13 @@ export default function RestaurantOTP() {
                     onKeyDown={(e) => handleKeyDown(index, e)}
                     onFocus={() => setFocusedIndex(index)}
                     onBlur={() => setFocusedIndex(null)}
-                    className={`w-full aspect-square bg-gray-50 dark:bg-gray-900/50 text-center text-3xl font-black text-[#7e3866] border-2 border-transparent rounded-2xl outline-none transition-all ${
+                    className={`w-full aspect-square bg-gray-50 dark:bg-gray-900/50 text-center text-3xl font-black text-[#2A9C64] border-2 border-transparent rounded-2xl outline-none transition-all ${
                       focusedIndex === index 
-                        ? "border-[#7e3866] bg-white scale-105 shadow-[0_10px_30px_rgba(126,56,102,0.1)]" 
+                        ? "border-[#2A9C64] bg-white scale-105 shadow-[0_10px_30px_rgba(126,56,102,0.1)]" 
                         : "group-hover:border-gray-200 dark:group-hover:border-gray-700"
                     }`}
                   />
-                  <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full transition-all duration-300 ${focusedIndex === index ? "bg-[#7e3866] opacity-100" : "bg-gray-200 opacity-0"}`} />
+                  <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full transition-all duration-300 ${focusedIndex === index ? "bg-[#2A9C64] opacity-100" : "bg-gray-200 opacity-0"}`} />
                 </div>
               ))}
             </div>
@@ -260,7 +260,7 @@ export default function RestaurantOTP() {
             <button
               onClick={() => handleVerify()}
               disabled={isLoading || !isOtpComplete}
-              className="w-full py-4.5 bg-[#7e3866] hover:bg-[#6a2f56] disabled:bg-gray-200 dark:disabled:bg-gray-800 disabled:text-gray-400 text-white rounded-2xl font-bold text-lg shadow-xl shadow-[#7e3866]/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 mb-8"
+              className="w-full py-4.5 bg-[#2A9C64] hover:bg-[#6a2f56] disabled:bg-gray-200 dark:disabled:bg-gray-800 disabled:text-gray-400 text-white rounded-2xl font-bold text-lg shadow-xl shadow-[#2A9C64]/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 mb-8"
             >
               {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : "Verify & Continue"}
             </button>
@@ -269,13 +269,13 @@ export default function RestaurantOTP() {
             <div className="text-center">
               {resendTimer > 0 ? (
                 <p className="text-sm text-gray-400 font-medium flex items-center justify-center gap-2 tracking-wide uppercase text-[10px] font-black">
-                  <Timer className="w-3.5 h-3.5 text-[#7e3866]" />
-                  Resend code in <span className="text-[#7e3866] font-bold">{resendTimer}s</span>
+                  <Timer className="w-3.5 h-3.5 text-[#2A9C64]" />
+                  Resend code in <span className="text-[#2A9C64] font-bold">{resendTimer}s</span>
                 </p>
               ) : (
                 <button
                   onClick={handleResend}
-                  className="text-xs text-[#7e3866] font-black uppercase tracking-widest hover:underline underline-offset-4 flex items-center justify-center gap-2 mx-auto"
+                  className="text-xs text-[#2A9C64] font-black uppercase tracking-widest hover:underline underline-offset-4 flex items-center justify-center gap-2 mx-auto"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   Resend OTP Code

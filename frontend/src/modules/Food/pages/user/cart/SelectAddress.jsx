@@ -13,7 +13,7 @@ import { useLocation } from "@food/hooks/useLocation"
 import { toast } from "sonner"
 import { formatAddressLine, getAddressId } from "@food/utils/address"
 
-const ORANGE = "#7e3866"
+const ORANGE = "#2A9C64"
 
 const toBackendLabel = (label) => {
   const v = String(label || "").toLowerCase()
@@ -246,7 +246,7 @@ export default function SelectAddress() {
                                         {String(addr?.label || "Saved").toLowerCase() === "office" ? "Work" : (addr?.label || "Saved")}
                                       </p>
                                       {addr?.isDefault && (
-                                        <Badge className="bg-orange-100 text-orange-800 dark:bg-[#7e3866]/15 dark:text-orange-200">
+                                        <Badge className="bg-orange-100 text-orange-800 dark:bg-[#2A9C64]/15 dark:text-orange-200">
                                           Default
                                         </Badge>
                                       )}

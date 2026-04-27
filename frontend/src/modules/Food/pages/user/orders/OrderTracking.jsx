@@ -1441,7 +1441,7 @@ export default function OrderTracking() {
                 transition={{ delay: 1.5 }}
                 className="mt-8"
               >
-                <div className="w-8 h-8 border-2 border-[#7e3866] border-t-transparent rounded-full animate-spin mx-auto" />
+                <div className="w-8 h-8 border-2 border-[#2A9C64] border-t-transparent rounded-full animate-spin mx-auto" />
                 <p className="text-sm text-gray-500 mt-3">Loading order details...</p>
               </motion.div>
 
@@ -1451,7 +1451,7 @@ export default function OrderTracking() {
                 transition={{ delay: 2.0 }}
                 className="mt-12 pt-8 border-t border-gray-100 dark:border-gray-800"
               >
-                <div className="flex items-center justify-center gap-2 text-[#7e3866] dark:text-orange-400 font-medium cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate('/user/profile/report-safety-emergency')}>
+                <div className="flex items-center justify-center gap-2 text-[#2A9C64] dark:text-orange-400 font-medium cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate('/user/profile/report-safety-emergency')}>
                   <Shield className="w-4 h-4" />
                   <span className="text-sm">Learn about delivery partner safety</span>
                 </div>
@@ -1841,7 +1841,7 @@ export default function OrderTracking() {
               onClick={handleCallRestaurant}
               whileTap={{ scale: 0.9 }}
             >
-              <Phone className="w-5 h-5 text-[#7e3866]" />
+              <Phone className="w-5 h-5 text-[#2A9C64]" />
             </motion.button>
           </div>
 
@@ -2021,9 +2021,9 @@ export default function OrderTracking() {
             {/* Delivery Instructions Section */}
             {order?.note && (
               <div className="bg-orange-50/50 rounded-xl p-4 border border-orange-100 flex gap-3">
-                <MessageSquare className="w-5 h-5 text-[#7e3866] shrink-0 mt-0.5" />
+                <MessageSquare className="w-5 h-5 text-[#2A9C64] shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs text-#55254b font-bold uppercase tracking-wider mb-1">Delivery Instructions</p>
+                  <p className="text-xs text-#1E7A4A font-bold uppercase tracking-wider mb-1">Delivery Instructions</p>
                   <p className="text-sm text-gray-800 leading-relaxed font-medium capitalize">
                     {order.note}
                   </p>
@@ -2130,7 +2130,7 @@ export default function OrderTracking() {
       <Dialog open={isInstructionsModalOpen} onOpenChange={setIsInstructionsModalOpen}>
         <DialogContent className="sm:max-w-md w-[95vw] rounded-3xl p-6 border-0 shadow-2xl bg-white dark:bg-[#1a1a1a] max-h-[90vh] overflow-y-auto z-[200]">
           <DialogHeader className="mb-2">
-            <DialogTitle className="text-xl font-bold bg-gradient-to-r from-#55254b to-orange-400 bg-clip-text text-transparent">
+            <DialogTitle className="text-xl font-bold bg-gradient-to-r from-#1E7A4A to-orange-400 bg-clip-text text-transparent">
               Delivery Instructions
             </DialogTitle>
           </DialogHeader>
@@ -2142,12 +2142,12 @@ export default function OrderTracking() {
               value={deliveryInstructions}
               onChange={(e) => setDeliveryInstructions(e.target.value)}
               placeholder="E.g. Ring the doorbell, leave at the front desk..."
-              className="min-h-[120px] resize-none border-gray-200 focus:ring-[#7e3866] rounded-xl bg-gray-50 text-base"
+              className="min-h-[120px] resize-none border-gray-200 focus:ring-[#2A9C64] rounded-xl bg-gray-50 text-base"
             />
             <Button 
               onClick={handleUpdateInstructions} 
               disabled={isUpdatingInstructions}
-              className="w-full bg-gradient-to-r from-[#7e3866] to-amber-500 hover:from-#55254b hover:to-amber-600 text-white font-bold h-12 rounded-xl border-none"
+              className="w-full bg-gradient-to-r from-[#2A9C64] to-amber-500 hover:from-#1E7A4A hover:to-amber-600 text-white font-bold h-12 rounded-xl border-none"
             >
               {isUpdatingInstructions ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Save Instructions"}
             </Button>

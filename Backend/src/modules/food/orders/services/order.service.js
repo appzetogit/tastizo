@@ -302,15 +302,15 @@ export async function createOrder(userId, dto) {
     customerPhone: dto.customerPhone || deliveryAddress.phone || "",
     pricing: normalizedPricing,
     payment,
-    orderStatus: "created",
+    orderStatus: paymentMethod === "razorpay" ? "pending_payment" : "created",
     dispatch: { modeAtCreation: dispatchMode, status: "unassigned" },
     statusHistory: [
       {
         at: new Date(),
         byRole: "SYSTEM",
         from: "",
-        to: "created",
-        note: "Order placed",
+        to: paymentMethod === "razorpay" ? "pending_payment" : "created",
+        note: paymentMethod === "razorpay" ? "Order initiated, awaiting payment" : "Order placed",
       },
     ],
     note: dto.note || "",
@@ -462,6 +462,9 @@ export async function verifyPayment(userId, dto) {
   order.payment.status = "paid";
   order.payment.razorpay.paymentId = dto.razorpayPaymentId;
   order.payment.razorpay.signature = dto.razorpaySignature;
+
+  const previousStatus = order.orderStatus;
+  order.orderStatus = "created";
   pushStatusHistory(order, {
     byRole: "USER",
     byId: userId,
@@ -532,7 +535,7 @@ export async function processDispatchTimeout(orderId, partnerId, options = {}) {
 // ----- User: list, get, cancel -----
 export async function listOrdersUser(userId, query) {
   const { page, limit, skip } = buildPaginationOptions(query);
-  const filter = { userId: new mongoose.Types.ObjectId(userId) };
+  const filter = { userId: new mongoose.Types.ObjectId(userId), orderStatus: { $ne: "pending_payment" } };
   const [docs, total] = await Promise.all([
     FoodOrder.find(filter)
       .populate(
@@ -673,6 +676,138 @@ export async function recoverStuckOrders() {
 
   } catch (err) {
     logger.error(`Watchdog recovery error: ${err.message}`);
+  }
+}
+
+/**
+ * Auto-cancels orders that haven't been delivered within 2 hours.
+ * Targeted at orders stuck in 'preparing' or other non-final states.
+ */
+export async function autoCancelStaleOrders() {
+  const TWO_HOURS_AGO = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const staleStatuses = [
+    'created',
+    'confirmed',
+    'preparing',
+    'ready_for_pickup',
+    'reached_pickup',
+    'picked_up',
+    'reached_drop'
+  ];
+
+  try {
+    const staleOrders = await FoodOrder.find({
+      orderStatus: { $in: staleStatuses },
+      createdAt: { $lt: TWO_HOURS_AGO }
+    });
+
+    if (staleOrders.length === 0) return;
+
+    logger.info(`[AutoCancel] Found ${staleOrders.length} stale orders to cancel.`);
+
+    for (const order of staleOrders) {
+      const from = order.orderStatus;
+      order.orderStatus = 'cancelled_by_admin';
+      
+      pushStatusHistory(order, {
+        byRole: 'SYSTEM',
+        from,
+        to: 'cancelled_by_admin',
+        note: 'Auto-cancelled: Delivery exceeded 2 hours'
+      });
+
+      // Handle refunds for paid orders
+      const paymentMethod = String(order.payment?.method || "cash").toLowerCase();
+      const paymentStatus = String(order.payment?.status || "cod_pending").toLowerCase();
+      const hasRefundProcessed = String(order.payment?.refund?.status || "none").toLowerCase() === 'processed';
+
+      if (paymentStatus === 'paid' && !hasRefundProcessed) {
+        if (paymentMethod === 'razorpay' && order.payment?.razorpay?.paymentId) {
+          try {
+            const refundResult = await initiateRazorpayRefund(
+              order.payment.razorpay.paymentId,
+              order.pricing.total
+            );
+            if (refundResult.success) {
+              order.payment.status = 'refunded';
+              order.payment.refund = {
+                status: 'processed',
+                destination: 'source',
+                amount: order.pricing.total,
+                refundId: refundResult.refundId,
+                processedAt: new Date()
+              };
+            } else {
+              order.payment.refund = { status: 'failed', destination: 'source', amount: order.pricing.total };
+            }
+          } catch (err) {
+            logger.error(`[AutoCancel] Razorpay refund failed for Order ${order._id}: ${err.message}`);
+          }
+        } else if (paymentMethod === 'wallet') {
+          try {
+            await userWalletService.refundWalletBalance(
+              order.userId,
+              order.pricing.total,
+              `Auto-refund for order #${order.order_id || order._id} (Exceeded 2h limit)`,
+              { orderId: order._id }
+            );
+            order.payment.status = 'refunded';
+            order.payment.refund = {
+              status: 'processed',
+              destination: 'wallet',
+              amount: order.pricing.total,
+              processedAt: new Date()
+            };
+          } catch (err) {
+            logger.error(`[AutoCancel] Wallet refund failed for Order ${order._id}: ${err.message}`);
+          }
+        }
+      }
+
+      await order.save();
+
+      // Notify User and Restaurant
+      const msg = `Order #${order.order_id || order._id} was cancelled as it could not be delivered within 2 hours.`;
+      await notifyOwnersSafely(
+        [
+          { ownerType: 'USER', ownerId: order.userId },
+          { ownerType: 'RESTAURANT', ownerId: order.restaurantId },
+        ],
+        {
+          title: "Order Auto-Cancelled ⚠️",
+          body: msg,
+          image: "https://i.ibb.co/3m2Yh7r/Appzeto-Brand-Image.png",
+          data: {
+            type: "order_cancelled",
+            orderId: String(order._id),
+            orderStatus: "cancelled_by_admin"
+          },
+        }
+      );
+
+      // Socket Update
+      try {
+        const io = getIO();
+        if (io) {
+          const payload = {
+            orderMongoId: order._id.toString(),
+            orderId: order._id.toString(),
+            orderStatus: 'cancelled_by_admin',
+            message: msg
+          };
+          io.to(rooms.user(order.userId)).emit("order_status_update", payload);
+          io.to(rooms.restaurant(order.restaurantId)).emit("order_status_update", payload);
+          
+          if (order.dispatch?.deliveryPartnerId) {
+            io.to(rooms.delivery(order.dispatch.deliveryPartnerId)).emit("order_status_update", payload);
+          }
+        }
+      } catch (err) {
+        logger.warn(`[AutoCancel] Socket emit failed: ${err.message}`);
+      }
+    }
+  } catch (err) {
+    logger.error(`[AutoCancel] Process failed: ${err.message}`);
   }
 }
 
@@ -1370,6 +1505,7 @@ export async function getPaymentStatus(orderId, deliveryPartnerId) {
 export async function listOrdersAdmin(query) {
   const { page, limit, skip } = buildPaginationOptions(query);
   const filter = {
+    orderStatus: { $ne: "pending_payment" },
     $or: [
       { "payment.method": { $in: ["cash", "wallet"] } },
       { "payment.status": { $in: ["paid", "authorized", "captured", "settled", "refunded"] } },

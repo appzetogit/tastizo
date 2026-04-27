@@ -268,6 +268,7 @@ export async function notifyRestaurantNewOrder(orderDoc) {
 }
 
 export const STATUS_PRIORITY = {
+  pending_payment: 5,
   created: 10,
   confirmed: 20,
   preparing: 30,

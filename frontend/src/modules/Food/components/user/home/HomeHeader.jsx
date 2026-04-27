@@ -101,7 +101,7 @@ export default function HomeHeader({
   return (
     <div className="relative pt-2 pb-0 px-4 transition-all duration-700 overflow-hidden bg-transparent shadow-none">
       {/* Subtle Artistic Glows - Adds depth without being 'boring' */}
-      <div className="absolute top-[-20%] right-[-10%] w-48 h-48 bg-[#7e3866]/5 blur-[80px] rounded-full pointer-events-none" />
+      <div className="absolute top-[-20%] right-[-10%] w-48 h-48 bg-[#2A9C64]/5 blur-[80px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-20%] left-[-10%] w-48 h-48 bg-[#48c479]/5 blur-[80px] rounded-full pointer-events-none" />
 
       {/* Main Header Content */}
@@ -178,7 +178,7 @@ export default function HomeHeader({
                 <div className="h-8 w-8 relative flex items-center justify-center rounded-full bg-white/10 border border-white/10 cursor-pointer active:scale-90 transition-all">
                   <Bell className="h-4 w-4 text-white/90" />
                   {unreadCount > 0 && (
-                    <span className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full border animate-pulse ${vegMode ? 'bg-orange-400 border-[#00b09b]' : 'bg-orange-400 border-[#7e3866]'}`} />
+                    <span className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full border animate-pulse ${vegMode ? 'bg-orange-400 border-[#00b09b]' : 'bg-orange-400 border-[#2A9C64]'}`} />
                   )}
                 </div>
               </PopoverTrigger>
@@ -188,7 +188,7 @@ export default function HomeHeader({
                     <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
                       Notifications
                       {unreadCount > 0 && (
-                        <Badge variant="secondary" className="bg-orange-100 text-[#7e3866] border-none text-[10px] h-4">
+                        <Badge variant="secondary" className="bg-orange-100 text-[#2A9C64] border-none text-[10px] h-4">
                           {unreadCount} New
                         </Badge>
                       )}
@@ -200,7 +200,7 @@ export default function HomeHeader({
                         const Icon = ICON_MAP[notif.icon] || Bell;
                         return (
                           <div key={notif.id} className="p-4 flex items-start gap-3 border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 transition-colors">
-                            <div className="mt-1 p-2 rounded-full bg-gray-100 text-[#7e3866]">
+                            <div className="mt-1 p-2 rounded-full bg-gray-100 text-[#2A9C64]">
                               <Icon className="h-4 w-4" />
                             </div>
                             <div className="flex-1 min-w-0">
@@ -230,7 +230,7 @@ export default function HomeHeader({
           className="relative bg-white rounded-2xl flex items-center px-4 py-3 shadow-lg border border-black/5 cursor-pointer active:scale-[0.98] transition-all duration-300 max-w-[95%] mx-auto"
           onClick={handleSearchFocus}
         >
-          <Search className="h-4.5 w-4.5 text-[#7e3866] mr-2 shrink-0" strokeWidth={3} />
+          <Search className="h-4.5 w-4.5 text-[#2A9C64] mr-2 shrink-0" strokeWidth={3} />
           
           <div className="flex-1 overflow-hidden relative h-5">
             <AnimatePresence mode="wait">
@@ -249,7 +249,7 @@ export default function HomeHeader({
 
           <div className="flex items-center gap-2 pl-2">
             <div className="h-4 w-[1px] bg-gray-100" />
-            <Mic className="h-4.5 w-4.5 text-[#7e3866]" />
+            <Mic className="h-4.5 w-4.5 text-[#2A9C64]" />
           </div>
         </div>
       </div>

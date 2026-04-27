@@ -194,10 +194,14 @@ export const getAdminCategories = async (query = {}) => {
     };
 
     if (query.zoneId && mongoose.Types.ObjectId.isValid(query.zoneId)) {
-        filter.$or = [
-            { zoneId: new mongoose.Types.ObjectId(query.zoneId) },
-            { zoneId: { $exists: false } },
-            { zoneId: null }
+        filter.$and = [
+            {
+                $or: [
+                    { zoneId: new mongoose.Types.ObjectId(query.zoneId) },
+                    { zoneId: { $exists: false } },
+                    { zoneId: null }
+                ]
+            }
         ];
     }
 

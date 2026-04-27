@@ -241,7 +241,7 @@ export default function Gourmet() {
                           {/* Offer Badge */}
                           {restaurant.offer && (
                             <div className="flex items-center gap-2 text-sm">
-                              <BadgePercent className="h-4 w-4 text-[#7e3866] dark:text-[#7e3866]" strokeWidth={2} />
+                              <BadgePercent className="h-4 w-4 text-[#2A9C64] dark:text-[#2A9C64]" strokeWidth={2} />
                               <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
                             </div>
                           )}
