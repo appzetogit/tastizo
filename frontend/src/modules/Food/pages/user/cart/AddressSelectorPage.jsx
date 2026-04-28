@@ -206,6 +206,8 @@ export default function AddressSelectorPage() {
     selectSavedAddress,
     saveAddressFromLocation,
     setLocationState,
+    deliveryAddressMode,
+    selectedAddressId,
   } = useGeoLocation()
   const { addresses = [], userProfile } = useProfile()
   const [showAddressForm, setShowAddressForm] = useState(false)
@@ -964,18 +966,43 @@ export default function AddressSelectorPage() {
 
       <div className="flex-1 overflow-y-auto pb-10">
         <div className="p-4 bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-800">
-          <button 
+          <button
             onClick={handleUseCurrentLocation}
-            className="w-full flex items-center gap-4 p-4 bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm hover:shadow-md transition-all group"
+            className="w-full flex items-center gap-4 p-4 shadow-sm transition-all"
+            style={deliveryAddressMode === 'current' ? {
+              background: 'rgba(42,156,100,0.10)',
+              border: '2px solid #2A9C64',
+              borderRadius: '12px',
+            } : {
+              background: 'white',
+              border: '2px solid transparent',
+              borderRadius: '12px',
+            }}
           >
-            <div className="h-10 w-10 rounded-full bg-[#2A9C6410] dark:bg-[#2A9C6420] flex items-center justify-center">
-              <Navigation className="h-5 w-5 text-[#2A9C64]" />
+            <div
+              className="h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0"
+              style={deliveryAddressMode === 'current'
+                ? { background: '#2A9C64', boxShadow: '0 4px 14px rgba(42,156,100,0.4)' }
+                : { background: 'rgba(42,156,100,0.10)' }}
+            >
+              <Navigation className="h-5 w-5" style={{ color: deliveryAddressMode === 'current' ? 'white' : '#2A9C64' }} />
             </div>
-            <div className="text-left flex-1">
-              <p className="font-bold text-[#2A9C64]">Use Current Location</p>
+            <div className="text-left flex-1 min-w-0">
+              <p className="font-bold" style={{ color: '#2A9C64' }}>Use Current Location</p>
               <p className="text-xs text-gray-500 line-clamp-1">{currentAddress || "Enable GPS for accuracy"}</p>
             </div>
-            <ChevronRight className="h-5 w-5 text-gray-400" />
+            {deliveryAddressMode === 'current' ? (
+              <div
+                className="h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: '#2A9C64' }}
+              >
+                <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            ) : (
+              <ChevronRight className="h-5 w-5 text-gray-400" />
+            )}
           </button>
         </div>
 
@@ -987,7 +1014,7 @@ export default function AddressSelectorPage() {
             </Button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {addresses.length === 0 ? (
               <div className="text-center py-10 opacity-50">
                  <MapPin className="h-12 w-12 mx-auto mb-2 text-gray-400" />
@@ -996,24 +1023,64 @@ export default function AddressSelectorPage() {
             ) : (
               addresses.map((addr, idx) => {
                 const Icon = getAddressIcon(addr)
+                const addrId = getAddressId(addr)
+                const isActive = deliveryAddressMode === 'saved' && String(addrId) === String(selectedAddressId)
                 return (
                   <button
-                    key={getAddressId(addr) || idx}
+                    key={addrId || idx}
                     onClick={() => handleSelectSavedAddress(addr)}
-                    className="w-full flex items-start gap-4 p-4 bg-slate-50 dark:bg-[#1a1a1a] rounded-xl hover:bg-[#2A9C6410] dark:hover:bg-[#2A9C6420] transition-colors text-left group"
+                    className="w-full flex items-start gap-4 p-4 transition-colors text-left"
+                    style={isActive ? {
+                      background: 'rgba(42,156,100,0.10)',
+                      border: '2px solid #2A9C64',
+                      borderRadius: '12px',
+                    } : {
+                      background: '#f8fafc',
+                      border: '2px solid transparent',
+                      borderRadius: '12px',
+                    }}
                   >
-                    <div className="h-10 w-10 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
-                      <Icon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                    <div
+                      className="h-10 w-10 rounded-full flex items-center justify-center shadow-sm flex-shrink-0"
+                      style={isActive
+                        ? { background: '#2A9C64', boxShadow: '0 4px 14px rgba(42,156,100,0.4)' }
+                        : { background: 'white' }}
+                    >
+                      <Icon className="h-5 w-5" style={{ color: isActive ? 'white' : '#6b7280' }} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-gray-900 dark:text-white capitalize">{addr.label || "Address"}</p>
+                      <p
+                        className="font-bold capitalize flex items-center gap-2 flex-wrap"
+                        style={{ color: isActive ? '#2A9C64' : '#111827' }}
+                      >
+                        {addr.label || "Address"}
+                        {isActive && (
+                          <span
+                            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+                            style={{ background: '#2A9C64', color: 'white' }}
+                          >
+                            Active
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mt-0.5">
                         {formatAddressLine(addr)}
                       </p>
                     </div>
-                    <div className="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-700 mt-2 flex items-center justify-center group-hover:border-[#2A9C64]">
-                       <ChevronRight className="h-3 w-3 text-gray-400 group-hover:text-[#2A9C64]" />
-                    </div>
+                    {isActive ? (
+                      <div
+                        className="h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 mt-1"
+                        style={{ background: '#2A9C64' }}
+                      >
+                        <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    ) : (
+                      <div className="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-700 mt-1 flex items-center justify-center flex-shrink-0">
+                        <ChevronRight className="h-3 w-3 text-gray-400" />
+                      </div>
+                    )}
                   </button>
                 )
               })

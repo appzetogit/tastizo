@@ -60,13 +60,14 @@ const getPositionWithRetry = (forceFresh = true, options = {}, retryCount = 0) =
         resolve(position)
       },
       (error) => {
-        if (!forceFresh && error?.code === 3 && retryCount === 0 && options.enableHighAccuracy) {
+        // On timeout, retry with a longer timeout but KEEP high accuracy
+        if (error?.code === 3 && retryCount === 0) {
           getPositionWithRetry(
             forceFresh,
             {
-              enableHighAccuracy: false,
-              timeout: 5000,
-              maximumAge: 300000,
+              enableHighAccuracy: true, // always keep high accuracy
+              timeout: 20000,
+              maximumAge: 0,
             },
             1,
           )
@@ -88,13 +89,13 @@ const getPreciseFreshPosition = (options = {}) =>
       return
     }
 
-    const targetAccuracy = Number(options.targetAccuracy) || 35
-    const watchWindowMs = Number(options.watchWindowMs) || 12000
-    const maxWaitMs = Number(options.maxWaitMs) || 30000
+    const targetAccuracy = Number(options.targetAccuracy) || 20  // 20m for high-precision GPS
+    const watchWindowMs = Number(options.watchWindowMs) || 15000  // 15s watch window
+    const maxWaitMs = Number(options.maxWaitMs) || 40000          // 40s hard cap
     const geoOptions = {
-      enableHighAccuracy: true,
+      enableHighAccuracy: true,   // always force GPS chip
       timeout: maxWaitMs,
-      maximumAge: 0,
+      maximumAge: 0,              // never use cached position
       ...options,
     }
 
@@ -133,6 +134,7 @@ const getPreciseFreshPosition = (options = {}) =>
         bestAccuracy = accuracy
       }
 
+      // Resolve early if we hit the target accuracy
       if (accuracy <= targetAccuracy) {
         finish(position)
       }
@@ -147,6 +149,7 @@ const getPreciseFreshPosition = (options = {}) =>
         considerPosition(position)
         if (settled) return
 
+        // Keep watching for more accurate fixes during the watch window
         resolveTimer = setTimeout(() => {
           finish(bestPosition)
         }, watchWindowMs)
@@ -249,23 +252,98 @@ const buildPreciseGpsFallbackLocation = ({ latitude, longitude, accuracy = null,
 }
 
 const reverseGeocode = async (latitude, longitude, sourceType = "gps") => {
+  // Primary: backend reverse geocode (Nominatim via server-side proxy)
   try {
     const response = await locationAPI.reverseGeocode(latitude, longitude, { force: true })
     const raw = response?.data?.data
     const result = Array.isArray(raw?.results) ? raw.results[0] : raw
-    const payload = {
-      display_name: result?.formatted_address || "",
-      address: result?.address_components || {},
-      city: result?.address_components?.city || "",
-      state: result?.address_components?.state || "",
-      zipCode: result?.address_components?.postcode || "",
-      area: result?.address_components?.area || "",
-      street: result?.address_components?.road || "",
+    const addr = result?.address_components || {}
+
+    // Nominatim display_name is the most precise full address e.g. "26, Nagwa Lanka, Varanasi, Uttar Pradesh 221005"
+    const displayName = String(result?.formatted_address || "").replace(/,\s*India\s*$/i, "").trim()
+
+    // Extract all fine-grained Nominatim components
+    const houseNumber = addr.house_number || ""
+    const road       = addr.road || addr.pedestrian || addr.footway || addr.path || ""
+    const building   = addr.building || addr.amenity || ""
+    const area       = addr.neighbourhood || addr.suburb || addr.residential || addr.quarter || addr.city_district || ""
+    const city       = addr.city || addr.town || addr.village || addr.municipality || addr.county || ""
+    const state      = addr.state || ""
+    const postcode   = addr.postcode || ""
+
+    // Precise street line e.g. "26 Nagwa Lanka"
+    const streetLine = [houseNumber, road].filter(Boolean).join(" ").trim()
+
+    const built = buildRichLocation({
+      latitude,
+      longitude,
+      payload: {
+        display_name: displayName,
+        address: addr,
+        city,
+        state,
+        zipCode: postcode,
+        area,
+        street: streetLine || road,
+        building,
+        formattedAddress: displayName,
+      },
+      sourceType,
+    })
+
+    // Always prefer the Nominatim display_name — it's the exact street-level address
+    if (displayName) {
+      built.formattedAddress = displayName
+      built.address          = displayName
+      built.additionalDetails = displayName
     }
-    const built = buildRichLocation({ latitude, longitude, payload, sourceType })
+
     if (built.formattedAddress) return built
   } catch {}
 
+  // Fallback 1: Nominatim directly from the client (if backend is unreachable)
+  try {
+    const resp = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1&zoom=18&accept-language=en`,
+      { headers: { "User-Agent": "Tastizo-App/1.0" } },
+    )
+    const data = await resp.json()
+    if (data && !data.error) {
+      const addr        = data.address || {}
+      const houseNumber = addr.house_number || ""
+      const road        = addr.road || addr.pedestrian || addr.footway || ""
+      const area        = addr.neighbourhood || addr.suburb || addr.residential || addr.quarter || ""
+      const city        = addr.city || addr.town || addr.village || addr.municipality || addr.county || ""
+      const state       = addr.state || ""
+      const postcode    = addr.postcode || ""
+      const streetLine  = [houseNumber, road].filter(Boolean).join(" ").trim()
+      const displayName = String(data.display_name || "").replace(/,\s*India\s*$/i, "").trim()
+
+      const built = buildRichLocation({
+        latitude,
+        longitude,
+        payload: {
+          display_name: displayName,
+          address: addr,
+          city,
+          state,
+          zipCode: postcode,
+          area,
+          street: streetLine || road,
+          formattedAddress: displayName,
+        },
+        sourceType,
+      })
+      if (displayName) {
+        built.formattedAddress  = displayName
+        built.address           = displayName
+        built.additionalDetails = displayName
+      }
+      if (built.formattedAddress) return built
+    }
+  } catch {}
+
+  // Fallback 2: BigDataCloud — city-level only, last resort
   try {
     const response = await fetch(
       `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`,
@@ -359,11 +437,11 @@ export function LocationProvider({ children }) {
       setError(null)
       try {
         const position = await getPreciseFreshPosition({
-          timeout: 30000,
-          maximumAge: 0,
-          targetAccuracy: 35,
-          watchWindowMs: 12000,
-          maxWaitMs: 30000,
+          timeout: 40000,
+          maximumAge: 0,          // never use cached GPS
+          targetAccuracy: 20,     // aim for ≤20m accuracy (GPS chip level)
+          watchWindowMs: 15000,   // watch for 15s to refine fix
+          maxWaitMs: 40000,
         }).catch(() =>
           getPositionWithRetry(true, {
             enableHighAccuracy: true,

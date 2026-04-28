@@ -799,14 +799,13 @@ export default function CategoryPage() {
     return allDishes.length > 0 ? allDishes[0] : null
   }
 
-  // Fetch restaurants from API
+  // Fetch restaurants from API (zone-filtered so users only see restaurants in their zone)
   useEffect(() => {
     const fetchRestaurants = async () => {
       try {
         setLoadingRestaurants(true)
-        // IMPORTANT: Do NOT pass zoneId as a hard filter.
-        // UX is "show all restaurants", and we only style out-of-service state.
         const params = {}
+        if (zoneId) params.zoneId = zoneId
         const response = await restaurantAPI.getRestaurants(params)
 
         if (response.data && response.data.success && response.data.data && response.data.data.restaurants) {

@@ -181,9 +181,9 @@ export function useLocationSimple() {
       }
 
       const options = {
-        enableHighAccuracy: true, // Use GPS for accurate location
-        timeout: 10000, // 10 seconds timeout
-        maximumAge: forceFresh ? 0 : 300000, // Allow 5-minute cache if not forcing fresh
+        enableHighAccuracy: true, // always force GPS chip
+        timeout: 30000,           // 30s — enough for GPS chip to warm up
+        maximumAge: 0,            // never use cached position
       }
 
       navigator.geolocation.getCurrentPosition(
@@ -192,6 +192,7 @@ export function useLocationSimple() {
           const locationData = {
             latitude,
             longitude,
+            accuracy: position.coords.accuracy,
             area: "",
             city: "",
             state: "",
@@ -201,7 +202,6 @@ export function useLocationSimple() {
           resolve(locationData)
         },
         (err) => {
-          // Handle geolocation errors
           let errorMessage = "Unable to retrieve your location"
           
           switch (err.code) {

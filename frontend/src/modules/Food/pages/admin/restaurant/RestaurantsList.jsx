@@ -209,11 +209,33 @@ export default function RestaurantsList() {
         setLoading(true)
         setError(null)
 
-        const response = await adminAPI.getApprovedRestaurants({})
+        // Fetch restaurants and zones in parallel so we can resolve zone names
+        const [response, zonesRes] = await Promise.allSettled([
+          adminAPI.getApprovedRestaurants({}),
+          adminAPI.getZones({ limit: 1000 }),
+        ])
 
         if (cancelled) return
 
-        const body = response?.data
+        // Build a zoneId → name lookup map
+        const zoneList =
+          zonesRes.status === 'fulfilled'
+            ? (zonesRes.value?.data?.data?.zones ||
+               zonesRes.value?.data?.data?.data?.zones ||
+               zonesRes.value?.data?.data ||
+               [])
+            : []
+        const zoneMap = {}
+        if (Array.isArray(zoneList)) {
+          setZones(zoneList)
+          for (const z of zoneList) {
+            const zid = String(z?._id || z?.id || "")
+            if (zid) zoneMap[zid] = z?.name || z?.zoneName || ""
+          }
+        }
+
+        const body = response.status === 'fulfilled' ? response.value?.data : null
+        if (!body) throw new Error('Failed to fetch restaurants')
         const data = body?.data
         const rawList = Array.isArray(data?.restaurants)
           ? data.restaurants
@@ -225,28 +247,28 @@ export default function RestaurantsList() {
 
         const zoneLabelFromRestaurant = (restaurant) => {
           const zid = restaurant?.zoneId
-          const zoneName =
-            (typeof zid === "object" ? (zid?.name || zid?.zoneName) : "") ||
-            ""
-          if (zoneName) return zoneName
 
-          const zoneIdString =
-            typeof zid === "string"
-              ? zid
-              : (zid?._id || zid?.id || "")
-          if (zoneIdString && Array.isArray(zones) && zones.length > 0) {
-            const match = zones.find((z) => (z?._id || z?.id) === zoneIdString)
-            const label = match?.name || match?.zoneName
-            if (label) return label
+          // Case 1: zoneId is a populated object with a name
+          if (typeof zid === 'object' && zid !== null) {
+            const name = zid?.name || zid?.zoneName
+            if (name) return name
+            // Try resolving its _id from the map
+            const oid = String(zid?._id || zid?.id || '')
+            if (oid && zoneMap[oid]) return zoneMap[oid]
           }
 
+          // Case 2: zoneId is a plain ObjectId string — resolve from map
+          if (typeof zid === 'string' && zid.length > 0) {
+            if (zoneMap[zid]) return zoneMap[zid]
+          }
+
+          // Fallback: city/area (but NOT restaurant.zone which is unreliable raw data)
           return (
-            restaurant?.zone ||
             restaurant?.location?.area ||
             restaurant?.location?.city ||
             restaurant?.area ||
             restaurant?.city ||
-            "N/A"
+            'N/A'
           )
         }
 
@@ -254,9 +276,9 @@ export default function RestaurantsList() {
           const mappedRestaurants = rawList.map((restaurant, index) => ({
             id: restaurant._id || restaurant.id || index + 1,
             _id: restaurant._id,
-            name: restaurant.name || restaurant.restaurantName || "N/A",
-            ownerName: restaurant.ownerName || "N/A",
-            ownerPhone: restaurant.ownerPhone || restaurant.phone || "N/A",
+            name: restaurant.name || restaurant.restaurantName || 'N/A',
+            ownerName: restaurant.ownerName || 'N/A',
+            ownerPhone: restaurant.ownerPhone || restaurant.phone || 'N/A',
             zone: zoneLabelFromRestaurant(restaurant),
             approvalStatus: normalizeApprovalStatus(restaurant),
             isActive: restaurant.isActive !== false,
@@ -270,19 +292,17 @@ export default function RestaurantsList() {
         }
       } catch (err) {
         if (cancelled) return
-        debugError("Error fetching restaurants:", err)
+        debugError('Error fetching restaurants:', err)
         const status = err?.response?.status
         const serverMessage = err?.response?.data?.message || err?.response?.data?.error
         if (status === 401) {
-          setError(serverMessage || "Session expired or not logged in. Please log in as admin.")
+          setError(serverMessage || 'Session expired or not logged in. Please log in as admin.')
           setRestaurants([])
-          try {
-            clearModuleAuth("admin")
-          } catch (_) {}
-          navigate("/admin/login", { replace: true, state: { from: "/admin/food/restaurants" } })
+          try { clearModuleAuth('admin') } catch (_) {}
+          navigate('/admin/login', { replace: true, state: { from: '/admin/food/restaurants' } })
           return
         }
-        setError(serverMessage || err.message || "Failed to fetch restaurants")
+        setError(serverMessage || err.message || 'Failed to fetch restaurants')
         setRestaurants([])
       } finally {
         if (!cancelled) setLoading(false)

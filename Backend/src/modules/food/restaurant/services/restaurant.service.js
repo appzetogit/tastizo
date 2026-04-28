@@ -1217,16 +1217,37 @@ export const listApprovedRestaurants = async (query = {}) => {
         }
     }
 
-    // Optional zone polygon filter (when restaurant.zoneId is not set yet).
+    // Strict zone filter: when zoneId is provided, only show restaurants in that zone.
+    // Restaurants are matched if:
+    //   1. Their zoneId field exactly matches the requested zone, OR
+    //   2. They fall within the zone's geo polygon AND have no zoneId assigned (global restaurants)
+    // Restaurants explicitly assigned to a DIFFERENT zone are excluded.
     const zoneIdRaw = String(query.zoneId || '').trim();
     if (zoneIdRaw && mongoose.Types.ObjectId.isValid(zoneIdRaw)) {
-        // Try fast path (precomputed restaurant.zoneId).
-        filter.$or = [{ zoneId: new mongoose.Types.ObjectId(zoneIdRaw) }];
+        const zoneObjId = new mongoose.Types.ObjectId(zoneIdRaw);
         const zoneDoc = await FoodZone.findOne({ _id: zoneIdRaw, isActive: true }).lean();
         const polygon = zoneToPolygon(zoneDoc);
+
+        const zoneConditions = [
+            // Restaurants explicitly assigned to this zone
+            { zoneId: zoneObjId }
+        ];
+
         if (polygon) {
-            filter.$or.push({ location: { $geoWithin: { $geometry: polygon } } });
+            // Restaurants within geo polygon that have no specific zone assignment
+            zoneConditions.push({
+                $and: [
+                    { location: { $geoWithin: { $geometry: polygon } } },
+                    { $or: [{ zoneId: { $exists: false } }, { zoneId: null }] }
+                ]
+            });
         }
+
+        // Use $and to apply zone filter alongside existing filters without overwriting $or (search)
+        filter.$and = [
+            ...(filter.$and || []),
+            { $or: zoneConditions }
+        ];
     }
 
     const lat = toFiniteNumber(query.lat);
@@ -1239,6 +1260,7 @@ export const listApprovedRestaurants = async (query = {}) => {
         restaurantName: 1,
         area: 1,
         city: 1,
+        zoneId: 1,
         cuisines: 1,
         profileImage: 1,
         coverImages: 1,
@@ -1262,7 +1284,14 @@ export const listApprovedRestaurants = async (query = {}) => {
 
     // Use $geoNear only when geo is explicitly needed (radius filter or nearest sorting).
     // This avoids accidentally hiding restaurants that do not have coordinates yet.
-    const wantsGeo = (radiusKm !== null) || sortBy === 'nearest';
+    // IMPORTANT: when lat/lng are given but no zoneId, apply a default 50km cap so
+    // restaurants from completely different cities/zones don't bleed through.
+    const hasZoneFilter = Boolean(zoneIdRaw && mongoose.Types.ObjectId.isValid(zoneIdRaw));
+    const effectiveRadiusKm = radiusKm !== null
+        ? radiusKm
+        : (!hasZoneFilter && lat !== null && lng !== null ? 50 : null); // 50km default when no zone
+
+    const wantsGeo = (effectiveRadiusKm !== null) || sortBy === 'nearest';
     if (lat !== null && lng !== null && wantsGeo) {
         const geoNear = {
             $geoNear: {
@@ -1272,8 +1301,8 @@ export const listApprovedRestaurants = async (query = {}) => {
                 query: filter
             }
         };
-        if (radiusKm !== null) {
-            geoNear.$geoNear.maxDistance = Math.max(0.1, radiusKm) * 1000;
+        if (effectiveRadiusKm !== null) {
+            geoNear.$geoNear.maxDistance = Math.max(0.1, effectiveRadiusKm) * 1000;
         }
 
         const sortStage = (() => {
