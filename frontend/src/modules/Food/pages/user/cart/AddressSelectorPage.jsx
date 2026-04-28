@@ -11,7 +11,7 @@ import { toast } from "sonner"
 import { Loader } from '@googlemaps/js-api-loader'
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
-import { formatAddressLine, getAddressId } from "@food/utils/address"
+import { formatAddressLine, getAddressId, emitLocationStateChange } from "@food/utils/address"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -468,6 +468,14 @@ export default function AddressSelectorPage() {
       }
 
       await persistRefinedLocationToBackend(resolvedLocation || loc)
+      
+      // Broadcast location change to all components
+      emitLocationStateChange({
+        location: resolvedLocation || loc,
+        mode: "current",
+        source: "currentLocation"
+      })
+      
       toast.success("Location updated", { id: "geo" })
     } catch (e) {
       toast.error("Failed to get location", { id: "geo" })
@@ -476,9 +484,24 @@ export default function AddressSelectorPage() {
 
   const handleSelectSavedAddress = async (address) => {
     if (address) {
+      // First update the location in context
       await selectSavedAddress(address)
+      
+      // Immediately broadcast the change to all components
+      emitLocationStateChange({ 
+        location: address,
+        mode: "saved",
+        addressId: getAddressId(address),
+        source: "addressSelector"
+      })
+      
+      // Show success message
       toast.success("Address selected")
-      handleBack()
+      
+      // Small delay to ensure broadcast completes before navigation
+      setTimeout(() => {
+        handleBack()
+      }, 50)
     }
   }
 

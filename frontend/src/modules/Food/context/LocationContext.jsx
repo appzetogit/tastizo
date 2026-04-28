@@ -547,20 +547,40 @@ export function LocationProvider({ children }) {
 
   useEffect(() => {
     const syncFromEvent = (event) => {
-      if (event?.detail && Object.prototype.hasOwnProperty.call(event.detail, "location")) {
-        setLocation(event.detail.location || null)
-      } else {
-        const nextLocation = readStoredLocation()
-        if (nextLocation) setLocation(nextLocation)
+      // Always re-read from storage to get the latest state
+      const nextLocation = readStoredLocation()
+      if (nextLocation) {
+        setLocation(nextLocation)
+      } else if (event?.detail?.location) {
+        setLocation(event.detail.location)
       }
       setDeliveryAddressMode(getStoredMode())
       setSelectedAddressId(getStoredSelectedAddressId())
+      setPermissionGranted(Boolean(nextLocation?.latitude && nextLocation?.longitude))
     }
 
-    window.addEventListener(LOCATION_STATE_EVENT, syncFromEvent)
+    // Listen to all location change events for instant updates
+    const locationEvents = [
+      LOCATION_STATE_EVENT,
+      "userLocationUpdated",
+      "deliveryAddressModeUpdated", 
+      "locationChanged",
+      "addressSelected",
+      "forceLocationRefresh"
+    ]
+    
+    locationEvents.forEach(eventName => {
+      window.addEventListener(eventName, syncFromEvent)
+      document.addEventListener(eventName, syncFromEvent)
+    })
+    
     window.addEventListener("userAuthChanged", hydrateBackendLocation)
+    
     return () => {
-      window.removeEventListener(LOCATION_STATE_EVENT, syncFromEvent)
+      locationEvents.forEach(eventName => {
+        window.removeEventListener(eventName, syncFromEvent)
+        document.removeEventListener(eventName, syncFromEvent)
+      })
       window.removeEventListener("userAuthChanged", hydrateBackendLocation)
     }
   }, [hydrateBackendLocation])

@@ -87,7 +87,31 @@ export const writeStoredLocation = (location) => {
 
 export const emitLocationStateChange = (detail = {}) => {
   if (typeof window === "undefined") return
-  window.dispatchEvent(new CustomEvent(LOCATION_STATE_EVENT, { detail }))
-  window.dispatchEvent(new CustomEvent("userLocationUpdated", { detail }))
-  window.dispatchEvent(new CustomEvent("deliveryAddressModeUpdated", { detail }))
+  
+  // Broadcast to all components immediately
+  const events = [
+    LOCATION_STATE_EVENT,
+    "userLocationUpdated", 
+    "deliveryAddressModeUpdated",
+    "locationChanged",
+    "addressSelected",
+    "forceLocationRefresh"
+  ]
+  
+  events.forEach(eventName => {
+    window.dispatchEvent(new CustomEvent(eventName, { 
+      detail: { ...detail, timestamp: Date.now() },
+      bubbles: true,
+      cancelable: true 
+    }))
+  })
+  
+  // Also broadcast on document for maximum compatibility
+  events.forEach(eventName => {
+    document.dispatchEvent(new CustomEvent(eventName, { 
+      detail: { ...detail, timestamp: Date.now() },
+      bubbles: true,
+      cancelable: true 
+    }))
+  })
 }
