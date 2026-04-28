@@ -1975,10 +1975,23 @@ export default function Home() {
     );
   }, [effectiveLocation?.latitude, effectiveLocation?.longitude]);
 
+  // Refetch restaurants when zone changes (e.g., after address selection)
+  useEffect(() => {
+    // Only refetch if we have a valid location and zone has been determined
+    if (!effectiveLocation?.latitude || !effectiveLocation?.longitude) return;
+    if (zoneLoading || savedAddressZoneLoading) return;
+    
+    debugLog("[Home] Zone/Location changed, refetching restaurants for zone:", effectiveZoneId);
+    
+    // Refetch restaurants with current filters but new zone
+    fetchRestaurants(appliedFilters);
+  }, [effectiveZoneId, zoneLoading, savedAddressZoneLoading]);
+
   // IMPORTANT:
   // Homepage should avoid eager N+1 menu requests. We only resolve menu metadata
   // when the UI truly needs it: Veg Mode is enabled, or admin categories are unavailable.
   useEffect(() => {
+    // ... (rest of the code remains the same)
     const restaurantIds = menuUnionRestaurantIdsKey
       ? menuUnionRestaurantIdsKey.split(",").filter(Boolean)
       : [];
