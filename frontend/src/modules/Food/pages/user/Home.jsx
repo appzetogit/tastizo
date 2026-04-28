@@ -1516,9 +1516,14 @@ export default function Home() {
           params.city = String(effectiveLocation.city).trim();
         }
 
-        debugLog("Fetching restaurants with params:", params);
-        const response = await restaurantAPI.getRestaurants(params);
-        debugLog("Restaurants API response:", response.data);
+        const fetchRestaurantsResponse = async (requestParams, label = "primary") => {
+          debugLog(`Fetching restaurants with params (${label}):`, requestParams);
+          const apiResponse = await restaurantAPI.getRestaurants(requestParams);
+          debugLog(`Restaurants API response (${label}):`, apiResponse.data);
+          return apiResponse;
+        };
+
+        let response = await fetchRestaurantsResponse(params);
 
         // If a newer request started, ignore this response to avoid races/flicker.
         if (requestSeq !== restaurantsRequestSeqRef.current) return;
@@ -1529,8 +1534,36 @@ export default function Home() {
           response.data.data &&
           response.data.data.restaurants
         ) {
-          const restaurantsArray = response.data.data.restaurants;
+          let restaurantsArray = response.data.data.restaurants;
           debugLog(`Fetched ${restaurantsArray.length} restaurants from API:`, restaurantsArray);
+
+          if (restaurantsArray.length === 0 && effectiveZoneId) {
+            const fallbackParams = { ...params };
+            delete fallbackParams.zoneId;
+
+            debugWarn(
+              "Zone-filtered restaurant response was empty. Retrying without zoneId...",
+              { zoneId: effectiveZoneId, fallbackParams },
+            );
+
+            const fallbackResponse = await fetchRestaurantsResponse(
+              fallbackParams,
+              "zone-fallback",
+            );
+
+            if (requestSeq !== restaurantsRequestSeqRef.current) return;
+
+            if (
+              fallbackResponse?.data?.success &&
+              fallbackResponse?.data?.data?.restaurants
+            ) {
+              restaurantsArray = fallbackResponse.data.data.restaurants;
+              debugLog(
+                `Fetched ${restaurantsArray.length} restaurants from fallback API:`,
+                restaurantsArray,
+              );
+            }
+          }
 
           if (restaurantsArray.length === 0) {
             debugWarn("No restaurants found in API response");
