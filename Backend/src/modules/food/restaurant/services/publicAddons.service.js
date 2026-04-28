@@ -3,18 +3,20 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 import { FoodRestaurant } from '../models/restaurant.model.js';
 import { FoodAddon } from '../models/foodAddon.model.js';
 
+const PUBLIC_VISIBLE_RESTAURANT_STATUSES = ['approved', 'pending'];
+
 export async function getPublicApprovedRestaurantAddons(restaurantIdOrSlug) {
     const value = String(restaurantIdOrSlug || '').trim();
     if (!value) throw new ValidationError('Restaurant id is required');
 
     let restaurant = null;
     if (/^[0-9a-fA-F]{24}$/.test(value)) {
-        restaurant = await FoodRestaurant.findOne({ _id: value, status: 'approved' })
+        restaurant = await FoodRestaurant.findOne({ _id: value, status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES } })
             .select('_id status')
             .lean();
     } else {
         const normalized = value.trim().toLowerCase().replace(/-/g, ' ').replace(/\s+/g, ' ');
-        restaurant = await FoodRestaurant.findOne({ restaurantNameNormalized: normalized, status: 'approved' })
+        restaurant = await FoodRestaurant.findOne({ restaurantNameNormalized: normalized, status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES } })
             .select('_id status')
             .lean();
     }

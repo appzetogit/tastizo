@@ -1138,7 +1138,7 @@ export default function Home() {
     getDefaultAddress,
   } = profileContext;
   const { addToCart, cart } = useCart();
-  const { location, loading, requestLocation } = useLocation();
+  const { location, loading, requestLocation, deliveryAddressMode } = useLocation();
   const {
     zoneId,
     zoneStatus,
@@ -1301,18 +1301,19 @@ export default function Home() {
   }, [defaultSavedAddress]);
 
   const effectiveLocation = useMemo(() => {
-    let deliveryAddressMode = "saved";
-    try {
-      deliveryAddressMode =
-        localStorage.getItem("deliveryAddressMode") || "saved";
-    } catch {
-      deliveryAddressMode = "saved";
-    }
-
-    if (deliveryAddressMode === "current") {
+    // The LocationContext already manages the correct location based on the
+    // active delivery address mode (selectSavedAddress / requestLocation both
+    // call applyLocation which sets context state + localStorage + emits events).
+    // Trust it directly when valid coordinates are available.
+    if (
+      Number.isFinite(location?.latitude) &&
+      Number.isFinite(location?.longitude)
+    ) {
       return location;
     }
 
+    // Fallback: derive from profile's default saved address when context
+    // hasn't resolved yet (e.g. cold start before GPS or address selection).
     if (
       defaultSavedAddressLocation &&
       Number.isFinite(defaultSavedAddressLocation.latitude) &&
@@ -2948,6 +2949,7 @@ export default function Home() {
                     transition={{ duration: 0.35, delay: index * 0.05 }}>
                     <Link
                       to={`/user/restaurants/${restaurantSlug}`}
+                      state={{ restaurant }}
                       className="block rounded-[20px] overflow-hidden border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] shadow-sm hover:shadow-md transition-shadow">
                       <div className="relative h-24 sm:h-28 md:h-32 bg-gray-50">
                         <RestaurantImageCarousel
@@ -3162,6 +3164,7 @@ export default function Home() {
                     <div className="h-full group">
                       <Link
                         to={`/user/restaurants/${restaurantSlug}`}
+                        state={{ restaurant }}
                         className="h-full flex">
                         <Card
                           className={`overflow-hidden gap-0 cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] border-background transition-all duration-500 py-0 rounded-[28px] flex flex-col h-full w-full relative shadow-sm hover:shadow-xl ${isOutOfService || !availability.isOpen

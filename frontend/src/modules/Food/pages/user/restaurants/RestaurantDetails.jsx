@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Component, useMemo } from "react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { useParams, useNavigate, useSearchParams } from "react-router-dom"
+import { useParams, useNavigate, useSearchParams, useLocation as useRouterLocation } from "react-router-dom"
 import { restaurantAPI, diningAPI, orderAPI } from "@food/api"
 import { API_BASE_URL } from "@food/api/config"
 import { toast } from "sonner"
@@ -75,10 +75,12 @@ const RESTAURANT_DETAILS_FILTERS_STORAGE_KEY = "food-restaurant-details-filters"
 function RestaurantDetailsContent() {
   const { slug } = useParams()
   const navigate = useNavigate()
+  const routerLocation = useRouterLocation()
   const goBack = useAppBackNavigation()
   const [searchParams] = useSearchParams()
   const showOnlyUnder250 = searchParams.get('under250') === 'true'
   const targetDishId = useMemo(() => String(searchParams.get('dish') || '').trim(), [searchParams])
+  const routeRestaurant = routerLocation.state?.restaurant || null
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
   const { vegMode, addDishFavorite, removeDishFavorite, isDishFavorite, getDishFavorites, getFavorites, addFavorite, removeFavorite, isFavorite } = useProfile()
   const { location: userLocation } = useLocation() // Get user's current location
@@ -190,7 +192,26 @@ function RestaurantDetailsContent() {
   // Fetch restaurant data from API
   useEffect(() => {
     const fetchRestaurant = async () => {
-      if (!slug) return
+      if (!slug && !routeRestaurant) return
+
+      const normalizeLookupValue = (value) =>
+        String(value || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)/g, "")
+
+      const lookupCandidates = [
+        routeRestaurant?.mongoId,
+        routeRestaurant?._id,
+        routeRestaurant?.restaurantId,
+        routeRestaurant?.id,
+        routeRestaurant?.slug,
+        slug,
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).trim())
+        .filter((value, index, arr) => arr.indexOf(value) === index)
 
       // Prevent re-fetching for the same slug. Mobile location/zone updates can
       // trigger transient refetch failures that clear already-rendered content.
@@ -229,48 +250,86 @@ function RestaurantDetailsContent() {
         // Restaurant API fallback (works for both ObjectId and slug)
         if (!apiRestaurant) {
           try {
-            // First, try to get restaurant directly by slug/ID (no zoneId needed)
-            try {
-              response = await restaurantAPI.getRestaurantById(slug)
-              if (response?.data?.success && response?.data?.data) {
-                apiRestaurant = response.data.data
-                debugLog('? Found restaurant in restaurant API by slug/ID:', apiRestaurant)
+            // Try all known route/state candidates so we can recover when the URL slug
+            // differs from the canonical backend slug but we still have the exact id.
+            for (const candidate of lookupCandidates) {
+              try {
+                response = await restaurantAPI.getRestaurantById(candidate)
+                const resolvedRestaurant =
+                  response?.data?.data?.restaurant || response?.data?.data || null
+                if (response?.data?.success && resolvedRestaurant) {
+                  apiRestaurant = resolvedRestaurant
+                  debugLog('? Found restaurant in restaurant API by candidate:', candidate, apiRestaurant)
+                  break
+                }
+              } catch (candidateLookupError) {
+                debugLog('? Direct lookup failed for candidate:', candidate, candidateLookupError?.message)
               }
-            } catch (directLookupError) {
+            }
+
+            if (!apiRestaurant) {
               // If direct lookup fails, try searching by name.
               // Fallback without zoneId so missing live location never blocks this page.
               debugLog('? Direct lookup failed, trying search by name...')
 
-                const searchVariants = zoneId
-                  ? [{ limit: 100, zoneId: zoneId, _ts: Date.now() }, { limit: 100, _ts: Date.now() }]
-                  : [{ limit: 100, _ts: Date.now() }]
+              const searchVariants = zoneId
+                ? [{ limit: 100, zoneId: zoneId, _ts: Date.now() }, { limit: 100, _ts: Date.now() }]
+                : [{ limit: 100, _ts: Date.now() }]
+              const normalizedLookupTargets = new Set(
+                lookupCandidates.map(normalizeLookupValue).filter(Boolean)
+              )
 
-                for (const searchParams of searchVariants) {
-                  try {
-                    const searchResponse = await restaurantAPI.getRestaurants(searchParams, { noCache: true })
-                    const restaurants = searchResponse?.data?.data?.restaurants || searchResponse?.data?.data || []
+              for (const searchParams of searchVariants) {
+                try {
+                  const searchResponse = await restaurantAPI.getRestaurants(searchParams, { noCache: true })
+                  const restaurants = searchResponse?.data?.data?.restaurants || searchResponse?.data?.data || []
 
-                    // Try to find by slug match or name match
-                    const restaurantName = slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-                    const matchingRestaurant = restaurants.find(r =>
-                      r.slug === slug ||
-                      r.name?.toLowerCase().replace(/\s+/g, '-') === slug.toLowerCase() ||
-                      r.name?.toLowerCase() === restaurantName.toLowerCase()
-                    )
+                  const matchingRestaurant = restaurants.find((r) => {
+                    const restaurantLookupValues = [
+                      r?.slug,
+                      r?.name,
+                      r?.restaurantName,
+                      r?.restaurantId,
+                      r?._id,
+                      r?.id,
+                    ]
+                      .map(normalizeLookupValue)
+                      .filter(Boolean)
 
-                    if (matchingRestaurant) {
-                      // Get full restaurant details by ID
-                      const fullResponse = await restaurantAPI.getRestaurantById(matchingRestaurant._id || matchingRestaurant.restaurantId)
-                      if (fullResponse.data && fullResponse.data.success && fullResponse.data.data) {
-                        apiRestaurant = fullResponse.data.data
-                        debugLog('? Found restaurant in restaurant API by name search:', apiRestaurant)
-                        break
+                    return restaurantLookupValues.some((value) => normalizedLookupTargets.has(value))
+                  })
+
+                  if (matchingRestaurant) {
+                    const detailLookupCandidates = [
+                      matchingRestaurant?._id,
+                      matchingRestaurant?.restaurantId,
+                      matchingRestaurant?.id,
+                      matchingRestaurant?.slug,
+                    ].filter(Boolean)
+
+                    for (const detailCandidate of detailLookupCandidates) {
+                      try {
+                        const fullResponse = await restaurantAPI.getRestaurantById(detailCandidate)
+                        const resolvedRestaurant =
+                          fullResponse?.data?.data?.restaurant || fullResponse?.data?.data || null
+                        if (fullResponse?.data?.success && resolvedRestaurant) {
+                          apiRestaurant = resolvedRestaurant
+                          debugLog('? Found restaurant in restaurant API by search fallback:', apiRestaurant)
+                          break
+                        }
+                      } catch (detailLookupError) {
+                        debugWarn('? Search match detail lookup failed for:', detailCandidate, detailLookupError?.message)
                       }
                     }
-                  } catch (searchError) {
-                    debugWarn('? Search fallback failed for params:', searchParams, searchError?.message)
                   }
+
+                  if (apiRestaurant) {
+                    break
+                  }
+                } catch (searchError) {
+                  debugWarn('? Search fallback failed for params:', searchParams, searchError?.message)
                 }
+              }
             }
           } catch (restaurantError) {
             debugError('? Restaurant not found in restaurant API either:', restaurantError)
@@ -1006,8 +1065,7 @@ function RestaurantDetailsContent() {
     }
 
     fetchRestaurant()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug, zoneId])
+  }, [slug, zoneId, restaurant, routeRestaurant])
 
   // Track previous values to prevent unnecessary recalculations
   const prevCoordsRef = useRef({ userLat: null, userLng: null, restaurantLat: null, restaurantLng: null })

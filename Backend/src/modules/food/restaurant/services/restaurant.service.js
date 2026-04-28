@@ -6,11 +6,14 @@ import { FoodZone } from '../../admin/models/zone.model.js';
 import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FoodDiningRestaurant } from '../../dining/models/diningRestaurant.model.js';
 
+const PUBLIC_VISIBLE_RESTAURANT_STATUSES = ['approved', 'pending'];
+
 const normalizeName = (value) =>
     String(value || '')
         .trim()
         .toLowerCase()
         .replace(/-/g, ' ')
+        .replace(/[^a-z0-9\s]/g, ' ')
         .replace(/\s+/g, ' ');
 
 const normalizePhone = (value) => {
@@ -1162,7 +1165,7 @@ export const listApprovedRestaurants = async (query = {}) => {
     const page = Math.max(parseInt(query.page, 10) || 1, 1);
     const skip = (page - 1) * limit;
 
-    const filter = { status: { $in: ['approved', 'pending'] } };
+    const filter = { status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES } };
     console.log('[listApprovedRestaurants] Filter:', JSON.stringify(filter, null, 2));
     console.log('[listApprovedRestaurants] Query:', JSON.stringify(query, null, 2));
 
@@ -1279,7 +1282,8 @@ export const listApprovedRestaurants = async (query = {}) => {
         location: 1,
         openingTime: 1,
         closingTime: 1,
-        openDays: 1
+        openDays: 1,
+        restaurantNameNormalized: 1
     };
 
     // Use $geoNear only when geo is explicitly needed (radius filter or nearest sorting).
@@ -1343,7 +1347,22 @@ export const listApprovedRestaurants = async (query = {}) => {
             const statusCount = await FoodRestaurant.countDocuments({ status: filter.status });
             console.log(`[listApprovedRestaurants] Debug: Total restaurants with status ${JSON.stringify(filter.status)}:`, statusCount);
         }
-        return { restaurants: pageDocs, total, page, limit };
+        const restaurants = (pageDocs || []).map((r) => ({
+            ...r,
+            restaurantId: r._id,
+            id: r._id,
+            name: r.restaurantName || '',
+            rating: normalizeRatingValue(r.rating),
+            totalRatings: normalizeTotalRatingsValue(r.totalRatings),
+            profileImage: r.profileImage ? { url: r.profileImage } : null,
+            coverImages: Array.isArray(r.coverImages) ? r.coverImages : [],
+            openingTime: r.openingTime || null,
+            closingTime: r.closingTime || null,
+            openDays: Array.isArray(r.openDays) ? r.openDays : [],
+            menuImages: Array.isArray(r.menuImages) ? r.menuImages : [],
+            slug: (r.restaurantNameNormalized || normalizeName(r.restaurantName) || '').replace(/\s+/g, '-')
+        }));
+        return { restaurants, total, page, limit };
     }
 
     console.log('[listApprovedRestaurants] Using non-geo path');
@@ -1383,7 +1402,8 @@ export const listApprovedRestaurants = async (query = {}) => {
         closingTime: r.closingTime || null,
         openDays: Array.isArray(r.openDays) ? r.openDays : [],
         // Keep menuImages as an array for fallbacks; allow both string and {url} on client.
-        menuImages: Array.isArray(r.menuImages) ? r.menuImages : []
+        menuImages: Array.isArray(r.menuImages) ? r.menuImages : [],
+        slug: (r.restaurantNameNormalized || normalizeName(r.restaurantName) || '').replace(/\s+/g, '-')
     }));
 
     return { restaurants, total, page, limit };
@@ -1393,31 +1413,64 @@ export const getApprovedRestaurantByIdOrSlug = async (idOrSlug) => {
     const value = String(idOrSlug || '').trim();
     if (!value) return null;
 
-    // ObjectId path
-    if (/^[0-9a-fA-F]{24}$/.test(value)) {
-        const doc = await FoodRestaurant.findOne({ _id: value, status: 'approved' }).lean();
+    const formatResult = (doc) => {
         if (!doc) return null;
         return {
             ...doc,
             rating: normalizeRatingValue(doc.rating),
-            totalRatings: normalizeTotalRatingsValue(doc.totalRatings)
+            totalRatings: normalizeTotalRatingsValue(doc.totalRatings),
+            slug: (doc.restaurantNameNormalized || normalizeName(doc.restaurantName) || '').replace(/\s+/g, '-')
         };
+    };
+
+    // ObjectId path
+    if (/^[0-9a-fA-F]{24}$/.test(value)) {
+        const doc = await FoodRestaurant.findOne({ _id: value, status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES } }).lean();
+        return formatResult(doc);
     }
 
-    // Slug path: use normalized field for index-friendly exact match.
-    const restaurantNameNormalized = normalizeName(value);
-    if (!restaurantNameNormalized) return null;
+    // 1) Try exact slug field match first
+    const slugDoc = await FoodRestaurant.findOne({ status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES }, slug: value }).lean();
+    if (slugDoc) return formatResult(slugDoc);
 
-    const doc = await FoodRestaurant.findOne({
-        status: 'approved',
-        restaurantNameNormalized
-    }).lean();
-    if (!doc) return null;
-    return {
-        ...doc,
-        rating: normalizeRatingValue(doc.rating),
-        totalRatings: normalizeTotalRatingsValue(doc.totalRatings)
-    };
+    // 2) Normalized name match (converts hyphens to spaces for index-friendly lookup)
+    const restaurantNameNormalized = normalizeName(value);
+    if (restaurantNameNormalized) {
+        const normalizedDoc = await FoodRestaurant.findOne({
+            status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES },
+            restaurantNameNormalized
+        }).lean();
+        if (normalizedDoc) return formatResult(normalizedDoc);
+    }
+
+    // 3) Regex fallback: match restaurant name case-insensitively
+    //    (handles names with apostrophes, special chars, etc.)
+    const escapedSlug = escapeRegex(value.replace(/-/g, ' '));
+    if (escapedSlug) {
+        const regexDoc = await FoodRestaurant.findOne({
+            status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES },
+            restaurantName: { $regex: new RegExp(`^${escapedSlug}$`, 'i') }
+        }).lean();
+        if (regexDoc) return formatResult(regexDoc);
+    }
+
+    // 4) Last-resort JS normalization against current restaurant names.
+    // This recovers older records whose stored normalized field still contains
+    // punctuation variants such as apostrophes.
+    if (restaurantNameNormalized) {
+        const approvedRestaurants = await FoodRestaurant.find({ status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES } })
+            .select('restaurantName restaurantNameNormalized rating totalRatings profileImage coverImages menuImages openingTime closingTime openDays estimatedDeliveryTime cuisines location area city slug')
+            .lean();
+
+        const fallbackDoc = approvedRestaurants.find((doc) => {
+            const normalizedStoredName = normalizeName(doc?.restaurantNameNormalized || doc?.restaurantName);
+            return normalizedStoredName === restaurantNameNormalized;
+        });
+
+        if (fallbackDoc) return formatResult(fallbackDoc);
+    }
+
+    return null;
 };
 
 export const listPublicOffers = async () => {

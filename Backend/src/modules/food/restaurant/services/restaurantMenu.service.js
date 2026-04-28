@@ -5,6 +5,8 @@ import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodCategory } from '../../admin/models/category.model.js';
 import { getFoodDisplayPrice, serializeFoodVariants } from '../../admin/services/foodVariant.service.js';
 
+const PUBLIC_VISIBLE_RESTAURANT_STATUSES = ['approved', 'pending'];
+
 const buildMenuFromFoods = async (foods = []) => {
     const categoryIds = Array.from(
         new Set(
@@ -124,12 +126,12 @@ export async function getPublicApprovedRestaurantMenu(restaurantIdOrSlug) {
 
     let restaurant = null;
     if (/^[0-9a-fA-F]{24}$/.test(value)) {
-        restaurant = await FoodRestaurant.findOne({ _id: value, status: 'approved' })
+        restaurant = await FoodRestaurant.findOne({ _id: value, status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES } })
             .select('_id status')
             .lean();
     } else {
         const normalized = value.trim().toLowerCase().replace(/-/g, ' ').replace(/\s+/g, ' ');
-        restaurant = await FoodRestaurant.findOne({ restaurantNameNormalized: normalized, status: 'approved' })
+        restaurant = await FoodRestaurant.findOne({ restaurantNameNormalized: normalized, status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES } })
             .select('_id status')
             .lean();
     }
