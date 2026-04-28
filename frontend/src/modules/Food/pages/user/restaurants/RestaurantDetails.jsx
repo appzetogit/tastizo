@@ -177,6 +177,16 @@ function RestaurantDetailsContent() {
   const fetchedRestaurantRef = useRef(false) // Track if restaurant has been fetched for current slug
   const fetchedSlugRef = useRef(null)
 
+  const zoneRequestParams = useMemo(() => {
+    const params = {}
+    if (zoneId) params.zoneId = zoneId
+    if (Number.isFinite(userLocation?.latitude) && Number.isFinite(userLocation?.longitude)) {
+      params.lat = userLocation.latitude
+      params.lng = userLocation.longitude
+    }
+    return params
+  }, [zoneId, userLocation?.latitude, userLocation?.longitude])
+
   useEffect(() => {
     const intervalId = setInterval(() => {
       setAvailabilityTick(Date.now())
@@ -254,7 +264,9 @@ function RestaurantDetailsContent() {
             // differs from the canonical backend slug but we still have the exact id.
             for (const candidate of lookupCandidates) {
               try {
-                response = await restaurantAPI.getRestaurantById(candidate)
+                response = await restaurantAPI.getRestaurantById(candidate, {
+                  params: zoneRequestParams,
+                })
                 const resolvedRestaurant =
                   response?.data?.data?.restaurant || response?.data?.data || null
                 if (response?.data?.success && resolvedRestaurant) {
@@ -309,7 +321,9 @@ function RestaurantDetailsContent() {
 
                     for (const detailCandidate of detailLookupCandidates) {
                       try {
-                        const fullResponse = await restaurantAPI.getRestaurantById(detailCandidate)
+                        const fullResponse = await restaurantAPI.getRestaurantById(detailCandidate, {
+                          params: zoneRequestParams,
+                        })
                         const resolvedRestaurant =
                           fullResponse?.data?.data?.restaurant || fullResponse?.data?.data || null
                         if (fullResponse?.data?.success && resolvedRestaurant) {
@@ -788,7 +802,10 @@ function RestaurantDetailsContent() {
               for (const lookupId of normalizedLookupIds) {
                 try {
                   debugLog('? Fetching menu for restaurant lookup ID:', lookupId)
-                  const response = await restaurantAPI.getMenuByRestaurantId(lookupId, { noCache: true })
+                  const response = await restaurantAPI.getMenuByRestaurantId(lookupId, {
+                    noCache: true,
+                    params: zoneRequestParams,
+                  })
                   if (response?.data?.success) {
                     menuResponse = response
                     resolvedMenuLookupId = lookupId
@@ -1065,7 +1082,7 @@ function RestaurantDetailsContent() {
     }
 
     fetchRestaurant()
-  }, [slug, zoneId, restaurant, routeRestaurant])
+  }, [slug, zoneId, restaurant, routeRestaurant, zoneRequestParams])
 
   // Track previous values to prevent unnecessary recalculations
   const prevCoordsRef = useRef({ userLat: null, userLng: null, restaurantLat: null, restaurantLng: null })

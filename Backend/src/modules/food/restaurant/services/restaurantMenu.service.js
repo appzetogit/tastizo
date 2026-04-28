@@ -4,8 +4,22 @@ import { FoodRestaurant } from '../models/restaurant.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodCategory } from '../../admin/models/category.model.js';
 import { getFoodDisplayPrice, serializeFoodVariants } from '../../admin/services/foodVariant.service.js';
+import { pointLikeBelongsToZone, resolveZoneFromQuery } from '../../shared/zoneResolver.js';
 
-const PUBLIC_VISIBLE_RESTAURANT_STATUSES = ['approved', 'pending'];
+const PUBLIC_VISIBLE_RESTAURANT_STATUSES = ['approved'];
+
+const buildPublicVisibleRestaurantFilter = (extra = {}) => ({
+    ...extra,
+    $or: [
+        { status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES } },
+        { isAdminApproved: true }
+    ]
+});
+
+const restaurantMatchesResolvedZone = (restaurant, resolvedZone) => {
+    if (!restaurant || !resolvedZone?._id) return false;
+    return pointLikeBelongsToZone(restaurant.location, resolvedZone);
+};
 
 const buildMenuFromFoods = async (foods = []) => {
     const categoryIds = Array.from(
@@ -120,26 +134,27 @@ export async function updateRestaurantMenu(restaurantId, body = {}) {
     throw new ValidationError('Menu editing is disabled. Menu is generated from food items.');
 }
 
-export async function getPublicApprovedRestaurantMenu(restaurantIdOrSlug) {
+export async function getPublicApprovedRestaurantMenu(restaurantIdOrSlug, zoneQuery = {}) {
     const value = String(restaurantIdOrSlug || '').trim();
+    const resolvedZone = await resolveZoneFromQuery(zoneQuery || {});
     if (!value) throw new ValidationError('Restaurant id is required');
-
+    if (!resolvedZone?._id) return null;
     let restaurant = null;
     if (/^[0-9a-fA-F]{24}$/.test(value)) {
-        restaurant = await FoodRestaurant.findOne({ _id: value, status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES } })
-            .select('_id status')
+        restaurant = await FoodRestaurant.findOne(buildPublicVisibleRestaurantFilter({ _id: value }))
+            .select('_id status isAdminApproved zoneId location')
             .lean();
     } else {
         const normalized = value.trim().toLowerCase().replace(/-/g, ' ').replace(/\s+/g, ' ');
-        restaurant = await FoodRestaurant.findOne({ restaurantNameNormalized: normalized, status: { $in: PUBLIC_VISIBLE_RESTAURANT_STATUSES } })
-            .select('_id status')
+        restaurant = await FoodRestaurant.findOne(buildPublicVisibleRestaurantFilter({ restaurantNameNormalized: normalized }))
+            .select('_id status isAdminApproved zoneId location')
             .lean();
     }
 
-    if (!restaurant?._id) {
+    if (!restaurant?._id || !restaurantMatchesResolvedZone(restaurant, resolvedZone)) {
         return null;
     }
-    const foods = await FoodItem.find({ restaurantId: restaurant._id, approvalStatus: 'approved' })
+    const foods = await FoodItem.find({ restaurantId: restaurant._id, approvalStatus: 'approved', isAvailable: true })
         .sort({ createdAt: -1 })
         .limit(2000)
         .lean();

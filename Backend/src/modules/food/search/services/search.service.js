@@ -2,6 +2,7 @@ import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodCategory } from '../../admin/models/category.model.js';
 import mongoose from 'mongoose';
+import { pointLikeBelongsToZone, resolveZoneFromQuery } from '../../shared/zoneResolver.js';
 
 /**
  * Unified Search Service
@@ -28,13 +29,26 @@ export const searchUnified = async (query = {}, options = {}) => {
     const regex = term ? new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : null;
 
     // 1. Initial Filter (approved status and basic conditions)
-    const restaurantFilter = { status: 'approved' };
+    const restaurantFilter = {
+        $or: [
+            { status: 'approved' },
+            { isAdminApproved: true }
+        ]
+    };
     
     console.log(`[Search-Service] Querying with term: "${term}", categoryId: "${categoryId}", zoneId: "${zoneId}"`);
 
-    if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
-        restaurantFilter.zoneId = new mongoose.Types.ObjectId(zoneId);
+    const resolvedZone = await resolveZoneFromQuery({ zoneId, lat, lng });
+    if (!resolvedZone?._id) {
+        return {
+            success: true,
+            data: { restaurants: [], total: 0, page: parseInt(page), limit: parseInt(limit), zoneFiltered: false }
+        };
     }
+    const restaurantMatchesResolvedZone = (restaurant) => {
+        if (!restaurant || !resolvedZone?._id) return false;
+        return pointLikeBelongsToZone(restaurant.location, resolvedZone);
+    };
 
     if (isVeg === 'true') {
         restaurantFilter.pureVegRestaurant = true;
@@ -55,9 +69,14 @@ export const searchUnified = async (query = {}, options = {}) => {
 
     // 2. Handle Category Filtering (Restaurants don't have categoryId, FoodItems do)
     if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
+        const scopedRestaurants = await FoodRestaurant.find(restaurantFilter).select('_id').lean();
+        const scopedRestaurantIds = scopedRestaurants.map((restaurant) => restaurant._id);
+
         const catFoodItems = await FoodItem.find({ 
             categoryId: new mongoose.Types.ObjectId(categoryId),
-            approvalStatus: 'approved' 
+            approvalStatus: 'approved',
+            isAvailable: true,
+            restaurantId: { $in: scopedRestaurantIds }
         }).select('restaurantId').lean();
         
         const catRestaurantIds = [...new Set(catFoodItems.map(f => f.restaurantId.toString()))];
@@ -89,7 +108,13 @@ export const searchUnified = async (query = {}, options = {}) => {
         });
 
         // B. Search by Food Item Name
-        const foodFilters = { approvalStatus: 'approved' };
+        const scopedRestaurants = await FoodRestaurant.find(restaurantFilter).select('_id').lean();
+        const scopedRestaurantIds = scopedRestaurants.map((restaurant) => restaurant._id);
+        const foodFilters = {
+            approvalStatus: 'approved',
+            isAvailable: true,
+            restaurantId: { $in: scopedRestaurantIds }
+        };
         if (isVeg === 'true') foodFilters.foodType = 'Veg';
         
         const matchedFoods = await FoodItem.find({
@@ -153,6 +178,8 @@ export const searchUnified = async (query = {}, options = {}) => {
         results.sort((a, b) => (a.distanceScore || 999) - (b.distanceScore || 999));
     }
 
+    results = results.filter(restaurantMatchesResolvedZone);
+
     // ... (rest of logic up to result formation)
     const finalResult = {
         success: true,
@@ -161,20 +188,9 @@ export const searchUnified = async (query = {}, options = {}) => {
             total: results.length,
             page: parseInt(page),
             limit: parseInt(limit),
-            zoneFiltered: !!(zoneId && mongoose.Types.ObjectId.isValid(zoneId))
+            zoneFiltered: true
         }
     };
-
-    // FALLBACK: If results are empty and a zoneId was provided, try one more time without zoneId 
-    // to ensure user sees SOMETHING if their current zone has no matches.
-    if (results.length === 0 && zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
-        console.log(`[Search-Service] No results in zone ${zoneId}. Trying global fallback...`);
-        const fallbackResults = await searchUnified({ ...query, zoneId: null }, options);
-        if (fallbackResults.data.total > 0) {
-            fallbackResults.data.wasFallback = true;
-            return fallbackResults;
-        }
-    }
 
     return finalResult;
 };

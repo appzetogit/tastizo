@@ -27,7 +27,7 @@ export const updateMenuController = async (req, res, next) => {
 
 export const getPublicRestaurantMenuController = async (req, res, next) => {
     try {
-        const menu = await getPublicApprovedRestaurantMenu(req.params.id);
+        const menu = await getPublicApprovedRestaurantMenu(req.params.id, req.query || {});
         if (!menu) {
             return res.status(404).json({ success: false, message: 'Restaurant not found' });
         }

@@ -6,14 +6,30 @@ import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FoodOfferUsage } from '../../admin/models/offerUsage.model.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { haversineKm } from './order.helpers.js';
+import { resolveZoneFromAddressLike } from '../../shared/zoneResolver.js';
 
 export async function calculateOrderPricing(userId, dto) {
   const restaurant = await FoodRestaurant.findById(dto.restaurantId)
-    .select("status location")
+    .select("status location zoneId")
     .lean();
   if (!restaurant) throw new ValidationError("Restaurant not found");
   if (restaurant.status !== "approved")
     throw new ValidationError("Restaurant not available");
+  if (!restaurant.zoneId) {
+    throw new ValidationError("Restaurant zone is not configured");
+  }
+
+  const resolvedZone =
+    dto?.zoneId && mongoose.Types.ObjectId.isValid(String(dto.zoneId))
+      ? { _id: String(dto.zoneId) }
+      : await resolveZoneFromAddressLike(dto?.deliveryAddress);
+
+  if (!resolvedZone?._id) {
+    throw new ValidationError("Service is not available at your location");
+  }
+  if (String(restaurant.zoneId) !== String(resolvedZone._id)) {
+    throw new ValidationError("Restaurant not available in your zone");
+  }
 
   const items = Array.isArray(dto.items) ? dto.items : [];
   const subtotal = items.reduce(

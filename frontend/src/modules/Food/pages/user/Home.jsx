@@ -1537,34 +1537,6 @@ export default function Home() {
           let restaurantsArray = response.data.data.restaurants;
           debugLog(`Fetched ${restaurantsArray.length} restaurants from API:`, restaurantsArray);
 
-          if (restaurantsArray.length === 0 && effectiveZoneId) {
-            const fallbackParams = { ...params };
-            delete fallbackParams.zoneId;
-
-            debugWarn(
-              "Zone-filtered restaurant response was empty. Retrying without zoneId...",
-              { zoneId: effectiveZoneId, fallbackParams },
-            );
-
-            const fallbackResponse = await fetchRestaurantsResponse(
-              fallbackParams,
-              "zone-fallback",
-            );
-
-            if (requestSeq !== restaurantsRequestSeqRef.current) return;
-
-            if (
-              fallbackResponse?.data?.success &&
-              fallbackResponse?.data?.data?.restaurants
-            ) {
-              restaurantsArray = fallbackResponse.data.data.restaurants;
-              debugLog(
-                `Fetched ${restaurantsArray.length} restaurants from fallback API:`,
-                restaurantsArray,
-              );
-            }
-          }
-
           if (restaurantsArray.length === 0) {
             debugWarn("No restaurants found in API response");
             setRestaurantsData([]);

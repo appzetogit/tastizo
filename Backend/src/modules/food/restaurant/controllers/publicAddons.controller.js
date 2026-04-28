@@ -3,7 +3,7 @@ import { getPublicApprovedRestaurantAddons } from '../services/publicAddons.serv
 
 export const getPublicRestaurantAddonsController = async (req, res, next) => {
     try {
-        const addons = await getPublicApprovedRestaurantAddons(req.params.id);
+        const addons = await getPublicApprovedRestaurantAddons(req.params.id, req.query || {});
         if (!addons) {
             return res.status(404).json({ success: false, message: 'Restaurant not found' });
         }

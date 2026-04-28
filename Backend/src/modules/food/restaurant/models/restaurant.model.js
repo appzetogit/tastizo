@@ -246,6 +246,11 @@ const restaurantSchema = new mongoose.Schema(
       enum: ["pending", "approved", "rejected"],
       default: "pending",
     },
+    isAdminApproved: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     approvedAt: {
       type: Date,
     },
@@ -264,6 +269,21 @@ const restaurantSchema = new mongoose.Schema(
 );
 
 restaurantSchema.pre("validate", function normalizeDerivedFields(next) {
+  const currentStatus =
+    typeof this.status === "string" ? this.status.trim().toLowerCase() : "";
+
+  if (this.isAdminApproved === true || currentStatus === "approved") {
+    this.status = "approved";
+    this.isAdminApproved = true;
+    this.approvedAt = this.approvedAt || new Date();
+    this.rejectedAt = undefined;
+    this.rejectionReason = undefined;
+  } else if (currentStatus === "rejected") {
+    this.isAdminApproved = false;
+    this.rejectedAt = this.rejectedAt || new Date();
+    this.approvedAt = undefined;
+  }
+
   const name =
     typeof this.restaurantName === "string" ? this.restaurantName : "";
   const normalizedName = name.trim().toLowerCase().replace(/\s+/g, " ");

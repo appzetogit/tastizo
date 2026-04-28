@@ -33,6 +33,7 @@ import { calculateOrderPricing } from './order-pricing.service.js';
 import * as dispatchService from './order-dispatch.service.js';
 import * as deliveryService from './order-delivery.service.js';
 import * as paymentService from './order-payment.service.js';
+import { resolveZoneFromAddressLike } from '../../shared/zoneResolver.js';
 import {
   enqueueOrderEvent,
   haversineKm,
@@ -167,6 +168,21 @@ export async function createOrder(userId, dto) {
     throw new ValidationError("Restaurant not accepting orders");
   if (restaurant.isAcceptingOrders === false)
     throw new ValidationError("Restaurant not accepting orders");
+  if (!restaurant.zoneId) {
+    throw new ValidationError("Restaurant zone is not configured");
+  }
+
+  const resolvedZone =
+    dto?.zoneId && mongoose.Types.ObjectId.isValid(String(dto.zoneId))
+      ? { _id: String(dto.zoneId) }
+      : await resolveZoneFromAddressLike(dto?.address);
+
+  if (!resolvedZone?._id) {
+    throw new ValidationError("Service is not available at your location");
+  }
+  if (String(restaurant.zoneId) !== String(resolvedZone._id)) {
+    throw new ValidationError("Restaurant not available in your zone");
+  }
 
 
   const settings = await getDispatchSettings();
@@ -293,9 +309,7 @@ export async function createOrder(userId, dto) {
   const order = new FoodOrder({
     userId: new mongoose.Types.ObjectId(userId),
     restaurantId: new mongoose.Types.ObjectId(dto.restaurantId),
-    zoneId: dto.zoneId
-      ? new mongoose.Types.ObjectId(dto.zoneId)
-      : restaurant.zoneId,
+    zoneId: new mongoose.Types.ObjectId(String(resolvedZone._id)),
     items: dto.items,
     deliveryAddress,
     customerName: dto.customerName || deliveryAddress.fullName || "",

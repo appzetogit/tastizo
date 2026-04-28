@@ -123,7 +123,7 @@ const startServer = async () => {
         process.on('SIGINT', () => gracefulShutdown('SIGINT'));
         process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
-        // Handle server errors (like EADDRINUSE)
+        
         server.on('error', (err) => {
             if (err.code === 'EADDRINUSE') {
                 logger.error(`Port ${config.port} is already in use. Please kill the process or use a different port.`);
@@ -133,7 +133,7 @@ const startServer = async () => {
             process.exit(1);
         });
 
-        // Handle unhandled promise rejections
+
         process.on('unhandledRejection', (err) => {
             logger.error(`Unhandled Rejection: ${err?.message || err}`);
             if (config.nodeEnv === 'production') {

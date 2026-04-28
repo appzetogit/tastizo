@@ -309,6 +309,29 @@ export async function getCurrentTripDelivery(deliveryPartnerId) {
 
 export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
   const { page, limit, skip } = buildPaginationOptions(query);
+  const partner = await FoodDeliveryPartner.findById(deliveryPartnerId)
+    .select('zoneId')
+    .lean();
+
+  if (!partner?._id) {
+    throw new NotFoundError('Delivery partner not found');
+  }
+
+  if (!partner.zoneId || !mongoose.Types.ObjectId.isValid(String(partner.zoneId))) {
+    logger.warn(`[DeliveryOrders] Partner ${deliveryPartnerId} has no valid zoneId`);
+    return {
+      ...buildPaginatedResult({ docs: [], total: 0, page, limit }),
+      cashLimit: {
+        blocked: false,
+        message: 'Delivery zone not configured.',
+        totalCashLimit: 0,
+        cashInHand: 0,
+        availableCashLimit: 0,
+      },
+    };
+  }
+
+  const partnerZoneId = new mongoose.Types.ObjectId(String(partner.zoneId));
   const partnerCapacity = await getPartnerCashCapacity(deliveryPartnerId);
   const cashLimit = {
     blocked: !partnerCapacity.hasCapacity,
@@ -337,6 +360,7 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
         $or: [
           {
             'dispatch.status': 'unassigned',
+            zoneId: partnerZoneId,
             orderStatus: { $in: ['confirmed', 'preparing', 'ready_for_pickup'] },
           },
           activeOwnOrderFilter,
@@ -388,11 +412,27 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
   if (!identity) throw new ValidationError('Order id required');
 
   const partnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
+  const partner = await FoodDeliveryPartner.findById(deliveryPartnerId)
+    .select('zoneId availabilityStatus')
+    .lean();
+
+  if (!partner?._id) throw new NotFoundError('Delivery partner not found');
+  if (!partner.zoneId || !mongoose.Types.ObjectId.isValid(String(partner.zoneId))) {
+    throw new ValidationError('Delivery partner zone is not configured');
+  }
+  if (String(partner.availabilityStatus || '').toLowerCase() !== 'online') {
+    throw new ValidationError('Delivery partner must be online to accept orders');
+  }
+
+  const partnerZoneId = String(partner.zoneId);
 
   const existingOrder = await FoodOrder.findOne(identity)
-    .select('pricing payment dispatch orderStatus')
+    .select('pricing payment dispatch orderStatus zoneId')
     .lean();
   if (!existingOrder) throw new NotFoundError('Order not found');
+  if (!existingOrder.zoneId || String(existingOrder.zoneId) !== partnerZoneId) {
+    throw new ForbiddenError('Order is outside your assigned zone');
+  }
 
   const paymentMethod = String(existingOrder?.payment?.method || 'cash').toLowerCase();
   const isCashOrder = paymentMethod === 'cash';
@@ -433,6 +473,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
   const order = await FoodOrder.findOneAndUpdate(
     {
       ...identity,
+      zoneId: new mongoose.Types.ObjectId(partnerZoneId),
       orderStatus: { $in: acceptedStatuses },
       $or: [
         { 'dispatch.status': 'unassigned' },
