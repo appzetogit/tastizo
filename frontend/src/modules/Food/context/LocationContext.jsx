@@ -392,9 +392,21 @@ export function LocationProvider({ children }) {
       const response = await userAPI.getLocation()
       const backendLocation = response?.data?.data?.location || response?.data?.location || null
       if (backendLocation?.latitude && backendLocation?.longitude) {
-        setLocation(backendLocation)
+        // Only hydrate from backend when there is no valid local location yet.
+        // This prevents overwriting a freshly selected address or GPS fix with
+        // stale backend data (e.g. from a previous session or different device).
+        setLocation((current) => {
+          if (
+            current &&
+            Number.isFinite(current.latitude) &&
+            Number.isFinite(current.longitude)
+          ) {
+            return current
+          }
+          syncLocationStorage(backendLocation, getStoredMode(), getStoredSelectedAddressId())
+          return backendLocation
+        })
         setPermissionGranted(true)
-        syncLocationStorage(backendLocation, getStoredMode(), getStoredSelectedAddressId())
         return backendLocation
       }
     } catch {
@@ -514,7 +526,7 @@ export function LocationProvider({ children }) {
       }
       const nextLocation = addressToLocationState(selected, "saved")
       if (!nextLocation) return null
-      await applyLocation(nextLocation, { mode: "saved", selectedAddress: selected, syncBackend: false })
+      await applyLocation(nextLocation, { mode: "saved", selectedAddress: selected, syncBackend: true })
       return nextLocation
     },
     [addresses, applyLocation, setDefaultAddress],

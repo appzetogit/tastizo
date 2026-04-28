@@ -71,6 +71,10 @@ export default function Logout() {
       // Clear all authentication data from localStorage
       clearModuleAuth("user")
       localStorage.removeItem("cart")
+      // Clear location data to prevent previous account's location leaking
+      localStorage.removeItem("userLocation")
+      localStorage.removeItem("deliveryAddressMode")
+      localStorage.removeItem("selectedAddressId")
       USER_SESSION_PREFERENCE_KEYS.forEach((key) => localStorage.removeItem(key))
 
       // Clear sessionStorage
@@ -90,6 +94,9 @@ export default function Logout() {
       // Clear local data anyway
       clearModuleAuth("user")
       localStorage.removeItem("cart")
+      localStorage.removeItem("userLocation")
+      localStorage.removeItem("deliveryAddressMode")
+      localStorage.removeItem("selectedAddressId")
       USER_SESSION_PREFERENCE_KEYS.forEach((key) => localStorage.removeItem(key))
       sessionStorage.removeItem("userAuthData")
       window.dispatchEvent(new Event("userAuthChanged"))
