@@ -1078,10 +1078,11 @@ export default function Cart() {
         if (inRange) return fee
       }
 
-      return 0
+      return Number(feeSettings.deliveryFee || 0)
     }
 
-    if (subtotal >= feeSettings.freeDeliveryThreshold) {
+    const freeThreshold = Number(feeSettings.freeDeliveryThreshold || 0)
+    if (Number.isFinite(freeThreshold) && freeThreshold > 0 && subtotal >= freeThreshold) {
       return 0
     }
 
