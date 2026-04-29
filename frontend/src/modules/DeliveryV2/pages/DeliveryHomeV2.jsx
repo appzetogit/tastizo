@@ -75,14 +75,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
   const [incomingOrder, setIncomingOrder] = useState(null);
   const [cashLimitNotice, setCashLimitNotice] = useState(null);
-  const [currentTab, setCurrentTab] = useState(tab);
   const [showNotifications, setShowNotifications] = useState(false);
-  
-  // Track URL changes (Prop changes) to update sub-page content
-  useEffect(() => {
-    setCurrentTab(tab);
-  }, [tab]);
-
   const [showVerification, setShowVerification] = useState(false);
   const [showEmergencyPopup, setShowEmergencyPopup] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
@@ -530,7 +523,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     return () => clearInterval(pingInterval);
   }, [isOnline]);
 
-  useEffect(() => { if (newOrder) setIncomingOrder(newOrder); }, [newOrder]);
+  useEffect(() => { 
+    setIncomingOrder(newOrder); 
+  }, [newOrder]);
 
   useEffect(() => {
     if (activeOrder && incomingOrder) {
@@ -551,14 +546,33 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     clearClaimedOrderId();
   }, [claimedOrderId]);
 
-  useEffect(() => {
-    if (!isOnline) return;
-    if (currentTab !== 'feed') return;
-    if (activeOrder) return;
+  const handleAcceptOrder = useCallback(async (o) => {
+    try {
+      await acceptOrder(o);
+      setIncomingOrder(null);
+      clearNewOrder();
+    } catch (err) {
+      const msg = String(err?.response?.data?.message || err?.message || '');
+      const isTaken = msg.toLowerCase().includes('already accepted') || 
+                      msg.toLowerCase().includes('another partner') ||
+                      (err?.response?.status === 403);
+      if (isTaken) {
+        setIncomingOrder(null);
+        clearNewOrder();
+      }
+    }
+  }, [acceptOrder]);
 
-    let cancelled = false;
+  const handleRejectOrder = useCallback(() => {
+    setIncomingOrder(null);
+    clearNewOrder();
+  }, []);
 
-    const hydrateAvailableOrder = async () => {
+  const hydrateAvailableOrder = useCallback(
+    async (cancelled = false) => {
+      const currentActiveOrder = useDeliveryStore.getState().activeOrder;
+      const currentTripStatus = useDeliveryStore.getState().tripStatus;
+      
       try {
         const currentResponse = await deliveryAPI.getCurrentDelivery();
         const currentPayload =
@@ -607,7 +621,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
             updateTripStatus('REACHED_PICKUP');
           } else if (['confirmed', 'preparing', 'ready_for_pickup'].includes(backendStatus)) {
              // Only set to PICKING_UP if we aren't already further ahead
-             if (tripStatus === 'IDLE') updateTripStatus('PICKING_UP');
+             if (currentTripStatus === 'IDLE') updateTripStatus('PICKING_UP');
           }
           return;
         }
@@ -632,12 +646,16 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         const nextIncomingOrder = availableOrders.find((order) => {
           const dispatchStatus = String(order?.dispatch?.status || '').toLowerCase();
           const orderStatus = String(order?.orderStatus || order?.status || '').toLowerCase();
-          const hasAcceptedStatus = ['confirmed', 'preparing', 'ready_for_pickup'].includes(orderStatus);
+          const hasAcceptedStatus = ['confirmed', 'preparing', 'ready_for_pickup', 'ready'].includes(orderStatus);
           const isDispatchEligible =
             !dispatchStatus ||
             ['unassigned', 'assigned', 'offered', 'offer_sent', 'pending'].includes(dispatchStatus);
 
-          return hasAcceptedStatus && isDispatchEligible;
+          const offeredTo = order?.dispatch?.offeredTo || [];
+          const partnerIdStr = String(useDeliveryStore.getState().deliveryPartner?._id || '');
+          const isOfferedToMe = offeredTo.some(o => String(o.partnerId) === partnerIdStr && o.action === 'offered');
+
+          return hasAcceptedStatus && isDispatchEligible && (offeredTo.length === 0 || isOfferedToMe);
         });
 
         if (!cancelled && nextIncomingOrder) {
@@ -650,17 +668,19 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
               nextIncomingOrder?.orderMongoId;
             return prevId === nextId && prev ? prev : nextIncomingOrder;
           });
-        } else if (!cancelled) {
-          setIncomingOrder(null);
         }
+        // Removed the automatic clearing to null here.
+        // incomingOrder is cleared by onAccept/onReject/socket(order_claimed)
       } catch (error) {
         console.warn('[DeliveryHomeV2] Available order fallback sync failed:', error?.message || error);
       }
-    };
+    }, [setActiveOrder, updateTripStatus, setCashLimitNotice, setIncomingOrder]);
 
+  useEffect(() => {
+    let cancelled = false;
     void hydrateAvailableOrder();
     const poller = window.setInterval(() => {
-      if (!document.hidden) {
+      if (!document.hidden && !useDeliveryStore.getState().activeOrder) {
         void hydrateAvailableOrder();
       }
     }, isSocketConnected ? 12000 : 5000);
@@ -669,7 +689,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       cancelled = true;
       window.clearInterval(poller);
     };
-  }, [activeOrder, currentTab, isOnline, isSocketConnected, setActiveOrder, tripStatus, updateTripStatus]);
+  }, [tab, isOnline, isSocketConnected, hydrateAvailableOrder]);
 
   useEffect(() => {
     if (orderStatusUpdate) {
@@ -716,7 +736,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   return (
     <div className="relative h-screen w-full bg-white text-gray-900 overflow-hidden flex flex-col">
       {/* ─── 1. TOP HEADER (Premium Dark Gray) ─── */}
-      {currentTab !== 'history' && (
+      {tab !== 'history' && (
       <div className="absolute top-0 inset-x-0 bg-[#121212]/95 backdrop-blur-2xl shadow-2xl z-[200] safe-top pb-2 border-b border-white/10">
         <div className="flex items-center justify-between px-4 py-2">
           <div className="flex items-center gap-4">
@@ -767,7 +787,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
         {/* ─── LIVE STATUS / PROGRESS BADGE (MATCHED PRO) ─── */}
         <AnimatePresence>
-          {currentTab === 'feed' && (
+          {tab === 'feed' && (
             <motion.div 
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -839,21 +859,20 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       )}
 
       {/* ─── 2. MAIN CONTENT ─── */}
-      <div className={`flex-1 relative overflow-y-auto ${currentTab === 'history' ? 'pt-0' : 'pt-[120px]'} no-scrollbar`}>
-         {currentTab === 'feed' ? (
+      <div className={`flex-1 relative overflow-y-auto ${tab === 'history' ? 'pt-0' : 'pt-[120px]'} no-scrollbar`}>
+         {tab === 'feed' ? (
            <div className="absolute inset-0 top-[-120px]">
              <LiveMap 
-               onMapLoad={(m) => mapRef.current = m}
+               onMapLoad={useCallback((m) => { mapRef.current = m; }, [])}
                onMapClick={handleMapClick}
                onPathReceived={setSimPath}
-               onPolylineReceived={(poly) => {
+               onPolylineReceived={useCallback((poly) => {
                  setActivePolyline(poly);
-                 // If we have an order, push the INITIAL polyline to Firebase immediately for the customer
                  const orderId = activeOrder?.orderId || activeOrder?._id;
                  if (orderId && poly) {
                    writeOrderTracking(orderId, { polyline: poly, status: tripStatus, eta: eta }).catch(() => {});
                  }
-               }}
+               }, [activeOrder, tripStatus, eta])}
                zoom={zoom}
              />
              
@@ -941,9 +960,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                 </button>
              </div>
            </div>
-         ) : currentTab === 'pocket' ? (
+         ) : tab === 'pocket' ? (
            <PocketV2 />
-         ) : currentTab === 'history' ? (
+         ) : tab === 'history' ? (
            <HistoryV2 />
          ) : (
            <ProfileV2 />
@@ -953,7 +972,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       </div>
 
       {/* OVERLAYS (Persistent if active) - Outside flex container to avoid clipping and z-index issues */}
-      {(currentTab === 'feed' || activeOrder) && (
+      {(tab === 'feed' || activeOrder || incomingOrder) && (
         <AnimatePresence>
           {!isModalMinimized && (
             <motion.div
@@ -968,30 +987,8 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                 {incomingOrder && (
                   <NewOrderModal 
                     order={incomingOrder} 
-                    onAccept={async (o) => {
-                      try {
-                        await acceptOrder(o);
-                        // Only dismiss the modal on successful accept
-                        setIncomingOrder(null);
-                        clearNewOrder();
-                      } catch (err) {
-                        // acceptOrder already shows a toast for the specific error:
-                        // - "Order already accepted by another partner" (403)
-                        // - Network/timeout errors
-                        // Keep the modal visible only if it's not a "taken" error
-                        const msg = String(err?.response?.data?.message || err?.message || '');
-                        const isTaken = msg.toLowerCase().includes('already accepted') || 
-                                        msg.toLowerCase().includes('another partner') ||
-                                        (err?.response?.status === 403);
-                        if (isTaken) {
-                          // Dismiss modal — the order is no longer available
-                          setIncomingOrder(null);
-                          clearNewOrder();
-                        }
-                        // For other errors (network, etc.), keep showing the modal so they can retry
-                      }
-                    }}
-                    onReject={() => { setIncomingOrder(null); clearNewOrder(); }}
+                    onAccept={handleAcceptOrder}
+                    onReject={handleRejectOrder}
                     onMinimize={() => setIsModalMinimized(true)}
                   />
                 )}
@@ -1210,16 +1207,16 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
       {/* ─── 3. BOTTOM NAV (Fixed - Compact Pro) ─── */}
       <div className="bg-white border-t border-gray-100 px-8 py-3 pb-6 flex justify-between items-center z-[200] shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-         <button onClick={() => navigate('/food/delivery/feed')} className={`flex flex-col items-center gap-1 transition-all ${currentTab === 'feed' ? 'text-gray-950 scale-110' : 'text-gray-400 opacity-70'}`}>
+         <button onClick={() => navigate('/food/delivery/feed')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'feed' ? 'text-gray-950 scale-110' : 'text-gray-400 opacity-70'}`}>
             <LayoutGrid className="w-6 h-6" /><span className="text-[11px] font-medium font-sans">Feed</span>
          </button>
-         <button onClick={() => navigate('/food/delivery/pocket')} className={`flex flex-col items-center gap-1 transition-all ${currentTab === 'pocket' ? 'text-gray-950 scale-110' : 'text-gray-400 opacity-70'}`}>
+         <button onClick={() => navigate('/food/delivery/pocket')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'pocket' ? 'text-gray-950 scale-110' : 'text-gray-400 opacity-70'}`}>
             <Wallet className="w-6 h-6" /><span className="text-[11px] font-medium font-sans">Pocket</span>
          </button>
-         <button onClick={() => navigate('/food/delivery/history')} className={`flex flex-col items-center gap-1 transition-all ${currentTab === 'history' ? 'text-gray-950 scale-110' : 'text-gray-400 opacity-70'}`}>
+         <button onClick={() => navigate('/food/delivery/history')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'history' ? 'text-gray-950 scale-110' : 'text-gray-400 opacity-70'}`}>
             <History className="w-6 h-6" /><span className="text-[11px] font-medium font-sans">Trip History</span>
          </button>
-         <button onClick={() => navigate('/food/delivery/profile')} className={`flex flex-col items-center gap-1 transition-all ${currentTab === 'profile' ? 'text-gray-950 scale-110' : 'text-gray-400 opacity-70'}`}>
+         <button onClick={() => navigate('/food/delivery/profile')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'profile' ? 'text-gray-950 scale-110' : 'text-gray-400 opacity-70'}`}>
             <UserIcon className="w-6 h-6" /><span className="text-[11px] font-medium font-sans">Profile</span>
          </button>
       </div>

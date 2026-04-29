@@ -409,11 +409,17 @@ export const useDeliveryNotifications = () => {
             : [];
 
       const recoverableOrder = availableOrders.find((order) => {
-        const dispatchStatus = order?.dispatch?.status;
-        return (
-          ['unassigned', 'assigned'].includes(dispatchStatus) &&
-          ['preparing', 'ready_for_pickup'].includes(order?.orderStatus)
-        );
+        const dispatchStatus = String(order?.dispatch?.status || '').toLowerCase();
+        const orderStatus = String(order?.orderStatus || order?.status || '').toLowerCase();
+        
+        const hasAcceptedStatus = ['confirmed', 'preparing', 'ready_for_pickup', 'ready'].includes(orderStatus);
+        const isDispatchEligible = ['unassigned', 'assigned', 'offered', 'offer_sent', 'pending'].includes(dispatchStatus);
+        
+        // Ensure it's for this partner if offeredTo exists
+        const offeredTo = order?.dispatch?.offeredTo || [];
+        const isOfferedToMe = offeredTo.some(o => String(o.partnerId) === String(deliveryPartnerId) && o.action === 'offered');
+        
+        return hasAcceptedStatus && isDispatchEligible && (offeredTo.length === 0 || isOfferedToMe);
       });
 
       if (recoverableOrder && !activeOrderRef.current) {

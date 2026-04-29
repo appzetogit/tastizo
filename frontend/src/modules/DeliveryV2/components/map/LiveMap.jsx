@@ -80,10 +80,13 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
     if (!isRouteActive) {
       setDirections(null);
       setBaselineDirections(null);
-      onPathReceived?.([]);
-      onPolylineReceived?.(null);
+      // Use refs or stable callbacks to avoid loop
+      if (typeof onPathReceived === 'function') onPathReceived([]);
+      if (typeof onPolylineReceived === 'function') onPolylineReceived(null);
     }
-  }, [isRouteActive, onPathReceived, onPolylineReceived]);
+  // Only depend on isRouteActive to avoid loop when callbacks are unstable
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRouteActive]);
 
   const parsePoint = useCallback((raw) => {
     if (!raw) return null;
@@ -144,7 +147,8 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
         onPathReceived(simplePath);
       }
     }
-  }, [directions, onPathReceived]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directions]);
 
   const directionsCallback = useCallback((result, status) => {
     if (!isRouteActive) return;

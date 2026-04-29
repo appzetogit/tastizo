@@ -326,24 +326,33 @@ export async function tryAutoAssign(orderId, options = {}) {
 
       return order;
     }
-
     const io = getIO();
-    const payload = buildDeliverySocketPayload(order, order.restaurantId);
     const lead = eligible[0];
+    const offeredAt = new Date();
+
     if (lead) {
       logger.info(`[Dispatch] Offering order ${order._id} to rider ${lead.partnerId} in zone ${String(order.zoneId || '')} (${lead.distanceKm}km)`);
-    }
-
-    if (lead) {
+      
+      const payload = buildDeliverySocketPayload(order, order.restaurantId);
       const roomName = rooms.delivery(lead.partnerId);
       if (io) {
-        const eventPayload = { ...payload, pickupDistanceKm: lead.distanceKm };
+        const eventPayload = { 
+          ...payload, 
+          pickupDistanceKm: lead.distanceKm,
+          offeredAt: offeredAt, // Crucial for frontend timer
+          dispatch: {
+            ...order.dispatch,
+            status: 'offered',
+            offeredTo: [
+              ...(order.dispatch?.offeredTo || []),
+              { partnerId: lead.partnerId, at: offeredAt, action: 'offered' }
+            ]
+          }
+        };
         io.to(roomName).emit('new_order', eventPayload);
         io.to(roomName).emit('new_order_available', eventPayload);
       }
-    }
 
-    if (lead) {
       try {
         await notifyOwnerSafely(
           { ownerType: 'DELIVERY_PARTNER', ownerId: lead.partnerId },
@@ -360,7 +369,7 @@ export async function tryAutoAssign(orderId, options = {}) {
 
     const offeredToEntries = (lead ? [lead] : []).map(p => ({
       partnerId: p.partnerId,
-      at: new Date(),
+      at: offeredAt,
       action: 'offered',
       allowOverLimit: Boolean(p.allowOverLimit),
       requiredCashForOrder: Number(p.requiredCashForOrder || requiredAmount || 0),

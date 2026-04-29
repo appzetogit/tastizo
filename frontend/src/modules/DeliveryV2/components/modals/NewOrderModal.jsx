@@ -12,7 +12,6 @@ import { formatCurrency } from '@food/utils/currency';
  */
 export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
   const { riderLocation } = useDeliveryStore();
-  const [timeLeft, setTimeLeft] = useState(30);
   const formatMoney = (value) =>
     formatCurrency(Number(value) || 0, "\u20B9").replace("\u20B9 ", "\u20B9");
   const resolveEstimatedEarning = (orderLike) =>
@@ -27,14 +26,52 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
         0,
     );
 
+  const { deliveryPartner } = useDeliveryStore();
+  const partnerId = deliveryPartner?._id || deliveryPartner?.partnerId || deliveryPartner?.id;
+
+  const [timeLeft, setTimeLeft] = useState(30);
+
   useEffect(() => {
-    if (timeLeft <= 0) {
-      onReject();
-      return;
+    if (!order) return;
+
+    let startTime = order.offeredAt || order.createdAt;
+
+    // Try to find the exact time it was offered to THIS partner from the history
+    if (partnerId && Array.isArray(order.dispatch?.offeredTo)) {
+      const myOffer = [...order.dispatch.offeredTo]
+        .reverse()
+        .find((o) => String(o.partnerId) === String(partnerId));
+      if (myOffer?.at) startTime = myOffer.at;
     }
-    const timer = setInterval(() => setTimeLeft((t) => t - 1), 1000);
+
+    if (startTime) {
+      const start = new Date(startTime).getTime();
+      const now = Date.now();
+      const diff = Math.floor((now - start) / 1000);
+      const remaining = Math.max(0, 30 - diff);
+      setTimeLeft(remaining);
+
+      if (remaining <= 0) {
+        onReject();
+        return;
+      }
+    } else {
+      setTimeLeft(30);
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft((t) => {
+        if (t <= 1) {
+          clearInterval(timer);
+          onReject();
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+
     return () => clearInterval(timer);
-  }, [timeLeft, onReject]);
+  }, [order, partnerId, onReject]);
 
   const { distanceKm, etaMins } = useMemo(() => {
     if (!order) return { distanceKm: null, etaMins: null };

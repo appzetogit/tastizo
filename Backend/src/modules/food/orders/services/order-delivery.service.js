@@ -361,7 +361,7 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
           {
             'dispatch.status': 'unassigned',
             zoneId: partnerZoneId,
-            orderStatus: { $in: ['confirmed', 'preparing', 'ready_for_pickup'] },
+            orderStatus: { $in: ['confirmed', 'preparing', 'ready_for_pickup', 'ready'] },
           },
           activeOwnOrderFilter,
         ],
@@ -454,7 +454,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
   }
 
   const now = new Date();
-  const acceptedStatuses = ['confirmed', 'preparing', 'ready_for_pickup', 'picked_up'];
+  const acceptedStatuses = ['confirmed', 'preparing', 'ready_for_pickup', 'ready', 'picked_up'];
   const cancellableStatuses = [
     'cancelled_by_user',
     'cancelled_by_restaurant',
