@@ -34,6 +34,102 @@ import { useCompanyName } from "@food/hooks/useCompanyName";
 import { useNavigate } from 'react-router-dom';
 import useNotificationInbox from "@food/hooks/useNotificationInbox";
 
+const INCOMING_ORDER_STORAGE_KEY = 'delivery_v2_incoming_order';
+const OFFER_TTL_SECONDS = 30;
+
+const safeReadJson = (key) => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const getIncomingOrderIdentity = (order) =>
+  String(order?.orderId || order?._id || order?.orderMongoId || '').trim();
+
+const resolveDeliveryPartnerIdFromClient = () => {
+  try {
+    const storedUser =
+      safeReadJson('delivery_user') ||
+      safeReadJson('deliveryUser') ||
+      safeReadJson('user');
+
+    const candidate =
+      storedUser?.id ||
+      storedUser?._id ||
+      storedUser?.userId ||
+      storedUser?.deliveryId ||
+      storedUser?.deliveryPartnerId ||
+      storedUser?.user?.id ||
+      storedUser?.user?._id ||
+      storedUser?.deliveryPartner?.id ||
+      storedUser?.deliveryPartner?._id;
+
+    return candidate ? String(candidate) : '';
+  } catch {
+    return '';
+  }
+};
+
+const getOfferForPartner = (order, partnerId) => {
+  if (!partnerId || !Array.isArray(order?.dispatch?.offeredTo)) return null;
+  return [...order.dispatch.offeredTo]
+    .reverse()
+    .find((entry) => String(entry?.partnerId || '') === String(partnerId));
+};
+
+const getIncomingOrderRemainingSeconds = (order, partnerId) => {
+  if (!order) return 0;
+
+  let startTime = order.offeredAt || order.createdAt;
+  const myOffer = getOfferForPartner(order, partnerId);
+  if (myOffer?.at) startTime = myOffer.at;
+
+  const startMs = new Date(startTime).getTime();
+  if (!Number.isFinite(startMs)) return OFFER_TTL_SECONDS;
+
+  const elapsedSeconds = Math.floor((Date.now() - startMs) / 1000);
+  return Math.max(0, OFFER_TTL_SECONDS - elapsedSeconds);
+};
+
+const shouldKeepIncomingOrder = (order, partnerId) => {
+  if (!order) return false;
+
+  const orderStatus = String(order?.orderStatus || order?.status || '').toLowerCase();
+  const dispatchStatus = String(order?.dispatch?.status || '').toLowerCase();
+  const myOffer = getOfferForPartner(order, partnerId);
+  const wasOfferedToMe = !partnerId || Boolean(myOffer);
+  const remaining = getIncomingOrderRemainingSeconds(order, partnerId);
+  const acceptedBySomeone = Boolean(order?.dispatch?.acceptedAt);
+
+  if (acceptedBySomeone) return false;
+  if (remaining <= 0) return false;
+  if (!wasOfferedToMe) return false;
+  if (dispatchStatus && !['unassigned', 'assigned', 'offered', 'offer_sent', 'pending'].includes(dispatchStatus)) {
+    return false;
+  }
+
+  return ['confirmed', 'preparing', 'ready_for_pickup', 'ready'].includes(orderStatus);
+};
+
+const persistIncomingOrder = (order) => {
+  try {
+    localStorage.setItem(INCOMING_ORDER_STORAGE_KEY, JSON.stringify(order));
+  } catch {
+    // Ignore storage failures and fall back to in-memory behavior.
+  }
+};
+
+const clearPersistedIncomingOrder = () => {
+  try {
+    localStorage.removeItem(INCOMING_ORDER_STORAGE_KEY);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
+};
+
 /** Minimal bottom-sheet popup (Restored from legacy FeedNavbar) */
 function BottomPopup({ isOpen, onClose, title, children }) {
   if (!isOpen) return null;
@@ -101,6 +197,8 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const [activePolyline, setActivePolyline] = useState(null);
   const mapRef = useRef(null);
   const simInitializedRef = useRef(false);
+  const deliveryPartnerIdRef = useRef('');
+  const incomingOrderHydratedRef = useRef(false);
 
   const isLoggingOut = useRef(false);
   const handleLogout = useCallback(() => {
@@ -134,6 +232,42 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     window.addEventListener('authRefreshFailed', onAuthFailure);
     return () => window.removeEventListener('authRefreshFailed', onAuthFailure);
   }, [handleLogout]);
+
+  useEffect(() => {
+    deliveryPartnerIdRef.current = resolveDeliveryPartnerIdFromClient();
+  }, []);
+
+  useEffect(() => {
+    if (activeOrder) return;
+
+    const partnerId = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
+    const persistedOrder = safeReadJson(INCOMING_ORDER_STORAGE_KEY);
+
+    if (shouldKeepIncomingOrder(persistedOrder, partnerId)) {
+      setIncomingOrder((prev) => prev || persistedOrder);
+    } else {
+      clearPersistedIncomingOrder();
+    }
+
+    incomingOrderHydratedRef.current = true;
+  }, [activeOrder]);
+
+  useEffect(() => {
+    if (!incomingOrderHydratedRef.current) return;
+
+    if (activeOrder) {
+      clearPersistedIncomingOrder();
+      return;
+    }
+
+    const partnerId = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
+    if (incomingOrder && shouldKeepIncomingOrder(incomingOrder, partnerId)) {
+      persistIncomingOrder(incomingOrder);
+      return;
+    }
+
+    clearPersistedIncomingOrder();
+  }, [incomingOrder, activeOrder]);
 
   // 0. Auto-Simulation Effect (High-Precision Smooth Glide)
   const lastSimUpdateSentAt = useRef(0);
@@ -524,7 +658,10 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   }, [isOnline]);
 
   useEffect(() => { 
-    setIncomingOrder(newOrder); 
+    const partnerId = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
+    if (shouldKeepIncomingOrder(newOrder, partnerId)) {
+      setIncomingOrder(newOrder);
+    }
   }, [newOrder]);
 
   useEffect(() => {
@@ -542,6 +679,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       toast.info('Order was taken by another delivery partner.', { duration: 4000 });
       setIncomingOrder(null);
       clearNewOrder();
+      clearPersistedIncomingOrder();
     }
     clearClaimedOrderId();
   }, [claimedOrderId]);
@@ -551,6 +689,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       await acceptOrder(o);
       setIncomingOrder(null);
       clearNewOrder();
+      clearPersistedIncomingOrder();
     } catch (err) {
       const msg = String(err?.response?.data?.message || err?.message || '');
       const isTaken = msg.toLowerCase().includes('already accepted') || 
@@ -559,6 +698,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       if (isTaken) {
         setIncomingOrder(null);
         clearNewOrder();
+        clearPersistedIncomingOrder();
       }
     }
   }, [acceptOrder]);
@@ -566,6 +706,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const handleRejectOrder = useCallback(() => {
     setIncomingOrder(null);
     clearNewOrder();
+    clearPersistedIncomingOrder();
   }, []);
 
   const hydrateAvailableOrder = useCallback(
@@ -651,21 +792,18 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
             !dispatchStatus ||
             ['unassigned', 'assigned', 'offered', 'offer_sent', 'pending'].includes(dispatchStatus);
 
-          const offeredTo = order?.dispatch?.offeredTo || [];
-          const partnerIdStr = String(useDeliveryStore.getState().deliveryPartner?._id || '');
-          const isOfferedToMe = offeredTo.some(o => String(o.partnerId) === partnerIdStr && o.action === 'offered');
+          const partnerIdStr = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
+          const myOffer = getOfferForPartner(order, partnerIdStr);
+          const isOfferedToMe = Boolean(myOffer && myOffer.action === 'offered');
 
-          return hasAcceptedStatus && isDispatchEligible && (offeredTo.length === 0 || isOfferedToMe);
+          return hasAcceptedStatus && isDispatchEligible && shouldKeepIncomingOrder(order, partnerIdStr) && isOfferedToMe;
         });
 
         if (!cancelled && nextIncomingOrder) {
           setCashLimitNotice(null);
           setIncomingOrder((prev) => {
-            const prevId = prev?.orderId || prev?._id || prev?.orderMongoId;
-            const nextId =
-              nextIncomingOrder?.orderId ||
-              nextIncomingOrder?._id ||
-              nextIncomingOrder?.orderMongoId;
+            const prevId = getIncomingOrderIdentity(prev);
+            const nextId = getIncomingOrderIdentity(nextIncomingOrder);
             return prevId === nextId && prev ? prev : nextIncomingOrder;
           });
         }
