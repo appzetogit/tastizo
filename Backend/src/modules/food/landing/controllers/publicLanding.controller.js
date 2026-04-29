@@ -4,7 +4,7 @@ import { FoodHeroBanner } from '../models/heroBanner.model.js';
 import { FoodUnder250Banner } from '../models/under250Banner.model.js';
 import { FoodDiningBanner } from '../models/diningBanner.model.js';
 import { FoodExploreIcon } from '../models/exploreIcon.model.js';
-import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
+import { FoodRestaurant, buildApprovedRestaurantFilter } from '../../restaurant/models/restaurant.model.js';
 import { sendResponse } from '../../../../utils/response.js';
 
 /** Public hero banners for user home: active only, sorted, with linkedRestaurants populated for click-through */
@@ -81,7 +81,9 @@ export const getPublicLandingSettingsController = async (req, res, next) => {
         const ids = settings?.recommendedRestaurantIds || [];
         let recommendedRestaurants = [];
         if (Array.isArray(ids) && ids.length > 0) {
-            recommendedRestaurants = await FoodRestaurant.find({ _id: { $in: ids }, status: 'approved' })
+            recommendedRestaurants = await FoodRestaurant.find(
+                buildApprovedRestaurantFilter({ _id: { $in: ids } })
+            )
                 .select('restaurantName area city profileImage coverImages menuImages slug rating cuisines pureVegRestaurant')
                 .lean();
         }

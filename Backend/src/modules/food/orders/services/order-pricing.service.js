@@ -1,6 +1,9 @@
 ﻿import mongoose from 'mongoose';
 import { FoodOrder } from '../models/order.model.js';
-import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
+import {
+  FoodRestaurant,
+  isRestaurantApproved,
+} from '../../restaurant/models/restaurant.model.js';
 import { FoodFeeSettings } from '../../admin/models/feeSettings.model.js';
 import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FoodOfferUsage } from '../../admin/models/offerUsage.model.js';
@@ -10,10 +13,10 @@ import { resolveZoneFromAddressLike } from '../../shared/zoneResolver.js';
 
 export async function calculateOrderPricing(userId, dto) {
   const restaurant = await FoodRestaurant.findById(dto.restaurantId)
-    .select("status location zoneId")
+    .select("status isAdminApproved location zoneId")
     .lean();
   if (!restaurant) throw new ValidationError("Restaurant not found");
-  if (restaurant.status !== "approved")
+  if (!isRestaurantApproved(restaurant))
     throw new ValidationError("Restaurant not available");
   if (!restaurant.zoneId) {
     throw new ValidationError("Restaurant zone is not configured");

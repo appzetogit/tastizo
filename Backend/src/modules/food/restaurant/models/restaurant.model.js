@@ -6,6 +6,103 @@ const normalizeRatingValue = (value) => {
   return Math.max(0, Math.min(5, Number(numeric.toFixed(1))));
 };
 
+export const getEffectiveRestaurantStatus = (restaurant) => {
+  if (!restaurant || typeof restaurant !== "object") return "pending";
+  if (restaurant.isAdminApproved === true) return "approved";
+  const rawStatus =
+    typeof restaurant.status === "string"
+      ? restaurant.status.trim().toLowerCase()
+      : "";
+  if (rawStatus === "approved" || rawStatus === "rejected") return rawStatus;
+  return "pending";
+};
+
+export const isRestaurantApproved = (restaurant) =>
+  getEffectiveRestaurantStatus(restaurant) === "approved";
+
+export const buildApprovedRestaurantFilter = (extra = {}) => ({
+  ...extra,
+  $or: [{ status: "approved" }, { isAdminApproved: true }],
+});
+
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+
+const normalizeApprovalStateFields = (target = {}) => {
+  if (!target || typeof target !== "object") return target;
+
+  const hasStatus = hasOwn(target, "status");
+  const hasApprovalFlag = hasOwn(target, "isAdminApproved");
+  const rawStatus =
+    typeof target.status === "string" ? target.status.trim().toLowerCase() : "";
+
+  if (target.isAdminApproved === true || rawStatus === "approved") {
+    target.status = "approved";
+    target.isAdminApproved = true;
+    target.approvedAt = target.approvedAt || new Date();
+    delete target.rejectedAt;
+    delete target.rejectionReason;
+    return target;
+  }
+
+  if (rawStatus === "rejected") {
+    target.status = "rejected";
+    target.isAdminApproved = false;
+    target.rejectedAt = target.rejectedAt || new Date();
+    delete target.approvedAt;
+    return target;
+  }
+
+  if (hasApprovalFlag && target.isAdminApproved === false) {
+    target.status = "pending";
+    delete target.approvedAt;
+    return target;
+  }
+
+  if (hasStatus && rawStatus === "pending") {
+    target.status = "pending";
+    if (!hasApprovalFlag) target.isAdminApproved = false;
+    delete target.approvedAt;
+  }
+
+  return target;
+};
+
+const normalizeApprovalStateUpdate = (update) => {
+  if (!update || typeof update !== "object" || Array.isArray(update)) return update;
+
+  const nextUpdate = { ...update };
+  const topLevel = { ...nextUpdate };
+  delete topLevel.$set;
+  delete topLevel.$unset;
+  delete topLevel.$setOnInsert;
+
+  if (Object.keys(topLevel).length > 0) {
+    Object.assign(nextUpdate, normalizeApprovalStateFields(topLevel));
+  }
+
+  const nextSet = normalizeApprovalStateFields({ ...(nextUpdate.$set || {}) });
+  if (Object.keys(nextSet).length > 0) {
+    nextUpdate.$set = nextSet;
+  }
+
+  const nextUnset = { ...(nextUpdate.$unset || {}) };
+  if (nextSet.status === "approved") {
+    nextUnset.rejectedAt = 1;
+    nextUnset.rejectionReason = 1;
+    delete nextSet.rejectedAt;
+    delete nextSet.rejectionReason;
+  } else if (nextSet.status === "rejected" || nextSet.status === "pending") {
+    nextUnset.approvedAt = 1;
+    delete nextSet.approvedAt;
+  }
+
+  if (Object.keys(nextUnset).length > 0) {
+    nextUpdate.$unset = nextUnset;
+  }
+
+  return nextUpdate;
+};
+
 const geoPointSchema = new mongoose.Schema(
   {
     type: { type: String, enum: ["Point"], default: "Point" },
@@ -401,6 +498,16 @@ restaurantSchema.pre("validate", function normalizeDerivedFields(next) {
   }
   next();
 });
+
+const approvalUpdateMiddleware = function approvalUpdateMiddleware(next) {
+  this.setUpdate(normalizeApprovalStateUpdate(this.getUpdate()));
+  next();
+};
+
+restaurantSchema.pre("findOneAndUpdate", approvalUpdateMiddleware);
+restaurantSchema.pre("updateOne", approvalUpdateMiddleware);
+restaurantSchema.pre("updateMany", approvalUpdateMiddleware);
+restaurantSchema.pre("update", approvalUpdateMiddleware);
 
 restaurantSchema.index({ ownerPhone: 1 });
 restaurantSchema.index({ restaurantName: 1 });

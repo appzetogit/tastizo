@@ -1229,7 +1229,9 @@ function RestaurantDetailsContent() {
     }
 
     // Ensure we have a valid restaurantId
-    const validRestaurantId = restaurant?.restaurantId || restaurant?._id || restaurant?.id;
+    const validRestaurantObjectId = restaurant?._id || restaurant?.id || null;
+    const validRestaurantPublicId = restaurant?.restaurantId || null;
+    const validRestaurantId = validRestaurantObjectId || validRestaurantPublicId;
     if (!validRestaurantId) {
       debugError('? Cannot add item to cart: Restaurant ID is missing!', {
         restaurant: restaurant,
@@ -1246,6 +1248,8 @@ function RestaurantDetailsContent() {
       itemName: item.name,
       restaurantName: restaurant.name,
       restaurantId: validRestaurantId,
+      restaurantObjectId: validRestaurantObjectId,
+      restaurantPublicId: validRestaurantPublicId,
       restaurant_id: restaurant._id,
       restaurant_restaurantId: restaurant.restaurantId
     });
@@ -1262,7 +1266,9 @@ function RestaurantDetailsContent() {
       variantPrice: resolvedVariant?.price ?? item.price,
       image: item.image,
       restaurant: restaurant.name, // Use restaurant.name directly (already validated)
-      restaurantId: validRestaurantId, // Use validated restaurantId
+      restaurantId: validRestaurantId,
+      restaurantObjectId: validRestaurantObjectId,
+      restaurantPublicId: validRestaurantPublicId,
       description: item.description,
       originalPrice: item.originalPrice,
       isVeg: item.isVeg !== false, // Add isVeg property

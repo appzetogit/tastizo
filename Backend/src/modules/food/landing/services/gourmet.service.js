@@ -1,5 +1,5 @@
 import { FoodGourmetRestaurant } from '../models/gourmetRestaurant.model.js';
-import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
+import { FoodRestaurant, buildApprovedRestaurantFilter } from '../../restaurant/models/restaurant.model.js';
 
 export const getPublicGourmetRestaurants = async () => {
     const docs = await FoodGourmetRestaurant.find({ isActive: true })
@@ -7,7 +7,7 @@ export const getPublicGourmetRestaurants = async () => {
         .lean();
 
     const restaurantIds = docs.map((d) => d.restaurantId);
-    const restaurants = await FoodRestaurant.find({ _id: { $in: restaurantIds } })
+    const restaurants = await FoodRestaurant.find(buildApprovedRestaurantFilter({ _id: { $in: restaurantIds } }))
         .select('restaurantName area city profileImage rating cuisines slug pureVegRestaurant location estimatedDeliveryTime')
         .lean();
 

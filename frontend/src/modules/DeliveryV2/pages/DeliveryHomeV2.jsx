@@ -250,6 +250,16 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     }
   }, [tripStatus, isSimMode, activeOrder?._id]);
 
+  useEffect(() => {
+    const routeVisible = Boolean(activeOrder) && ['PICKING_UP', 'REACHED_PICKUP', 'PICKED_UP', 'REACHED_DROP'].includes(tripStatus);
+    if (!routeVisible) {
+      setSimPath([]);
+      setSimIndex(0);
+      setSimProgress(0);
+      setActivePolyline(null);
+    }
+  }, [activeOrder, tripStatus]);
+
   // Ensure simulation starts from the first route point once route is ready.
   useEffect(() => {
     if (!isSimMode || simInitializedRef.current || simPath.length < 2) return;

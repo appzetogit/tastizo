@@ -5,6 +5,8 @@ const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
+const isMongoObjectId = (value) => /^[0-9a-fA-F]{24}$/.test(String(value || "").trim())
+
 
 // Default cart context value to prevent errors during initial render
 const defaultCartContext = {
@@ -55,11 +57,25 @@ const normalizeCartData = (rawCart) => {
             ? item.restaurant.name
             : ""
 
-      const normalizedRestaurantId =
-        item.restaurantId ||
-        item.restaurant_id ||
+      const normalizedRestaurantObjectId =
+        item.restaurantObjectId ||
+        item.restaurantMongoId ||
         item.restaurant?._id ||
+        (isMongoObjectId(item.restaurantId) ? item.restaurantId : null) ||
+        (isMongoObjectId(item.restaurant_id) ? item.restaurant_id : null) ||
+        (isMongoObjectId(item.restaurant?.restaurantId) ? item.restaurant?.restaurantId : null) ||
+        null
+
+      const normalizedRestaurantPublicId =
+        item.restaurantPublicId ||
+        (!isMongoObjectId(item.restaurantId) ? item.restaurantId : null) ||
+        (!isMongoObjectId(item.restaurant_id) ? item.restaurant_id : null) ||
         item.restaurant?.restaurantId ||
+        null
+
+      const normalizedRestaurantId =
+        normalizedRestaurantObjectId ||
+        normalizedRestaurantPublicId ||
         null
 
       const normalizedImage =
@@ -111,6 +127,8 @@ const normalizeCartData = (rawCart) => {
         price: Number.isFinite(parsedPrice) ? parsedPrice : 0,
         restaurant: normalizedRestaurantName,
         restaurantId: normalizedRestaurantId,
+        restaurantObjectId: normalizedRestaurantObjectId,
+        restaurantPublicId: normalizedRestaurantPublicId,
         image: normalizedImage,
         imageUrl: normalizedImage,
       }

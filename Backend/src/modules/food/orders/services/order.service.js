@@ -3,7 +3,10 @@ import { FoodOrder, FoodSettings } from '../models/order.model.js';
 // import { paymentSnapshotFromOrder } from './foodOrderPayment.service.js';
 import { logger } from '../../../../utils/logger.js';
 import { FoodUser } from '../../../../core/users/user.model.js';
-import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
+import {
+    FoodRestaurant,
+    isRestaurantApproved,
+} from '../../restaurant/models/restaurant.model.js';
 import { FoodDeliveryPartner } from '../../delivery/models/deliveryPartner.model.js';
 import { FoodZone } from '../../admin/models/zone.model.js';
 import { FoodFeeSettings } from '../../admin/models/feeSettings.model.js';
@@ -161,10 +164,10 @@ export async function calculateOrder(userId, dto) {
 // ----- Create order -----
 export async function createOrder(userId, dto) {
   const restaurant = await FoodRestaurant.findById(dto.restaurantId)
-    .select("status restaurantName zoneId location isAcceptingOrders")
+    .select("status isAdminApproved restaurantName zoneId location isAcceptingOrders")
     .lean();
   if (!restaurant) throw new ValidationError("Restaurant not found");
-  if (restaurant.status !== "approved")
+  if (!isRestaurantApproved(restaurant))
     throw new ValidationError("Restaurant not accepting orders");
   if (restaurant.isAcceptingOrders === false)
     throw new ValidationError("Restaurant not accepting orders");

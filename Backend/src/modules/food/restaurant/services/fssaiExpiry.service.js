@@ -1,4 +1,4 @@
-import { FoodRestaurant } from '../models/restaurant.model.js';
+import { FoodRestaurant, buildApprovedRestaurantFilter } from '../models/restaurant.model.js';
 import { FoodNotification } from '../../../../core/notifications/models/notification.model.js';
 import { notifyOwnerSafely, notifyAdminsSafely } from '../../../../core/notifications/firebase.service.js';
 
@@ -68,10 +68,11 @@ const buildAdminSummary = (restaurant) => {
 export const listExpiredFssaiRestaurants = async () => {
     const today = startOfToday();
 
-    const restaurants = await FoodRestaurant.find({
-        status: 'approved',
-        fssaiExpiry: { $lt: nextDay(today) }
-    })
+    const restaurants = await FoodRestaurant.find(
+        buildApprovedRestaurantFilter({
+            fssaiExpiry: { $lt: nextDay(today) }
+        })
+    )
         .select('restaurantName ownerName ownerPhone fssaiNumber fssaiExpiry')
         .sort({ fssaiExpiry: -1, updatedAt: -1 })
         .lean();

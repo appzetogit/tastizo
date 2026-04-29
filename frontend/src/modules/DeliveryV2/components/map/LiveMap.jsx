@@ -42,6 +42,7 @@ const LIBRARIES = ['places', 'geometry'];
 
 export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineReceived, zoom = 12 }) => {
   const { riderLocation, activeOrder, tripStatus } = useDeliveryStore();
+  const isRouteActive = Boolean(activeOrder) && ['PICKING_UP', 'REACHED_PICKUP', 'PICKED_UP', 'REACHED_DROP'].includes(tripStatus);
   
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
@@ -74,13 +75,15 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
     setBaselineDirections(null);
   }, [tripStatus, activeOrder?._id]);
 
-  // Ensure we don't keep old directions if target is lost
+  // Ensure we don't keep old directions if target is lost or trip is complete/idle
   useEffect(() => {
-    if (!activeOrder) {
+    if (!isRouteActive) {
       setDirections(null);
       setBaselineDirections(null);
+      onPathReceived?.([]);
+      onPolylineReceived?.(null);
     }
-  }, [activeOrder]);
+  }, [isRouteActive, onPathReceived, onPolylineReceived]);
 
   const parsePoint = useCallback((raw) => {
     if (!raw) return null;
@@ -93,7 +96,7 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
   const customerPoint = useMemo(() => parsePoint(activeOrder?.customerLocation), [activeOrder?.customerLocation, parsePoint]);
 
   const targetLocation = useMemo(() => {
-    if (!activeOrder) return null;
+    if (!isRouteActive || !activeOrder) return null;
     let rawLoc = null;
     if (tripStatus === 'PICKING_UP' || tripStatus === 'REACHED_PICKUP') {
       rawLoc = activeOrder.restaurantLocation;
@@ -102,7 +105,7 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
     }
     if (!rawLoc) return null;
     return parsePoint(rawLoc);
-  }, [activeOrder, tripStatus, parsePoint]);
+  }, [activeOrder, tripStatus, parsePoint, isRouteActive]);
 
   const parsedRiderLocation = useMemo(() => {
     if (!riderLocation) return null;
@@ -144,13 +147,14 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
   }, [directions, onPathReceived]);
 
   const directionsCallback = useCallback((result, status) => {
+    if (!isRouteActive) return;
     if (status === 'OK' && result) {
       setDirections(result);
       setLastDirectionsAt(Date.now());
       const encodedPolyline = result.routes[0]?.overview_polyline;
       if (encodedPolyline && onPolylineReceived) onPolylineReceived(encodedPolyline);
     }
-  }, [onPolylineReceived]);
+  }, [onPolylineReceived, isRouteActive]);
 
   const baselineDirectionsCallback = useCallback((result, status) => {
     if (status === 'OK' && result) {
@@ -223,13 +227,13 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
   if (loadError) return <div className="absolute inset-0 flex items-center justify-center bg-gray-50 text-red-500 font-bold">Map Load Error</div>;
   if (!isLoaded) return <div className="absolute inset-0 flex items-center justify-center bg-gray-50"><div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" /></div>;
 
-  const directionsServiceOptions = (parsedRiderLocation && targetLocation) ? {
+  const directionsServiceOptions = (isRouteActive && parsedRiderLocation && targetLocation) ? {
     origin: parsedRiderLocation,
     destination: targetLocation,
     travelMode: 'DRIVING',
   } : null;
 
-  const baselineServiceOptions = (restaurantPoint && customerPoint && (tripStatus === 'PICKING_UP' || tripStatus === 'REACHED_PICKUP')) ? {
+  const baselineServiceOptions = (isRouteActive && restaurantPoint && customerPoint && (tripStatus === 'PICKING_UP' || tripStatus === 'REACHED_PICKUP')) ? {
     origin: restaurantPoint,
     destination: customerPoint,
     travelMode: 'DRIVING',

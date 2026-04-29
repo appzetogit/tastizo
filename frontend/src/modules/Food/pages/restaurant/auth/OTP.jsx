@@ -115,7 +115,22 @@ export default function RestaurantOTP() {
       const purpose = authData.isSignUp ? "register" : "login"
 
       const response = await restaurantAPI.verifyOTP(phone, code, purpose, null, email)
-      const data = response?.data?.data || response?.data
+      const data = response?.data?.data || response?.data || {}
+
+      if (data.pendingApproval === true && !data.isRejected) {
+        const pendingPhone = data.phone || phone || authData?.email || contactInfo
+        setRestaurantPendingPhone(pendingPhone)
+        sessionStorage.removeItem("restaurantAuthData")
+        navigate("/food/restaurant/pending-verification", {
+          replace: true,
+          state: { phone: pendingPhone || "" },
+        })
+        return
+      }
+
+      if (data.isRejected) {
+        throw new Error(data.message || "Your restaurant registration has been rejected. Please contact support.")
+      }
 
       if (data?.needsRegistration) {
         setRestaurantPendingPhone(data.phone || phone)

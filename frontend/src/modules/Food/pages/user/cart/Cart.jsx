@@ -28,6 +28,50 @@ const debugLog = (...args) => { }
 const debugWarn = (...args) => { }
 const debugError = (...args) => { }
 
+const isMongoObjectId = (value) => /^[0-9a-fA-F]{24}$/.test(String(value || "").trim())
+const normalizeName = (value) => String(value || "").trim().toLowerCase()
+const getRestaurantObjectId = (restaurant) => {
+  if (!restaurant || typeof restaurant !== "object") return null
+  const candidates = [
+    restaurant.restaurantObjectId,
+    restaurant.restaurantMongoId,
+    restaurant._id,
+    restaurant.id,
+    restaurant.restaurantId,
+  ]
+  const match = candidates.find((value) => isMongoObjectId(value))
+  return match ? String(match) : null
+}
+const getRestaurantPublicId = (restaurant) => {
+  if (!restaurant || typeof restaurant !== "object") return null
+  const candidates = [restaurant.restaurantPublicId, restaurant.restaurantId]
+  const match = candidates.find((value) => value && !isMongoObjectId(value))
+  return match ? String(match) : null
+}
+const getCartRestaurantObjectId = (item) => {
+  if (!item || typeof item !== "object") return null
+  const candidates = [
+    item.restaurantObjectId,
+    item.restaurantMongoId,
+    item.restaurant?._id,
+    item.restaurantId,
+    item.restaurant_id,
+  ]
+  const match = candidates.find((value) => isMongoObjectId(value))
+  return match ? String(match) : null
+}
+const getCartRestaurantPublicId = (item) => {
+  if (!item || typeof item !== "object") return null
+  const candidates = [
+    item.restaurantPublicId,
+    item.restaurant?.restaurantId,
+    item.restaurantId,
+    item.restaurant_id,
+  ]
+  const match = candidates.find((value) => value && !isMongoObjectId(value))
+  return match ? String(match) : null
+}
+
 
 
 // Removed hardcoded suggested items - now fetching approved addons from backend
@@ -467,20 +511,40 @@ export default function Cart() {
   // Get restaurant ID from cart or restaurant data
   // Priority: restaurantData > cart[0].restaurantId
   // DO NOT use cart[0].restaurant as slug fallback - it creates wrong slugs
+  const cartRestaurantObjectId = useMemo(() => {
+    for (const item of cart) {
+      const id = getCartRestaurantObjectId(item)
+      if (id) return id
+    }
+    return null
+  }, [cart])
+
+  const cartRestaurantPublicId = useMemo(() => {
+    for (const item of cart) {
+      const id = getCartRestaurantPublicId(item)
+      if (id) return id
+    }
+    return null
+  }, [cart])
+
   const restaurantId = cart.length > 0
-    ? (restaurantData?._id || restaurantData?.restaurantId || cart[0]?.restaurantId || null)
+    ? (getRestaurantObjectId(restaurantData) || cartRestaurantObjectId || getRestaurantPublicId(restaurantData) || cartRestaurantPublicId || null)
     : null
+
+  const checkoutRestaurantObjectId = useMemo(
+    () => getRestaurantObjectId(restaurantData) || cartRestaurantObjectId || null,
+    [restaurantData, cartRestaurantObjectId],
+  )
 
   // Stable restaurant ID for addons fetch (memoized to prevent dependency array issues)
   // Prefer restaurantData IDs (more reliable) over slug from cart
   const restaurantIdForAddons = useMemo(() => {
     // Only use restaurantData if it's loaded, otherwise wait
     if (restaurantData) {
-      return restaurantData._id || restaurantData.restaurantId || null
+      return getRestaurantObjectId(restaurantData) || getRestaurantPublicId(restaurantData) || null
     }
-    // If restaurantData is not loaded yet, return null to wait
-    return null
-  }, [restaurantData])
+    return checkoutRestaurantObjectId || null
+  }, [restaurantData, checkoutRestaurantObjectId])
 
 
 
@@ -532,9 +596,10 @@ export default function Cart() {
       setLoadingRestaurant(true)
 
       // Strategy 1: Try using restaurantId from cart if available
-      if (cart[0]?.restaurantId) {
+      const cartRestaurantObjectId = getCartRestaurantObjectId(cart[0])
+      if (cartRestaurantObjectId) {
         try {
-          const cartRestaurantId = cart[0].restaurantId;
+          const cartRestaurantId = cartRestaurantObjectId;
           const cartRestaurantName = cart[0].restaurant;
 
           debugLog("?? Fetching restaurant data by restaurantId from cart:", cartRestaurantId)
@@ -543,8 +608,8 @@ export default function Cart() {
 
           if (data) {
             // CRITICAL: Validate that fetched restaurant matches cart items
-            const fetchedRestaurantId = data.restaurantId || data._id?.toString();
-            const fetchedRestaurantName = data.name;
+            const fetchedRestaurantId = getRestaurantObjectId(data) || data._id?.toString();
+            const fetchedRestaurantName = data.name || data.restaurantName;
 
             // Check if restaurantId matches
             const restaurantIdMatches =
@@ -605,22 +670,22 @@ export default function Cart() {
 
           // Try exact match first
           let matchingRestaurant = restaurants.find(r =>
-            r.name?.toLowerCase().trim() === cart[0].restaurant?.toLowerCase().trim()
+            normalizeName(r.name || r.restaurantName) === normalizeName(cart[0].restaurant)
           )
 
           // If no exact match, try partial match
           if (!matchingRestaurant) {
             debugLog("?? No exact match, trying partial match...")
             matchingRestaurant = restaurants.find(r =>
-              r.name?.toLowerCase().includes(cart[0].restaurant?.toLowerCase().trim()) ||
-              cart[0].restaurant?.toLowerCase().trim().includes(r.name?.toLowerCase())
+              normalizeName(r.name || r.restaurantName).includes(normalizeName(cart[0].restaurant)) ||
+              normalizeName(cart[0].restaurant).includes(normalizeName(r.name || r.restaurantName))
             )
           }
 
           if (matchingRestaurant) {
             // CRITICAL: Validate that the found restaurant matches cart items
             const cartRestaurantName = cart[0]?.restaurant?.toLowerCase().trim();
-            const foundRestaurantName = matchingRestaurant.name?.toLowerCase().trim();
+            const foundRestaurantName = normalizeName(matchingRestaurant.name || matchingRestaurant.restaurantName);
 
             if (cartRestaurantName && foundRestaurantName && cartRestaurantName !== foundRestaurantName) {
               debugError("? CRITICAL: Restaurant name mismatch!", {
@@ -635,7 +700,7 @@ export default function Cart() {
             }
 
             debugLog("? Found restaurant by name:", {
-              name: matchingRestaurant.name,
+              name: matchingRestaurant.name || matchingRestaurant.restaurantName,
               _id: matchingRestaurant._id,
               restaurantId: matchingRestaurant.restaurantId,
               slug: matchingRestaurant.slug,
@@ -861,8 +926,13 @@ export default function Cart() {
           isVeg: item.isVeg !== false
         }))
 
-        const resolvedRestaurantId = restaurantData?.restaurantId || restaurantData?._id || restaurantId || undefined
+        const resolvedRestaurantId = checkoutRestaurantObjectId || undefined
         const resolvedCouponCode = appliedCoupon?.code || couponCode || undefined
+
+        if (!resolvedRestaurantId) {
+          setPricing(null)
+          return
+        }
 
         const response = await orderAPI.calculateOrder({
           items,
@@ -895,7 +965,7 @@ export default function Cart() {
     }
 
     calculatePricing()
-  }, [cart, defaultAddress, appliedCoupon, couponCode, restaurantId])
+  }, [cart, defaultAddress, appliedCoupon, couponCode, checkoutRestaurantObjectId])
 
   // Fetch wallet balance
   useEffect(() => {
@@ -1278,7 +1348,7 @@ export default function Cart() {
 
         const response = await orderAPI.calculateOrder({
           items,
-          restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || null,
+          restaurantId: checkoutRestaurantObjectId || null,
           deliveryAddress: defaultAddress,
           couponCode: coupon.code
         })
@@ -1339,7 +1409,7 @@ export default function Cart() {
 
       const response = await orderAPI.calculateOrder({
         items,
-        restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || null,
+        restaurantId: checkoutRestaurantObjectId || null,
         deliveryAddress: defaultAddress,
         couponCode: inputCode
       })
@@ -1398,7 +1468,7 @@ export default function Cart() {
 
         const response = await orderAPI.calculateOrder({
           items,
-          restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || null,
+          restaurantId: checkoutRestaurantObjectId || null,
           deliveryAddress: defaultAddress,
           couponCode: null
         })
@@ -1443,6 +1513,41 @@ export default function Cart() {
     // Use API_BASE_URL from config (supports both dev and production)
 
     try {
+      const resolveRestaurantForCheckout = async () => {
+        const currentObjectId = getRestaurantObjectId(restaurantData) || cartRestaurantObjectId
+        if (currentObjectId) {
+          return {
+            restaurant: restaurantData,
+            restaurantObjectId: currentObjectId,
+            restaurantName: restaurantData?.name || restaurantData?.restaurantName || cart[0]?.restaurant || null,
+          }
+        }
+
+        const cartRestaurantName = String(cart[0]?.restaurant || "").trim()
+        if (!cartRestaurantName) {
+          return { restaurant: restaurantData, restaurantObjectId: null, restaurantName: null }
+        }
+
+        const searchResponse = await restaurantAPI.getRestaurants({ limit: 100 })
+        const restaurants = searchResponse?.data?.data?.restaurants || searchResponse?.data?.data || []
+        const matchingRestaurant = restaurants.find((r) => normalizeName(r.name || r.restaurantName) === normalizeName(cartRestaurantName))
+          || restaurants.find((r) =>
+            normalizeName(r.name || r.restaurantName).includes(normalizeName(cartRestaurantName)) ||
+            normalizeName(cartRestaurantName).includes(normalizeName(r.name || r.restaurantName)),
+          )
+
+        if (!matchingRestaurant) {
+          return { restaurant: restaurantData, restaurantObjectId: null, restaurantName: cartRestaurantName || null }
+        }
+
+        setRestaurantData(matchingRestaurant)
+        return {
+          restaurant: matchingRestaurant,
+          restaurantObjectId: getRestaurantObjectId(matchingRestaurant),
+          restaurantName: matchingRestaurant?.name || matchingRestaurant?.restaurantName || cartRestaurantName,
+        }
+      }
+
       debugLog("?? Starting order placement process...")
       debugLog("?? Cart items:", cart.map(item => ({ id: item.id, name: item.name, quantity: item.quantity, price: item.price })))
       debugLog("?? Applied coupon:", appliedCoupon?.code || "None")
@@ -1490,16 +1595,17 @@ export default function Cart() {
 
       // CRITICAL: Validate restaurant ID before placing order
       // Ensure we're using the correct restaurant from restaurantData (most reliable)
-      const finalRestaurantId = restaurantData?.restaurantId || restaurantData?._id || null;
-      const finalRestaurantName = restaurantData?.name || null;
+      const resolvedRestaurant = await resolveRestaurantForCheckout()
+      const finalRestaurantId = resolvedRestaurant.restaurantObjectId
+      const finalRestaurantName = resolvedRestaurant.restaurantName
 
       if (!finalRestaurantId) {
         debugError('? CRITICAL: Cannot place order - Restaurant ID is missing!');
         debugError('?? Debug info:', {
-          restaurantData: restaurantData ? {
-            _id: restaurantData._id,
-            restaurantId: restaurantData.restaurantId,
-            name: restaurantData.name
+          restaurantData: resolvedRestaurant.restaurant ? {
+            _id: resolvedRestaurant.restaurant._id,
+            restaurantId: resolvedRestaurant.restaurant.restaurantId,
+            name: resolvedRestaurant.restaurant.name || resolvedRestaurant.restaurant.restaurantName
           } : 'Not loaded',
           cartRestaurantId: restaurantId,
           cartRestaurantName: cart[0]?.restaurant,
@@ -1517,9 +1623,9 @@ export default function Cart() {
 
       // CRITICAL: Validate that ALL cart items belong to the SAME restaurant
       const cartRestaurantIds = cart
-        .map(item => item.restaurantId)
+        .map(item => getCartRestaurantObjectId(item))
         .filter(Boolean)
-        .map(id => String(id).trim()); // Normalize to string and trim
+        .map(id => String(id).trim())
 
       const cartRestaurantNames = cart
         .map(item => item.restaurant)
@@ -1552,7 +1658,7 @@ export default function Cart() {
           toast.error('Cart contained items from different restaurants. Items from other restaurants have been removed.');
         } else {
           // If restaurantData is not available, keep items from first restaurant in cart
-          const firstRestaurantId = cart[0]?.restaurantId;
+          const firstRestaurantId = getCartRestaurantObjectId(cart[0]) || cart[0]?.restaurantId;
           const firstRestaurantName = cart[0]?.restaurant;
           if (firstRestaurantId && firstRestaurantName) {
             debugLog('?? Auto-cleaning cart to keep items from first restaurant:', firstRestaurantName);
@@ -1584,17 +1690,15 @@ export default function Cart() {
 
         // Check if cart restaurantId matches restaurantData
         const restaurantIdMatches =
-          cartRestaurantId === finalRestaurantId ||
-          cartRestaurantId === restaurantData?._id?.toString() ||
-          cartRestaurantId === restaurantData?.restaurantId;
+          cartRestaurantId === finalRestaurantId;
 
         if (!restaurantIdMatches) {
           debugError('? CRITICAL ERROR: Cart restaurantId does not match restaurantData!', {
             cartRestaurantId: cartRestaurantId,
             finalRestaurantId: finalRestaurantId,
-            restaurantDataId: restaurantData?._id?.toString(),
-            restaurantDataRestaurantId: restaurantData?.restaurantId,
-            restaurantDataName: restaurantData?.name,
+            restaurantDataId: resolvedRestaurant.restaurant?._id?.toString(),
+            restaurantDataRestaurantId: resolvedRestaurant.restaurant?.restaurantId,
+            restaurantDataName: resolvedRestaurant.restaurant?.name || resolvedRestaurant.restaurant?.restaurantName,
             cartRestaurantName: cartRestaurantNames[0]
           });
           alert(`Error: Cart items belong to "${cartRestaurantNames[0] || 'Unknown Restaurant'}" but restaurant data doesn't match. Please refresh the page and try again.`);
@@ -1621,23 +1725,21 @@ export default function Cart() {
       debugLog('? Order validation passed - Placing order with restaurant:', {
         restaurantId: finalRestaurantId,
         restaurantName: finalRestaurantName,
-        restaurantDataId: restaurantData?._id,
-        restaurantDataRestaurantId: restaurantData?.restaurantId,
+        restaurantDataId: resolvedRestaurant.restaurant?._id,
+        restaurantDataRestaurantId: resolvedRestaurant.restaurant?.restaurantId,
         cartRestaurantId: cartRestaurantIds[0],
         cartRestaurantName: cartRestaurantNames[0],
         cartItemCount: cart.length
       });
 
       // FINAL VALIDATION: Double-check restaurantId before sending to backend
-      const cartRestaurantId = cart[0]?.restaurantId;
-      if (cartRestaurantId && cartRestaurantId !== finalRestaurantId &&
-        cartRestaurantId !== restaurantData?._id?.toString() &&
-        cartRestaurantId !== restaurantData?.restaurantId) {
+      const cartRestaurantId = getCartRestaurantObjectId(cart[0]);
+      if (cartRestaurantId && cartRestaurantId !== finalRestaurantId) {
         debugError('? CRITICAL: Final validation failed - restaurantId mismatch!', {
           cartRestaurantId: cartRestaurantId,
           finalRestaurantId: finalRestaurantId,
-          restaurantDataId: restaurantData?._id?.toString(),
-          restaurantDataRestaurantId: restaurantData?.restaurantId,
+          restaurantDataId: resolvedRestaurant.restaurant?._id?.toString(),
+          restaurantDataRestaurantId: resolvedRestaurant.restaurant?.restaurantId,
           cartRestaurantName: cart[0]?.restaurant,
           finalRestaurantName: finalRestaurantName
         });

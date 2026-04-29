@@ -381,6 +381,10 @@ export default function Under250() {
                   return {
                     ...item,
                     id: String(item?.id || item?._id || `${restaurantId}-${item?.name || "dish"}`),
+                    restaurantId: String(restaurant?._id || restaurantId || ""),
+                    restaurantObjectId: String(restaurant?._id || restaurantId || ""),
+                    restaurantPublicId: restaurant?.restaurantId || "",
+                    restaurant: restaurant?.restaurantName || restaurant?.name || "Restaurant",
                     price: Number(item?.price || 0),
                     isVeg,
                     image:
@@ -654,6 +658,9 @@ export default function Under250() {
       price: item.price,
       image: item.image,
       restaurant: restaurant,
+      restaurantId: item.restaurantObjectId || item.restaurantId || null,
+      restaurantObjectId: item.restaurantObjectId || item.restaurantId || null,
+      restaurantPublicId: item.restaurantPublicId || null,
       description: item.description || "",
       originalPrice: item.originalPrice || item.price,
       priceOnOtherPlatforms: item.priceOnOtherPlatforms || null, // Include platform pricing for savings display
