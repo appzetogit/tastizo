@@ -169,7 +169,7 @@ export default function AddonsList() {
     const id = pendingDelete?.id || pendingDelete?._id
     try {
       setSubmittingAction(true)
-      await adminAPI.rejectRestaurantAddon(String(id), "Deleted by admin")
+      await adminAPI.deleteRestaurantAddon(String(id))
       setAddons((prev) => (prev || []).filter((a) => String(a.id || a._id) !== String(id)))
       toast.success("Add-on deleted")
     } catch (error) {

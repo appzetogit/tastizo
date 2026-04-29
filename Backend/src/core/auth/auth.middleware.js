@@ -1,6 +1,11 @@
 import { verifyAccessToken } from './token.util.js';
 import { sendError } from '../../utils/response.js';
 import { FoodUser } from '../users/user.model.js';
+import { FoodDeliveryPartner } from '../../modules/food/delivery/models/deliveryPartner.model.js';
+import {
+    FoodRestaurant,
+    getEffectiveRestaurantStatus,
+} from '../../modules/food/restaurant/models/restaurant.model.js';
 
 export const requireAdmin = (req, res, next) => {
     if (req.user?.role !== 'ADMIN') {
@@ -31,6 +36,32 @@ export const authMiddleware = (req, res, next) => {
                 }
                 next();
             }).catch(() => sendError(res, 401, 'Authentication failed'));
+            return;
+        }
+        if (decoded.role === 'RESTAURANT') {
+            FoodRestaurant.findById(decoded.userId)
+                .select('status isAdminApproved approvedAt rejectedAt')
+                .lean()
+                .then((doc) => {
+                    if (!doc || getEffectiveRestaurantStatus(doc) !== 'approved') {
+                        return sendError(res, 401, 'Restaurant account is not approved');
+                    }
+                    next();
+                })
+                .catch(() => sendError(res, 401, 'Authentication failed'));
+            return;
+        }
+        if (decoded.role === 'DELIVERY_PARTNER') {
+            FoodDeliveryPartner.findById(decoded.userId)
+                .select('status')
+                .lean()
+                .then((doc) => {
+                    if (!doc || String(doc.status || '').toLowerCase() !== 'approved') {
+                        return sendError(res, 401, 'Delivery account is not approved');
+                    }
+                    next();
+                })
+                .catch(() => sendError(res, 401, 'Authentication failed'));
             return;
         }
         return next();

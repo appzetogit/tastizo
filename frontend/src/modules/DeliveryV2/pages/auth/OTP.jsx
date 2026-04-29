@@ -5,7 +5,7 @@ import AnimatedPage from "@food/components/user/AnimatedPage"
 import { Input } from "@food/components/ui/input"
 import { Button } from "@food/components/ui/button"
 import { deliveryAPI } from "@food/api"
-import { setAuthData as storeAuthData } from "@food/utils/auth"
+import { clearModuleAuth, setAuthData as storeAuthData } from "@food/utils/auth"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -229,6 +229,7 @@ export default function DeliveryOTP() {
       debugLog("Parsed Delivery OTP Data:", data)
 
       if (data.pendingApproval === true) {
+        clearModuleAuth("delivery")
         sessionStorage.removeItem("deliveryAuthData")
         setIsLoading(false)
         setError("")
@@ -242,6 +243,7 @@ export default function DeliveryOTP() {
 
       if (needsRegistration) {
         // No DB record yet; redirect to registration details page WITHOUT creating anything in DB.
+        clearModuleAuth("delivery")
         sessionStorage.removeItem("deliveryAuthData")
         sessionStorage.setItem("deliveryNeedsRegistration", "true")
         const digits = String(phone || "").replace(/\D/g, "")

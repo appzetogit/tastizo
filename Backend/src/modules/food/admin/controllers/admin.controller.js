@@ -1321,6 +1321,25 @@ export async function rejectDeliveryPartner(req, res, next) {
     }
 }
 
+export async function deleteDeliveryPartner(req, res, next) {
+    try {
+        const deleted = await adminService.deleteDeliveryPartner(req.params.id);
+        if (!deleted) {
+            return res.status(404).json({
+                success: false,
+                message: 'Delivery partner not found'
+            });
+        }
+        res.status(200).json({
+            success: true,
+            message: 'Delivery partner deleted successfully',
+            data: deleted
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
 // ----- Zones -----
 export async function getZones(req, res, next) {
     try {
@@ -1542,22 +1561,32 @@ export async function createDeliveryPartner(req, res, next) {
         } = req.body;
 
         const partnerName = name || `${firstName || ''} ${lastName || ''}`.trim();
-        const partnerPhone = String(phone || '').trim();
+        const partnerPhone = String(phone || '').replace(/\D/g, '').slice(-10);
 
         if (!partnerName) {
             return res.status(400).json({ success: false, message: 'Name is required' });
         }
-        if (!partnerPhone || partnerPhone.length < 10) {
+        if (!partnerPhone || partnerPhone.length !== 10) {
             return res.status(400).json({ success: false, message: 'Valid phone number is required' });
         }
 
         // Check for duplicate phone
-        const existingPhone = await FoodDeliveryPartner.findOne({ phone: partnerPhone });
+        const existingPhone = await FoodDeliveryPartner.findOne({
+            $or: [
+                { phone: partnerPhone },
+                { phone: { $regex: new RegExp(`${partnerPhone}$`) } }
+            ]
+        });
         if (existingPhone && existingPhone.status !== 'rejected') {
             return res.status(409).json({ success: false, message: 'A delivery partner with this phone already exists' });
         }
         if (existingPhone) {
-            await FoodDeliveryPartner.deleteMany({ phone: partnerPhone });
+            await FoodDeliveryPartner.deleteMany({
+                $or: [
+                    { phone: partnerPhone },
+                    { phone: { $regex: new RegExp(`${partnerPhone}$`) } }
+                ]
+            });
         }
 
         // Check for duplicate vehicle number

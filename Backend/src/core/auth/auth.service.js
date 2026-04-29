@@ -813,6 +813,51 @@ const normalizePhoneForDelivery = (phone) => {
   return digits.slice(-10) || null;
 };
 
+const buildDeliveryPhoneMatchQuery = (phone) => {
+  const normalized = normalizePhoneForDelivery(phone);
+  if (!normalized) return null;
+
+  return {
+    $or: [
+      { phone: normalized },
+      { phone: { $regex: new RegExp(`${normalized}$`) } },
+    ],
+  };
+};
+
+const pickBestDeliveryPartnerMatch = (partners = [], normalizedPhone) => {
+  if (!Array.isArray(partners) || !partners.length) return null;
+
+  const normalized = String(normalizedPhone || "");
+  const statusWeight = {
+    approved: 3,
+    pending: 2,
+    rejected: 1,
+  };
+
+  return [...partners]
+    .sort((a, b) => {
+      const aStatus = String(a?.status || "").toLowerCase();
+      const bStatus = String(b?.status || "").toLowerCase();
+      const statusDelta = (statusWeight[bStatus] || 0) - (statusWeight[aStatus] || 0);
+      if (statusDelta !== 0) return statusDelta;
+
+      const aPhone = String(a?.phone || "").replace(/\D/g, "").slice(-10);
+      const bPhone = String(b?.phone || "").replace(/\D/g, "").slice(-10);
+      const aExact = aPhone === normalized ? 1 : 0;
+      const bExact = bPhone === normalized ? 1 : 0;
+      if (aExact !== bExact) return bExact - aExact;
+
+      const aApprovedAt = a?.approvedAt ? new Date(a.approvedAt).getTime() : 0;
+      const bApprovedAt = b?.approvedAt ? new Date(b.approvedAt).getTime() : 0;
+      if (aApprovedAt !== bApprovedAt) return bApprovedAt - aApprovedAt;
+
+      const aCreatedAt = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bCreatedAt = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bCreatedAt - aCreatedAt;
+    })[0];
+};
+
 export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) => {
   const result = await verifyOtp(phone, otp);
   if (!result.valid) {
@@ -824,12 +869,12 @@ export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) 
     return { needsRegistration: true, phone };
   }
 
-  const deliveryPartner = await FoodDeliveryPartner.findOne({
-    $or: [
-      { phone: normalized },
-      { phone: { $regex: new RegExp(normalized + "$") } },
-    ],
-  });
+  const deliveryQuery = buildDeliveryPhoneMatchQuery(phone);
+  const deliveryMatches = deliveryQuery
+    ? await FoodDeliveryPartner.find(deliveryQuery)
+        .select("+approvedAt status rejectionReason rejectedAt phone createdAt")
+    : [];
+  const deliveryPartner = pickBestDeliveryPartnerMatch(deliveryMatches, normalized);
 
   if (!deliveryPartner) {
     return { needsRegistration: true, phone };

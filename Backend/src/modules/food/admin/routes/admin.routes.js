@@ -96,6 +96,7 @@ router.get('/addons', addonsApprovalController.getRestaurantAddons);
 router.patch('/addons/:id', addonsApprovalController.updateRestaurantAddon);
 router.patch('/addons/:id/approve', addonsApprovalController.approveRestaurantAddon);
 router.patch('/addons/:id/reject', addonsApprovalController.rejectRestaurantAddon);
+router.delete('/addons/:id', addonsApprovalController.deleteRestaurantAddon);
 
 // ----- Foods -----
 router.get('/foods', adminController.getFoods);
@@ -178,6 +179,7 @@ router.post('/delivery', upload.any(), adminController.createDeliveryPartner);
 router.get('/delivery/:id', adminController.getDeliveryPartnerById);
 router.patch('/delivery/:id/approve', adminController.approveDeliveryPartner);
 router.patch('/delivery/:id/reject', adminController.rejectDeliveryPartner);
+router.delete('/delivery/:id', adminController.deleteDeliveryPartner);
 
 // ----- Zones -----
 router.get('/zones', adminController.getZones);

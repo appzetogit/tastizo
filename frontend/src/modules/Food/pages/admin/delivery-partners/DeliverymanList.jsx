@@ -346,7 +346,7 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
     }
 
     const confirmed = window.confirm(
-      `Deactivate ${deliveryman?.name || "this delivery partner"}?\n\nThis will block the account and log them out, while preserving profile, wallet, and history.`,
+      `Delete ${deliveryman?.name || "this delivery partner"} permanently?\n\nThis will remove the delivery partner from the database and clear related delivery records owned by this partner.`,
     )
 
     if (!confirmed) {
@@ -358,7 +358,7 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
       const response = await adminAPI.deleteDeliveryPartner(deliverymanId)
 
       if (!response?.data?.success) {
-        toast.error(response?.data?.message || "Failed to deactivate delivery partner")
+        toast.error(response?.data?.message || "Failed to delete delivery partner")
         return
       }
 
@@ -370,10 +370,10 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
       if (wasViewingDeletedPartner) {
         setIsViewOpen(false)
       }
-      toast.success(response?.data?.message || "Delivery partner deactivated successfully")
+      toast.success(response?.data?.message || "Delivery partner deleted successfully")
     } catch (err) {
       debugError("Error deleting delivery partner:", err)
-      toast.error(err?.response?.data?.message || "Failed to deactivate delivery partner")
+      toast.error(err?.response?.data?.message || "Failed to delete delivery partner")
     } finally {
       setDeletingDeliveryId(null)
     }

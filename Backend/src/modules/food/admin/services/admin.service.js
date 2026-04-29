@@ -3012,6 +3012,13 @@ export async function rejectRestaurantAddon(addonId, reason) {
     return updated || null;
 }
 
+export async function deleteRestaurantAddon(addonId) {
+    if (!addonId || !mongoose.Types.ObjectId.isValid(String(addonId))) return null;
+    const _id = new mongoose.Types.ObjectId(String(addonId));
+    const deleted = await FoodAddon.findOneAndDelete({ _id }).lean();
+    return deleted ? { id: String(_id) } : null;
+}
+
 // ----- Foods (separate collection) -----
 export async function getFoods(query) {
     const limit = Math.min(Math.max(parseInt(query.limit, 10) || 100, 1), 1000);
@@ -4571,6 +4578,50 @@ export async function rejectDeliveryPartner(id, reason) {
         }
     }
     return updated;
+}
+
+export async function deleteDeliveryPartner(id) {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+
+    const partnerId = new mongoose.Types.ObjectId(id);
+    const partner = await FoodDeliveryPartner.findById(partnerId).lean();
+    if (!partner) return null;
+
+    await Promise.all([
+        FoodRefreshToken.deleteMany({ userId: partnerId }),
+        DeliverySupportTicket.deleteMany({ deliveryPartnerId: partnerId }),
+        FoodDeliveryWithdrawal.deleteMany({ deliveryPartnerId: partnerId }),
+        FoodDeliveryWallet.deleteMany({ deliveryPartnerId: partnerId }),
+        FoodDeliveryCashDeposit.deleteMany({ deliveryPartnerId: partnerId }),
+        DeliveryBonusTransaction.deleteMany({ deliveryPartnerId: partnerId }),
+        FoodEarningAddonHistory.deleteMany({ deliveryPartnerId: partnerId }),
+        FoodReferralLog.deleteMany({
+            $or: [
+                { referrerId: partnerId, role: 'DELIVERY_PARTNER' },
+                { refereeId: partnerId, role: 'DELIVERY_PARTNER' }
+            ]
+        }),
+        FoodOrder.updateMany(
+            { 'dispatch.deliveryPartnerId': partnerId },
+            {
+                $set: {
+                    'dispatch.deliveryPartnerId': null,
+                    'dispatch.status': 'unassigned'
+                }
+            }
+        ),
+        FoodOrder.updateMany(
+            {},
+            {
+                $pull: {
+                    'dispatch.offeredTo': { partnerId: String(partnerId) }
+                }
+            }
+        ),
+        FoodDeliveryPartner.deleteOne({ _id: partnerId })
+    ]);
+
+    return { id: String(partnerId), name: partner.name || '' };
 }
 
 // ----- Zones CRUD -----

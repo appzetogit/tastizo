@@ -280,9 +280,9 @@ export const adminAPI = {
       contextModule: "admin",
       headers: { "Content-Type": "multipart/form-data" },
     }),
-  /** Deactivate/Reject a delivery partner */
+  /** Permanently delete a delivery partner */
   deleteDeliveryPartner: (id) =>
-    apiClient.patch(`/food/admin/delivery/${id}/reject`, {}, {
+    apiClient.delete(`/food/admin/delivery/${id}`, {
       contextModule: "admin",
     }),
   getDeliverymanReviews: (params = {}) =>
@@ -906,6 +906,10 @@ export const adminAPI = {
       { reason: String(reason || "").trim() },
       { contextModule: "admin" },
     ),
+  deleteRestaurantAddon: (id) =>
+    apiClient.delete(`/food/admin/addons/${String(id)}`, {
+      contextModule: "admin",
+    }),
   /** Business Settings (admin) */
   getBusinessSettings: () =>
     apiClient.get(API_ENDPOINTS.ADMIN.BUSINESS_SETTINGS, {

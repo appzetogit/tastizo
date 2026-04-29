@@ -8,6 +8,8 @@ import { uploadImageBuffer } from '../../../../services/cloudinary.service.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { getDeliveryCashLimitSettings } from '../../admin/services/admin.service.js';
 
+const normalizeDeliveryPhone = (value) => String(value || '').replace(/\D/g, '').slice(-10);
+
 export const registerDeliveryPartner = async (payload, files) => {
     const { 
         name, phone, email, countryCode, address, city, state, 
@@ -15,14 +17,29 @@ export const registerDeliveryPartner = async (payload, files) => {
         fcmToken, platform 
     } = payload;
     const refRaw = typeof payload?.ref === 'string' ? String(payload.ref).trim() : '';
+    const normalizedPhone = normalizeDeliveryPhone(phone);
 
-    const existing = await FoodDeliveryPartner.findOne({ phone });
+    if (!normalizedPhone || normalizedPhone.length !== 10) {
+        throw new ValidationError('Valid phone number is required');
+    }
+
+    const existing = await FoodDeliveryPartner.findOne({
+        $or: [
+            { phone: normalizedPhone },
+            { phone: { $regex: new RegExp(`${normalizedPhone}$`) } }
+        ]
+    });
     if (existing) {
         if (existing.status !== 'rejected') {
             throw new ValidationError('Delivery partner with this phone already exists');
         }
         // If rejected, delete the old record so they can start fresh with same phone
-        await FoodDeliveryPartner.deleteMany({ phone });
+        await FoodDeliveryPartner.deleteMany({
+            $or: [
+                { phone: normalizedPhone },
+                { phone: { $regex: new RegExp(`${normalizedPhone}$`) } }
+            ]
+        });
     }
 
     const images = {};
@@ -45,7 +62,7 @@ export const registerDeliveryPartner = async (payload, files) => {
 
     const partner = await FoodDeliveryPartner.create({
         name,
-        phone,
+        phone: normalizedPhone,
         email: email && String(email).trim() ? String(email).trim() : undefined,
         countryCode,
         address,
