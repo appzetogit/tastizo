@@ -11,6 +11,35 @@ const servicesApi = path.resolve(__dirname, './src/services/api')
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    target: 'es2020',
+    cssCodeSplit: true,
+    reportCompressedSize: false,
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+
+          if (id.includes('firebase')) return 'vendor-firebase'
+          if (id.includes('@mui') || id.includes('@emotion')) return 'vendor-mui'
+          if (id.includes('@radix-ui')) return 'vendor-radix'
+          if (id.includes('@react-google-maps') || id.includes('@googlemaps') || id.includes('leaflet') || id.includes('react-leaflet')) {
+            return 'vendor-maps'
+          }
+          if (id.includes('recharts')) return 'vendor-charts'
+          if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('canvg')) {
+            return 'vendor-export'
+          }
+          if (id.includes('framer-motion') || id.includes('motion') || id.includes('gsap') || id.includes('lenis')) {
+            return 'vendor-motion'
+          }
+
+          return undefined
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       // More specific first so @food/api/* resolves to services (no backend)

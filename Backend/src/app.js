@@ -9,6 +9,8 @@ import errorHandler from './middleware/errorHandler.js';
 import { apiRateLimiter } from './middleware/rateLimit.js';
 import { responseTimeLogger } from './middleware/responseTimeLogger.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
+import { compressionMiddleware } from './middleware/compression.js';
+import { apiCacheHeaders, staticAssetCacheHeaders } from './middleware/cacheHeaders.js';
 import { healthCheck } from './config/health.js';
 import { config } from './config/env.js';
 
@@ -52,7 +54,10 @@ app.use(helmet({
 }));
 app.use(cors(corsOptions));
 app.use(morgan('dev'));
+app.use(staticAssetCacheHeaders);
+app.use(compressionMiddleware());
 app.use(express.json({
+    limit: '1mb',
     verify: (req, res, buf) => {
         // ✅ Store rawBody for signature verification (Razorpay Webhooks)
         if (req.originalUrl && req.originalUrl.includes('/webhook/razorpay')) {
@@ -60,7 +65,7 @@ app.use(express.json({
         }
     }
 }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Protect against NoSQL injection and XSS
 app.use((req, _res, next) => {
@@ -73,6 +78,7 @@ app.use(xssClean());
 
 // Global rate limiting for API routes
 app.use('/api', apiRateLimiter);
+app.use('/api', apiCacheHeaders);
 
 // Optional: log API response time (method, path, status, duration) - no sensitive data
 app.use('/api', responseTimeLogger);

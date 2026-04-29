@@ -905,8 +905,6 @@ export const logout = async (refreshToken, fcmToken, platform) => {
 
   // 1. Remove specific FCM token from ALL collections if provided
   if (fcmToken) {
-    console.log(`[FCM-Logout] Starting logout-driven token removal: platform=${platform}, tokenPreview=${fcmToken?.slice(0, 10)}...`);
-    
     // We try to remove the token from all 4 possible models regardless of the user ID, 
     // ensuring no stale connections are left across any role or app the user was logged into.
     const field = platform === "mobile" ? "fcmTokenMobile" : "fcmTokens";
@@ -921,7 +919,6 @@ export const logout = async (refreshToken, fcmToken, platform) => {
           ),
         ),
       );
-      console.log("[FCM-Logout] Token removed from all collections successfully");
     } catch (err) {
       logger.warn({ err }, "Failed to remove FCM token from all collections during logout");
     }

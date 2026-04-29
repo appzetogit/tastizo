@@ -169,7 +169,14 @@ export function clearModuleAuth(module) {
  */
 export function clearUserSession() {
   if (typeof localStorage === "undefined") return;
-  const keys = ["userProfile", "user_user", "user_edit_profile_draft"];
+  const keys = [
+    "userProfile",
+    "user_user",
+    "user_edit_profile_draft",
+    "userLocation",
+    "deliveryAddressMode",
+    "selectedAddressId",
+  ];
   keys.forEach((k) => localStorage.removeItem(k));
 }
 
@@ -261,6 +268,9 @@ export function setAuthData(module, token, user, refreshToken = null) {
     // Prevent stale profile data from previous accounts after re-login.
     if (module === "user") {
       clearUserSession();
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem("user_force_fresh_location", "true");
+      }
     } else if (module === "restaurant") {
       clearRestaurantSessionCache();
     }

@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useMemo, useCallback } 
 import { authAPI, userAPI } from "@food/api"
 import {
   DELIVERY_MODE_STORAGE_KEY,
+  LOCATION_STORAGE_KEY,
   SELECTED_ADDRESS_ID_STORAGE_KEY,
   addressToLocationState,
   emitLocationStateChange,
@@ -16,8 +17,33 @@ const debugError = (...args) => {}
 
 const ProfileContext = createContext(null)
 const USER_SESSION_PREFERENCE_KEYS = ["userVegMode", "food-under-250-filters"]
+const ACTIVE_USER_SESSION_KEY = "activeUserSessionId"
 
 export function ProfileProvider({ children }) {
+  const getProfileIdentity = useCallback((profile) => {
+    if (!profile || typeof profile !== "object") return ""
+    return String(profile.id || profile._id || profile.phone || "").trim()
+  }, [])
+
+  const getStoredProfileIdentity = useCallback(() => {
+    try {
+      const raw =
+        localStorage.getItem("user_user") || localStorage.getItem("userProfile")
+      if (!raw) return ""
+      return getProfileIdentity(JSON.parse(raw))
+    } catch {
+      return ""
+    }
+  }, [getProfileIdentity])
+
+  const clearUserScopedClientState = useCallback(() => {
+    localStorage.removeItem("userAddresses")
+    localStorage.removeItem(LOCATION_STORAGE_KEY)
+    localStorage.removeItem(DELIVERY_MODE_STORAGE_KEY)
+    localStorage.removeItem(SELECTED_ADDRESS_ID_STORAGE_KEY)
+    emitLocationStateChange({ mode: "saved", location: null, selectedAddressId: null })
+  }, [])
+
   const normalizeAddress = (address) => {
     if (!address || typeof address !== "object") return null
     const id = getAddressId(address)
@@ -132,6 +158,8 @@ export function ProfileProvider({ children }) {
         setFavorites([])
         setDishFavorites([])
         setVegMode(false)
+        localStorage.removeItem(ACTIVE_USER_SESSION_KEY)
+        clearUserScopedClientState()
         USER_SESSION_PREFERENCE_KEYS.forEach((key) => {
           localStorage.removeItem(key)
         })
@@ -147,10 +175,23 @@ export function ProfileProvider({ children }) {
         const userData = response?.data?.data?.user || response?.data?.user || response?.data
         
         if (userData) {
+          const nextUserId = getProfileIdentity(userData)
+          const previousUserId =
+            String(localStorage.getItem(ACTIVE_USER_SESSION_KEY) || "").trim() ||
+            getStoredProfileIdentity()
+
+          if (previousUserId && nextUserId && previousUserId !== nextUserId) {
+            setAddresses([])
+            clearUserScopedClientState()
+          }
+
           setUserProfile(userData)
           // Update localStorage
           localStorage.setItem("user_user", JSON.stringify(userData))
           localStorage.setItem("userProfile", JSON.stringify(userData))
+          if (nextUserId) {
+            localStorage.setItem(ACTIVE_USER_SESSION_KEY, nextUserId)
+          }
         }
 
         // Fetch addresses
@@ -300,7 +341,7 @@ export function ProfileProvider({ children }) {
       debugError("Error setting default address:", error)
       // Keep UI stable even if backend call fails
     }
-  }, [])
+  }, [clearUserScopedClientState, getProfileIdentity, getStoredProfileIdentity])
 
   const getDefaultAddress = useCallback(() => {
     return addresses.find((addr) => addr.isDefault) || addresses[0] || null

@@ -13,7 +13,7 @@ import { useOrders } from "@food/context/OrdersContext"
 import { useLocation as useUserLocation } from "@food/hooks/useLocation"
 import { useZone } from "@food/hooks/useZone"
 import { useLocationSelector } from "@food/components/user/UserLayout"
-import { orderAPI, restaurantAPI, adminAPI, userAPI, API_ENDPOINTS } from "@food/api"
+import { orderAPI, restaurantAPI, adminAPI, userAPI, zoneAPI, API_ENDPOINTS } from "@food/api"
 import { API_BASE_URL } from "@food/api/config"
 import { initRazorpayPayment } from "@food/utils/razorpay"
 import { toast } from "sonner"
@@ -70,6 +70,15 @@ const getCartRestaurantPublicId = (item) => {
   ]
   const match = candidates.find((value) => value && !isMongoObjectId(value))
   return match ? String(match) : null
+}
+const getAddressZoneCacheKey = (address) => {
+  const coordinates = address?.location?.coordinates
+  if (!Array.isArray(coordinates) || coordinates.length !== 2) return null
+  const [lng, lat] = coordinates
+  const normalizedLat = Number(lat)
+  const normalizedLng = Number(lng)
+  if (!Number.isFinite(normalizedLat) || !Number.isFinite(normalizedLng)) return null
+  return `${normalizedLat.toFixed(5)},${normalizedLng.toFixed(5)}`
 }
 
 
@@ -247,6 +256,7 @@ export default function Cart() {
   const [availableCoupons, setAvailableCoupons] = useState([])
   const [loadingCoupons, setLoadingCoupons] = useState(false)
   const [userOrderCount, setUserOrderCount] = useState(0)
+  const [addressZoneMap, setAddressZoneMap] = useState({})
 
   // Fee settings from database (used for platform fee and GST fallback only)
   const [feeSettings, setFeeSettings] = useState({
@@ -412,6 +422,72 @@ export default function Cart() {
     : currentLocation
   const { zoneId } = useZone(zoneLocation) // Prefer selected/saved address zone
   const defaultPayment = getDefaultPaymentMethod()
+  const restaurantZoneId = restaurantData?.zoneId ? String(restaurantData.zoneId) : null
+
+  useEffect(() => {
+    let isCancelled = false
+
+    const detectAddressZones = async () => {
+      const addressesNeedingZone = addresses.filter((address) => {
+        const cacheKey = getAddressZoneCacheKey(address)
+        return cacheKey && addressZoneMap[cacheKey] === undefined
+      })
+
+      if (addressesNeedingZone.length === 0) return
+
+      const detections = await Promise.all(
+        addressesNeedingZone.map(async (address) => {
+          const cacheKey = getAddressZoneCacheKey(address)
+          if (!cacheKey) return null
+
+          try {
+            const [lng, lat] = address.location.coordinates
+            const response = await zoneAPI.detectZone(lat, lng)
+            const payload = response?.data?.data || null
+            return {
+              key: cacheKey,
+              zoneId:
+                payload?.status === "IN_SERVICE" && payload?.zoneId
+                  ? String(payload.zoneId)
+                  : null,
+            }
+          } catch {
+            return { key: cacheKey, zoneId: null }
+          }
+        }),
+      )
+
+      if (isCancelled) return
+
+      setAddressZoneMap((prev) => {
+        const next = { ...prev }
+        detections.forEach((entry) => {
+          if (entry?.key) next[entry.key] = entry.zoneId
+        })
+        return next
+      })
+    }
+
+    detectAddressZones()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [addresses, addressZoneMap])
+
+  const zoneMatchedAddresses = useMemo(() => {
+    if (!restaurantZoneId) return addresses
+
+    return addresses.filter((address) => {
+      const directZoneId = address?.zoneId ? String(address.zoneId) : null
+      if (directZoneId) return directZoneId === restaurantZoneId
+
+      const cacheKey = getAddressZoneCacheKey(address)
+      if (!cacheKey) return false
+
+      return addressZoneMap[cacheKey] === restaurantZoneId
+    })
+  }, [addresses, addressZoneMap, restaurantZoneId])
 
   useEffect(() => {
     // Sync delivery mode from overlay/localStorage changes.
@@ -507,6 +583,22 @@ export default function Cart() {
       setSelectedAddressId(defaultId)
     }
   }, [savedAddress, selectedAddressId, deliveryAddressMode])
+
+  useEffect(() => {
+    if (deliveryAddressMode === "current") return
+    if (!restaurantZoneId) return
+    if (zoneMatchedAddresses.length === 0) return
+
+    const selectedStillValid = zoneMatchedAddresses.some(
+      (address) => String(getAddressId(address) || "") === String(selectedAddressId || ""),
+    )
+
+    if (!selectedStillValid) {
+      const nextAddress = zoneMatchedAddresses[0]
+      const nextId = getAddressId(nextAddress)
+      if (nextId) setSelectedAddressId(nextId)
+    }
+  }, [deliveryAddressMode, restaurantZoneId, zoneMatchedAddresses, selectedAddressId])
 
   // Get restaurant ID from cart or restaurant data
   // Priority: restaurantData > cart[0].restaurantId
@@ -1293,7 +1385,7 @@ export default function Cart() {
     try {
       // Find address with matching label
       const targetLabel = normalizeAddressLabel(label)
-      const address = addresses.find(addr => normalizeAddressLabel(addr.label) === targetLabel)
+      const address = zoneMatchedAddresses.find(addr => normalizeAddressLabel(addr.label) === targetLabel)
 
       if (!address) {
         toast.error(`No ${label} address found. Please add an address first.`)
@@ -2527,7 +2619,7 @@ export default function Cart() {
                         <div className="flex flex-wrap gap-2 mt-3">
                           {["Home", "Work", "Other"].map((label) => {
                             const normalizedLabel = normalizeAddressLabel(label)
-                            const addressExists = addresses.some(addr => normalizeAddressLabel(addr.label) === normalizedLabel)
+                            const addressExists = zoneMatchedAddresses.some(addr => normalizeAddressLabel(addr.label) === normalizedLabel)
                             return (
                               <button
                                 key={label}
@@ -2547,9 +2639,9 @@ export default function Cart() {
                             )
                           })}
                         </div>
-                        {addresses.length > 0 && (
+                        {zoneMatchedAddresses.length > 0 && (
                           <div className="mt-4 space-y-3">
-                            {addresses.map((address) => {
+                            {zoneMatchedAddresses.map((address) => {
                               const addressId = getAddressId(address)
                               const isSelected = addressId && addressId === selectedAddressId
                               return (
@@ -2584,6 +2676,11 @@ export default function Cart() {
                                 </button>
                               )
                             })}
+                          </div>
+                        )}
+                        {restaurantZoneId && zoneMatchedAddresses.length === 0 && (
+                          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            No saved address is available in this restaurant&apos;s zone.
                           </div>
                         )}
                     </div>

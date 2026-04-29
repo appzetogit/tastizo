@@ -1,7 +1,5 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { useEffect, Suspense, lazy } from "react"
-import ProtectedRoute from "@food/components/ProtectedRoute"
-import AuthRedirect from "@food/components/AuthRedirect"
 import Loader from "@food/components/Loader"
 import AuthInitializer from "@food/components/AuthInitializer"
 import PushSoundEnableButton from "@food/components/PushSoundEnableButton"
@@ -15,20 +13,8 @@ const UserRouter = lazy(() => import("@food/components/user/UserRouter"))
 // Restaurant Module
 const RestaurantRouter = lazy(() => import("@food/components/restaurant/RestaurantRouter"))
 
-// Admin Module
-const AdminRouter = lazy(() => import("@food/components/admin/AdminRouter"))
-const AdminLogin = lazy(() => import("@food/pages/admin/auth/AdminLogin"))
-const AdminSignup = lazy(() => import("@food/pages/admin/auth/AdminSignup"))
-const AdminForgotPassword = lazy(() => import("@food/pages/admin/auth/AdminForgotPassword"))
-
 // Delivery Module
 const DeliveryRouter = lazy(() => import("../DeliveryV2"))
-
-function UserPathRedirect() {
-  const location = useLocation()
-  const newPath = location.pathname.replace("/user", "") || "/"
-  return <Navigate to={newPath} replace />
-}
 
 // Scroll to top on route change
 function ScrollToTop() {
@@ -78,10 +64,18 @@ function RestaurantGlobalNotificationListener() {
 
 export default function App() {
   const location = useLocation()
+  const moduleRoot =
+    location.pathname.startsWith("/restaurant")
+      ? "restaurant"
+      : location.pathname.startsWith("/delivery")
+        ? "delivery"
+        : location.pathname.startsWith("/admin")
+          ? "admin"
+          : "user"
 
   useEffect(() => {
-    registerWebPushForCurrentModule(location.pathname)
-  }, [location.pathname])
+    registerWebPushForCurrentModule(`/${moduleRoot}`)
+  }, [moduleRoot])
 
   return (
     <AuthInitializer>

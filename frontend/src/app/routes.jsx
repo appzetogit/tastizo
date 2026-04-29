@@ -71,13 +71,27 @@ const AppRoutes = () => {
   return (
     <Routes>
       {/* Auth Module */}
-      <Route path="/user/auth/*" element={<AuthApp />} />
+      <Route
+        path="/user/auth/*"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <AuthApp />
+          </Suspense>
+        }
+      />
 
       {/* Legacy /food URLs redirect to the same page without the prefix */}
       <Route path="/food/*" element={<RedirectLegacyFoodRoute />} />
 
       {/* Global Admin Portal - AdminRouter handles its own protection for sub-routes */}
-      <Route path="/admin/*" element={<AdminRouter />} />
+      <Route
+        path="/admin/*"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <AdminRouter />
+          </Suspense>
+        }
+      />
 
       {/* Handle root and other paths via FoodAppWrapper */}
       <Route path="/*" element={<FoodAppWrapper />} />

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { locationAPI, userAPI } from "@food/api"
 import { useProfile } from "@food/context/ProfileContext"
 import {
@@ -16,6 +16,7 @@ import {
 } from "@food/utils/address"
 
 const LocationContext = createContext(null)
+const FORCE_FRESH_LOCATION_SESSION_KEY = "user_force_fresh_location"
 
 const debugError = (..._args) => {}
 
@@ -40,6 +41,22 @@ const getStoredSelectedAddressId = () => {
     return localStorage.getItem(SELECTED_ADDRESS_ID_STORAGE_KEY) || null
   } catch {
     return null
+  }
+}
+
+const shouldForceFreshLocationOnBoot = () => {
+  try {
+    return sessionStorage.getItem(FORCE_FRESH_LOCATION_SESSION_KEY) === "true"
+  } catch {
+    return false
+  }
+}
+
+const clearFreshLocationBootFlag = () => {
+  try {
+    sessionStorage.removeItem(FORCE_FRESH_LOCATION_SESSION_KEY)
+  } catch {
+    // no-op
   }
 }
 
@@ -379,12 +396,22 @@ const syncLocationStorage = (location, mode, selectedAddressId = null) => {
 
 export function LocationProvider({ children }) {
   const { addresses, getDefaultAddress, setDefaultAddress, addAddress } = useProfile()
-  const [location, setLocation] = useState(() => readStoredLocation())
-  const [loading, setLoading] = useState(() => !readStoredLocation())
+  const [location, setLocation] = useState(() => {
+    if (shouldForceFreshLocationOnBoot()) return null
+    return readStoredLocation()
+  })
+  const [loading, setLoading] = useState(() => {
+    if (shouldForceFreshLocationOnBoot()) return true
+    return !readStoredLocation()
+  })
   const [error, setError] = useState(null)
-  const [permissionGranted, setPermissionGranted] = useState(() => Boolean(readStoredLocation()?.latitude))
+  const [permissionGranted, setPermissionGranted] = useState(() => {
+    if (shouldForceFreshLocationOnBoot()) return false
+    return Boolean(readStoredLocation()?.latitude)
+  })
   const [deliveryAddressMode, setDeliveryAddressMode] = useState(getStoredMode)
   const [selectedAddressId, setSelectedAddressId] = useState(getStoredSelectedAddressId)
+  const wasAuthenticatedRef = useRef(isAuthenticated())
 
   const hydrateBackendLocation = useCallback(async () => {
     if (!isAuthenticated()) return null
@@ -548,14 +575,28 @@ export function LocationProvider({ children }) {
   )
 
   useEffect(() => {
+    const forceFreshLocation = shouldForceFreshLocationOnBoot()
     const storedLocation = readStoredLocation()
-    if (storedLocation?.latitude && storedLocation?.longitude) {
+    if (!forceFreshLocation && storedLocation?.latitude && storedLocation?.longitude) {
       setLocation(storedLocation)
       setPermissionGranted(true)
       setLoading(false)
     }
-    hydrateBackendLocation().finally(() => setLoading(false))
-  }, [hydrateBackendLocation])
+    if (forceFreshLocation && isAuthenticated()) {
+      requestLocation()
+        .catch(() => hydrateBackendLocation())
+        .finally(() => {
+          clearFreshLocationBootFlag()
+          setLoading(false)
+        })
+      return
+    }
+    hydrateBackendLocation()
+      .finally(() => {
+        clearFreshLocationBootFlag()
+        setLoading(false)
+      })
+  }, [hydrateBackendLocation, requestLocation])
 
   useEffect(() => {
     const syncFromEvent = (event) => {
@@ -570,12 +611,35 @@ export function LocationProvider({ children }) {
     }
 
     window.addEventListener(LOCATION_STATE_EVENT, syncFromEvent)
-    window.addEventListener("userAuthChanged", hydrateBackendLocation)
+    const handleAuthChange = async () => {
+      const authenticatedNow = isAuthenticated()
+      const wasAuthenticated = wasAuthenticatedRef.current
+      wasAuthenticatedRef.current = authenticatedNow
+
+      if (authenticatedNow && !wasAuthenticated) {
+        try {
+          await requestLocation()
+          return
+        } catch {
+          await hydrateBackendLocation()
+          return
+        }
+      }
+
+      if (!authenticatedNow) {
+        setPermissionGranted(Boolean(readStoredLocation()?.latitude))
+        return
+      }
+
+      await hydrateBackendLocation()
+    }
+
+    window.addEventListener("userAuthChanged", handleAuthChange)
     return () => {
       window.removeEventListener(LOCATION_STATE_EVENT, syncFromEvent)
-      window.removeEventListener("userAuthChanged", hydrateBackendLocation)
+      window.removeEventListener("userAuthChanged", handleAuthChange)
     }
-  }, [hydrateBackendLocation])
+  }, [hydrateBackendLocation, requestLocation])
 
   useEffect(() => {
     if (deliveryAddressMode !== "saved" || selectedAddressId) return

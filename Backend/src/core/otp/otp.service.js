@@ -103,7 +103,9 @@ const sendSmsViaIndiaHub = async (phone, otp) => {
 };
 
 export const createOrUpdateOtp = async (phone) => {
-    const existing = await FoodOtp.findOne({ phone });
+    const existing = await FoodOtp.findOne({ phone })
+        .select('requestCount lastRequestAt')
+        .lean();
     const now = new Date();
     const defaultOtpCode = getDefaultOtpCode();
     const isDefaultOtpPhone = isDefaultOtpPhoneMatch(phone);
@@ -144,14 +146,18 @@ export const createOrUpdateOtp = async (phone) => {
     const expiresAt = new Date(now.getTime() + ttlMs);
 
     if (existing) {
-        existing.otp = otp;
-        existing.expiresAt = expiresAt;
-        existing.attempts = 0;
-        existing.lastRequestAt = now;
-        if (isDefaultOtpPhone) {
-            existing.requestCount = 0;
-        }
-        await existing.save();
+        await FoodOtp.updateOne(
+            { phone },
+            {
+                $set: {
+                    otp,
+                    expiresAt,
+                    attempts: 0,
+                    lastRequestAt: now,
+                    requestCount: isDefaultOtpPhone ? 0 : existing.requestCount
+                }
+            }
+        );
     } else {
         await FoodOtp.create({
             phone,
