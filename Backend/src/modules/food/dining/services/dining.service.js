@@ -323,6 +323,15 @@ export async function updateDiningRestaurant(restaurantId, body = {}) {
     await diningDoc.save();
     await syncCategoryRestaurantLinks(restaurant._id, validCategoryIds);
     await syncRestaurantDiningSettings(restaurant._id, diningDoc);
+    await FoodDiningRequest.updateMany(
+        { restaurantId, status: 'pending' },
+        {
+            $set: {
+                status: 'rejected',
+                rejectionReason: 'Dining settings were updated directly by admin.'
+            }
+        }
+    );
 
     const categories = await FoodDiningCategory.find({}).select('name slug imageUrl').lean();
     const categoriesById = new Map(categories.map((category) => [String(category._id), category]));
@@ -493,33 +502,30 @@ export async function approveDiningRequest(requestId) {
     }).select('_id').lean();
     const categoryIds = selectedCategories.map(c => c._id);
 
-    // Apply changes to FoodDiningRestaurant
-    await FoodDiningRestaurant.findOneAndUpdate(
-        { restaurantId },
-        {
-            $set: {
-                isEnabled: request.requestedSettings.isEnabled,
-                maxGuests: request.requestedSettings.maxGuests,
-                categoryIds: categoryIds,
-                primaryCategoryId: categoryIds[0] || null
-            }
-        },
-        { upsert: true }
-    );
+    const restaurant = await FoodRestaurant.findById(restaurantId).lean();
+    if (!restaurant) {
+        throw new ValidationError('Restaurant not found');
+    }
 
-    // Apply changes to FoodRestaurant
-    await FoodRestaurant.findByIdAndUpdate(
-        restaurantId,
-        {
-            $set: {
-                diningSettings: {
-                    isEnabled: request.requestedSettings.isEnabled,
-                    maxGuests: request.requestedSettings.maxGuests,
-                    diningType: finalDiningType
-                }
-            }
-        }
-    );
+    let diningDoc = await FoodDiningRestaurant.findOne({ restaurantId });
+    if (!diningDoc) {
+        diningDoc = new FoodDiningRestaurant({
+            restaurantId,
+            pureVegRestaurant: restaurant.pureVegRestaurant === true
+        });
+    }
+
+    diningDoc.isEnabled = request.requestedSettings.isEnabled === true;
+    diningDoc.maxGuests = Math.max(1, parseInt(request.requestedSettings.maxGuests, 10) || 6);
+    diningDoc.categoryIds = categoryIds;
+    diningDoc.primaryCategoryId = categoryIds[0] || null;
+    if (typeof diningDoc.pureVegRestaurant !== 'boolean') {
+        diningDoc.pureVegRestaurant = restaurant.pureVegRestaurant === true;
+    }
+
+    await diningDoc.save();
+    await syncCategoryRestaurantLinks(restaurantId, categoryIds);
+    await syncRestaurantDiningSettings(restaurantId, diningDoc);
 
     request.status = 'approved';
     await request.save();

@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { Loader } from "@googlemaps/js-api-loader"
 import { locationAPI, userAPI } from "@food/api"
 import { useProfile } from "@food/context/ProfileContext"
+import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import {
   DELIVERY_MODE_STORAGE_KEY,
   LOCATION_STATE_EVENT,
@@ -17,8 +19,10 @@ import {
 
 const LocationContext = createContext(null)
 const FORCE_FRESH_LOCATION_SESSION_KEY = "user_force_fresh_location"
+let googleMapsNamespacePromise = null
 
 const debugError = (..._args) => {}
+const cleanLocationDisplayLine = (value) => String(value || "").replace(/,\s*India\s*$/i, "").trim()
 
 const isAuthenticated = () => {
   try {
@@ -41,6 +45,16 @@ const getStoredSelectedAddressId = () => {
     return localStorage.getItem(SELECTED_ADDRESS_ID_STORAGE_KEY) || null
   } catch {
     return null
+  }
+}
+
+const shouldPreserveSavedSelection = () => {
+  try {
+    const mode = localStorage.getItem(DELIVERY_MODE_STORAGE_KEY) || "saved"
+    const selectedAddressId = localStorage.getItem(SELECTED_ADDRESS_ID_STORAGE_KEY) || null
+    return mode === "saved" && Boolean(selectedAddressId)
+  } catch {
+    return false
   }
 }
 
@@ -268,8 +282,206 @@ const buildPreciseGpsFallbackLocation = ({ latitude, longitude, accuracy = null,
   }
 }
 
+const geometryPrecisionRank = (result) => {
+  const type = result?.geometry?.location_type || result?.geometry?.locationType
+  const order = {
+    ROOFTOP: 0,
+    RANGE_INTERPOLATED: 1,
+    GEOMETRIC_CENTER: 2,
+    APPROXIMATE: 3,
+  }
+  return order[type] ?? 4
+}
+
+const pickBestGoogleGeocodeResult = (results) => {
+  if (!results?.length) return null
+
+  const typeRank = (result) => {
+    const types = result?.types || []
+    if (types.includes("street_address")) return 0
+    if (types.includes("premise")) return 1
+    if (types.includes("point_of_interest") || types.includes("establishment")) return 2
+    if (types.includes("subpremise")) return 3
+    if (types.includes("route")) return 4
+    if (types.some((type) => type.startsWith("sublocality"))) return 5
+    if (types.includes("locality")) return 6
+    return 10
+  }
+
+  let best = results[0]
+  let bestGeometryRank = geometryPrecisionRank(best)
+  let bestTypeRank = typeRank(best)
+
+  for (const result of results.slice(1, 15)) {
+    const nextGeometryRank = geometryPrecisionRank(result)
+    const nextTypeRank = typeRank(result)
+    if (
+      nextGeometryRank < bestGeometryRank ||
+      (nextGeometryRank === bestGeometryRank && nextTypeRank < bestTypeRank)
+    ) {
+      best = result
+      bestGeometryRank = nextGeometryRank
+      bestTypeRank = nextTypeRank
+    }
+  }
+
+  return best
+}
+
+const parseGoogleGeocodeResult = (bestResult) => {
+  if (!bestResult) {
+    return {
+      formattedAddress: "",
+      city: "",
+      state: "",
+      area: "",
+      street: "",
+      streetNumber: "",
+      postalCode: "",
+      pointOfInterest: "",
+      premise: "",
+    }
+  }
+
+  let city = ""
+  let state = ""
+  let area = ""
+  let street = ""
+  let streetNumber = ""
+  let postalCode = ""
+  let pointOfInterest = ""
+  let premise = ""
+  let areaGranularity = -1
+
+  const considerArea = (types, name) => {
+    const normalized = String(name || "").trim()
+    if (!normalized) return
+
+    let score = -1
+    if (types.includes("sublocality_level_3")) score = 6
+    else if (types.includes("sublocality_level_2")) score = 5
+    else if (types.includes("neighborhood")) score = 4
+    else if (types.includes("sublocality_level_1")) score = 3
+    else if (types.includes("sublocality")) score = 2
+    else if (types.includes("colloquial_area")) score = 2
+
+    if (score > areaGranularity) {
+      areaGranularity = score
+      area = normalized
+    }
+  }
+
+  for (const component of bestResult.address_components || []) {
+    const types = component.types || []
+    if (types.includes("point_of_interest") && !pointOfInterest) pointOfInterest = component.long_name
+    if (types.includes("premise") && !premise) premise = component.long_name
+    if (types.includes("street_number") && !streetNumber) streetNumber = component.long_name
+    if (types.includes("route") && !street) street = component.long_name
+    if (types.includes("locality") && !city) city = component.long_name
+    if (types.includes("administrative_area_level_1") && !state) state = component.long_name
+    if (types.includes("postal_code") && !postalCode) postalCode = component.long_name
+    considerArea(types, component.long_name)
+  }
+
+  return {
+    formattedAddress: cleanLocationDisplayLine(bestResult.formatted_address || ""),
+    city,
+    state,
+    area,
+    street,
+    streetNumber,
+    postalCode,
+    pointOfInterest,
+    premise,
+  }
+}
+
+const loadGoogleMapsNamespace = async () => {
+  if (typeof window !== "undefined" && window.google?.maps?.Geocoder) {
+    return window.google
+  }
+
+  if (!googleMapsNamespacePromise) {
+    googleMapsNamespacePromise = (async () => {
+      const apiKey = await getGoogleMapsApiKey()
+      if (!apiKey) {
+        throw new Error("Google Maps API key unavailable")
+      }
+      const loader = new Loader({ apiKey, version: "weekly" })
+      return loader.load()
+    })().catch((error) => {
+      googleMapsNamespacePromise = null
+      throw error
+    })
+  }
+
+  return googleMapsNamespacePromise
+}
+
+const reverseGeocodeWithGoogleMaps = async (latitude, longitude) => {
+  const googleNs = await loadGoogleMapsNamespace()
+  return new Promise((resolve, reject) => {
+    if (!googleNs?.maps?.Geocoder) {
+      reject(new Error("Google geocoder unavailable"))
+      return
+    }
+
+    const geocoder = new googleNs.maps.Geocoder()
+    geocoder.geocode({ location: { lat: latitude, lng: longitude }, region: "in" }, (results, status) => {
+      if (status === "OK" && results?.length) {
+        resolve(parseGoogleGeocodeResult(pickBestGoogleGeocodeResult(results)))
+        return
+      }
+      reject(new Error(`Google geocoder failed: ${status}`))
+    })
+  })
+}
+
 const reverseGeocode = async (latitude, longitude, sourceType = "gps") => {
-  // Primary: backend reverse geocode (Nominatim via server-side proxy)
+  // Primary: Google geocoder for map-grade locality/street precision.
+  try {
+    const parsed = await reverseGeocodeWithGoogleMaps(latitude, longitude)
+    const streetLine = [parsed.streetNumber, parsed.street].filter(Boolean).join(" ").trim()
+    const pointOfInterest = parsed.pointOfInterest || parsed.premise || ""
+    const displayName =
+      parsed.formattedAddress ||
+      [
+        pointOfInterest,
+        streetLine,
+        parsed.area,
+        parsed.city,
+        parsed.state,
+        parsed.postalCode,
+      ]
+        .filter(Boolean)
+        .join(", ")
+
+    const built = buildRichLocation({
+      latitude,
+      longitude,
+      payload: {
+        display_name: displayName,
+        city: parsed.city,
+        state: parsed.state,
+        zipCode: parsed.postalCode,
+        area: parsed.area,
+        street: streetLine || parsed.street,
+        additionalDetails: pointOfInterest,
+        formattedAddress: displayName,
+      },
+      sourceType,
+    })
+
+    if (displayName) {
+      built.formattedAddress = displayName
+      built.address = displayName
+      built.additionalDetails = displayName
+    }
+
+    if (built.formattedAddress) return built
+  } catch {}
+
+  // Fallback 1: backend reverse geocode (Nominatim via server-side proxy)
   try {
     const response = await locationAPI.reverseGeocode(latitude, longitude, { force: true })
     const raw = response?.data?.data
@@ -318,7 +530,7 @@ const reverseGeocode = async (latitude, longitude, sourceType = "gps") => {
     if (built.formattedAddress) return built
   } catch {}
 
-  // Fallback 1: Nominatim directly from the client (if backend is unreachable)
+  // Fallback 2: Nominatim directly from the client (if backend is unreachable)
   try {
     const resp = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1&zoom=18&accept-language=en`,
@@ -471,21 +683,32 @@ export function LocationProvider({ children }) {
 
   const requestLocation = useCallback(
     async (options = {}) => {
-      const { skipDatabaseUpdate = false } = options
+      const {
+        skipDatabaseUpdate = false,
+        allowStoredFallback = true,
+        targetAccuracy = 10,
+        watchWindowMs = 25000,
+        maxWaitMs = 60000,
+        retryTimeout = 45000,
+      } = options
       setLoading(true)
       setError(null)
       try {
+        const precisePositionOptions = { targetAccuracy, watchWindowMs, maxWaitMs }
+        const retryPositionOptions = { timeout: retryTimeout }
         const position = await getPreciseFreshPosition({
-          timeout: 40000,
+          timeout: maxWaitMs,
           maximumAge: 0,          // never use cached GPS
           targetAccuracy: 20,     // aim for ≤20m accuracy (GPS chip level)
           watchWindowMs: 15000,   // watch for 15s to refine fix
           maxWaitMs: 40000,
+          ...precisePositionOptions,
         }).catch(() =>
           getPositionWithRetry(true, {
             enableHighAccuracy: true,
             timeout: 30000,
             maximumAge: 0,
+            ...retryPositionOptions,
           }),
         )
         const latitude = Number(position.coords.latitude)
@@ -519,6 +742,10 @@ export function LocationProvider({ children }) {
         })
         return refinedLocation
       } catch (err) {
+        if (!allowStoredFallback) {
+          setError(err?.message || "Unable to fetch location")
+          throw err
+        }
         const fallbackLocation = readStoredLocation()
         if (fallbackLocation?.latitude && fallbackLocation?.longitude) {
           await applyLocation(fallbackLocation, {
@@ -576,13 +803,14 @@ export function LocationProvider({ children }) {
 
   useEffect(() => {
     const forceFreshLocation = shouldForceFreshLocationOnBoot()
+    const preserveSavedSelection = shouldPreserveSavedSelection()
     const storedLocation = readStoredLocation()
     if (!forceFreshLocation && storedLocation?.latitude && storedLocation?.longitude) {
       setLocation(storedLocation)
       setPermissionGranted(true)
       setLoading(false)
     }
-    if (forceFreshLocation && isAuthenticated()) {
+    if (forceFreshLocation && isAuthenticated() && !preserveSavedSelection) {
       requestLocation()
         .catch(() => hydrateBackendLocation())
         .finally(() => {
@@ -614,9 +842,10 @@ export function LocationProvider({ children }) {
     const handleAuthChange = async () => {
       const authenticatedNow = isAuthenticated()
       const wasAuthenticated = wasAuthenticatedRef.current
+      const preserveSavedSelection = shouldPreserveSavedSelection()
       wasAuthenticatedRef.current = authenticatedNow
 
-      if (authenticatedNow && !wasAuthenticated) {
+      if (authenticatedNow && !wasAuthenticated && !preserveSavedSelection) {
         try {
           await requestLocation()
           return

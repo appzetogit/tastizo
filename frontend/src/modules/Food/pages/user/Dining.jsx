@@ -63,6 +63,22 @@ const getDistanceKm = (userLocation, restaurant) => {
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+const getRestaurantZoneId = (restaurant) => {
+  const rawZone =
+    restaurant?.zoneId ||
+    restaurant?.restaurant?.zoneId ||
+    restaurant?.zone?._id ||
+    restaurant?.zone?.id ||
+    null
+
+  if (!rawZone) return ""
+  if (typeof rawZone === "string") return rawZone.trim()
+  if (typeof rawZone === "object") {
+    return String(rawZone?._id || rawZone?.id || "").trim()
+  }
+  return String(rawZone).trim()
+}
+
 const shimmerClassName =
   "before:absolute before:inset-0 before:-translate-x-full before:bg-gradient-to-r before:from-transparent before:via-white/30 before:to-transparent before:animate-[shimmer_2.2s_infinite]"
 
@@ -148,6 +164,7 @@ export default function Dining() {
   const [categories, setCategories] = useState([])
   const [restaurantList, setRestaurantList] = useState([])
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [diningHeroBanners, setDiningHeroBanners] = useState([])
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0)
   const autoSlideIntervalRef = useRef(null)
@@ -156,6 +173,8 @@ export default function Dining() {
   const touchEndXRef = useRef(0)
   const touchEndYRef = useRef(0)
   const isBannerSwipingRef = useRef(false)
+  const hasLoadedDataRef = useRef(false)
+  const latestFetchTokenRef = useRef(0)
 
   const resolveLocationForDining = useCallback(() => {
     const fromHook = location || {}
@@ -176,23 +195,40 @@ export default function Dining() {
     }
   }, [location])
 
+  const diningFetchParams = useMemo(() => {
+    const activeLocation = resolveLocationForDining()
+    const lat = Number(activeLocation?.latitude)
+    const lng = Number(activeLocation?.longitude)
+    const cityRaw = String(activeLocation?.city || "").trim()
+    const city = cityRaw && cityRaw.toLowerCase() !== "current location" ? cityRaw : ""
+
+    return {
+      city,
+      lat: Number.isFinite(lat) ? Number(lat.toFixed(5)) : null,
+      lng: Number.isFinite(lng) ? Number(lng.toFixed(5)) : null,
+      zoneId: zoneId || "",
+    }
+  }, [resolveLocationForDining, zoneId])
+
   useEffect(() => {
     const fetchDiningData = async () => {
-      try {
-        setLoading(true)
+      const fetchToken = latestFetchTokenRef.current + 1
+      latestFetchTokenRef.current = fetchToken
+      const shouldShowInitialLoader = !hasLoadedDataRef.current
 
-        const activeLocation = resolveLocationForDining()
-        const lat = Number(activeLocation?.latitude)
-        const lng = Number(activeLocation?.longitude)
-        const cityRaw = String(activeLocation?.city || "").trim()
-        const city = cityRaw && cityRaw.toLowerCase() !== "current location" ? cityRaw : ""
+      try {
+        if (shouldShowInitialLoader) {
+          setLoading(true)
+        } else {
+          setIsRefreshing(true)
+        }
 
         const restaurantParams = {}
-        if (city) restaurantParams.city = city
-        if (zoneId) restaurantParams.zoneId = zoneId
-        if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          restaurantParams.lat = lat
-          restaurantParams.lng = lng
+        if (diningFetchParams.city) restaurantParams.city = diningFetchParams.city
+        if (diningFetchParams.zoneId) restaurantParams.zoneId = diningFetchParams.zoneId
+        if (Number.isFinite(diningFetchParams.lat) && Number.isFinite(diningFetchParams.lng)) {
+          restaurantParams.lat = diningFetchParams.lat
+          restaurantParams.lng = diningFetchParams.lng
         }
 
         const [bannerResponse, cats, rests] = await Promise.all([
@@ -217,20 +253,28 @@ export default function Dining() {
               .filter(Boolean)
           : []
 
+        if (latestFetchTokenRef.current !== fetchToken) return
+
         setDiningHeroBanners(heroBanners)
         setCategories(cats?.data?.success ? (cats.data.data || []) : [])
         setRestaurantList(rests?.data?.success ? (rests.data.data || []) : [])
+        hasLoadedDataRef.current = true
       } catch (error) {
         debugError("Failed to fetch dining data", error)
-        setDiningHeroBanners([])
-        setCategories([])
-        setRestaurantList([])
+        if (!hasLoadedDataRef.current) {
+          setDiningHeroBanners([])
+          setCategories([])
+          setRestaurantList([])
+        }
       } finally {
-        setLoading(false)
+        if (latestFetchTokenRef.current === fetchToken) {
+          setLoading(false)
+          setIsRefreshing(false)
+        }
       }
     }
     fetchDiningData()
-  }, [resolveLocationForDining, zoneId])
+  }, [diningFetchParams])
 
   const safeCategories = useMemo(() => {
     return (Array.isArray(categories) ? categories : [])
@@ -254,7 +298,7 @@ export default function Dining() {
     return (Array.isArray(restaurantList) ? restaurantList : [])
       .filter((restaurant) => {
         const name = String(restaurant?.restaurantName || restaurant?.name || "").trim()
-        return name.length > 0
+        return name.length > 0 && restaurant?.diningSettings?.isEnabled === true
       })
       .sort((a, b) => {
         const aEnabled = a?.diningSettings?.isEnabled === true
@@ -313,10 +357,19 @@ export default function Dining() {
       })
   }, [restaurantList, location])
 
+  const zoneScopedRestaurants = useMemo(() => {
+    const activeZoneId = String(zoneId || "").trim()
+    if (!activeZoneId) return normalizedRestaurantList
+
+    return normalizedRestaurantList.filter(
+      (restaurant) => getRestaurantZoneId(restaurant) === activeZoneId,
+    )
+  }, [normalizedRestaurantList, zoneId])
+
   const categoryRestaurantKeys = useMemo(() => {
     const keySet = new Set()
 
-    normalizedRestaurantList.forEach((restaurant) => {
+    zoneScopedRestaurants.forEach((restaurant) => {
       const rawCategories = []
 
       // 1. Existing categories from the platform categories mapping
@@ -349,17 +402,15 @@ export default function Dining() {
     })
 
     return keySet
-  }, [normalizedRestaurantList])
+  }, [zoneScopedRestaurants])
 
   const filteredCategories = safeCategories
 
   const nearbyPopularRestaurants = useMemo(() => {
-    const within10Km = normalizedRestaurantList
+    return zoneScopedRestaurants
       .filter((restaurant) => Number.isFinite(restaurant.distanceValue) && restaurant.distanceValue <= 10)
       .sort((a, b) => a.distanceValue - b.distanceValue)
-
-    return within10Km.length > 0 ? within10Km : normalizedRestaurantList
-  }, [normalizedRestaurantList])
+  }, [zoneScopedRestaurants])
 
   const toggleFilter = (filterId) => {
     setActiveFilters(prev => {

@@ -1700,39 +1700,22 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         return
       }
 
-      toast.loading("Getting your fresh location...", { id: "current-location" })
+      toast.loading("Getting your precise current location...", { id: "current-location" })
 
-      // Use Promise.race to keep UI responsive, but don't fail too aggressively:
-      // geolocation + reverse geocode can legitimately take a few seconds on slow networks/devices.
-      const locationPromise = requestLocation(true, true) // forceFresh = true, updateDB = true
+      // Require a fresh GPS fix here; do not silently fall back to cached data.
+      const locationPromise = requestLocation({
+        skipDatabaseUpdate: false,
+        allowStoredFallback: false,
+        targetAccuracy: 8,
+        watchWindowMs: 30000,
+        maxWaitMs: 70000,
+        retryTimeout: 50000,
+      })
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Location timeout")), 10000)
+        setTimeout(() => reject(new Error("Fresh location timeout")), 75000)
       )
 
-      let locationData
-      try {
-        locationData = await Promise.race([locationPromise, timeoutPromise])
-      } catch (raceError) {
-        // If timeout, try to use cached location immediately (and don't show an error if we can proceed).
-        const stored = localStorage.getItem("userLocation")
-        if (stored) {
-          try {
-            const cachedLocation = JSON.parse(stored)
-            if (cachedLocation?.latitude && cachedLocation?.longitude) {
-              debugLog("?? Using cached location (timeout):", cachedLocation)
-              locationData = cachedLocation
-            } else {
-              throw new Error("Invalid cached location")
-            }
-          } catch (cacheErr) {
-            toast.error("Could not get location. Please try again.", { id: "current-location" })
-            return
-          }
-        } else {
-          toast.error("Could not get location. Please try again.", { id: "current-location" })
-          return
-        }
-      }
+      const locationData = await Promise.race([locationPromise, timeoutPromise])
 
       debugLog("?? Current location data received:", locationData)
 
@@ -1753,7 +1736,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       debugLog("?? Location accuracy:", locationData.accuracy ? `${locationData.accuracy}m` : "unknown")
       debugLog("?? Location timestamp:", locationData.timestamp || new Date().toISOString())
       setMapPosition([lat, lng])
-      toast.success("Location updated", { id: "current-location" })
+      toast.success("Current location updated", { id: "current-location" })
 
       // Update Google Maps to new location
       if (googleMapRef.current && window.google && window.google.maps) {
@@ -1848,57 +1831,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       }
     } catch (error) {
       debugError("? Error getting current location:", error)
-
-      // Check if it's a timeout error
-      if (error.message && (error.message.includes("timeout") || error.message.includes("Timeout"))) {
-        // Try to use cached location from localStorage
-        try {
-          const stored = localStorage.getItem("userLocation")
-          if (stored) {
-            const cachedLocation = JSON.parse(stored)
-            if (cachedLocation?.latitude && cachedLocation?.longitude) {
-              debugLog("?? Using cached location due to timeout:", cachedLocation)
-              setMapPosition([cachedLocation.latitude, cachedLocation.longitude])
-
-              // Update Google Maps with cached location
-              if (googleMapRef.current && window.google && window.google.maps) {
-                try {
-                  googleMapRef.current.panTo({ lat: cachedLocation.latitude, lng: cachedLocation.longitude });
-                  googleMapRef.current.setZoom(17);
-
-                  // Update markers
-                  if (greenMarkerRef.current) {
-                    greenMarkerRef.current.setPosition({ lat: cachedLocation.latitude, lng: cachedLocation.longitude });
-                  }
-                  if (blueDotCircleRef.current) {
-                    blueDotCircleRef.current.setCenter({ lat: cachedLocation.latitude, lng: cachedLocation.longitude });
-                  }
-
-                  setTimeout(async () => {
-                    await handleMapMoveEnd(cachedLocation.latitude, cachedLocation.longitude);
-                    toast.success("Using cached location", { id: "current-location" });
-                  }, 500);
-                } catch (mapErr) {
-                  debugError("Error updating map with cached location:", mapErr);
-                  toast.warning("Location request timed out. Please try again.", { id: "current-location" });
-                }
-              } else {
-                setTimeout(async () => {
-                  await handleMapMoveEnd(cachedLocation.latitude, cachedLocation.longitude)
-                  toast.success("Using cached location", { id: "current-location" })
-                }, 300)
-              }
-              return
-            }
-          }
-        } catch (cacheErr) {
-          debugWarn("Failed to use cached location:", cacheErr)
-        }
-
-        toast.warning("Location request timed out. Please try again or check your GPS settings.", { id: "current-location" })
-      } else {
-        toast.error("Failed to get current location: " + (error.message || "Unknown error"), { id: "current-location" })
-      }
+      toast.error("Failed to get a fresh current location. Please enable GPS and try again.", { id: "current-location" })
     }
   }
 

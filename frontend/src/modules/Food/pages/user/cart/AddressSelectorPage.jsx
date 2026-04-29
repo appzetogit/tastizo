@@ -411,28 +411,24 @@ export default function AddressSelectorPage() {
         return
       }
 
-      toast.loading("Getting your fresh location...", { id: "geo" })
+      toast.loading("Getting your precise current location...", { id: "geo" })
 
-      const locationPromise = requestLocation({ skipDatabaseUpdate: true })
+      const locationPromise = requestLocation({
+        skipDatabaseUpdate: true,
+        allowStoredFallback: false,
+        targetAccuracy: 8,
+        watchWindowMs: 30000,
+        maxWaitMs: 70000,
+        retryTimeout: 50000,
+      })
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Location timeout")), 25000),
+        setTimeout(() => reject(new Error("Fresh location timeout")), 75000),
       )
 
-      let loc
-      try {
-        loc = await Promise.race([locationPromise, timeoutPromise])
-      } catch {
-        const raw = localStorage.getItem("userLocation")
-        if (raw) {
-          const cachedLocation = JSON.parse(raw)
-          if (cachedLocation?.latitude && cachedLocation?.longitude) {
-            loc = cachedLocation
-          }
-        }
-      }
+      const loc = await Promise.race([locationPromise, timeoutPromise])
 
       if (!loc?.latitude || !loc?.longitude) {
-        toast.error("Could not get location. Please try again.", { id: "geo" })
+        toast.error("Could not get a fresh GPS location. Please try again.", { id: "geo" })
         return
       }
 
@@ -467,10 +463,11 @@ export default function AddressSelectorPage() {
         debugWarn("Map refinement skipped or timed out", error)
       }
 
-      await persistRefinedLocationToBackend(resolvedLocation || loc)
-      toast.success("Location updated", { id: "geo" })
+      const finalLocation = resolvedLocation || loc
+      await persistRefinedLocationToBackend(finalLocation)
+      toast.success("Current location updated", { id: "geo" })
     } catch (e) {
-      toast.error("Failed to get location", { id: "geo" })
+      toast.error("Failed to get a fresh current location. Please enable GPS and try again.", { id: "geo" })
     }
   }
 
