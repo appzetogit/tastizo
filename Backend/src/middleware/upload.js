@@ -19,7 +19,7 @@ export const upload = multer({
     storage,
     limits: {
         fileSize: 10 * 1024 * 1024,
-        files: 1
+        files: 20
     },
     fileFilter: (_req, file, cb) => {
         const mimeType = String(file?.mimetype || '').toLowerCase();

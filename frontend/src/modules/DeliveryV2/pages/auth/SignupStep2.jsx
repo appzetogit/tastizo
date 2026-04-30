@@ -3,13 +3,20 @@ import { useNavigate } from "react-router-dom"
 import { ArrowLeft, Upload, X, Check, Camera, Image as ImageIcon } from "lucide-react"
 import { deliveryAPI } from "@food/api"
 import { toast } from "sonner"
-import { isFlutterBridgeAvailable, openCamera } from "@food/utils/imageUploadUtils"
+import { openCamera, openGallery } from "@food/utils/imageUploadUtils"
 import useDeliveryBackNavigation from "../../hooks/useDeliveryBackNavigation"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 const createEmptyUploadedDocs = () => ({
+  profilePhoto: null,
+  aadharPhoto: null,
+  panPhoto: null,
+  drivingLicensePhoto: null
+})
+
+const createEmptyPreviewUrls = () => ({
   profilePhoto: null,
   aadharPhoto: null,
   panPhoto: null,
@@ -25,10 +32,10 @@ const sanitizeUploadedDocValue = (value) => {
 
   if (typeof value === "object") {
     const url = typeof value.url === "string" ? value.url : ""
-    if (url.startsWith("blob:")) {
+    if (!url || url.startsWith("blob:")) {
       return null
     }
-    return value
+    return { ...value, url }
   }
 
   return null
@@ -75,32 +82,21 @@ const getFriendlyRegistrationError = (error) => {
 export default function SignupStep2() {
   const navigate = useNavigate()
   const goBack = useDeliveryBackNavigation()
-  const isMobileDevice =
-    typeof navigator !== "undefined" &&
-    /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent || "")
   const fileInputRefs = useRef({
     profilePhoto: null,
     aadharPhoto: null,
     panPhoto: null,
     drivingLicensePhoto: null
   })
+  const previewUrlsRef = useRef(createEmptyPreviewUrls())
   const [documents, setDocuments] = useState({
     profilePhoto: null,
     aadharPhoto: null,
     panPhoto: null,
     drivingLicensePhoto: null
   })
-  const [uploadedDocs, setUploadedDocs] = useState(() => {
-    const saved = sessionStorage.getItem("deliverySignupDocs")
-    if (saved) {
-      try {
-        return sanitizeUploadedDocs(JSON.parse(saved))
-      } catch (e) {
-        debugError("Error parsing saved docs:", e)
-      }
-    }
-    return createEmptyUploadedDocs()
-  })
+  const [previewUrls, setPreviewUrls] = useState(() => createEmptyPreviewUrls())
+  const [uploadedDocs, setUploadedDocs] = useState(() => createEmptyUploadedDocs())
   const [activePicker, setActivePicker] = useState(null) // { docType: string, title: string, ref: any }
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [uploading, setUploading] = useState({})
@@ -111,37 +107,41 @@ export default function SignupStep2() {
     document.body.scrollTop = 0
   }, [])
 
-  // Save uploaded docs to session storage whenever they change
   useEffect(() => {
-    sessionStorage.setItem("deliverySignupDocs", JSON.stringify(uploadedDocs))
-  }, [uploadedDocs])
+    sessionStorage.removeItem("deliverySignupDocs")
+  }, [])
+
+  useEffect(() => {
+    previewUrlsRef.current = previewUrls
+  }, [previewUrls])
 
   useEffect(() => {
     return () => {
-      Object.values(documents).forEach((file) => {
-        if (file instanceof File) {
-          const previewUrl = file.previewUrl || file._previewUrl
-          if (previewUrl) {
-            URL.revokeObjectURL(previewUrl)
-          }
+      Object.values(previewUrlsRef.current).forEach((previewUrl) => {
+        if (previewUrl) {
+          URL.revokeObjectURL(previewUrl)
+        }
+      })
+      Object.values(fileInputRefs.current).forEach((input) => {
+        if (input) {
+          input.value = ""
         }
       })
     }
-  }, [documents])
+  }, [])
+
+  const hasSelectedDocument = (docType) => {
+    const uploaded = uploadedDocs[docType]
+    if (typeof uploaded === "string" && uploaded.trim()) return true
+    if (uploaded?.url) return true
+    return Boolean(documents[docType])
+  }
 
   const getPreviewSrc = (docType) => {
     const uploaded = uploadedDocs[docType]
     if (typeof uploaded === "string") return uploaded
     if (uploaded?.url) return uploaded.url
-
-    const localFile = documents[docType]
-    if (localFile instanceof File) {
-      if (!localFile._previewUrl) {
-        localFile._previewUrl = URL.createObjectURL(localFile)
-      }
-      return localFile._previewUrl
-    }
-    return null
+    return previewUrls[docType] || null
   }
 
   const handleOpenUploadOptions = (docType) => {
@@ -160,12 +160,18 @@ export default function SignupStep2() {
       return
     }
 
+    if (previewUrls[docType]) {
+      URL.revokeObjectURL(previewUrls[docType])
+    }
+    const nextPreviewUrl = URL.createObjectURL(file)
+
     setDocuments((prev) => ({ ...prev, [docType]: file }))
-    setUploadedDocs((prev) => ({ ...prev, [docType]: { file: true } }))
+    setPreviewUrls((prev) => ({ ...prev, [docType]: nextPreviewUrl }))
+    setUploadedDocs((prev) => ({ ...prev, [docType]: null }))
     toast.success(`${docType.replace(/([A-Z])/g, " $1").trim()} selected`)
   }
 
-  const handleTakeCameraPhoto = (docType, label) => {
+  const handleTakeCameraPhoto = (docType) => {
     openCamera({
       onSelectFile: (file) => handleFileSelect(docType, file),
       fileNamePrefix: `signup-${docType}`
@@ -173,11 +179,21 @@ export default function SignupStep2() {
   }
 
   const handlePickFromGallery = (docType) => {
-    fileInputRefs.current[docType]?.click()
+    openGallery({
+      onSelectFile: (file) => handleFileSelect(docType, file),
+      fileNamePrefix: `signup-${docType}`
+    })
   }
 
   const handleRemove = (docType) => {
+    if (previewUrls[docType]) {
+      URL.revokeObjectURL(previewUrls[docType])
+    }
     setDocuments(prev => ({
+      ...prev,
+      [docType]: null
+    }))
+    setPreviewUrls(prev => ({
       ...prev,
       [docType]: null
     }))
@@ -297,8 +313,10 @@ export default function SignupStep2() {
   }
 
   const DocumentUpload = ({ docType, label, required = true }) => {
-    const uploaded = uploadedDocs[docType]
+    const uploaded = hasSelectedDocument(docType)
     const isUploading = uploading[docType]
+    const previewSrc = getPreviewSrc(docType)
+    const hasPreview = Boolean(previewSrc)
 
     return (
       <div className="bg-white rounded-lg p-4 border border-gray-200">
@@ -308,11 +326,17 @@ export default function SignupStep2() {
 
         {uploaded ? (
           <div className="relative">
-            <img
-              src={getPreviewSrc(docType)}
-              alt={label}
-              className="w-full h-48 object-cover rounded-lg"
-            />
+            {hasPreview ? (
+              <img
+                src={previewSrc}
+                alt={label}
+                className="w-full h-48 object-cover rounded-lg"
+              />
+            ) : (
+              <div className="w-full h-48 rounded-lg bg-gray-100 flex items-center justify-center text-sm text-gray-500">
+                Preview unavailable
+              </div>
+            )}
             <button
               type="button"
               onClick={() => handleRemove(docType)}
@@ -346,7 +370,7 @@ export default function SignupStep2() {
               <div className="w-full grid grid-cols-2 gap-2 pb-4">
                 <button
                   type="button"
-                  onClick={() => handleTakeCameraPhoto(docType, label)}
+                  onClick={() => handleTakeCameraPhoto(docType)}
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold cursor-pointer hover:bg-black transition-all active:scale-95"
                 >
                   <Camera className="w-4 h-4" />
@@ -417,8 +441,8 @@ export default function SignupStep2() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isSubmitting || !uploadedDocs.profilePhoto || !uploadedDocs.aadharPhoto || !uploadedDocs.panPhoto || !uploadedDocs.drivingLicensePhoto}
-            className={`w-full py-4 rounded-lg font-bold text-white text-base transition-colors mt-6 ${isSubmitting || !uploadedDocs.profilePhoto || !uploadedDocs.aadharPhoto || !uploadedDocs.panPhoto || !uploadedDocs.drivingLicensePhoto
+            disabled={isSubmitting || !hasSelectedDocument("profilePhoto") || !hasSelectedDocument("aadharPhoto") || !hasSelectedDocument("panPhoto") || !hasSelectedDocument("drivingLicensePhoto")}
+            className={`w-full py-4 rounded-lg font-bold text-white text-base transition-colors mt-6 ${isSubmitting || !hasSelectedDocument("profilePhoto") || !hasSelectedDocument("aadharPhoto") || !hasSelectedDocument("panPhoto") || !hasSelectedDocument("drivingLicensePhoto")
               ? "bg-gray-400 cursor-not-allowed"
               : "bg-[#00B761] hover:bg-[#00A055]"
               }`}
