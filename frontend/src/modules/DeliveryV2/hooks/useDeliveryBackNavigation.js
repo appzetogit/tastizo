@@ -25,8 +25,8 @@ const resolveDeliveryBackPath = ({ pathname, state }) => {
   const normalizedPath = getNormalizedDeliveryPath(pathname)
   const explicitBackPath = toDeliveryPath(state?.backTo) || toDeliveryPath(state?.from)
 
-  if (normalizedPath === "/signup/details") return "/food/delivery/signup"
-  if (normalizedPath === "/signup/documents") return "/food/delivery/signup/details"
+  if (normalizedPath === "/signup/details") return explicitBackPath || "/food/delivery/signup"
+  if (normalizedPath === "/signup/documents") return explicitBackPath || "/food/delivery/signup/details"
   if (normalizedPath === "/otp") return explicitBackPath || "/food/delivery/login"
   if (normalizedPath === "/terms") return explicitBackPath || "/food/delivery/signup"
 
@@ -73,6 +73,22 @@ export default function useDeliveryBackNavigation() {
   const location = useLocation()
 
   return useCallback(() => {
+    const explicitBackPath =
+      toDeliveryPath(location.state?.backTo) || toDeliveryPath(location.state?.from)
+
+    if (explicitBackPath && explicitBackPath !== location.pathname) {
+      navigate(explicitBackPath)
+      return
+    }
+
+    const historyStateIdx =
+      typeof window !== "undefined" ? Number(window.history.state?.idx) : NaN
+
+    if (Number.isFinite(historyStateIdx) && historyStateIdx > 0) {
+      navigate(-1)
+      return
+    }
+
     navigate(resolveDeliveryBackPath(location))
   }, [location, navigate])
 }

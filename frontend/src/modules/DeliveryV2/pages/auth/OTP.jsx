@@ -254,7 +254,10 @@ export default function DeliveryOTP() {
         }
         sessionStorage.setItem("deliverySignupDetails", JSON.stringify(details))
         setIsLoading(false)
-        navigate("/food/delivery/signup/details", { replace: true })
+        navigate("/food/delivery/signup/details", {
+          replace: true,
+          state: { backTo: "/food/delivery/otp" },
+        })
         return
       }
 
@@ -541,7 +544,10 @@ export default function DeliveryOTP() {
                         countryCode: "+91",
                       }
                       sessionStorage.setItem("deliverySignupDetails", JSON.stringify(details))
-                      navigate("/food/delivery/signup/details", { replace: true })
+                      navigate("/food/delivery/signup/details", {
+                        replace: true,
+                        state: { backTo: "/food/delivery/otp" },
+                      })
                     }}
                     className="w-full py-3 bg-red-600 text-white rounded-lg font-bold text-sm hover:bg-red-700 shadow-md transition-all active:scale-95"
                   >

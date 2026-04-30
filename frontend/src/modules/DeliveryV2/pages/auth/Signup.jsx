@@ -163,7 +163,9 @@ export default function DeliverySignup() {
       sessionStorage.setItem("deliverySignupDetails", JSON.stringify(signupDetails))
       clearModuleAuth("delivery")
 
-      navigate("/food/delivery/signup/details")
+      navigate("/food/delivery/signup/details", {
+        state: { backTo: "/food/delivery/signup" },
+      })
     } catch (error) {
       const message =
         error?.response?.data?.message ||

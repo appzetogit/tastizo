@@ -210,7 +210,9 @@ export default function SignupStep1() {
       }
       sessionStorage.setItem("deliverySignupDetails", JSON.stringify(details))
       toast.success("Details saved")
-      navigate("/food/delivery/signup/documents")
+      navigate("/food/delivery/signup/documents", {
+        state: { backTo: "/food/delivery/signup/details" },
+      })
     } catch (error) {
       debugError("Error saving details:", error)
       toast.error("Failed to save. Please try again.")
