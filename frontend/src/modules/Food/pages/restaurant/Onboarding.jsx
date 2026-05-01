@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
+import { useSmoothScroll } from "@/shared/hooks/useSmoothScroll"
 import { Input } from "@food/components/ui/input"
 import { Button } from "@food/components/ui/button"
 import { Label } from "@food/components/ui/label"
@@ -485,6 +486,7 @@ function TimeSelector({ label, value, onChange }) {
 }
 
 export default function RestaurantOnboarding() {
+  useSmoothScroll()
   const companyName = useCompanyName()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()

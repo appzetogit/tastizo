@@ -74,42 +74,37 @@ const clearFreshLocationBootFlag = () => {
   }
 }
 
-const getPositionWithRetry = (forceFresh = true, options = {}, retryCount = 0) =>
+const getPositionFast = () =>
   new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error("Geolocation is not supported"))
+      reject(new Error("Geolocation not supported"))
       return
     }
-
-    const effectiveOptions = {
-      ...options,
-      maximumAge: forceFresh ? 0 : (options.maximumAge || 60000),
-    }
-
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve(position)
-      },
-      (error) => {
-        // On timeout, retry with a longer timeout but KEEP high accuracy
-        if (error?.code === 3 && retryCount === 0) {
-          getPositionWithRetry(
-            forceFresh,
-            {
-              enableHighAccuracy: true, // always keep high accuracy
-              timeout: 20000,
-              maximumAge: 0,
-            },
-            1,
-          )
-            .then(resolve)
-            .catch(reject)
-          return
-        }
+      resolve,
+      reject,
+      {
+        enableHighAccuracy: false,
+        timeout: 8000,
+        maximumAge: 300000, // 5 minutes cached
+      }
+    )
+  })
 
-        reject(error)
-      },
-      effectiveOptions,
+const getPositionHighAccuracy = () =>
+  new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation not supported"))
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      resolve,
+      reject,
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
     )
   })
 
@@ -623,6 +618,7 @@ export function LocationProvider({ children }) {
   })
   const [deliveryAddressMode, setDeliveryAddressMode] = useState(getStoredMode)
   const [selectedAddressId, setSelectedAddressId] = useState(getStoredSelectedAddressId)
+  const [locationStatus, setLocationStatus] = useState("idle") // idle, fetching, retrying, success, error
   const wasAuthenticatedRef = useRef(isAuthenticated())
 
   const hydrateBackendLocation = useCallback(async () => {
@@ -686,81 +682,98 @@ export function LocationProvider({ children }) {
       const {
         skipDatabaseUpdate = false,
         allowStoredFallback = true,
-        targetAccuracy = 10,
-        watchWindowMs = 25000,
-        maxWaitMs = 60000,
-        retryTimeout = 45000,
+        background = false,
       } = options
-      setLoading(true)
+
+      if (!background) setLoading(true)
       setError(null)
+      if (!background) setLocationStatus("fetching")
+
       try {
-        const precisePositionOptions = { targetAccuracy, watchWindowMs, maxWaitMs }
-        const retryPositionOptions = { timeout: retryTimeout }
-        const position = await getPreciseFreshPosition({
-          timeout: maxWaitMs,
-          maximumAge: 0,          // never use cached GPS
-          targetAccuracy: 20,     // aim for ≤20m accuracy (GPS chip level)
-          watchWindowMs: 15000,   // watch for 15s to refine fix
-          maxWaitMs: 40000,
-          ...precisePositionOptions,
-        }).catch(() =>
-          getPositionWithRetry(true, {
-            enableHighAccuracy: true,
-            timeout: 30000,
-            maximumAge: 0,
-            ...retryPositionOptions,
-          }),
-        )
+        let position
+        try {
+          // Stage 1: Fast Location
+          position = await getPositionFast()
+        } catch (fastErr) {
+          debugError("Fast location failed, trying high accuracy...", fastErr)
+          setLocationStatus("retrying")
+          // Stage 2: High Accuracy Retry
+          position = await getPositionHighAccuracy()
+        }
+
         const latitude = Number(position.coords.latitude)
         const longitude = Number(position.coords.longitude)
         const accuracy = Number(position.coords.accuracy)
-        const geocoded = await reverseGeocode(latitude, longitude, "gps")
-        const refinedLocation =
-          geocoded ||
-          buildPreciseGpsFallbackLocation({
-            latitude,
-            longitude,
-            accuracy,
-            sourceType: "gps",
-          })
 
-        if (Number.isFinite(accuracy)) {
-          refinedLocation.accuracy = accuracy
-        }
+        // Resolve coordinates immediately to unblock restaurant fetching
+        const basicLocation = buildPreciseGpsFallbackLocation({
+          latitude,
+          longitude,
+          accuracy,
+          sourceType: "gps",
+        })
 
-        if (!refinedLocation?.formattedAddress) {
-          refinedLocation.formattedAddress = `${latitude.toFixed(8)}, ${longitude.toFixed(8)}`
-          refinedLocation.address = refinedLocation.formattedAddress
-          refinedLocation.additionalDetails =
-            refinedLocation.additionalDetails || refinedLocation.formattedAddress
-        }
-
-        await applyLocation(refinedLocation, {
+        // Apply coordinates immediately
+        await applyLocation(basicLocation, {
           mode: "current",
           selectedAddress: null,
-          syncBackend: !skipDatabaseUpdate,
+          syncBackend: false, // Don't sync yet, wait for geocode if possible
         })
-        return refinedLocation
+
+        if (!background) {
+          setLocationStatus("success")
+          setLoading(false) // Unblock UI loading state
+        }
+
+        // Background Reverse Geocoding - do not await
+        reverseGeocode(latitude, longitude, "gps").then(async (refinedLocation) => {
+          if (refinedLocation) {
+            if (Number.isFinite(accuracy)) {
+              refinedLocation.accuracy = accuracy
+            }
+            await applyLocation(refinedLocation, {
+              mode: "current",
+              selectedAddress: null,
+              syncBackend: !skipDatabaseUpdate,
+            })
+          }
+        }).catch((err) => {
+          debugError("Background geocode failed:", err)
+        })
+
+        return basicLocation
       } catch (err) {
-        if (!allowStoredFallback) {
-          setError(err?.message || "Unable to fetch location")
-          throw err
+        if (!background) {
+          setLocationStatus("error")
+          let errorMsg = "Unable to fetch location. Please select location manually."
+          if (err?.code === 1) errorMsg = "Location permission denied. Please select location manually."
+          else if (err?.code === 3) errorMsg = "Location request timed out. Please select location manually."
+
+          if (!allowStoredFallback) {
+            setError(errorMsg)
+            setLoading(false)
+            throw new Error(errorMsg)
+          }
+
+          const fallbackLocation = readStoredLocation()
+          if (fallbackLocation?.latitude && fallbackLocation?.longitude) {
+            await applyLocation(fallbackLocation, {
+              mode: getStoredMode(),
+              selectedAddress: addresses.find(
+                (item) => String(getAddressId(item)) === String(getStoredSelectedAddressId()),
+              ),
+              syncBackend: false,
+            })
+            setLoading(false)
+            return fallbackLocation
+          }
+
+          setError(errorMsg)
+          setLoading(false)
+          throw new Error(errorMsg)
         }
-        const fallbackLocation = readStoredLocation()
-        if (fallbackLocation?.latitude && fallbackLocation?.longitude) {
-          await applyLocation(fallbackLocation, {
-            mode: getStoredMode(),
-            selectedAddress: addresses.find(
-              (item) => String(getAddressId(item)) === String(getStoredSelectedAddressId()),
-            ),
-            syncBackend: false,
-          })
-          return fallbackLocation
-        }
-        setError(err?.message || "Unable to fetch location")
-        throw err
       } finally {
-        setLoading(false)
+        if (!background) setLoading(false)
       }
     },
     [addresses, applyLocation],
@@ -809,6 +822,8 @@ export function LocationProvider({ children }) {
       setLocation(storedLocation)
       setPermissionGranted(true)
       setLoading(false)
+      // Refresh in background
+      requestLocation({ background: true }).catch(() => {})
     }
     if (forceFreshLocation && isAuthenticated() && !preserveSavedSelection) {
       requestLocation()
@@ -887,6 +902,7 @@ export function LocationProvider({ children }) {
       permissionGranted,
       deliveryAddressMode,
       selectedAddressId,
+      locationStatus,
       requestLocation,
       selectSavedAddress,
       saveAddressFromLocation,
@@ -899,6 +915,7 @@ export function LocationProvider({ children }) {
       permissionGranted,
       deliveryAddressMode,
       selectedAddressId,
+      locationStatus,
       requestLocation,
       selectSavedAddress,
       saveAddressFromLocation,

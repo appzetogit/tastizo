@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
+import { useSmoothScroll } from "@/shared/hooks/useSmoothScroll"
 import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
 import { AnimatePresence, motion } from "framer-motion"
 import {
@@ -61,6 +62,8 @@ export default function MenuCategoriesPage() {
   useEffect(() => {
     fetchCategories()
   }, [])
+
+  useSmoothScroll()
 
   useEffect(() => {
     const draftCategoryName = String(location.state?.draftCategoryName || "").trim()

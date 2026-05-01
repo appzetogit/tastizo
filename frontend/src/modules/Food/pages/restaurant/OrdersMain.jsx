@@ -5,7 +5,7 @@ import {
   isRestaurantOnboardingComplete,
 } from "@food/utils/onboardingUtils";
 import { motion, AnimatePresence } from "framer-motion";
-import Lenis from "lenis";
+import { useSmoothScroll } from "@/shared/hooks/useSmoothScroll";
 import {
   Printer,
   Volume2,
@@ -1333,24 +1333,7 @@ export default function OrdersMain() {
   };
 
   // Lenis smooth scrolling
-  useEffect(() => {
-    const lenis = new Lenis({
-      duration: 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      smoothWheel: true,
-    });
-
-    function raf(time) {
-      lenis.raf(time);
-      requestAnimationFrame(raf);
-    }
-
-    requestAnimationFrame(raf);
-
-    return () => {
-      lenis.destroy();
-    };
-  }, []);
+  useSmoothScroll();
 
   // Show new order popup when real order notification arrives from Socket.IO
   useEffect(() => {

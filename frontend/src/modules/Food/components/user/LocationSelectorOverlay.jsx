@@ -43,7 +43,7 @@ const getAddressIcon = (address) => {
 }
 
 export default function LocationSelectorOverlay({ isOpen, onClose }) {
-  const { location, loading, requestLocation } = useGeoLocation()
+  const { location, loading, requestLocation, locationStatus, error: locationError } = useGeoLocation()
   const { addresses = [], addAddress, updateAddress, setDefaultAddress, userProfile } = useProfile()
   const [showAddressForm, setShowAddressForm] = useState(false)
   const [mapPosition, setMapPosition] = useState([22.7196, 75.8577]) // Default Indore coordinates [lat, lng]
@@ -2435,17 +2435,21 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           >
             <button
               onClick={handleUseCurrentLocation}
-              disabled={loading}
+              disabled={loading && locationStatus !== "error"}
               className="w-full flex items-center justify-between py-4 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors group"
             >
               <div className="flex items-center gap-4">
                 <div className="h-10 w-10 rounded-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center group-hover:bg-green-100 dark:group-hover:bg-green-900/30 transition-colors">
-                  <Crosshair className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" strokeWidth={2.5} />
+                  <Crosshair className={`h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0 ${locationStatus === 'fetching' || locationStatus === 'retrying' ? 'animate-pulse' : ''}`} strokeWidth={2.5} />
                 </div>
                 <div className="text-left">
-                  <p className="font-semibold text-green-700 dark:text-green-400">Use current location</p>
+                  <p className="font-semibold text-green-700 dark:text-green-400">
+                    {locationStatus === 'fetching' ? 'Getting location...' : 
+                     locationStatus === 'retrying' ? 'Still trying...' : 
+                     'Use current location'}
+                  </p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {loading ? "Getting location..." : currentLocationText}
+                    {locationStatus === 'error' ? (locationError || "Unable to fetch location. Please select manually.") : currentLocationText}
                   </p>
                 </div>
               </div>
@@ -2461,7 +2465,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                 <div className="h-10 w-10 rounded-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center group-hover:bg-green-100 dark:group-hover:bg-green-900/30 transition-colors">
                   <Plus className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
-                <p className="font-semibold text-green-700 dark:text-green-400">Add Address</p>
+                <p className="font-semibold text-green-700 dark:text-green-400">Select manually / Add address</p>
               </div>
               <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
             </button>

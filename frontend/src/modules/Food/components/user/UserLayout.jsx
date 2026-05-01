@@ -1,4 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
+import { useSmoothScroll } from "@/shared/hooks/useSmoothScroll"
 import { useEffect, useState, createContext, useContext } from "react"
 import { ProfileProvider } from "@food/context/ProfileContext"
 import { LocationProvider } from "@food/context/LocationContext"
@@ -108,6 +109,8 @@ export default function UserLayout() {
     // Reset scroll to top whenever location changes (pathname, search, or hash)
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
   }, [location.pathname, location.search, location.hash])
+
+  useSmoothScroll({ touchMultiplier: 2 })
 
   const path = location.pathname.startsWith("/food")
     ? location.pathname.substring(5) || "/"

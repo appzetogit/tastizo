@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import Lenis from "lenis"
+import { useSmoothScroll } from "@/shared/hooks/useSmoothScroll"
 import BottomNavbar from "@food/components/restaurant/BottomNavbar"
 import MenuOverlay from "@food/components/restaurant/MenuOverlay"
 import { 
@@ -43,24 +43,7 @@ export default function RestaurantDetailsPage() {
   const [logoLoadFailed, setLogoLoadFailed] = useState(false)
 
   // Lenis smooth scrolling
-  useEffect(() => {
-    const lenis = new Lenis({
-      duration: 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      smoothWheel: true,
-    })
-
-    function raf(time) {
-      lenis.raf(time)
-      requestAnimationFrame(raf)
-    }
-
-    requestAnimationFrame(raf)
-
-    return () => {
-      lenis.destroy()
-    }
-  }, [])
+  useSmoothScroll()
 
   // Load restaurant data and listen for updates
   useEffect(() => {
