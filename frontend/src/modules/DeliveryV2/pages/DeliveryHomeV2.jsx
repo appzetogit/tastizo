@@ -165,12 +165,20 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const { isOnline, toggleOnline, riderLocation, activeOrder, tripStatus, setRiderLocation, setActiveOrder, updateTripStatus, clearActiveOrder } = useDeliveryStore();
   const { isWithinRange, distanceToTarget } = useProximityCheck();
   const { acceptOrder, reachPickup, pickUpOrder, reachDrop, completeDelivery, resetTrip } = useOrderManager();
-  const { newOrder, clearNewOrder, orderStatusUpdate, clearOrderStatusUpdate, claimedOrderId, clearClaimedOrderId, adminNotification, clearAdminNotification, isConnected: isSocketConnected, emitLocation } = useDeliveryNotifications();
+  const { newOrder, clearNewOrder, orderStatusUpdate, clearOrderStatusUpdate, claimedOrderId, clearClaimedOrderId, adminNotification, clearAdminNotification, isConnected: isSocketConnected, currentZoneId: socketCurrentZoneId, emitLocation } = useDeliveryNotifications();
   const companyName = useCompanyName();
   const { items: broadcastItems, unreadCount: notificationUnreadCount, markAsRead: markBroadcastAsRead, dismissAll: dismissAllBroadcast } = useNotificationInbox("delivery", { limit: 20 });
 
   const [incomingOrder, setIncomingOrder] = useState(null);
   const [cashLimitNotice, setCashLimitNotice] = useState(null);
+  const [currentZoneId, setCurrentZoneId] = useState(() => {
+    try {
+      return localStorage.getItem('deliveryCurrentZoneId') || null;
+    } catch {
+      return null;
+    }
+  });
+  const [deliveryZone, setDeliveryZone] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
   const [showEmergencyPopup, setShowEmergencyPopup] = useState(false);
@@ -233,9 +241,183 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     return () => window.removeEventListener('authRefreshFailed', onAuthFailure);
   }, [handleLogout]);
 
+  const handleAcceptOrder = useCallback(async (o) => {
+    try {
+      await acceptOrder(o);
+      setIncomingOrder(null);
+      clearNewOrder();
+      clearPersistedIncomingOrder();
+    } catch (err) {
+      const msg = String(err?.response?.data?.message || err?.message || '');
+      const isTaken = msg.toLowerCase().includes('already accepted') || 
+                      msg.toLowerCase().includes('another partner') ||
+                      (err?.response?.status === 403);
+      if (isTaken) {
+        setIncomingOrder(null);
+        clearNewOrder();
+        clearPersistedIncomingOrder();
+      }
+    }
+  }, [acceptOrder]);
+
+  const handleRejectOrder = useCallback(() => {
+    setIncomingOrder(null);
+    clearNewOrder();
+    clearPersistedIncomingOrder();
+  }, []);
+
+  const hydrateAvailableOrder = useCallback(
+    async (cancelled = false) => {
+      const currentActiveOrder = useDeliveryStore.getState().activeOrder;
+      const currentTripStatus = useDeliveryStore.getState().tripStatus;
+      
+      try {
+        const currentResponse = await deliveryAPI.getCurrentDelivery();
+        const currentPayload =
+          currentResponse?.data?.data?.activeOrder ||
+          currentResponse?.data?.data ||
+          null;
+
+        if (!cancelled && currentPayload && (currentPayload._id || currentPayload.orderId)) {
+          // Robust location mapping
+          const getLoc = (ref, keysLat, keysLng) => {
+            if (!ref) return null;
+            if (ref.location) {
+              if (Array.isArray(ref.location.coordinates) && ref.location.coordinates.length >= 2) {
+                return { lat: ref.location.coordinates[1], lng: ref.location.coordinates[0] };
+              }
+              return { lat: ref.location.latitude || ref.location.lat, lng: ref.location.longitude || ref.location.lng };
+            }
+            for (const k of keysLat) { if (ref[k] != null) return { lat: ref[k], lng: ref[keysLng[keysLat.indexOf(k)]] }; }
+            return null;
+          };
+
+          const resLoc = getLoc(currentPayload.restaurantId, ['latitude', 'lat'], ['longitude', 'lng']) || 
+                         getLoc(currentPayload, ['restaurant_lat', 'restaurantLat', 'latitude'], ['restaurant_lng', 'restaurantLng', 'longitude']);
+          const cusLoc = getLoc(currentPayload.deliveryAddress, ['latitude', 'lat'], ['longitude', 'lng']) || 
+                         getLoc(currentPayload, ['customer_lat', 'customerLat', 'latitude'], ['customer_lng', 'customerLng', 'longitude']);
+
+          setActiveOrder({
+            ...currentPayload,
+            _id: currentPayload._id,
+            orderId: currentPayload.orderId || currentPayload.order_id || currentPayload._id,
+            restaurantLocation: resLoc,
+            customerLocation: cusLoc
+          });
+
+          // Sync status with server
+          const backendStatus = String(currentPayload.deliveryStatus || currentPayload.orderState?.status || currentPayload.orderStatus || currentPayload.status || "").toLowerCase();
+          const currentPhase = currentPayload.deliveryState?.currentPhase;
+
+          if (['delivered', 'completed'].includes(backendStatus)) {
+            updateTripStatus('COMPLETED');
+          } else if (currentPhase === 'at_drop' || backendStatus === 'reached_drop') {
+            updateTripStatus('REACHED_DROP');
+          } else if (['picked_up', 'delivering'].includes(backendStatus)) {
+            updateTripStatus('PICKED_UP');
+          } else if (currentPhase === 'at_pickup' || backendStatus === 'reached_pickup') {
+            updateTripStatus('REACHED_PICKUP');
+          } else if (['confirmed', 'preparing', 'ready_for_pickup'].includes(backendStatus)) {
+             // Only set to PICKING_UP if we aren't already further ahead
+             if (currentTripStatus === 'IDLE') updateTripStatus('PICKING_UP');
+          }
+          return;
+        }
+
+        const availableResponse = await deliveryAPI.getOrders({ limit: 20, page: 1 });
+        const availablePayload =
+          availableResponse?.data?.data ||
+          availableResponse?.data ||
+          {};
+        const availableOrders = Array.isArray(availablePayload?.docs)
+          ? availablePayload.docs
+          : Array.isArray(availablePayload?.items)
+            ? availablePayload.items
+            : Array.isArray(availablePayload)
+              ? availablePayload
+              : [];
+
+        const nextCashLimitNotice =
+          availablePayload?.cashLimit?.blocked ? availablePayload.cashLimit : null;
+        if (!cancelled) setCashLimitNotice(nextCashLimitNotice);
+
+        const nextIncomingOrder = availableOrders.find((order) => {
+          const dispatchStatus = String(order?.dispatch?.status || '').toLowerCase();
+          const orderStatus = String(order?.orderStatus || order?.status || '').toLowerCase();
+          const hasAcceptedStatus = ['confirmed', 'preparing', 'ready_for_pickup', 'ready'].includes(orderStatus);
+          const isDispatchEligible =
+            !dispatchStatus ||
+            ['unassigned', 'assigned', 'offered', 'offer_sent', 'pending'].includes(dispatchStatus);
+
+          const partnerIdStr = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
+          const myOffer = getOfferForPartner(order, partnerIdStr);
+          const isOfferedToMe = Boolean(myOffer && myOffer.action === 'offered');
+
+          return hasAcceptedStatus && isDispatchEligible && shouldKeepIncomingOrder(order, partnerIdStr) && isOfferedToMe;
+        });
+
+        if (!cancelled && nextIncomingOrder) {
+          setCashLimitNotice(null);
+          setIncomingOrder((prev) => {
+            const prevId = getIncomingOrderIdentity(prev);
+            const nextId = getIncomingOrderIdentity(nextIncomingOrder);
+            return prevId === nextId && prev ? prev : nextIncomingOrder;
+          });
+        }
+        // Removed the automatic clearing to null here.
+        // incomingOrder is cleared by onAccept/onReject/socket(order_claimed)
+      } catch (error) {
+        console.warn('[DeliveryHomeV2] Available order fallback sync failed:', error?.message || error);
+      }
+    }, [setActiveOrder, updateTripStatus, setCashLimitNotice, setIncomingOrder]);
+
+  const syncDeliveryZoneState = useCallback(async (latitude, longitude, onlineStatus, extras = {}) => {
+    const response = await deliveryAPI.updateLocation(latitude, longitude, onlineStatus, extras);
+    const payload =
+      response?.data?.data ||
+      response?.data ||
+      {};
+    const nextZoneId = payload?.currentZoneId ? String(payload.currentZoneId) : null;
+    setDeliveryZone(payload?.matchedZone || null);
+
+    setCurrentZoneId((previousZoneId) => {
+      const previousNormalized = previousZoneId ? String(previousZoneId) : null;
+      if (nextZoneId !== previousNormalized) {
+        console.log('[DeliveryZone] Zone changed', {
+          oldZoneId: previousNormalized,
+          updatedZoneId: nextZoneId,
+          latitude,
+          longitude,
+        });
+        void hydrateAvailableOrder();
+      }
+      return nextZoneId;
+    });
+
+    try {
+      if (nextZoneId) localStorage.setItem('deliveryCurrentZoneId', nextZoneId);
+      else localStorage.removeItem('deliveryCurrentZoneId');
+    } catch {
+      // Ignore local storage failures.
+    }
+
+    return payload;
+  }, [hydrateAvailableOrder]);
+
   useEffect(() => {
     deliveryPartnerIdRef.current = resolveDeliveryPartnerIdFromClient();
   }, []);
+
+  useEffect(() => {
+    if (socketCurrentZoneId === undefined) return;
+    setCurrentZoneId(socketCurrentZoneId || null);
+    try {
+      if (socketCurrentZoneId) localStorage.setItem('deliveryCurrentZoneId', socketCurrentZoneId);
+      else localStorage.removeItem('deliveryCurrentZoneId');
+    } catch {
+      // Ignore local storage failures.
+    }
+  }, [socketCurrentZoneId]);
 
   useEffect(() => {
     if (activeOrder) return;
@@ -313,7 +495,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                 polyline: activePolyline // Include polyline in every stream update for resilience
               };
               // A. HTTP Backup
-              deliveryAPI.updateLocation(lat, lng, true, { heading }).catch(() => {});
+              syncDeliveryZoneState(lat, lng, true, { heading }).catch(() => {});
               
               // B. SOCKET LIVE (SILKY SMOOTH)
               if (payload.orderId) emitLocation(payload);
@@ -336,7 +518,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       }, 50); // 20 FPS movement
     }
     return () => clearInterval(interval);
-  }, [isSimMode, simPath, simIndex, activeOrder, emitLocation, activePolyline, eta, tripStatus]);
+  }, [activeOrder, activePolyline, emitLocation, eta, isSimMode, simIndex, simPath, syncDeliveryZoneState, tripStatus]);
 
   // Fetch Emergency numbers and Profile (Restored logic)
   useEffect(() => {
@@ -534,8 +716,15 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
   // 2. Online/Offline Status Sync (Low Frequency)
   useEffect(() => {
-    deliveryAPI.updateOnlineStatus(isOnline).catch(() => {});
-  }, [isOnline]);
+    if (!isOnline) {
+      deliveryAPI.updateOnlineStatus(false).catch(() => {});
+      return;
+    }
+
+    if (lastCoordRef.current) {
+      syncDeliveryZoneState(lastCoordRef.current.lat, lastCoordRef.current.lng, true).catch(() => {});
+    }
+  }, [isOnline, syncDeliveryZoneState]);
 
   // 3. Location logic (Smart Frequency Tracking)
   useEffect(() => {
@@ -597,7 +786,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
           polyline: activePolyline
         };
 
-        deliveryAPI.updateLocation(lat, lng, true, { 
+        syncDeliveryZoneState(lat, lng, true, { 
           heading: heading || 0,
           speed: speed || 0,
           accuracy: pos.coords.accuracy 
@@ -631,7 +820,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     });
     
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [isOnline, setRiderLocation, isSimMode]);
+  }, [activeOrder?._id, activeOrder?.orderId, activePolyline, distanceToTarget, emitLocation, eta, isOnline, isSimMode, reachDrop, reachPickup, riderLocation, setRiderLocation, syncDeliveryZoneState, tripStatus]);
 
   // 3.5. Background Ping / Heartbeat
   // If watchPosition stops firing (e.g. app in background or device stationary),
@@ -645,7 +834,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       // If no natural GPS update happened in the last 15 seconds, force a ping
       if (now - lastLocationSentAt.current >= 15000 && lastCoordRef.current) {
         lastLocationSentAt.current = now;
-        deliveryAPI.updateLocation(
+        syncDeliveryZoneState(
           lastCoordRef.current.lat, 
           lastCoordRef.current.lng, 
           true, 
@@ -655,7 +844,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     }, 10000); // Check every 10 seconds
     
     return () => clearInterval(pingInterval);
-  }, [isOnline]);
+  }, [isOnline, syncDeliveryZoneState]);
 
   useEffect(() => { 
     const partnerId = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
@@ -684,135 +873,8 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     clearClaimedOrderId();
   }, [claimedOrderId]);
 
-  const handleAcceptOrder = useCallback(async (o) => {
-    try {
-      await acceptOrder(o);
-      setIncomingOrder(null);
-      clearNewOrder();
-      clearPersistedIncomingOrder();
-    } catch (err) {
-      const msg = String(err?.response?.data?.message || err?.message || '');
-      const isTaken = msg.toLowerCase().includes('already accepted') || 
-                      msg.toLowerCase().includes('another partner') ||
-                      (err?.response?.status === 403);
-      if (isTaken) {
-        setIncomingOrder(null);
-        clearNewOrder();
-        clearPersistedIncomingOrder();
-      }
-    }
-  }, [acceptOrder]);
 
-  const handleRejectOrder = useCallback(() => {
-    setIncomingOrder(null);
-    clearNewOrder();
-    clearPersistedIncomingOrder();
-  }, []);
 
-  const hydrateAvailableOrder = useCallback(
-    async (cancelled = false) => {
-      const currentActiveOrder = useDeliveryStore.getState().activeOrder;
-      const currentTripStatus = useDeliveryStore.getState().tripStatus;
-      
-      try {
-        const currentResponse = await deliveryAPI.getCurrentDelivery();
-        const currentPayload =
-          currentResponse?.data?.data?.activeOrder ||
-          currentResponse?.data?.data ||
-          null;
-
-        if (!cancelled && currentPayload && (currentPayload._id || currentPayload.orderId)) {
-          // Robust location mapping
-          const getLoc = (ref, keysLat, keysLng) => {
-            if (!ref) return null;
-            if (ref.location) {
-              if (Array.isArray(ref.location.coordinates) && ref.location.coordinates.length >= 2) {
-                return { lat: ref.location.coordinates[1], lng: ref.location.coordinates[0] };
-              }
-              return { lat: ref.location.latitude || ref.location.lat, lng: ref.location.longitude || ref.location.lng };
-            }
-            for (const k of keysLat) { if (ref[k] != null) return { lat: ref[k], lng: ref[keysLng[keysLat.indexOf(k)]] }; }
-            return null;
-          };
-
-          const resLoc = getLoc(currentPayload.restaurantId, ['latitude', 'lat'], ['longitude', 'lng']) || 
-                         getLoc(currentPayload, ['restaurant_lat', 'restaurantLat', 'latitude'], ['restaurant_lng', 'restaurantLng', 'longitude']);
-          const cusLoc = getLoc(currentPayload.deliveryAddress, ['latitude', 'lat'], ['longitude', 'lng']) || 
-                         getLoc(currentPayload, ['customer_lat', 'customerLat', 'latitude'], ['customer_lng', 'customerLng', 'longitude']);
-
-          setActiveOrder({
-            ...currentPayload,
-            _id: currentPayload._id,
-            orderId: currentPayload.orderId || currentPayload.order_id || currentPayload._id,
-            restaurantLocation: resLoc,
-            customerLocation: cusLoc
-          });
-
-          // Sync status with server
-          const backendStatus = String(currentPayload.deliveryStatus || currentPayload.orderState?.status || currentPayload.orderStatus || currentPayload.status || "").toLowerCase();
-          const currentPhase = currentPayload.deliveryState?.currentPhase;
-
-          if (['delivered', 'completed'].includes(backendStatus)) {
-            updateTripStatus('COMPLETED');
-          } else if (currentPhase === 'at_drop' || backendStatus === 'reached_drop') {
-            updateTripStatus('REACHED_DROP');
-          } else if (['picked_up', 'delivering'].includes(backendStatus)) {
-            updateTripStatus('PICKED_UP');
-          } else if (currentPhase === 'at_pickup' || backendStatus === 'reached_pickup') {
-            updateTripStatus('REACHED_PICKUP');
-          } else if (['confirmed', 'preparing', 'ready_for_pickup'].includes(backendStatus)) {
-             // Only set to PICKING_UP if we aren't already further ahead
-             if (currentTripStatus === 'IDLE') updateTripStatus('PICKING_UP');
-          }
-          return;
-        }
-
-        const availableResponse = await deliveryAPI.getOrders({ limit: 20, page: 1 });
-        const availablePayload =
-          availableResponse?.data?.data ||
-          availableResponse?.data ||
-          {};
-        const availableOrders = Array.isArray(availablePayload?.docs)
-          ? availablePayload.docs
-          : Array.isArray(availablePayload?.items)
-            ? availablePayload.items
-            : Array.isArray(availablePayload)
-              ? availablePayload
-              : [];
-
-        const nextCashLimitNotice =
-          availablePayload?.cashLimit?.blocked ? availablePayload.cashLimit : null;
-        if (!cancelled) setCashLimitNotice(nextCashLimitNotice);
-
-        const nextIncomingOrder = availableOrders.find((order) => {
-          const dispatchStatus = String(order?.dispatch?.status || '').toLowerCase();
-          const orderStatus = String(order?.orderStatus || order?.status || '').toLowerCase();
-          const hasAcceptedStatus = ['confirmed', 'preparing', 'ready_for_pickup', 'ready'].includes(orderStatus);
-          const isDispatchEligible =
-            !dispatchStatus ||
-            ['unassigned', 'assigned', 'offered', 'offer_sent', 'pending'].includes(dispatchStatus);
-
-          const partnerIdStr = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
-          const myOffer = getOfferForPartner(order, partnerIdStr);
-          const isOfferedToMe = Boolean(myOffer && myOffer.action === 'offered');
-
-          return hasAcceptedStatus && isDispatchEligible && shouldKeepIncomingOrder(order, partnerIdStr) && isOfferedToMe;
-        });
-
-        if (!cancelled && nextIncomingOrder) {
-          setCashLimitNotice(null);
-          setIncomingOrder((prev) => {
-            const prevId = getIncomingOrderIdentity(prev);
-            const nextId = getIncomingOrderIdentity(nextIncomingOrder);
-            return prevId === nextId && prev ? prev : nextIncomingOrder;
-          });
-        }
-        // Removed the automatic clearing to null here.
-        // incomingOrder is cleared by onAccept/onReject/socket(order_claimed)
-      } catch (error) {
-        console.warn('[DeliveryHomeV2] Available order fallback sync failed:', error?.message || error);
-      }
-    }, [setActiveOrder, updateTripStatus, setCashLimitNotice, setIncomingOrder]);
 
   useEffect(() => {
     let cancelled = false;
@@ -891,7 +953,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                   if (nextState) {
                      // Try to get location and sync immediately so we are visible for dispatch right away
                      navigator.geolocation.getCurrentPosition((pos) => {
-                         deliveryAPI.updateLocation(pos.coords.latitude, pos.coords.longitude, true).catch(() => {});
+                         syncDeliveryZoneState(pos.coords.latitude, pos.coords.longitude, true).catch(() => {});
                      }, (err) => console.warn('Online sync position failed:', err), { enableHighAccuracy: true });
                   } else {
                      deliveryAPI.updateOnlineStatus(false).catch(() => {});
@@ -973,8 +1035,17 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                       <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
                     </div>
                     <div>
-                      <h3 className="text-white font-black text-[11px] uppercase tracking-widest leading-none mb-1">{isOnline ? 'System Online' : 'System Offline'}</h3>
-                      <p className="text-gray-400 text-[10px] font-bold uppercase tracking-tight">{isOnline ? 'Waiting for order requests' : 'Go online to receive jobs'}</p>
+                      <h3 className="text-white font-black text-[11px] uppercase tracking-widest leading-none mb-1">
+                        {isOnline ? 'System Online' : 'System Offline'} 
+                        {isOnline && deliveryZone?.name && (
+                          <span className="ml-2 text-green-400">• {deliveryZone.name}</span>
+                        )}
+                      </h3>
+                      <p className="text-gray-400 text-[10px] font-bold uppercase tracking-tight">
+                        {isOnline 
+                          ? (currentZoneId ? 'Receiving orders in your zone' : 'Outside service area') 
+                          : 'Go online to receive jobs'}
+                      </p>
                     </div>
                   </div>
                 </div>

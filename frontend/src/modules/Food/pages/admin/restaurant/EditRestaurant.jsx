@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { adminAPI } from "@food/api"
+import { adminAPI, zoneAPI } from "@food/api"
 import { Input } from "@food/components/ui/input"
 import { Button } from "@food/components/ui/button"
 import { Label } from "@food/components/ui/label"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2, MapPin, Navigation } from "lucide-react"
+import { Loader } from "@googlemaps/js-api-loader"
 
 const debugError = (..._args) => {}
 
@@ -22,6 +23,20 @@ const normalizeZoneId = (zoneId) => {
   if (!zoneId) return ""
   if (typeof zoneId === "string") return zoneId
   return zoneId?._id || zoneId?.id || ""
+}
+
+const detectZoneIdForCoords = async (latitude, longitude) => {
+  const lat = Number(latitude)
+  const lng = Number(longitude)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return ""
+  try {
+    const response = await zoneAPI.detectZone(lat, lng)
+    const payload = response?.data?.data || null
+    if (payload?.status === "IN_SERVICE" && payload?.zoneId) {
+      return String(payload.zoneId)
+    }
+  } catch {}
+  return ""
 }
 
 const normalizeLocationFormFromRestaurant = (restaurant) => {
@@ -141,6 +156,9 @@ export default function EditRestaurant() {
 
   const locationSearchInputRef = useRef(null)
   const placesAutocompleteRef = useRef(null)
+  const mapRef = useRef(null)
+  const mapInstanceRef = useRef(null)
+  const markerRef = useRef(null)
 
   const restaurantId = useMemo(() => {
     if (id) return id
@@ -259,11 +277,33 @@ export default function EditRestaurant() {
         }
       }
 
-      placesAutocompleteRef.current.addListener("place_changed", () => {
+      placesAutocompleteRef.current.addListener("place_changed", async () => {
         const place = placesAutocompleteRef.current.getPlace()
         const parsed = parsePlace(place)
+        const detectedZoneId = await detectZoneIdForCoords(parsed.latitude, parsed.longitude)
+        
+        if (mapInstanceRef.current && window.google) {
+          const pos = { lat: parsed.latitude, lng: parsed.longitude }
+          mapInstanceRef.current.setCenter(pos)
+          mapInstanceRef.current.setZoom(17)
+          if (markerRef.current) {
+            markerRef.current.setPosition(pos)
+          } else {
+            markerRef.current = new window.google.maps.Marker({
+              position: pos,
+              map: mapInstanceRef.current,
+              draggable: true,
+              animation: window.google.maps.Animation.DROP,
+            })
+            markerRef.current.addListener("dragend", async () => {
+              const newPos = markerRef.current.getPosition()
+              await handleMapUpdate(newPos.lat(), newPos.lng())
+            })
+          }
+        }
         setLocationForm((prev) => ({
           ...prev,
+          zoneId: detectedZoneId || prev.zoneId || "",
           formattedAddress: parsed.formattedAddress || prev.formattedAddress,
           addressLine1: parsed.formattedAddress || prev.addressLine1,
           area: parsed.area || prev.area,
@@ -274,9 +314,74 @@ export default function EditRestaurant() {
           longitude: parsed.longitude !== "" ? parsed.longitude : prev.longitude,
         }))
       })
+
+      // Initialize Map
+      if (mapRef.current && !mapInstanceRef.current) {
+        const initialPos = {
+          lat: Number(locationForm.latitude) || 20.5937,
+          lng: Number(locationForm.longitude) || 78.9629,
+        }
+
+        const map = new window.google.maps.Map(mapRef.current, {
+          center: initialPos,
+          zoom: locationForm.latitude && locationForm.longitude ? 17 : 5,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+        })
+
+        mapInstanceRef.current = map
+
+        if (locationForm.latitude && locationForm.longitude) {
+          markerRef.current = new window.google.maps.Marker({
+            position: initialPos,
+            map: map,
+            draggable: true,
+          })
+          markerRef.current.addListener("dragend", async () => {
+            const newPos = markerRef.current.getPosition()
+            await handleMapUpdate(newPos.lat(), newPos.lng())
+          })
+        }
+
+        map.addListener("click", async (e) => {
+          await handleMapUpdate(e.latLng.lat(), e.latLng.lng())
+        })
+      }
+
+    }
+
+    const handleMapUpdate = async (lat, lng) => {
+      const latitude = Number(lat.toFixed(6))
+      const longitude = Number(lng.toFixed(6))
+
+      if (markerRef.current) {
+        markerRef.current.setPosition({ lat: latitude, lng: longitude })
+      }
+
+      const detectedZoneId = await detectZoneIdForCoords(latitude, longitude)
+
+      let reverseAddress = ""
+      try {
+        const geocoder = new window.google.maps.Geocoder()
+        const res = await geocoder.geocode({ location: { lat: latitude, lng: longitude } })
+        if (res.results && res.results[0]) {
+          reverseAddress = res.results[0].formatted_address
+        }
+      } catch {}
+
+      setLocationForm((prev) => ({
+        ...prev,
+        zoneId: detectedZoneId || prev.zoneId || "",
+        latitude,
+        longitude,
+        formattedAddress: reverseAddress || prev.formattedAddress,
+        addressLine1: reverseAddress || prev.addressLine1,
+      }))
     }
 
     requestAnimationFrame(init)
+
     return () => {
       cancelled = true
       placesAutocompleteRef.current = null
@@ -338,10 +443,6 @@ export default function EditRestaurant() {
     const latitude = Number(locationForm.latitude)
     const longitude = Number(locationForm.longitude)
 
-    if (!locationForm.zoneId) {
-      alert("Please select a zone")
-      return
-    }
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !locationForm.formattedAddress) {
       alert("Please select a location from dropdown")
       return
@@ -349,8 +450,9 @@ export default function EditRestaurant() {
 
     try {
       setSavingLocation(true)
+      const detectedZoneId = await detectZoneIdForCoords(latitude, longitude)
       const payload = {
-        zoneId: locationForm.zoneId,
+        zoneId: detectedZoneId || locationForm.zoneId || "",
         latitude,
         longitude,
         coordinates: [longitude, latitude],
@@ -526,14 +628,14 @@ export default function EditRestaurant() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
-                  <Label>Service Zone</Label>
+                  <Label>Service Zone (auto from pin)</Label>
                   <select
                     value={locationForm.zoneId || ""}
                     onChange={(e) => setLocationForm((p) => ({ ...p, zoneId: e.target.value }))}
                     className="mt-1 h-10 w-full rounded-md border border-input bg-white px-3 text-sm"
                     disabled={zonesLoading}
                   >
-                    <option value="">{zonesLoading ? "Loading zones..." : "Select a zone"}</option>
+                    <option value="">{zonesLoading ? "Loading zones..." : "Auto-detect from selected pin"}</option>
                     {zones.map((z) => {
                       const zid = normalizeZoneId(z?._id || z?.id)
                       const label = z?.name || z?.zoneName || zid
@@ -559,6 +661,27 @@ export default function EditRestaurant() {
                   </p>
                 </div>
 
+                <div className="md:col-span-2 space-y-2">
+                  <Label className="text-xs text-slate-700 font-medium flex items-center gap-2">
+                    <MapPin className="w-3.5 h-3.5 text-orange-600" />
+                    Pin restaurant location*
+                  </Label>
+                  <div
+                    ref={mapRef}
+                    className="w-full h-[300px] rounded-lg border border-slate-200 bg-slate-50 overflow-hidden relative"
+                    style={{ minHeight: "300px" }}
+                  >
+                    <div className="absolute top-2 right-2 z-10">
+                       <div className="bg-white/90 backdrop-blur-sm px-2 py-1 rounded shadow-sm border border-slate-100 text-[10px] font-medium text-orange-700 flex items-center gap-1">
+                         <Navigation className="w-3 h-3" />
+                         Draggable Pin
+                       </div>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 italic">
+                    Tip: You can drag the marker or click on the map to set the exact restaurant location.
+                  </p>
+                </div>
                 <div className="md:col-span-2">
                   <Label>Formatted Address</Label>
                   <Input value={locationForm.formattedAddress} readOnly className="mt-1 bg-slate-50" />
@@ -595,4 +718,3 @@ export default function EditRestaurant() {
     </div>
   )
 }
-

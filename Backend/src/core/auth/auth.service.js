@@ -1061,6 +1061,10 @@ export const getProfile = async (userId, role) => {
         email: partner.email || null,
         deliveryId,
         status: partner.status === "rejected" ? "blocked" : partner.status,
+        currentZoneId: partner.currentZoneId || null,
+        currentLat: Number.isFinite(Number(partner.currentLat)) ? Number(partner.currentLat) : null,
+        currentLng: Number.isFinite(Number(partner.currentLng)) ? Number(partner.currentLng) : null,
+        lastLocationUpdatedAt: partner.lastLocationUpdatedAt || partner.lastLocationAt || null,
         profileImage: partner.profilePhoto
           ? { url: partner.profilePhoto }
           : null,

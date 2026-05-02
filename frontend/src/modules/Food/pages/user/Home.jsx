@@ -1573,7 +1573,9 @@ export default function Home() {
               .trim();
 
           const strictCityRestaurants = restaurantsArray.filter((restaurant) => {
-            if (!hasUsableUserCity) return true;
+            // When the backend already filtered by the user's resolved service zone,
+            // do not hide valid restaurants again because of stale city text.
+            if (effectiveZoneId || !hasUsableUserCity) return true;
 
             const cityCandidates = [
               restaurant?.city,
@@ -1594,7 +1596,9 @@ export default function Home() {
           });
 
           const restaurantsForDisplay =
-            hasUsableUserCity && strictCityRestaurants.length === 0
+            effectiveZoneId
+              ? restaurantsArray
+              : hasUsableUserCity && strictCityRestaurants.length === 0
               ? restaurantsArray
               : strictCityRestaurants;
 

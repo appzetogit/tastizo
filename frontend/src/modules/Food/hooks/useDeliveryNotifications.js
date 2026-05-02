@@ -188,6 +188,13 @@ export const useDeliveryNotifications = () => {
   const [orderStatusUpdate, setOrderStatusUpdate] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [deliveryPartnerId, setDeliveryPartnerId] = useState(null);
+  const [currentZoneId, setCurrentZoneId] = useState(() => {
+    try {
+      return localStorage.getItem('deliveryCurrentZoneId') || null;
+    } catch {
+      return null;
+    }
+  });
   const [claimedOrderId, setClaimedOrderId] = useState(null); // set when another partner claims an order
   const [adminNotification, setAdminNotification] = useState(null);
   const joinedDeliveryRoomRef = useRef(null);
@@ -369,6 +376,25 @@ export const useDeliveryNotifications = () => {
     }
   }, [playNotificationSound, showBackgroundOrderNotification, startAlertLoop]);
 
+  const shouldAcceptSocketOrderForPartner = useCallback((orderData = {}) => {
+    const partnerId = deliveryPartnerId || resolveDeliveryPartnerIdFromClient();
+    const eligibleIds = Array.isArray(orderData?.eligibleDeliveryPartnerIds)
+      ? orderData.eligibleDeliveryPartnerIds.map((id) => String(id))
+      : [];
+    if (eligibleIds.length > 0 && partnerId) {
+      return eligibleIds.includes(String(partnerId));
+    }
+
+    const offeredTo = Array.isArray(orderData?.dispatch?.offeredTo)
+      ? orderData.dispatch.offeredTo
+      : [];
+    if (offeredTo.length > 0 && partnerId) {
+      return offeredTo.some((entry) => String(entry?.partnerId || '') === String(partnerId));
+    }
+
+    return true;
+  }, [deliveryPartnerId]);
+
   const recoverDeliveryState = useCallback(async () => {
     if (!deliveryPartnerId) return;
 
@@ -422,7 +448,7 @@ export const useDeliveryNotifications = () => {
         return hasAcceptedStatus && isDispatchEligible && (offeredTo.length === 0 || isOfferedToMe);
       });
 
-      if (recoverableOrder && !activeOrderRef.current) {
+    if (recoverableOrder && !activeOrderRef.current) {
         debugLog('Recovered available delivery order after reconnect/focus:', recoverableOrder);
         setNewOrder(recoverableOrder);
         handleIncomingOrderAlert(recoverableOrder);
@@ -796,6 +822,18 @@ export const useDeliveryNotifications = () => {
       void recoverDeliveryState();
     });
 
+    socketRef.current.on('delivery_zone_updated', (data) => {
+      const nextZoneId = String(data?.currentZoneId || '').trim() || null;
+      setCurrentZoneId(nextZoneId);
+      try {
+        if (nextZoneId) localStorage.setItem('deliveryCurrentZoneId', nextZoneId);
+        else localStorage.removeItem('deliveryCurrentZoneId');
+      } catch {
+        // Ignore storage sync failures.
+      }
+      debugLog('Delivery zone updated', data);
+    });
+
     socketRef.current.on('delivery-room-joined', (data) => {
       debugLog('Delivery room joined successfully', data);
     });
@@ -859,6 +897,14 @@ export const useDeliveryNotifications = () => {
     });
 
     socketRef.current.on('new_order', (orderData) => {
+      if (!shouldAcceptSocketOrderForPartner(orderData)) {
+        debugLog('Ignoring new_order not meant for this delivery partner', {
+          orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
+          deliveryPartnerId,
+          currentZoneId,
+        });
+        return;
+      }
       debugLog('New order received via socket', {
         orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
         dispatchStatus: orderData?.dispatch?.status,
@@ -869,6 +915,14 @@ export const useDeliveryNotifications = () => {
 
     // Listen for priority-based order notifications (new_order_available)
     socketRef.current.on('new_order_available', (orderData) => {
+      if (!shouldAcceptSocketOrderForPartner(orderData)) {
+        debugLog('Ignoring new_order_available not meant for this delivery partner', {
+          orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
+          deliveryPartnerId,
+          currentZoneId,
+        });
+        return;
+      }
       debugLog('New order available received via socket', {
         orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
         phase: orderData?.phase || 'unknown',
@@ -1003,7 +1057,7 @@ export const useDeliveryNotifications = () => {
         socketRef.current = null;
       }
     };
-  }, [deliveryPartnerId, handleIncomingOrderAlert, joinDeliveryRoomIfPossible, playNotificationSound, recoverDeliveryState, showBackgroundOrderNotification, startAlertLoop, stopAlertLoop]);
+  }, [currentZoneId, deliveryPartnerId, handleIncomingOrderAlert, joinDeliveryRoomIfPossible, playNotificationSound, recoverDeliveryState, showBackgroundOrderNotification, shouldAcceptSocketOrderForPartner, startAlertLoop, stopAlertLoop]);
 
   useEffect(() => {
     if (!deliveryPartnerId) {
@@ -1065,6 +1119,7 @@ export const useDeliveryNotifications = () => {
     claimedOrderId,
     clearClaimedOrderId,
     isConnected,
+    currentZoneId,
     playNotificationSound,
     emitLocation
   };

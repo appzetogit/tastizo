@@ -4,7 +4,7 @@ import { FoodRestaurant } from '../models/restaurant.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodCategory } from '../../admin/models/category.model.js';
 import { getFoodDisplayPrice, serializeFoodVariants } from '../../admin/services/foodVariant.service.js';
-import { pointLikeBelongsToZone, resolveZoneFromQuery } from '../../shared/zoneResolver.js';
+import { resolveZoneFromQuery, restaurantBelongsToResolvedZone } from '../../shared/zoneResolver.js';
 
 const PUBLIC_VISIBLE_RESTAURANT_STATUSES = ['approved'];
 
@@ -18,7 +18,7 @@ const buildPublicVisibleRestaurantFilter = (extra = {}) => ({
 
 const restaurantMatchesResolvedZone = (restaurant, resolvedZone) => {
     if (!restaurant || !resolvedZone?._id) return false;
-    return pointLikeBelongsToZone(restaurant.location, resolvedZone);
+    return restaurantBelongsToResolvedZone(restaurant, resolvedZone);
 };
 
 const buildMenuFromFoods = async (foods = []) => {

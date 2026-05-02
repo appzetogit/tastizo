@@ -103,6 +103,33 @@ const normalizeApprovalStateUpdate = (update) => {
   return nextUpdate;
 };
 
+const syncFlatAddressFieldsFromLocation = (target = {}) => {
+  const location = target?.location;
+  if (!location || typeof location !== "object") return target;
+
+  const addressLine1 = String(
+    location.addressLine1 || location.formattedAddress || location.address || "",
+  ).trim();
+  const addressLine2 = String(location.addressLine2 || "").trim();
+  const area = String(location.area || "").trim();
+  const city = String(location.city || "").trim();
+  const state = String(location.state || "").trim();
+  const pincode = String(
+    location.pincode || location.zipCode || location.postalCode || "",
+  ).trim();
+  const landmark = String(location.landmark || "").trim();
+
+  target.addressLine1 = addressLine1;
+  target.addressLine2 = addressLine2;
+  target.area = area;
+  target.city = city;
+  target.state = state;
+  target.pincode = pincode;
+  target.landmark = landmark;
+
+  return target;
+};
+
 const geoPointSchema = new mongoose.Schema(
   {
     type: { type: String, enum: ["Point"], default: "Point" },
@@ -365,7 +392,7 @@ const restaurantSchema = new mongoose.Schema(
   },
 );
 
-restaurantSchema.pre("validate", function normalizeDerivedFields(next) {
+restaurantSchema.pre("validate", async function normalizeDerivedFields(next) {
   const currentStatus =
     typeof this.status === "string" ? this.status.trim().toLowerCase() : "";
 
@@ -476,6 +503,19 @@ restaurantSchema.pre("validate", function normalizeDerivedFields(next) {
       if (!this.location.landmark && this.landmark)
         this.location.landmark = this.landmark;
     }
+
+    const hasCoordinates =
+      Array.isArray(this.location.coordinates) &&
+      this.location.coordinates.length === 2 &&
+      this.location.coordinates.every(Number.isFinite);
+    const hasLatLng =
+      typeof this.location.latitude === "number" &&
+      Number.isFinite(this.location.latitude) &&
+      typeof this.location.longitude === "number" &&
+      Number.isFinite(this.location.longitude);
+    if (hasCoordinates || hasLatLng) {
+      syncFlatAddressFieldsFromLocation(this);
+    }
   }
 
   // Derive estimatedDeliveryTimeMinutes from the human string if not explicitly set.
@@ -496,11 +536,30 @@ restaurantSchema.pre("validate", function normalizeDerivedFields(next) {
       }
     }
   }
+
+  // Fallback: detect zoneId from coordinates if missing
+  if (!this.zoneId && this.location) {
+    try {
+      const { resolveZoneFromAddressLike } = await import("../../shared/zoneResolver.js");
+      const resolvedZone = await resolveZoneFromAddressLike(this.location);
+      if (resolvedZone?._id) {
+        this.zoneId = resolvedZone._id;
+        console.log(`[RestaurantModel] Auto-detected zone ${this.zoneId} for restaurant ${this.restaurantName}`);
+      }
+    } catch (err) {
+      console.error("[RestaurantModel] Failed to auto-detect zone:", err);
+    }
+  }
+
   next();
 });
 
 const approvalUpdateMiddleware = function approvalUpdateMiddleware(next) {
-  this.setUpdate(normalizeApprovalStateUpdate(this.getUpdate()));
+  const normalizedUpdate = normalizeApprovalStateUpdate(this.getUpdate());
+  if (normalizedUpdate?.$set && typeof normalizedUpdate.$set === "object") {
+    syncFlatAddressFieldsFromLocation(normalizedUpdate.$set);
+  }
+  this.setUpdate(normalizedUpdate);
   next();
 };
 

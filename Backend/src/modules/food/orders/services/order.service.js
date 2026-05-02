@@ -144,6 +144,23 @@ function extractLatLng(locationLike) {
   return null;
 }
 
+async function assertRestaurantZoneIntegrity(restaurant) {
+  if (!restaurant?.zoneId) {
+    throw new ValidationError("Restaurant zone is not configured");
+  }
+
+  const resolvedRestaurantZone = await resolveZoneFromAddressLike(restaurant.location);
+  if (!resolvedRestaurantZone?._id) {
+    throw new ValidationError("Restaurant location is not configured correctly");
+  }
+
+  if (String(resolvedRestaurantZone._id) !== String(restaurant.zoneId)) {
+    throw new ValidationError("Restaurant service area is misconfigured. Please contact support.");
+  }
+
+  return resolvedRestaurantZone;
+}
+
 /** Append-only food_order_payments row; never blocks main flow on failure */
 // 🗑️ Deprecated in favor of FoodTransaction system.
 
@@ -171,14 +188,9 @@ export async function createOrder(userId, dto) {
     throw new ValidationError("Restaurant not accepting orders");
   if (restaurant.isAcceptingOrders === false)
     throw new ValidationError("Restaurant not accepting orders");
-  if (!restaurant.zoneId) {
-    throw new ValidationError("Restaurant zone is not configured");
-  }
+  await assertRestaurantZoneIntegrity(restaurant);
 
-  const resolvedZone =
-    dto?.zoneId && mongoose.Types.ObjectId.isValid(String(dto.zoneId))
-      ? { _id: String(dto.zoneId) }
-      : await resolveZoneFromAddressLike(dto?.address);
+  const resolvedZone = await resolveZoneFromAddressLike(dto?.address);
 
   if (!resolvedZone?._id) {
     throw new ValidationError("Service is not available at your location");
@@ -186,6 +198,26 @@ export async function createOrder(userId, dto) {
   if (String(restaurant.zoneId) !== String(resolvedZone._id)) {
     throw new ValidationError("Restaurant not available in your zone");
   }
+
+  // 1.5. Strict Distance Limit (Prevent 781km orders)
+  restaurantCoords = extractLatLng(restaurant.location);
+  deliveryCoords = extractLatLng(dto.address) || extractLatLng(dto.address?.location);
+  if (restaurantCoords && deliveryCoords) {
+    const d = haversineKm(
+      restaurantCoords.lat,
+      restaurantCoords.lng,
+      deliveryCoords.lat,
+      deliveryCoords.lng,
+    );
+    if (Number.isFinite(d) && d > 25) {
+       throw new ValidationError(`Restaurant is too far (${d.toFixed(1)} km). Max delivery distance is 25 km.`);
+    }
+  }
+  logger.info('[OrderZone] Resolved order zone from delivery address', {
+    userId: String(userId || ''),
+    restaurantId: String(dto.restaurantId || ''),
+    orderZoneId: String(resolvedZone._id),
+  });
 
 
   const settings = await getDispatchSettings();

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { useNavigate } from "react-router-dom"
-import { Building2, Info, Tag, Upload, Calendar, FileText, MapPin, CheckCircle2, X, Image as ImageIcon, Clock, Loader2 } from "lucide-react"
+import { Building2, Info, Tag, Upload, Calendar, FileText, MapPin, CheckCircle2, X, Image as ImageIcon, Clock, Loader2, Navigation } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@food/components/ui/dialog"
 import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
@@ -9,6 +9,7 @@ import { Button } from "@food/components/ui/button"
 import { adminAPI, uploadAPI, zoneAPI } from "@food/api"
 import { toast } from "sonner"
 import { EMAIL_REGEX } from "@/shared/utils/emailValidation"
+import { Loader } from "@googlemaps/js-api-loader"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => { console.warn(...args) }
 const debugError = (...args) => { console.error(...args) }
@@ -47,6 +48,19 @@ const timeStringToMinutes = (value = "") => {
   if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
   return hours * 60 + minutes
+}
+const detectZoneIdForCoords = async (latitude, longitude) => {
+  const lat = Number(latitude)
+  const lng = Number(longitude)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return ""
+  try {
+    const response = await zoneAPI.detectZone(lat, lng)
+    const payload = response?.data?.data || null
+    if (payload?.status === "IN_SERVICE" && payload?.zoneId) {
+      return String(payload.zoneId)
+    }
+  } catch {}
+  return ""
 }
 const getStoredFileLabel = (value) => {
   if (!value) return ""
@@ -425,7 +439,6 @@ export default function AddRestaurant() {
     if (step1.ownerPhone?.trim() && !PHONE_REGEX.test(step1.ownerPhone.trim())) errors.push("Owner phone number must be 10 digits")
     if (!step1.primaryContactNumber?.trim()) errors.push("Primary contact number is required")
     if (step1.primaryContactNumber?.trim() && !PHONE_REGEX.test(step1.primaryContactNumber.trim())) errors.push("Primary contact number must be 10 digits")
-    if (!step1.zoneId?.trim()) errors.push("Service zone is required")
     if (!step1.location?.area?.trim()) errors.push("Area/Sector/Locality is required")
     if (!step1.location?.city?.trim()) errors.push("City is required")
     return errors
@@ -629,6 +642,9 @@ export default function AddRestaurant() {
   const locationSearchInputRef = useRef(null)
   const placesAutocompleteRef = useRef(null)
   const mapsScriptLoadedRef = useRef(false)
+  const mapRef = useRef(null)
+  const mapInstanceRef = useRef(null)
+  const markerRef = useRef(null)
 
   // Manual search states for fallback
   const [locationSearchValue, setLocationSearchValue] = useState("")
@@ -770,13 +786,15 @@ export default function AddRestaurant() {
         inputElement.setAttribute('data-google-places-initialized', 'true')
         placesAutocompleteRef.current = autocomplete
 
-        autocomplete.addListener("place_changed", () => {
+        autocomplete.addListener("place_changed", async () => {
           const place = autocomplete.getPlace()
           if (!place?.geometry) return
           
           const parsed = parsePlace(place)
+          const detectedZoneId = await detectZoneIdForCoords(parsed.latitude, parsed.longitude)
           setStep1((prev) => ({
             ...prev,
+            zoneId: detectedZoneId || prev.zoneId || "",
             location: {
               ...prev.location,
               formattedAddress: parsed.formattedAddress || prev.location.formattedAddress,
@@ -792,9 +810,65 @@ export default function AddRestaurant() {
           
           setLocationSearchValue(parsed.formattedAddress)
           inputElement.blur()
+
+          if (mapInstanceRef.current && window.google) {
+            const pos = { lat: parsed.latitude, lng: parsed.longitude }
+            mapInstanceRef.current.setCenter(pos)
+            mapInstanceRef.current.setZoom(17)
+            if (markerRef.current) {
+              markerRef.current.setPosition(pos)
+            } else {
+              markerRef.current = new window.google.maps.Marker({
+                position: pos,
+                map: mapInstanceRef.current,
+                draggable: true,
+                animation: window.google.maps.Animation.DROP,
+              })
+              markerRef.current.addListener("dragend", async () => {
+                const newPos = markerRef.current.getPosition()
+                await handleMapUpdate(newPos.lat(), newPos.lng())
+              })
+            }
+          }
+
         })
         
+                // Initialize Map
+        if (mapRef.current && !mapInstanceRef.current) {
+          const initialPos = {
+            lat: Number(step1.location.latitude) || 20.5937,
+            lng: Number(step1.location.longitude) || 78.9629,
+          }
+
+          const map = new window.google.maps.Map(mapRef.current, {
+            center: initialPos,
+            zoom: step1.location.latitude && step1.location.longitude ? 17 : 5,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+          })
+
+          mapInstanceRef.current = map
+
+          if (step1.location.latitude && step1.location.longitude) {
+            markerRef.current = new window.google.maps.Marker({
+              position: initialPos,
+              map: map,
+              draggable: true,
+            })
+            markerRef.current.addListener("dragend", async () => {
+              const newPos = markerRef.current.getPosition()
+              await handleMapUpdate(newPos.lat(), newPos.lng())
+            })
+          }
+
+          map.addListener("click", async (e) => {
+            await handleMapUpdate(e.latLng.lat(), e.latLng.lng())
+          })
+        }
+
         const pacContainerFix = () => {
+
           const applyFix = () => {
             const containers = document.querySelectorAll('.pac-container');
             if (containers.length > 0) {
@@ -816,6 +890,39 @@ export default function AddRestaurant() {
       } catch (e) {
         debugError("Autocomplete error:", e)
       }
+    }
+
+        const handleMapUpdate = async (lat, lng) => {
+      const latitude = Number(lat.toFixed(6))
+      const longitude = Number(lng.toFixed(6))
+
+      if (markerRef.current) {
+        markerRef.current.setPosition({ lat: latitude, lng: longitude })
+      }
+
+      const detectedZoneId = await detectZoneIdForCoords(latitude, longitude)
+
+      let reverseAddress = ""
+      try {
+        const geocoder = new window.google.maps.Geocoder()
+        const res = await geocoder.geocode({ location: { lat: latitude, lng: longitude } })
+        if (res.results && res.results[0]) {
+          reverseAddress = res.results[0].formatted_address
+          setLocationSearchValue(reverseAddress)
+        }
+      } catch {}
+
+      setStep1((prev) => ({
+        ...prev,
+        zoneId: detectedZoneId || prev.zoneId || "",
+        location: {
+          ...prev.location,
+          latitude,
+          longitude,
+          formattedAddress: reverseAddress || prev.location.formattedAddress,
+          addressLine1: reverseAddress || prev.location.addressLine1,
+        },
+      }))
     }
 
     init().catch(() => {})
@@ -976,15 +1083,17 @@ export default function AddRestaurant() {
                 <button
                   key={s.id}
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     const { lat, lng, display, addr } = s
                     const area = addr.suburb || addr.neighbourhood || addr.city_district || addr.locality || ""
                     const city = addr.city || addr.town || addr.village || ""
                     const state = addr.state || ""
                     const pincode = addr.postcode || ""
+                    const detectedZoneId = await detectZoneIdForCoords(lat, lng)
 
                     setStep1((prev) => ({
                       ...prev,
+                      zoneId: detectedZoneId || prev.zoneId || "",
                       location: {
                         ...prev.location,
                         formattedAddress: display,
@@ -1012,15 +1121,38 @@ export default function AddRestaurant() {
             Search to auto-fill Area, City, State, Pincode and coordinates.
           </p>
         </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs text-gray-700 font-medium flex items-center gap-2">
+            <MapPin className="w-3.5 h-3.5 text-orange-600" />
+            Pin restaurant location*
+          </Label>
+          <div
+            ref={mapRef}
+            className="w-full h-[300px] rounded-lg border border-gray-200 bg-gray-50 overflow-hidden relative"
+            style={{ minHeight: "300px" }}
+          >
+            <div className="absolute top-2 right-2 z-10">
+               <div className="bg-white/90 backdrop-blur-sm px-2 py-1 rounded shadow-sm border border-gray-100 text-[10px] font-medium text-orange-700 flex items-center gap-1">
+                 <Navigation className="w-3 h-3" />
+                 Draggable Pin
+               </div>
+            </div>
+          </div>
+          <p className="text-[10px] text-gray-500 italic">
+            Tip: You can drag the marker or click on the map to set the exact restaurant location.
+          </p>
+        </div>
+
         <div>
-          <Label className="text-xs text-gray-700">Service zone*</Label>
+          <Label className="text-xs text-gray-700">Service zone (auto from pin)</Label>
           <select
             value={step1.zoneId || ""}
             onChange={(e) => setStep1({ ...step1, zoneId: e.target.value })}
             className="mt-1 w-full h-9 rounded-md border border-input bg-white px-3 text-sm"
             disabled={zonesLoading}
           >
-            <option value="">{zonesLoading ? "Loading zones..." : "Select a zone"}</option>
+            <option value="">{zonesLoading ? "Loading zones..." : "Auto-detect from selected pin"}</option>
             {zones.map((z) => {
               const id = String(z?._id || z?.id || "")
               const label = z?.name || z?.zoneName || z?.serviceLocation || id
@@ -1032,25 +1164,8 @@ export default function AddRestaurant() {
             })}
           </select>
           <p className="text-[11px] text-gray-500 mt-1">
-            Choose the service zone where your restaurant will be available.
+            Zone will update automatically from the pinned restaurant location.
           </p>
-        </div>
-        <div>
-          <Label className="text-xs text-gray-700">Primary contact number*</Label>
-          <Input
-            value={step1.primaryContactNumber || ""}
-            onChange={(e) => setStep1({ ...step1, primaryContactNumber: sanitizeDigits(e.target.value).slice(0, 10) })}
-            className="mt-1 bg-white text-sm text-black placeholder-black"
-            placeholder="Restaurant's primary contact number"
-            inputMode="numeric"
-            maxLength={10}
-          />
-        </div>
-        <div className="space-y-3">
-          <Input
-            value={step1.location?.area || ""}
-            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, area: e.target.value } })}
-            className="bg-white text-sm"
             placeholder="Area / Sector / Locality*"
           />
           <Input

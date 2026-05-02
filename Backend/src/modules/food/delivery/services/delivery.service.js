@@ -7,8 +7,27 @@ import { FoodOrder } from '../../orders/models/order.model.js';
 import { uploadImageBuffer } from '../../../../services/cloudinary.service.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { getDeliveryCashLimitSettings } from '../../admin/services/admin.service.js';
+import { resolveActiveZoneByCoordinates } from '../../shared/zoneResolver.js';
+import { logger } from '../../../../utils/logger.js';
+import { syncDeliveryPartnerZoneRoom } from '../../../../config/socket.js';
 
 const normalizeDeliveryPhone = (value) => String(value || '').replace(/\D/g, '').slice(-10);
+const isValidObjectId = (value) =>
+    Boolean(value) && mongoose.Types.ObjectId.isValid(String(value));
+const toFiniteCoordinate = (value) => {
+    const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value));
+    return Number.isFinite(numeric) ? numeric : null;
+};
+
+const toZoneSummary = (zone) =>
+    zone
+        ? {
+              _id: String(zone._id),
+              name: zone.name || zone.zoneName || zone.serviceLocation || '',
+              zoneName: zone.zoneName || zone.name || '',
+              serviceLocation: zone.serviceLocation || ''
+          }
+        : null;
 
 export const registerDeliveryPartner = async (payload, files) => {
     const { 
@@ -317,19 +336,83 @@ export const updateDeliveryAvailability = async (userId, payload) => {
     let validStatus = 'offline';
     if (status === 'online' || status === true) validStatus = 'online';
     else if (status === 'offline' || status === false) validStatus = 'offline';
-    
+
+    const lat = toFiniteCoordinate(latitude);
+    const lng = toFiniteCoordinate(longitude);
+    const hasCoordinates =
+        lat !== null &&
+        lng !== null &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180;
+
+    const oldZoneId = isValidObjectId(partner.currentZoneId) ? String(partner.currentZoneId) : null;
+    const matchedZone = hasCoordinates
+        ? await resolveActiveZoneByCoordinates(lat, lng)
+        : null;
+    const nextZoneId = matchedZone?._id ? String(matchedZone._id) : null;
+
     partner.availabilityStatus = validStatus;
-    if (typeof latitude === 'number' && typeof longitude === 'number') {
+    if (hasCoordinates) {
+        const pointCoordinates = [lng, lat];
+        partner.currentLocation = {
+            type: 'Point',
+            coordinates: pointCoordinates
+        };
+        partner.currentLat = lat;
+        partner.currentLng = lng;
+        partner.lastLocationUpdatedAt = new Date();
+        partner.currentZoneId = nextZoneId
+            ? new mongoose.Types.ObjectId(nextZoneId)
+            : null;
         partner.lastLocation = {
             type: 'Point',
-            coordinates: [longitude, latitude]
+            coordinates: pointCoordinates
         };
-        partner.lastLat = latitude;
-        partner.lastLng = longitude;
-        partner.lastLocationAt = new Date();
+        partner.lastLat = lat;
+        partner.lastLng = lng;
+        partner.lastLocationAt = partner.lastLocationUpdatedAt;
+    } else {
+        // Never keep a stale live zone when the client does not provide fresh coordinates.
+        partner.currentZoneId = null;
+        partner.currentLocation = undefined;
+        partner.currentLat = null;
+        partner.currentLng = null;
+        partner.lastLocationUpdatedAt = null;
+
+        if (validStatus === 'online') {
+            logger.warn('[DeliveryZoneSync] Rider set online without valid coordinates; clearing live zone', {
+                deliveryBoyId: String(userId),
+                oldZoneId,
+            });
+        }
     }
     await partner.save();
-    return { availabilityStatus: partner.availabilityStatus };
+
+    await syncDeliveryPartnerZoneRoom(String(userId), oldZoneId, nextZoneId, {
+        isOnline: validStatus === 'online'
+    });
+
+    logger.info('[DeliveryZoneSync] Rider availability/location updated', {
+        deliveryBoyId: String(userId),
+        currentLat: hasCoordinates ? lat : null,
+        currentLng: hasCoordinates ? lng : null,
+        matchedZoneId: nextZoneId,
+        oldZoneId,
+        updatedZoneId: nextZoneId,
+        availabilityStatus: validStatus
+    });
+
+    return {
+        availabilityStatus: partner.availabilityStatus,
+        currentLat: hasCoordinates ? lat : partner.currentLat ?? null,
+        currentLng: hasCoordinates ? lng : partner.currentLng ?? null,
+        currentZoneId: nextZoneId,
+        oldZoneId,
+        matchedZone: toZoneSummary(matchedZone),
+        lastLocationUpdatedAt: partner.lastLocationUpdatedAt || null
+    };
 };
 
 // ----- Delivery partner wallet (Pocket / requests page) -----

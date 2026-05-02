@@ -1,4 +1,4 @@
-﻿import mongoose from 'mongoose';
+import mongoose from 'mongoose';
 import { FoodOrder } from '../models/order.model.js';
 import {
   FoodRestaurant,
@@ -11,6 +11,21 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 import { haversineKm } from './order.helpers.js';
 import { resolveZoneFromAddressLike } from '../../shared/zoneResolver.js';
 
+async function assertRestaurantZoneIntegrity(restaurant) {
+  if (!restaurant?.zoneId) {
+    throw new ValidationError("Restaurant zone is not configured");
+  }
+
+  const resolvedRestaurantZone = await resolveZoneFromAddressLike(restaurant.location);
+  if (!resolvedRestaurantZone?._id) {
+    throw new ValidationError("Restaurant location is not configured correctly");
+  }
+
+  if (String(resolvedRestaurantZone._id) !== String(restaurant.zoneId)) {
+    throw new ValidationError("Restaurant service area is misconfigured. Please contact support.");
+  }
+}
+
 export async function calculateOrderPricing(userId, dto) {
   const restaurant = await FoodRestaurant.findById(dto.restaurantId)
     .select("status isAdminApproved location zoneId")
@@ -18,14 +33,9 @@ export async function calculateOrderPricing(userId, dto) {
   if (!restaurant) throw new ValidationError("Restaurant not found");
   if (!isRestaurantApproved(restaurant))
     throw new ValidationError("Restaurant not available");
-  if (!restaurant.zoneId) {
-    throw new ValidationError("Restaurant zone is not configured");
-  }
+  await assertRestaurantZoneIntegrity(restaurant);
 
-  const resolvedZone =
-    dto?.zoneId && mongoose.Types.ObjectId.isValid(String(dto.zoneId))
-      ? { _id: String(dto.zoneId) }
-      : await resolveZoneFromAddressLike(dto?.deliveryAddress);
+  const resolvedZone = await resolveZoneFromAddressLike(dto?.deliveryAddress);
 
   if (!resolvedZone?._id) {
     throw new ValidationError("Service is not available at your location");

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Search, Download, ChevronDown, Eye, Settings, ArrowUpDown, Loader2, X, MapPin, Phone, Mail, Clock, Star, Building2, User, FileText, CreditCard, Calendar, Image as ImageIcon, ExternalLink, ShieldX, AlertTriangle, Trash2, Plus } from "lucide-react"
-import { adminAPI, restaurantAPI, uploadAPI } from "@food/api"
+import { adminAPI, restaurantAPI, uploadAPI, zoneAPI } from "@food/api"
 import { clearModuleAuth } from "@food/utils/auth"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { exportRestaurantsToPDF } from "@food/components/admin/restaurants/restaurantsExportUtils"
@@ -14,6 +14,20 @@ import inactiveIcon from "@food/assets/Dashboard-icons/image3.png"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
+
+const detectZoneIdForCoords = async (latitude, longitude) => {
+  const lat = Number(latitude)
+  const lng = Number(longitude)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return ""
+  try {
+    const response = await zoneAPI.detectZone(lat, lng)
+    const payload = response?.data?.data || null
+    if (payload?.status === "IN_SERVICE" && payload?.zoneId) {
+      return String(payload.zoneId)
+    }
+  } catch {}
+  return ""
+}
 
 // Inline placeholder (no external request, avoids referrer policy / 500 from via.placeholder)
 const PLACEHOLDER_40 = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect fill='%23e2e8f0' width='40' height='40'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2394a3b8' font-size='12' font-family='sans-serif'%3E?%3C/text%3E%3C/svg%3E"
@@ -569,11 +583,13 @@ export default function RestaurantsList() {
       }
     }
 
-    placesAutocompleteRef.current.addListener("place_changed", () => {
+    placesAutocompleteRef.current.addListener("place_changed", async () => {
       const place = placesAutocompleteRef.current.getPlace()
       const parsed = parsePlace(place)
+      const detectedZoneId = await detectZoneIdForCoords(parsed.latitude, parsed.longitude)
       setLocationForm((prev) => ({
         ...prev,
+        zoneId: detectedZoneId || prev.zoneId || "",
         formattedAddress: parsed.formattedAddress || prev.formattedAddress,
         addressLine1: parsed.formattedAddress || prev.addressLine1,
         area: parsed.area || prev.area,
@@ -639,10 +655,6 @@ export default function RestaurantsList() {
     const latitude = Number(locationForm.latitude)
     const longitude = Number(locationForm.longitude)
 
-    if (!locationForm.zoneId) {
-      alert("Please select a zone")
-      return
-    }
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !locationForm.formattedAddress) {
       alert("Please select a location from dropdown")
       return
@@ -650,8 +662,9 @@ export default function RestaurantsList() {
 
     try {
       setSavingLocation(true)
+      const detectedZoneId = await detectZoneIdForCoords(latitude, longitude)
       const locationPayload = {
-        zoneId: locationForm.zoneId,
+        zoneId: detectedZoneId || locationForm.zoneId || "",
         latitude,
         longitude,
         coordinates: [longitude, latitude],
@@ -2352,13 +2365,13 @@ export default function RestaurantsList() {
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div className="md:col-span-2">
-                            <label className="block text-xs text-slate-600 mb-1 font-semibold">Service Zone*</label>
+                    <label className="block text-xs text-slate-600 mb-1 font-semibold">Service Zone (auto from pin)</label>
                             <select
                               value={locationForm.zoneId || ""}
                               onChange={(e) => setLocationForm((prev) => ({ ...prev, zoneId: e.target.value }))}
                               className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm"
                             >
-                              <option value="">{zonesLoading ? "Loading zones..." : "Select a zone"}</option>
+                              <option value="">{zonesLoading ? "Loading zones..." : "Auto-detect from selected pin"}</option>
                               {zones.map((z) => (
                                 <option key={z._id || z.id} value={z._id || z.id}>
                                   {z.name || z.zoneName || z.serviceLocation || "Zone"}

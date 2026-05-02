@@ -8,6 +8,14 @@ const coordinateSchema = new mongoose.Schema(
     { _id: false }
 );
 
+const zoneCenterSchema = new mongoose.Schema(
+    {
+        latitude: { type: Number, required: true },
+        longitude: { type: Number, required: true }
+    },
+    { _id: false }
+);
+
 const zoneSchema = new mongoose.Schema(
     {
         name: {
@@ -37,6 +45,11 @@ const zoneSchema = new mongoose.Schema(
             enum: ['kilometer', 'miles'],
             default: 'kilometer'
         },
+        coverageType: {
+            type: String,
+            enum: ['polygon', 'radius'],
+            default: 'polygon'
+        },
         coordinates: {
             type: [coordinateSchema],
             required: true,
@@ -46,6 +59,14 @@ const zoneSchema = new mongoose.Schema(
                 },
                 message: 'Zone must have at least 3 coordinates (polygon).'
             }
+        },
+        center: {
+            type: zoneCenterSchema,
+            default: null
+        },
+        radius: {
+            type: Number,
+            default: null
         },
         isActive: {
             type: Boolean,

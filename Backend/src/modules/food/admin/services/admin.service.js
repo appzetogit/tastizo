@@ -118,6 +118,36 @@ const validateOpeningClosingTimes = (openingTime, closingTime) => {
     }
 };
 
+const buildRestaurantLocationPayload = (locationLike = {}) => {
+    const toStr = (v) => (v != null && v !== undefined ? String(v).trim() : '');
+    const coordinates = Array.isArray(locationLike.coordinates) ? locationLike.coordinates : [];
+    const lngFromCoordinates = toFiniteNumber(coordinates[0]);
+    const latFromCoordinates = toFiniteNumber(coordinates[1]);
+    const latitude = toFiniteNumber(locationLike.latitude ?? latFromCoordinates);
+    const longitude = toFiniteNumber(locationLike.longitude ?? lngFromCoordinates);
+    const formattedAddress = toStr(
+        locationLike.formattedAddress ||
+        locationLike.address ||
+        locationLike.addressLine1
+    );
+
+    return {
+        type: 'Point',
+        coordinates: latitude !== null && longitude !== null ? [longitude, latitude] : undefined,
+        latitude: latitude ?? undefined,
+        longitude: longitude ?? undefined,
+        formattedAddress,
+        address: toStr(locationLike.address || formattedAddress),
+        addressLine1: toStr(locationLike.addressLine1 || formattedAddress),
+        addressLine2: toStr(locationLike.addressLine2),
+        area: toStr(locationLike.area),
+        city: toStr(locationLike.city),
+        state: toStr(locationLike.state),
+        pincode: toStr(locationLike.pincode || locationLike.zipCode || locationLike.postalCode),
+        landmark: toStr(locationLike.landmark),
+    };
+};
+
 export async function getRestaurantComplaints(query = {}) {
     const limit = Math.min(Math.max(parseInt(query.limit, 10) || 50, 1), 500);
     const page = Math.max(parseInt(query.page, 10) || 1, 1);
@@ -2467,6 +2497,67 @@ export async function updateRestaurantById(id, body = {}) {
         }
     }
 
+    if (body.zoneId !== undefined) {
+        const zoneId = toStr(body.zoneId);
+        if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
+            doc.zoneId = new mongoose.Types.ObjectId(zoneId);
+        } else {
+            doc.zoneId = undefined;
+        }
+    }
+
+    if (body.location !== undefined) {
+        const loc = (body.location && typeof body.location === 'object') ? body.location : body;
+        
+        const coordinates = Array.isArray(loc.coordinates) ? loc.coordinates : [];
+        const lngFromCoordinates = toFiniteNumber(coordinates[0]);
+        const latFromCoordinates = toFiniteNumber(coordinates[1]);
+        const latitude = toFiniteNumber(loc.latitude ?? latFromCoordinates);
+        const longitude = toFiniteNumber(loc.longitude ?? lngFromCoordinates);
+
+        const addressLine1 = toStr(loc.addressLine1 || loc.formattedAddress || loc.address);
+        const area = toStr(loc.area);
+        const city = toStr(loc.city);
+        const pincode = toStr(loc.pincode || loc.zipCode || loc.postalCode);
+        const formattedAddress = toStr(loc.formattedAddress || loc.address || addressLine1);
+
+        if (!doc.location || typeof doc.location !== 'object') {
+            doc.location = { type: 'Point' };
+        }
+        doc.location.type = 'Point';
+        if (latitude !== null && longitude !== null) {
+            doc.location.latitude = latitude;
+            doc.location.longitude = longitude;
+            doc.location.coordinates = [longitude, latitude];
+        }
+        doc.location.formattedAddress = formattedAddress;
+        doc.location.address = toStr(loc.address || formattedAddress);
+        doc.location.addressLine1 = addressLine1;
+        doc.location.addressLine2 = toStr(loc.addressLine2);
+        doc.location.area = area;
+        doc.location.city = city;
+        doc.location.state = toStr(loc.state);
+        doc.location.pincode = pincode;
+        doc.location.landmark = toStr(loc.landmark);
+
+        // Keep flat fields in sync
+        doc.addressLine1 = addressLine1;
+        doc.addressLine2 = toStr(loc.addressLine2);
+        doc.area = area;
+        doc.city = city;
+        doc.state = toStr(loc.state);
+        doc.pincode = pincode;
+        doc.landmark = toStr(loc.landmark);
+
+        // Auto-detect zone if location changed but zoneId not explicitly provided
+        if (body.zoneId === undefined) {
+            const resolvedZone = await resolveZoneFromAddressLike(doc.location);
+            if (resolvedZone?._id) {
+                doc.zoneId = new mongoose.Types.ObjectId(String(resolvedZone._id));
+            }
+        }
+    }
+
     preserveRestaurantReviewState(doc, 'admin-details-update');
     await doc.save();
     return FoodRestaurant.findById(id).select('-__v').populate('zoneId', 'name zoneName serviceLocation isActive').lean();
@@ -2545,28 +2636,9 @@ export async function updateRestaurantLocation(id, body = {}) {
     doc.landmark = landmark;
 
     const resolvedZone = await resolveZoneFromAddressLike(doc.location);
-    const requestedZoneId = String(source.zoneId || body.zoneId || '').trim();
-    if (
-        requestedZoneId &&
-        mongoose.Types.ObjectId.isValid(requestedZoneId) &&
-        resolvedZone?._id &&
-        String(resolvedZone._id) !== requestedZoneId
-    ) {
-        throw new ValidationError('Selected zone does not match location coordinates. Please pick the correct location again.');
-    }
     if (!resolvedZone?._id) {
         throw new ValidationError('Location is outside all active zones. Please select a valid location inside a service zone.');
     }
-    doc.zoneId = new mongoose.Types.ObjectId(String(resolvedZone._id));
-
-    preserveRestaurantReviewState(doc, 'admin-location-update');
-    await doc.save();
-    return FoodRestaurant.findById(id).select('-__v').populate('zoneId', 'name zoneName serviceLocation isActive').lean();
-}
-
-// ----- Categories -----
-export async function getCategories(query) {
-    const limit = Math.min(Math.max(parseInt(query.limit, 10) || 100, 1), 1000);
     const page = Math.max(parseInt(query.page, 10) || 1, 1);
     const skip = (page - 1) * limit;
 
@@ -3275,14 +3347,15 @@ export async function createRestaurantByAdmin(body) {
     const loc = body.location || {};
     const toStr = (v) => (v != null && v !== undefined ? String(v).trim() : '');
     const toUrl = (v) => (v && (typeof v === 'string' ? v : v.url)) ? (typeof v === 'string' ? v : v.url) : undefined;
-    const coordinates = Array.isArray(loc.coordinates) ? loc.coordinates : [];
-    const lngFromCoordinates = toFiniteNumber(coordinates[0]);
-    const latFromCoordinates = toFiniteNumber(coordinates[1]);
-    const latitude = toFiniteNumber(loc.latitude ?? latFromCoordinates);
-    const longitude = toFiniteNumber(loc.longitude ?? lngFromCoordinates);
     const menuUrls = Array.isArray(body.menuImages)
         ? body.menuImages.map((m) => toUrl(m)).filter(Boolean)
         : [];
+
+    const locationPayload = buildRestaurantLocationPayload(loc);
+    const resolvedZone = await resolveZoneFromAddressLike(locationPayload);
+    if (!resolvedZone?._id) {
+        throw new ValidationError('Restaurant location is outside all active zones. Please pin the restaurant inside a service zone.');
+    }
 
     const normalizedOpeningTime = normalizeRestaurantTime(body.openingTime) || '09:00';
     const normalizedClosingTime = normalizeRestaurantTime(body.closingTime) || '22:00';
@@ -3297,13 +3370,13 @@ export async function createRestaurantByAdmin(body) {
         pureVegRestaurant: body.pureVegRestaurant !== undefined
             ? parseBooleanLike(body.pureVegRestaurant, 'pureVegRestaurant')
             : false,
-        addressLine1: toStr(loc.addressLine1),
-        addressLine2: toStr(loc.addressLine2),
-        area: toStr(loc.area),
-        city: toStr(loc.city),
-        state: toStr(loc.state),
-        pincode: toStr(loc.pincode),
-        landmark: toStr(loc.landmark),
+        addressLine1: locationPayload.addressLine1 || '',
+        addressLine2: locationPayload.addressLine2 || '',
+        area: locationPayload.area || '',
+        city: locationPayload.city || '',
+        state: locationPayload.state || '',
+        pincode: locationPayload.pincode || '',
+        landmark: locationPayload.landmark || '',
         cuisines: Array.isArray(body.cuisines) ? body.cuisines : [],
         openingTime: normalizedOpeningTime,
         closingTime: normalizedClosingTime,
@@ -3337,37 +3410,11 @@ export async function createRestaurantByAdmin(body) {
             }
             : undefined,
         status: 'approved',
-        approvedAt: new Date()
+        isAdminApproved: true,
+        approvedAt: new Date(),
+        zoneId: new mongoose.Types.ObjectId(String(resolvedZone._id)),
+        location: locationPayload,
     };
-
-    if (body.zoneId !== undefined) {
-        const zoneId = String(body.zoneId || '').trim();
-        if (!zoneId) {
-            doc.zoneId = undefined;
-        } else if (!mongoose.Types.ObjectId.isValid(zoneId)) {
-            throw new ValidationError('Invalid zoneId');
-        } else {
-            doc.zoneId = new mongoose.Types.ObjectId(zoneId);
-        }
-    }
-
-    if (latitude !== null && longitude !== null) {
-        doc.location = {
-            type: 'Point',
-            coordinates: [longitude, latitude],
-            latitude,
-            longitude,
-            formattedAddress: toStr(loc.formattedAddress || loc.address || loc.addressLine1),
-            address: toStr(loc.address || loc.formattedAddress || loc.addressLine1),
-            addressLine1: toStr(loc.addressLine1 || loc.formattedAddress || loc.address),
-            addressLine2: toStr(loc.addressLine2),
-            area: toStr(loc.area),
-            city: toStr(loc.city),
-            state: toStr(loc.state),
-            pincode: toStr(loc.pincode || loc.zipCode || loc.postalCode),
-            landmark: toStr(loc.landmark),
-        };
-    }
 
     if (!doc.restaurantName || !doc.ownerName) {
         throw new ValidationError('Restaurant name and owner name are required');

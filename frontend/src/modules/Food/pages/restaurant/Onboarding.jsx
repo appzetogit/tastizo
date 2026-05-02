@@ -45,6 +45,19 @@ const LOCAL_IMAGE_FILE_ACCEPT = ".jpg,.jpeg,.png,.webp,.heic,.heif"
 const LOCAL_PDF_FILE_ACCEPT = ".pdf,application/pdf"
 const GALLERY_IMAGE_ACCEPT =
   ".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif"
+const detectZoneIdForCoords = async (latitude, longitude) => {
+  const lat = Number(latitude)
+  const lng = Number(longitude)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return ""
+  try {
+    const response = await zoneAPI.detectZone(lat, lng)
+    const payload = response?.data?.data || null
+    if (payload?.status === "IN_SERVICE" && payload?.zoneId) {
+      return String(payload.zoneId)
+    }
+  } catch {}
+  return ""
+}
 let onboardingFileCache = {
   step2: {
     menuImages: [],
@@ -1280,9 +1293,6 @@ export default function RestaurantOnboarding() {
     if (!step1.primaryContactNumber?.trim()) {
       errors.push("Primary contact number is required")
     }
-    if (!step1.zoneId?.trim()) {
-      errors.push("Service zone is required")
-    }
     if (!step1.location?.area?.trim()) {
       errors.push("Area/Sector/Locality is required")
     }
@@ -1835,14 +1845,14 @@ export default function RestaurantOnboarding() {
             Add your restaurant's location for order pick-up.
           </p>
           <div>
-            <Label className="text-xs text-gray-700">Service zone*</Label>
+              <Label className="text-xs text-gray-700">Service zone (auto from pin)</Label>
             <select
               value={step1.zoneId || ""}
               onChange={(e) => setStep1({ ...step1, zoneId: e.target.value })}
               className="mt-1 w-full h-9 rounded-md border border-input bg-white px-3 text-sm"
               disabled={zonesLoading || !isEditing}
             >
-              <option value="">{zonesLoading ? "Loading zones..." : "Select a zone"}</option>
+                <option value="">{zonesLoading ? "Loading zones..." : "Auto-detect from selected pin"}</option>
               {zones.map((z) => {
                 const id = String(z?._id || z?.id || "")
                 const label = z?.name || z?.zoneName || z?.serviceLocation || id
@@ -1854,7 +1864,7 @@ export default function RestaurantOnboarding() {
               })}
             </select>
             <p className="text-[11px] text-gray-500 mt-1">
-              Choose the service zone where your restaurant will be available.
+              Zone will update automatically from the pinned restaurant location.
             </p>
           </div>
           <div className="relative">
@@ -1882,15 +1892,17 @@ export default function RestaurantOnboarding() {
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       const { lat, lng, display, addr } = s
                       const area = addr.suburb || addr.neighbourhood || addr.city_district || addr.locality || ""
                       const city = addr.city || addr.town || addr.village || ""
                       const state = addr.state || ""
                       const pincode = addr.postcode || ""
+                      const detectedZoneId = await detectZoneIdForCoords(lat, lng)
 
                       setStep1((prev) => ({
                         ...prev,
+                        zoneId: detectedZoneId || prev.zoneId || "",
                         location: {
                           ...prev.location,
                           formattedAddress: display,
@@ -2119,13 +2131,15 @@ export default function RestaurantOnboarding() {
         inputElement.setAttribute("data-google-places-initialized", "true")
         placesAutocompleteRef.current = autocomplete
 
-        autocomplete.addListener("place_changed", () => {
+        autocomplete.addListener("place_changed", async () => {
           const place = autocomplete.getPlace()
           if (!place?.geometry) return
 
           const parsed = parsePlace(place)
+          const detectedZoneId = await detectZoneIdForCoords(parsed.latitude, parsed.longitude)
           setStep1((prev) => ({
             ...prev,
+            zoneId: detectedZoneId || prev.zoneId || "",
             location: {
               ...prev.location,
               formattedAddress: parsed.formattedAddress || prev.location.formattedAddress,

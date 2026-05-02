@@ -2,7 +2,7 @@ import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodCategory } from '../../admin/models/category.model.js';
 import mongoose from 'mongoose';
-import { pointLikeBelongsToZone, resolveZoneFromQuery } from '../../shared/zoneResolver.js';
+import { resolveZoneFromQuery, restaurantBelongsToResolvedZone } from '../../shared/zoneResolver.js';
 
 /**
  * Unified Search Service
@@ -47,7 +47,7 @@ export const searchUnified = async (query = {}, options = {}) => {
     }
     const restaurantMatchesResolvedZone = (restaurant) => {
         if (!restaurant || !resolvedZone?._id) return false;
-        return pointLikeBelongsToZone(restaurant.location, resolvedZone);
+        return restaurantBelongsToResolvedZone(restaurant, resolvedZone);
     };
 
     if (isVeg === 'true') {

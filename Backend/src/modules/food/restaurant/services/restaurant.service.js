@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import { FoodZone } from '../../admin/models/zone.model.js';
 import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FoodDiningRestaurant } from '../../dining/models/diningRestaurant.model.js';
-import { pointLikeBelongsToZone, resolveZoneFromAddressLike, resolveZoneFromQuery } from '../../shared/zoneResolver.js';
+import { resolveZoneFromAddressLike, resolveZoneFromQuery, restaurantBelongsToResolvedZone } from '../../shared/zoneResolver.js';
 
 const PUBLIC_VISIBLE_RESTAURANT_STATUSES = ['approved'];
 
@@ -30,7 +30,7 @@ const normalizePublicRestaurantStatus = (restaurant) => {
 
 const restaurantMatchesResolvedZone = (restaurant, resolvedZone) => {
     if (!restaurant || !resolvedZone?._id) return false;
-    return pointLikeBelongsToZone(restaurant.location, resolvedZone);
+    return restaurantBelongsToResolvedZone(restaurant, resolvedZone);
 };
 
 const normalizeName = (value) =>
@@ -382,6 +382,7 @@ export const registerRestaurant = async (payload, files) => {
     const estimatedDeliveryTimeMinutes = parseEstimatedDeliveryMinutes(estimatedDeliveryTimeText);
 
     try {
+        console.log(`[registerRestaurant] Lat/Lng: ${latitude}, ${longitude}`);
         const locationPayload = buildRestaurantLocationPayload({
             latitude,
             longitude,
@@ -395,15 +396,8 @@ export const registerRestaurant = async (payload, files) => {
             landmark
         });
         const resolvedZone = await resolveZoneFromAddressLike(locationPayload);
-        const explicitZoneId = String(zoneId || '').trim();
-        if (
-            explicitZoneId &&
-            mongoose.Types.ObjectId.isValid(explicitZoneId) &&
-            resolvedZone?._id &&
-            String(resolvedZone._id) !== explicitZoneId
-        ) {
-            throw new ValidationError('Selected zone does not match restaurant location. Please pin the restaurant inside the correct zone.');
-        }
+        console.log(`[registerRestaurant] Matched ZoneId: ${resolvedZone?._id || 'None'}`);
+        
         if (!resolvedZone?._id) {
             throw new ValidationError('Restaurant location is outside all active zones. Please pin the restaurant inside a service zone.');
         }
@@ -442,6 +436,7 @@ export const registerRestaurant = async (payload, files) => {
             menuPdf,
             ...images
         });
+        console.log(`[registerRestaurant] Saved Restaurant ZoneId: ${restaurant.zoneId}`);
 
         try {
             const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
@@ -712,7 +707,7 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
     }
 
     const currentRestaurant = await FoodRestaurant.findById(restaurantId)
-        .select('restaurantName restaurantNameNormalized ownerPhone ownerPhoneDigits ownerPhoneLast10 primaryContactNumber status isAdminApproved approvedAt rejectedAt rejectionReason')
+        .select('restaurantName restaurantNameNormalized ownerPhone ownerPhoneDigits ownerPhoneLast10 primaryContactNumber status isAdminApproved approvedAt rejectedAt rejectionReason location zoneId')
         .lean();
 
     if (!currentRestaurant) {
@@ -801,9 +796,26 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
 
     if (body.zoneId !== undefined) {
         const zoneId = String(body.zoneId || '').trim();
-        update.zoneId = zoneId && mongoose.Types.ObjectId.isValid(zoneId)
-            ? new mongoose.Types.ObjectId(zoneId)
-            : undefined;
+        if (zoneId && !mongoose.Types.ObjectId.isValid(zoneId)) {
+            throw new ValidationError('Selected zone is invalid');
+        }
+
+        if (zoneId) {
+            const currentLocation = currentRestaurant?.location && typeof currentRestaurant.location === 'object'
+                ? currentRestaurant.location
+                : null;
+            const resolvedZone = currentLocation
+                ? await resolveZoneFromAddressLike(currentLocation)
+                : null;
+
+            if (!resolvedZone?._id) {
+                throw new ValidationError('Restaurant location must be pinned inside an active zone before changing the zone.');
+            }
+
+            update.zoneId = new mongoose.Types.ObjectId(String(resolvedZone._id));
+        } else {
+            update.zoneId = undefined;
+        }
     }
 
     // Bank + UPI fields (Explore -> Update Bank Details page)
@@ -886,15 +898,6 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
             landmark: toStr(loc.landmark)
         });
         const resolvedZone = await resolveZoneFromAddressLike(update.location);
-        const requestedZoneId = String(body.zoneId || '').trim();
-        if (
-            requestedZoneId &&
-            mongoose.Types.ObjectId.isValid(requestedZoneId) &&
-            resolvedZone?._id &&
-            String(resolvedZone._id) !== requestedZoneId
-        ) {
-            throw new ValidationError('Selected zone does not match restaurant location. Please pin the restaurant inside the correct zone.');
-        }
         if (!resolvedZone?._id) {
             throw new ValidationError('Restaurant location is outside all active zones. Please pin the restaurant inside a service zone.');
         }
@@ -1275,16 +1278,19 @@ export const listApprovedRestaurants = async (query = {}) => {
         }
     }
 
+    const lat = toFiniteNumber(query.lat);
+    const lng = toFiniteNumber(query.lng);
     const resolvedZone = await resolveZoneFromQuery(query);
+    console.log(`[listApprovedRestaurants] User Lat/Lng: ${lat}, ${lng}`);
+    console.log(`[listApprovedRestaurants] User Matched ZoneId: ${resolvedZone?._id || 'None'}`);
+
     if (!resolvedZone?._id) {
+        console.warn(`[listApprovedRestaurants] No zone resolved for query: ${JSON.stringify(query)}`);
         return { restaurants: [], total: 0, page, limit };
     }
 
     const zoneIdRaw = String(resolvedZone._id);
     filter.$and = [...(filter.$and || [])];
-
-    const lat = toFiniteNumber(query.lat);
-    const lng = toFiniteNumber(query.lng);
     // Accept both radiusKm (preferred) and maxDistance (legacy frontend param).
     const radiusKm = toFiniteNumber(query.radiusKm) ?? toFiniteNumber(query.maxDistance);
     const sortBy = parseSortBy(query.sortBy);
@@ -1319,12 +1325,13 @@ export const listApprovedRestaurants = async (query = {}) => {
 
     // Use $geoNear only when geo is explicitly needed (radius filter or nearest sorting).
     // This avoids accidentally hiding restaurants that do not have coordinates yet.
-    const hasZoneFilter = Boolean(zoneIdRaw && mongoose.Types.ObjectId.isValid(zoneIdRaw));
     const effectiveRadiusKm = radiusKm !== null
         ? radiusKm
         : null;
 
     const wantsGeo = (effectiveRadiusKm !== null) || sortBy === 'nearest';
+    
+    let allDocs = [];
     if (lat !== null && lng !== null && wantsGeo) {
         const geoNear = {
             $geoNear: {
@@ -1359,65 +1366,43 @@ export const listApprovedRestaurants = async (query = {}) => {
             sortStage
         ];
 
-        const [allGeoDocs] = await Promise.all([
-            FoodRestaurant.aggregate([
-                ...basePipeline,
-                { $project: projection }
-            ]),
+        allDocs = await FoodRestaurant.aggregate([
+            ...basePipeline,
+            { $project: projection }
         ]);
-        const filteredGeoDocs = (allGeoDocs || []).filter((restaurant) =>
-            restaurantMatchesResolvedZone(restaurant, resolvedZone)
-        );
-        const total = filteredGeoDocs.length;
-        console.log('[listApprovedRestaurants] Geo path total matches:', total);
-        if (total === 0) {
-            // Check if any restaurant with this status exists at all
-            const statusCount = await FoodRestaurant.countDocuments(buildPublicVisibleRestaurantFilter());
-            console.log('[listApprovedRestaurants] Debug: Total public-visible restaurants:', statusCount);
-        }
-        const restaurants = filteredGeoDocs.slice(skip, skip + limit).map((r) => normalizePublicRestaurantStatus({
-            ...r,
-            restaurantId: r._id,
-            id: r._id,
-            name: r.restaurantName || '',
-            rating: normalizeRatingValue(r.rating),
-            totalRatings: normalizeTotalRatingsValue(r.totalRatings),
-            profileImage: r.profileImage ? { url: r.profileImage } : null,
-            coverImages: Array.isArray(r.coverImages) ? r.coverImages : [],
-            openingTime: r.openingTime || null,
-            closingTime: r.closingTime || null,
-            openDays: Array.isArray(r.openDays) ? r.openDays : [],
-            menuImages: Array.isArray(r.menuImages) ? r.menuImages : [],
-            slug: (r.restaurantNameNormalized || normalizeName(r.restaurantName) || '').replace(/\s+/g, '-')
-        }));
-        return { restaurants, total, page, limit };
-    }
+        console.log(`[listApprovedRestaurants] Geo path raw matches: ${allDocs.length}`);
+    } else {
+        console.log('[listApprovedRestaurants] Using non-geo path');
+        // Non-geo path: normal query + sort.
+        const sort = (() => {
+            if (sortBy === 'rating' || sortBy === 'rating-high') return { rating: -1, createdAt: -1 };
+            if (sortBy === 'rating-low') return { rating: 1, createdAt: -1 };
+            if (sortBy === 'price-low') return { featuredPrice: 1, createdAt: -1 };
+            if (sortBy === 'price-high') return { featuredPrice: -1, createdAt: -1 };
+            if (sortBy === 'deliveryTime') return { estimatedDeliveryTimeMinutes: 1, createdAt: -1 };
+            return { createdAt: -1 };
+        })();
 
-    console.log('[listApprovedRestaurants] Using non-geo path');
-    // Non-geo path: normal query + sort.
-    const sort = (() => {
-        if (sortBy === 'rating' || sortBy === 'rating-high') return { rating: -1, createdAt: -1 };
-        if (sortBy === 'rating-low') return { rating: 1, createdAt: -1 };
-        if (sortBy === 'price-low') return { featuredPrice: 1, createdAt: -1 };
-        if (sortBy === 'price-high') return { featuredPrice: -1, createdAt: -1 };
-        if (sortBy === 'deliveryTime') return { estimatedDeliveryTimeMinutes: 1, createdAt: -1 };
-        return { createdAt: -1 };
-    })();
-
-    const [restaurantsRaw] = await Promise.all([
-        FoodRestaurant.find(filter)
+        allDocs = await FoodRestaurant.find(filter)
             .select(Object.keys(projection).join(' '))
             .sort(sort)
-            .lean(),
-    ]);
-    const filteredRestaurantsRaw = (restaurantsRaw || []).filter((restaurant) =>
-        restaurantMatchesResolvedZone(restaurant, resolvedZone)
-    );
-    const total = filteredRestaurantsRaw.length;
-    console.log('[listApprovedRestaurants] Non-geo path total matches:', total);
-    const restaurants = filteredRestaurantsRaw.slice(skip, skip + limit).map((r) => normalizePublicRestaurantStatus({
+            .lean();
+        console.log(`[listApprovedRestaurants] Non-geo path raw matches: ${allDocs.length}`);
+    }
+
+    const filteredDocs = allDocs.filter((restaurant) => {
+        const match = restaurantMatchesResolvedZone(restaurant, resolvedZone);
+        if (!match) {
+            console.debug(`[listApprovedRestaurants] Restaurant ${restaurant.restaurantName} (${restaurant._id}) filtered out. RestaurantZone: ${restaurant.zoneId}, UserZone: ${resolvedZone._id}`);
+        }
+        return match;
+    });
+
+    const total = filteredDocs.length;
+    console.log(`[listApprovedRestaurants] Final restaurants returned: ${total}`);
+
+    const restaurants = filteredDocs.slice(skip, skip + limit).map((r) => normalizePublicRestaurantStatus({
         ...r,
-        // Frontend user app expects `name` and often checks `profileImage.url`
         restaurantId: r._id,
         id: r._id,
         name: r.restaurantName || '',
@@ -1428,7 +1413,6 @@ export const listApprovedRestaurants = async (query = {}) => {
         openingTime: r.openingTime || null,
         closingTime: r.closingTime || null,
         openDays: Array.isArray(r.openDays) ? r.openDays : [],
-        // Keep menuImages as an array for fallbacks; allow both string and {url} on client.
         menuImages: Array.isArray(r.menuImages) ? r.menuImages : [],
         slug: (r.restaurantNameNormalized || normalizeName(r.restaurantName) || '').replace(/\s+/g, '-')
     }));

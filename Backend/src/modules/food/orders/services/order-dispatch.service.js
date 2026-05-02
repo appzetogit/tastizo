@@ -16,6 +16,7 @@ import {
   notifyOwnerSafely,
   notifyOwnersSafely,
 } from './order.helpers.js';
+import { resolveZoneFromAddressLike } from '../../shared/zoneResolver.js';
 
 async function filterPartnersByCashLimit(partners = [], options = {}) {
   if (!Array.isArray(partners) || partners.length === 0) return [];
@@ -136,10 +137,19 @@ async function listNearbyOnlineDeliveryPartners(
   }
 
   if (!restaurant?.location?.coordinates?.length) {
+    const busyPartnerIds = await FoodOrder.distinct('dispatch.deliveryPartnerId', {
+      'dispatch.deliveryPartnerId': { $ne: null },
+      'dispatch.status': 'accepted',
+      orderStatus: {
+        $nin: ['delivered', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin'],
+      },
+    });
+
     const partners = await FoodDeliveryPartner.find({
       status: "approved",
       availabilityStatus: "online",
-      zoneId: new mongoose.Types.ObjectId(effectiveZoneId),
+      currentZoneId: new mongoose.Types.ObjectId(effectiveZoneId),
+      _id: { $nin: busyPartnerIds },
     })
       .select("_id status name")
       .limit(Math.max(1, limit))
@@ -157,25 +167,34 @@ async function listNearbyOnlineDeliveryPartners(
   }
 
   const [rLng, rLat] = restaurant.location.coordinates;
+  const busyPartnerIds = await FoodOrder.distinct('dispatch.deliveryPartnerId', {
+    'dispatch.deliveryPartnerId': { $ne: null },
+    'dispatch.status': 'accepted',
+    orderStatus: {
+      $nin: ['delivered', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin'],
+    },
+  });
+
   const allOnline = await FoodDeliveryPartner.find({
     status: "approved",
     availabilityStatus: "online",
-    zoneId: new mongoose.Types.ObjectId(effectiveZoneId),
+    currentZoneId: new mongoose.Types.ObjectId(effectiveZoneId),
+    _id: { $nin: busyPartnerIds },
   })
-    .select("_id status lastLat lastLng lastLocationAt name")
+    .select("_id status currentLat currentLng lastLocationUpdatedAt name")
     .lean();
 
   const scored = [];
   const STALE_GPS_MS = 10 * 60 * 1000;
 
   for (const p of allOnline) {
-    const isStale = !p.lastLocationAt || (Date.now() - new Date(p.lastLocationAt).getTime()) > STALE_GPS_MS;
-    if (p.lastLat == null || p.lastLng == null || isStale) {
+    const isStale = !p.lastLocationUpdatedAt || (Date.now() - new Date(p.lastLocationUpdatedAt).getTime()) > STALE_GPS_MS;
+    if (p.currentLat == null || p.currentLng == null || isStale) {
       scored.push({ partnerId: p._id, distanceKm: 999, status: p.status });
       continue;
     }
 
-    const d = haversineKm(rLat, rLng, p.lastLat, p.lastLng);
+    const d = haversineKm(rLat, rLng, p.currentLat, p.currentLng);
     if (Number.isFinite(d) && d <= maxKm) {
       scored.push({ partnerId: p._id, distanceKm: d, status: p.status });
     }
@@ -188,7 +207,8 @@ async function listNearbyOnlineDeliveryPartners(
     const anyOnline = await FoodDeliveryPartner.find({
       status: 'approved',
       availabilityStatus: "online",
-      zoneId: new mongoose.Types.ObjectId(effectiveZoneId),
+      currentZoneId: new mongoose.Types.ObjectId(effectiveZoneId),
+      _id: { $nin: busyPartnerIds },
     })
       .select("_id status name")
       .limit(Math.max(1, limit))
@@ -268,6 +288,29 @@ export async function tryAutoAssign(orderId, options = {}) {
   }
 
   try {
+    if (!order.zoneId) {
+      const fallbackZone = await resolveZoneFromAddressLike(order.deliveryAddress);
+      if (fallbackZone?._id) {
+        order.zoneId = new mongoose.Types.ObjectId(String(fallbackZone._id));
+        await order.save();
+        logger.info('[Dispatch] Backfilled missing order zoneId', {
+          orderId: String(order._id),
+          orderZoneId: String(fallbackZone._id),
+        });
+      }
+    }
+
+    if (!order.zoneId) {
+      logger.warn(`[Dispatch] Order ${order._id} has no zoneId and could not be resolved. Keeping pending.`);
+      await addOrderJob({
+        action: 'DISPATCH_TIMEOUT_CHECK',
+        orderMongoId: order._id.toString(),
+        orderId: order._id.toString(),
+        attempt: attempt + 1
+      }, { delay: 30000 });
+      return order;
+    }
+
     const offeredIds = (order.dispatch?.offeredTo || []).map(o => o.partnerId.toString());
     const paymentMethod = String(order.payment?.method || 'cash').toLowerCase();
     const isCashOrder = paymentMethod === 'cash';
@@ -312,9 +355,20 @@ export async function tryAutoAssign(orderId, options = {}) {
     }
 
     const eligible = partners.filter(p => !offeredIds.includes(p.partnerId.toString()));
+    logger.info('[Dispatch] Eligible delivery boys for order', {
+      orderId: String(order._id),
+      orderZoneId: String(order.zoneId || ''),
+      eligibleCount: eligible.length,
+      assignedDeliveryBoyList: eligible.map((p) => ({
+        partnerId: String(p.partnerId),
+        distance: p.distanceKm,
+        isOverLimit: p.allowOverLimit
+      })),
+      attempt,
+    });
 
     if (eligible.length === 0) {
-      logger.info(`tryAutoAssign: No NEW eligible partners in ${maxKm}km for order ${order._id}. Restarting hunt...`);
+      logger.info(`tryAutoAssign: No NEW eligible partners in same zone for order ${order._id}. Restarting hunt...`);
 
       // Re-queue itself to keep trying
       await addOrderJob({
@@ -327,53 +381,59 @@ export async function tryAutoAssign(orderId, options = {}) {
       return order;
     }
     const io = getIO();
-    const lead = eligible[0];
     const offeredAt = new Date();
+    const offeredToEntries = eligible.map((partner) => ({
+      partnerId: partner.partnerId,
+      at: offeredAt,
+      action: 'offered',
+      allowOverLimit: Boolean(partner.allowOverLimit),
+      requiredCashForOrder: Number(partner.requiredCashForOrder || requiredAmount || 0),
+      distanceKm: Number.isFinite(Number(partner.distanceKm)) ? Number(partner.distanceKm) : null,
+    }));
 
-    if (lead) {
-      logger.info(`[Dispatch] Offering order ${order._id} to rider ${lead.partnerId} in zone ${String(order.zoneId || '')} (${lead.distanceKm}km)`);
-      
+    if (eligible.length > 0) {
+      logger.info(`[Dispatch] Offering order ${order._id} to zone ${String(order.zoneId || '')}`, {
+        orderZoneId: String(order.zoneId || ''),
+        assignedDeliveryBoyList: eligible.map((partner) => String(partner.partnerId)),
+      });
+
       const payload = buildDeliverySocketPayload(order, order.restaurantId);
-      const roomName = rooms.delivery(lead.partnerId);
+      const roomName = rooms.deliveryZone(String(order.zoneId));
       if (io) {
         const eventPayload = { 
           ...payload, 
-          pickupDistanceKm: lead.distanceKm,
           offeredAt: offeredAt, // Crucial for frontend timer
+          eligibleDeliveryPartnerIds: eligible.map((partner) => String(partner.partnerId)),
+          orderZoneId: String(order.zoneId || ''),
           dispatch: {
             ...order.dispatch,
             status: 'offered',
             offeredTo: [
               ...(order.dispatch?.offeredTo || []),
-              { partnerId: lead.partnerId, at: offeredAt, action: 'offered' }
+              ...offeredToEntries
             ]
           }
         };
         io.to(roomName).emit('new_order', eventPayload);
         io.to(roomName).emit('new_order_available', eventPayload);
       }
-
-      try {
-        await notifyOwnerSafely(
-          { ownerType: 'DELIVERY_PARTNER', ownerId: lead.partnerId },
-          {
-            title: 'New order assigned!',
-            body: `You have 30 seconds to accept Order #${order.order_id || order._id}.`,
-            data: { type: 'new_order', orderId: order._id.toString() },
-          },
-        );
-      } catch (err) {
-        logger.warn(`Push notification failed for partner ${lead.partnerId}: ${err.message}`);
-      }
+      await Promise.all(
+        eligible.map(async (partner) => {
+          try {
+            await notifyOwnerSafely(
+              { ownerType: 'DELIVERY_PARTNER', ownerId: partner.partnerId },
+              {
+                title: 'New order assigned!',
+                body: `You have 30 seconds to accept Order #${order.order_id || order._id}.`,
+                data: { type: 'new_order', orderId: order._id.toString(), orderZoneId: String(order.zoneId || '') },
+              },
+            );
+          } catch (err) {
+            logger.warn(`Push notification failed for partner ${partner.partnerId}: ${err.message}`);
+          }
+        }),
+      );
     }
-
-    const offeredToEntries = (lead ? [lead] : []).map(p => ({
-      partnerId: p.partnerId,
-      at: offeredAt,
-      action: 'offered',
-      allowOverLimit: Boolean(p.allowOverLimit),
-      requiredCashForOrder: Number(p.requiredCashForOrder || requiredAmount || 0),
-    }));
 
     order.dispatch.status = 'unassigned';
     order.dispatch.deliveryPartnerId = null;

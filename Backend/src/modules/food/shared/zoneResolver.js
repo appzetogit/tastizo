@@ -6,6 +6,20 @@ const toFinite = (value) => {
     return Number.isFinite(numeric) ? numeric : null;
 };
 
+const haversineKm = (lat1, lng1, lat2, lng2) => {
+    const earthRadiusKm = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) *
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.sin(dLng / 2) *
+            Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return earthRadiusKm * c;
+};
+
 const isPointInPolygon = (lat, lng, polygon) => {
     if (!Array.isArray(polygon) || polygon.length < 3) return false;
 
@@ -24,6 +38,37 @@ const isPointInPolygon = (lat, lng, polygon) => {
     }
 
     return inside;
+};
+
+const matchesRadiusZone = (lat, lng, zone) => {
+    const centerLat = toFinite(zone?.center?.latitude);
+    const centerLng = toFinite(zone?.center?.longitude);
+    const radius = toFinite(zone?.radius);
+    if (centerLat === null || centerLng === null || radius === null || radius <= 0) return false;
+
+    const unit = String(zone?.unit || 'kilometer').toLowerCase();
+    const radiusKm = unit === 'miles' ? radius * 1.60934 : radius;
+    return haversineKm(lat, lng, centerLat, centerLng) <= radiusKm;
+};
+
+const matchesPolygonZone = (lat, lng, zone) => {
+    const coordinates = Array.isArray(zone?.coordinates) ? zone.coordinates : [];
+    if (coordinates.length < 3) return false;
+    return isPointInPolygon(lat, lng, coordinates);
+};
+
+export const zoneMatchesCoordinates = (zone, latInput, lngInput) => {
+    const lat = toFinite(latInput);
+    const lng = toFinite(lngInput);
+    if (!zone || lat === null || lng === null) return false;
+
+    const coverageType = String(zone?.coverageType || '').toLowerCase();
+    if (coverageType === 'radius') {
+        return matchesRadiusZone(lat, lng, zone);
+    }
+
+    if (matchesPolygonZone(lat, lng, zone)) return true;
+    return matchesRadiusZone(lat, lng, zone);
 };
 
 export const extractLatLngFromPointLike = (pointLike) => {
@@ -59,13 +104,11 @@ export const resolveActiveZoneByCoordinates = async (latInput, lngInput) => {
     if (lat === null || lng === null) return null;
 
     const zones = await FoodZone.find({ isActive: true })
-        .select('_id name zoneName serviceLocation coordinates isActive')
+        .select('_id name zoneName serviceLocation coverageType coordinates center radius unit isActive')
         .lean();
 
     for (const zone of zones) {
-        const coordinates = Array.isArray(zone?.coordinates) ? zone.coordinates : [];
-        if (coordinates.length < 3) continue;
-        if (isPointInPolygon(lat, lng, coordinates)) {
+        if (zoneMatchesCoordinates(zone, lat, lng)) {
             return zone;
         }
     }
@@ -101,7 +144,20 @@ export const pointLikeBelongsToZone = (pointLike, zone) => {
     if (!zone || typeof zone !== 'object') return false;
     const point = extractLatLngFromPointLike(pointLike);
     if (!point) return false;
-    const coordinates = Array.isArray(zone?.coordinates) ? zone.coordinates : [];
-    if (coordinates.length < 3) return false;
-    return isPointInPolygon(point.lat, point.lng, coordinates);
+    return zoneMatchesCoordinates(zone, point.lat, point.lng);
+};
+
+export const restaurantBelongsToResolvedZone = (restaurant, zone) => {
+    if (!restaurant || !zone?._id) return false;
+
+    const restaurantZoneId =
+        restaurant?.zoneId?._id ??
+        restaurant?.zoneId?.id ??
+        restaurant?.zoneId;
+
+    if (restaurantZoneId && String(restaurantZoneId) === String(zone._id)) {
+        return true;
+    }
+
+    return pointLikeBelongsToZone(restaurant.location, zone);
 };

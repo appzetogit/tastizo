@@ -684,10 +684,18 @@ export function LocationProvider({ children }) {
         allowStoredFallback = true,
         background = false,
       } = options
+      const hasLockedSavedSelection = shouldPreserveSavedSelection()
 
       if (!background) setLoading(true)
       setError(null)
       if (!background) setLocationStatus("fetching")
+
+      if (background && hasLockedSavedSelection) {
+        const preservedLocation = readStoredLocation()
+        if (preservedLocation) {
+          return preservedLocation
+        }
+      }
 
       try {
         let position
@@ -727,6 +735,9 @@ export function LocationProvider({ children }) {
 
         // Background Reverse Geocoding - do not await
         reverseGeocode(latitude, longitude, "gps").then(async (refinedLocation) => {
+          if (shouldPreserveSavedSelection()) {
+            return
+          }
           if (refinedLocation) {
             if (Number.isFinite(accuracy)) {
               refinedLocation.accuracy = accuracy
@@ -822,8 +833,10 @@ export function LocationProvider({ children }) {
       setLocation(storedLocation)
       setPermissionGranted(true)
       setLoading(false)
-      // Refresh in background
-      requestLocation({ background: true }).catch(() => {})
+      if (!preserveSavedSelection) {
+        // Refresh in background only when current GPS mode is active.
+        requestLocation({ background: true }).catch(() => {})
+      }
     }
     if (forceFreshLocation && isAuthenticated() && !preserveSavedSelection) {
       requestLocation()

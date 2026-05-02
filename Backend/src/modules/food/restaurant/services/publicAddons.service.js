@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { FoodRestaurant } from '../models/restaurant.model.js';
 import { FoodAddon } from '../models/foodAddon.model.js';
-import { pointLikeBelongsToZone, resolveZoneFromQuery } from '../../shared/zoneResolver.js';
+import { resolveZoneFromQuery, restaurantBelongsToResolvedZone } from '../../shared/zoneResolver.js';
 
 const PUBLIC_VISIBLE_RESTAURANT_STATUSES = ['approved'];
 
@@ -16,7 +16,7 @@ const buildPublicVisibleRestaurantFilter = (extra = {}) => ({
 
 const restaurantMatchesResolvedZone = (restaurant, resolvedZone) => {
     if (!restaurant || !resolvedZone?._id) return false;
-    return pointLikeBelongsToZone(restaurant.location, resolvedZone);
+    return restaurantBelongsToResolvedZone(restaurant, resolvedZone);
 };
 
 export async function getPublicApprovedRestaurantAddons(restaurantIdOrSlug, zoneQuery = {}) {

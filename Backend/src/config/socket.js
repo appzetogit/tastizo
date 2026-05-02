@@ -3,6 +3,7 @@ import { config } from './env.js';
 import { logger } from '../utils/logger.js';
 import { verifyAccessToken } from '../core/auth/token.util.js';
 import { getFirebaseDB } from './firebase.js';
+import { FoodDeliveryPartner } from '../modules/food/delivery/models/deliveryPartner.model.js';
 
 let io = null;
 
@@ -32,7 +33,50 @@ const roomNames = {
     restaurant: (id) => `restaurant:${String(id)}`,
     user: (id) => `user:${String(id)}`,
     delivery: (id) => `delivery:${String(id)}`,
+    deliveryZone: (zoneId) => `delivery_zone_${String(zoneId)}`,
     tracking: (orderId) => `tracking:${String(orderId)}`
+};
+
+const normalizeZoneId = (value) => {
+    const raw = String(value || '').trim();
+    return raw || null;
+};
+
+export const syncDeliveryPartnerZoneRoom = async (
+    deliveryPartnerId,
+    previousZoneId,
+    nextZoneId,
+    { isOnline = true } = {},
+) => {
+    if (!io || !deliveryPartnerId) return;
+
+    const deliveryRoom = roomNames.delivery(deliveryPartnerId);
+    const oldZone = normalizeZoneId(previousZoneId);
+    const nextZone = normalizeZoneId(nextZoneId);
+
+    if (oldZone) {
+        io.in(deliveryRoom).socketsLeave(roomNames.deliveryZone(oldZone));
+    }
+
+    if (isOnline && nextZone) {
+        io.in(deliveryRoom).socketsJoin(roomNames.deliveryZone(nextZone));
+    }
+
+    io.to(deliveryRoom).emit('delivery_zone_updated', {
+        deliveryPartnerId: String(deliveryPartnerId),
+        oldZoneId: oldZone,
+        currentZoneId: isOnline ? nextZone : null,
+        isOnline: Boolean(isOnline),
+        room: isOnline && nextZone ? roomNames.deliveryZone(nextZone) : null,
+        updatedAt: Date.now(),
+    });
+
+    logDeliverySocket('Delivery zone room synced', {
+        deliveryPartnerId: String(deliveryPartnerId),
+        oldZoneId: oldZone,
+        updatedZoneId: isOnline ? nextZone : null,
+        isOnline: Boolean(isOnline),
+    });
 };
 
 function isAllowedSocketOrigin(origin) {
@@ -147,6 +191,26 @@ export const initSocket = async (server) => {
                     deliveryPartnerId: String(userId),
                     room: roomNames.delivery(userId),
                 });
+
+                FoodDeliveryPartner.findById(userId)
+                    .select('currentZoneId availabilityStatus')
+                    .lean()
+                    .then((partner) => {
+                        const zoneId = normalizeZoneId(partner?.currentZoneId);
+                        const isOnline = String(partner?.availabilityStatus || '').toLowerCase() === 'online';
+                        if (isOnline && zoneId) {
+                            socket.join(roomNames.deliveryZone(zoneId));
+                            logDeliverySocket('Auto-joined delivery zone room on connect', {
+                                socketId: socket.id,
+                                deliveryPartnerId: String(userId),
+                                zoneId,
+                                room: roomNames.deliveryZone(zoneId),
+                            });
+                        }
+                    })
+                    .catch((error) => {
+                        logger.warn(`[DeliverySocket] Failed to auto-join delivery zone for ${userId}: ${error.message}`);
+                    });
             }
         }
 
@@ -203,12 +267,12 @@ export const initSocket = async (server) => {
             socket.emit('tracking-room-joined', { room, orderId: String(orderId) });
         });
 
-        // Delivery partner emits live GPS location for an active order.
-        // Broadcasts to the tracking room so users see the bike move in real time.
+        // Delivery partner emits live GPS location updates.
+        // If orderId is present, we also fan out tracking events for that order.
         const _lastLocationBroadcast = {};
         socket.on('update-location', async (data) => {
             if (socket.user?.role !== 'DELIVERY_PARTNER') return;
-            if (!data || !data.orderId) return;
+            if (!data) return;
 
             const lat = Number(data.lat);
             const lng = Number(data.lng);
@@ -226,7 +290,6 @@ export const initSocket = async (server) => {
             _lastLocationBroadcast[data.orderId] = now;
 
             const payload = {
-                orderId: String(data.orderId),
                 deliveryPartnerId: String(userId),
                 lat,
                 lng,
@@ -239,14 +302,33 @@ export const initSocket = async (server) => {
                 timestamp: now
             };
 
+            try {
+                const { updateDeliveryAvailability } = await import('../modules/food/delivery/services/delivery.service.js');
+                const availabilityResult = await updateDeliveryAvailability(userId, {
+                    status: 'online',
+                    latitude: lat,
+                    longitude: lng,
+                });
+                payload.currentZoneId = availabilityResult?.currentZoneId || null;
+            } catch (error) {
+                logger.warn(`[DeliverySocket] Live zone sync failed for ${userId}: ${error.message}`);
+            }
+
             logDeliverySocket('Location update received', {
                 socketId: socket.id,
                 deliveryPartnerId: String(userId),
-                orderId: String(data.orderId),
+                orderId: String(data.orderId || ''),
                 lat,
                 lng,
+                matchedZoneId: payload.currentZoneId || null,
                 status: data.status || 'on_the_way',
             });
+
+            if (!data.orderId) {
+                return;
+            }
+
+            payload.orderId = String(data.orderId);
 
             // Broadcast to tracking room (all users watching this order)
             const trackingRoom = roomNames.tracking(data.orderId);
