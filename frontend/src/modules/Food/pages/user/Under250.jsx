@@ -59,6 +59,29 @@ const readUnder250Filters = () => {
   }
 }
 
+const readStoredLocationSnapshot = () => {
+  if (typeof window === "undefined") return null
+
+  try {
+    const raw = window.localStorage.getItem("userLocation")
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === "object" ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+const readStoredZoneId = () => {
+  if (typeof window === "undefined") return null
+
+  try {
+    return window.localStorage.getItem("userZoneId") || null
+  } catch {
+    return null
+  }
+}
+
 
 export default function Under250() {
   const initialFiltersRef = useRef(readUnder250Filters())
@@ -356,14 +379,40 @@ export default function Under250() {
   // Fetch restaurants with dishes under ₹250 from backend
   useEffect(() => {
     const fetchRestaurantsUnder250 = async () => {
+      const storedLocation = readStoredLocationSnapshot()
+      const effectiveZoneId = zoneId || readStoredZoneId()
+      const effectiveLat = Number(location?.latitude ?? storedLocation?.latitude)
+      const effectiveLng = Number(location?.longitude ?? storedLocation?.longitude)
+      const hasScope =
+        Boolean(effectiveZoneId) ||
+        (Number.isFinite(effectiveLat) && Number.isFinite(effectiveLng))
+
+      if (!hasScope) {
+        if (zoneStatus === "loading") {
+          return
+        }
+        setUnder250Restaurants([])
+        setLoadingRestaurants(false)
+        return
+      }
+
       try {
         setLoadingRestaurants(true)
-        const response = await restaurantAPI.getRestaurants(zoneId ? { zoneId } : {})
+        const userLat = effectiveLat
+        const userLng = effectiveLng
+        const zoneRequestParams = {}
+        if (effectiveZoneId) {
+          zoneRequestParams.zoneId = effectiveZoneId
+        }
+        if (Number.isFinite(userLat) && Number.isFinite(userLng)) {
+          zoneRequestParams.lat = userLat
+          zoneRequestParams.lng = userLng
+        }
+
+        const response = await restaurantAPI.getRestaurants(zoneRequestParams)
         const restaurantsRaw = Array.isArray(response?.data?.data?.restaurants)
           ? response.data.data.restaurants
           : []
-        const userLat = Number(location?.latitude)
-        const userLng = Number(location?.longitude)
 
         const restaurantsWithUnder250Dishes = await Promise.all(
           restaurantsRaw.map(async (restaurant, index) => {
@@ -371,7 +420,36 @@ export default function Under250() {
             if (!restaurantId) return null
 
             try {
-              const menuResponse = await restaurantAPI.getMenuByRestaurantId(restaurantId)
+              const lookupIds = [
+                restaurant?.restaurantId,
+                restaurant?._id,
+                restaurant?.id,
+                restaurant?.mongoId,
+                restaurant?.slug,
+              ]
+                .filter(Boolean)
+                .map((value) => String(value).trim())
+                .filter((value, valueIndex, arr) => arr.indexOf(value) === valueIndex)
+
+              let menuResponse = null
+              for (const lookupId of lookupIds) {
+                try {
+                  const response = await restaurantAPI.getMenuByRestaurantId(lookupId, {
+                    noCache: true,
+                    params: Object.keys(zoneRequestParams).length > 0 ? zoneRequestParams : undefined,
+                  })
+                  const resolvedMenu = getMenuFromResponse(response)
+                  if (response?.data?.success && resolvedMenu) {
+                    menuResponse = response
+                    break
+                  }
+                } catch (lookupError) {
+                  if (lookupError?.response?.status !== 404) {
+                    throw lookupError
+                  }
+                }
+              }
+
               const menu = getMenuFromResponse(menuResponse)
               const menuItems = flattenMenuItems(menu)
                 .filter((item) => Number(item?.price || 0) <= under250PriceLimit && item?.isAvailable !== false)
@@ -461,7 +539,7 @@ export default function Under250() {
     }
 
     fetchRestaurantsUnder250()
-  }, [zoneId, isOutOfService, location?.latitude, location?.longitude, under250PriceLimit])
+  }, [zoneId, zoneStatus, isOutOfService, location?.latitude, location?.longitude, under250PriceLimit])
 
   // Fetch categories from backend (no static fallback list)
   useEffect(() => {
