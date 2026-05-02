@@ -740,18 +740,18 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       }
       return;
     }
-    
-    const watchId = navigator.geolocation.watchPosition((pos) => {
+
+    const handlePositionUpdate = (pos) => {
       // CRITICAL: In Simulation Mode, we disable actual GPS to prevent overwriting our test position
       if (isSimMode) return;
-      
+
       const { latitude: lat, longitude: lng, heading, speed } = pos.coords;
       const now = Date.now();
-      
+
       const currentRiderPos = { lat, lng, heading: heading || 0 };
       gpsErrorToastShownRef.current = false;
       setRiderLocation(currentRiderPos);
-      
+
       // Calculate Rolling Average Speed for Smart ETA
       if (speed && speed > 0) {
         rollingSpeedRef.current = [...rollingSpeedRef.current.slice(-4), speed]; // keep last 5 points
@@ -815,7 +815,15 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
           }).catch(() => {});
         }
       }
-    }, (error) => {
+    };
+
+    navigator.geolocation.getCurrentPosition(handlePositionUpdate, () => {}, {
+      enableHighAccuracy: false,
+      maximumAge: 60000,
+      timeout: 5000
+    });
+
+    const watchId = navigator.geolocation.watchPosition(handlePositionUpdate, (error) => {
       console.warn('Geolocation watch failed', error);
 
       if (gpsErrorToastShownRef.current) {
