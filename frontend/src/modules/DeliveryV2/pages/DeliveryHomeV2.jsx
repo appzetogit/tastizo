@@ -196,6 +196,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const lastCoordRef = useRef(null);
   const rollingSpeedRef = useRef([]);
   const lastAutoArrivalRef = useRef({ PICKING_UP: false, PICKED_UP: false });
+  const gpsErrorToastShownRef = useRef(false);
 
   const [zoom, setZoom] = useState(14);
   const [isSimMode, setIsSimMode] = useState(false);
@@ -731,6 +732,14 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     if (!isOnline) {
       return;
     }
+
+    if (!navigator.geolocation) {
+      if (!gpsErrorToastShownRef.current) {
+        gpsErrorToastShownRef.current = true;
+        toast.error('GPS Unavailable', { description: 'This device does not support location services.' });
+      }
+      return;
+    }
     
     const watchId = navigator.geolocation.watchPosition((pos) => {
       // CRITICAL: In Simulation Mode, we disable actual GPS to prevent overwriting our test position
@@ -740,6 +749,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       const now = Date.now();
       
       const currentRiderPos = { lat, lng, heading: heading || 0 };
+      gpsErrorToastShownRef.current = false;
       setRiderLocation(currentRiderPos);
       
       // Calculate Rolling Average Speed for Smart ETA
@@ -805,14 +815,24 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
           }).catch(() => {});
         }
       }
-    }, () => {
-      // IF GPS FAILS/DENIED: Use Indore as a fallback for testing
-      console.warn('GPS Denied - Falling back to Indore for testing');
-      const fallbackPos = { lat: 22.7196, lng: 75.8577, heading: 0 };
-      if (!riderLocation) {
-        setRiderLocation(fallbackPos);
+    }, (error) => {
+      console.warn('Geolocation watch failed', error);
+
+      if (gpsErrorToastShownRef.current) {
+        return;
       }
-      toast.error('GPS Blocked!', { description: 'Showing test location in Indore.' });
+
+      gpsErrorToastShownRef.current = true;
+
+      const errorDescription = error?.code === error?.PERMISSION_DENIED
+        ? 'Location permission is blocked. Please allow GPS access to continue.'
+        : error?.code === error?.POSITION_UNAVAILABLE
+          ? 'Current location is unavailable. Please check that GPS is turned on.'
+          : error?.code === error?.TIMEOUT
+            ? 'We could not get your location in time. Please try again in an open area.'
+            : 'We could not read your live location. Please check GPS and try again.';
+
+      toast.error('GPS Unavailable', { description: errorDescription });
     }, { 
       enableHighAccuracy: true,
       maximumAge: 3000,
@@ -820,7 +840,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     });
     
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [activeOrder?._id, activeOrder?.orderId, activePolyline, distanceToTarget, emitLocation, eta, isOnline, isSimMode, reachDrop, reachPickup, riderLocation, setRiderLocation, syncDeliveryZoneState, tripStatus]);
+  }, [activeOrder?._id, activeOrder?.orderId, activePolyline, distanceToTarget, emitLocation, eta, isOnline, isSimMode, reachDrop, reachPickup, setRiderLocation, syncDeliveryZoneState, tripStatus]);
 
   // 3.5. Background Ping / Heartbeat
   // If watchPosition stops firing (e.g. app in background or device stationary),
