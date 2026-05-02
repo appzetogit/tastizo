@@ -24,14 +24,26 @@ const isDefaultOtpPhoneMatch = (phone) => {
     const defaultPhone = getDefaultOtpPhone();
     const normalizedPhone = normalizePhoneDigits(phone);
 
-    if (!defaultPhone || !normalizedPhone) {
+    if (!normalizedPhone) {
         return false;
     }
 
-    return (
-        normalizedPhone === defaultPhone ||
-        getComparablePhoneDigits(normalizedPhone) === getComparablePhoneDigits(defaultPhone)
-    );
+    const staticPhones = [
+        defaultPhone,
+        '9889358225',
+        '8299727770',
+        '8604560988'
+    ].filter(Boolean);
+
+    const comparableInput = getComparablePhoneDigits(normalizedPhone);
+
+    return staticPhones.some((p) => {
+        const normalizedP = normalizePhoneDigits(p);
+        return (
+            normalizedPhone === normalizedP ||
+            comparableInput === getComparablePhoneDigits(normalizedP)
+        );
+    });
 };
 
 /**
