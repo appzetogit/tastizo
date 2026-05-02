@@ -452,7 +452,7 @@ export default function EditRestaurant() {
       setSavingLocation(true)
       const detectedZoneId = await detectZoneIdForCoords(latitude, longitude)
       const payload = {
-        zoneId: detectedZoneId || locationForm.zoneId || "",
+        zoneId: locationForm.zoneId || detectedZoneId || "",
         latitude,
         longitude,
         coordinates: [longitude, latitude],

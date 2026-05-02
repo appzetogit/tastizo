@@ -180,6 +180,7 @@ export async function calculateOrder(userId, dto) {
 
 // ----- Create order -----
 export async function createOrder(userId, dto) {
+  let restaurantCoords, deliveryCoords;
   const restaurant = await FoodRestaurant.findById(dto.restaurantId)
     .select("status isAdminApproved restaurantName zoneId location isAcceptingOrders")
     .lean();
@@ -295,8 +296,8 @@ export async function createOrder(userId, dto) {
   };
 
   let distanceKm = null;
-  const restaurantCoords = extractLatLng(restaurant.location);
-  const deliveryCoords = extractLatLng(dto.address) || extractLatLng(dto.address?.location);
+  restaurantCoords = extractLatLng(restaurant.location);
+  deliveryCoords = extractLatLng(dto.address) || extractLatLng(dto.address?.location);
 
   if (restaurantCoords && deliveryCoords) {
     const d = haversineKm(

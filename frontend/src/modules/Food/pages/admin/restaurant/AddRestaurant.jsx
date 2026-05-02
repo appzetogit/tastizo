@@ -794,7 +794,7 @@ export default function AddRestaurant() {
           const detectedZoneId = await detectZoneIdForCoords(parsed.latitude, parsed.longitude)
           setStep1((prev) => ({
             ...prev,
-            zoneId: detectedZoneId || prev.zoneId || "",
+            zoneId: prev.zoneId && prev.zoneId !== detectedZoneId ? prev.zoneId : (detectedZoneId || prev.zoneId || ""),
             location: {
               ...prev.location,
               formattedAddress: parsed.formattedAddress || prev.location.formattedAddress,

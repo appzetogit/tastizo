@@ -1417,20 +1417,27 @@ export const listApprovedRestaurants = async (query = {}) => {
         slug: (r.restaurantNameNormalized || normalizeName(r.restaurantName) || '').replace(/\s+/g, '-')
     }));
 
-    return { restaurants, total, page, limit };
+    return { 
+        restaurants, 
+        total, 
+        page, 
+        limit,
+        resolvedZoneId: resolvedZone?._id 
+    };
 };
 
 export const getApprovedRestaurantByIdOrSlug = async (idOrSlug, zoneQuery = {}) => {
     const value = String(idOrSlug || '').trim();
     const resolvedZone = await resolveZoneFromQuery(zoneQuery || {});
     if (!value) return null;
-    if (!resolvedZone?._id) return null;
+    // Note: For direct lookups, we don't strictly block if zone resolution fails,
+    // but we will still validate against the resolved zone if it exists.
 
     const visibilityFilter = buildPublicVisibleRestaurantFilter();
 
     const formatResult = (doc) => {
         if (!doc) return null;
-        if (!restaurantMatchesResolvedZone(doc, resolvedZone)) return null;
+        if (resolvedZone?._id && !restaurantMatchesResolvedZone(doc, resolvedZone)) return null;
         return normalizePublicRestaurantStatus({
             ...doc,
             rating: normalizeRatingValue(doc.rating),

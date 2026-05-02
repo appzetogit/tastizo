@@ -2636,93 +2636,28 @@ export async function updateRestaurantLocation(id, body = {}) {
     doc.landmark = landmark;
 
     const resolvedZone = await resolveZoneFromAddressLike(doc.location);
-    if (!resolvedZone?._id) {
-        throw new ValidationError('Location is outside all active zones. Please select a valid location inside a service zone.');
-    }
-    const page = Math.max(parseInt(query.page, 10) || 1, 1);
-    const skip = (page - 1) * limit;
-
-    const filter = {};
-    if (query.search && String(query.search).trim()) {
-        const term = String(query.search).trim();
-        filter.$or = [{ name: { $regex: term, $options: 'i' } }];
-    }
-    // Optional zone filter for admin list.
-    // - zoneId=global => only global categories (zoneId missing)
-    // - zoneId=<ObjectId> => only categories bound to that zone
-    if (query.zoneId && String(query.zoneId).trim()) {
-        const zid = String(query.zoneId).trim();
-        if (zid === 'global') {
-            filter.$or = [...(filter.$or || []), { zoneId: { $exists: false } }, { zoneId: null }];
-        } else if (mongoose.Types.ObjectId.isValid(zid)) {
-            filter.zoneId = new mongoose.Types.ObjectId(zid);
-        }
-    }
-    if (query.approvalStatus) {
-        const approvalStatus = String(query.approvalStatus);
-        if (approvalStatus === 'pending') {
-            filter.$and = [...(filter.$and || []), {
-                $or: [
-                    { approvalStatus: 'pending' },
-                    { approvalStatus: { $exists: false }, isApproved: false }
-                ]
-            }];
-        } else {
-            filter.approvalStatus = approvalStatus;
-        }
-    } else if (query.isApproved !== undefined) {
-        if (query.isApproved === true) {
-            filter.$and = [...(filter.$and || []), {
-                $or: [
-                    { approvalStatus: 'approved' },
-                    { approvalStatus: { $exists: false }, isApproved: { $ne: false } }
-                ]
-            }];
-        } else {
-            filter.$and = [...(filter.$and || []), {
-                $or: [
-                    { approvalStatus: 'pending' },
-                    { approvalStatus: { $exists: false }, isApproved: false }
-                ]
-            }];
-        }
+    
+    // Use manually provided zoneId if it exists and is valid, otherwise use auto-resolved zone.
+    let targetZoneId = null;
+    if (body.zoneId && mongoose.Types.ObjectId.isValid(body.zoneId)) {
+        targetZoneId = new mongoose.Types.ObjectId(String(body.zoneId));
+    } else if (resolvedZone?._id) {
+        targetZoneId = new mongoose.Types.ObjectId(String(resolvedZone._id));
     }
 
-    const [list, total] = await Promise.all([
-        FoodCategory.find(filter)
-            .sort({ sortOrder: 1, createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean(),
-        FoodCategory.countDocuments(filter)
-    ]);
+    if (!targetZoneId) {
+        throw new ValidationError('Location is outside all active zones. Please select a valid location or manually assign a zone.');
+    }
 
-    const statsById = await backfillLegacyCategoryWorkflow(list);
-    const restaurantIds = Array.from(
-        new Set(
-            list
-                .flatMap((category) => [category?.restaurantId, category?.createdByRestaurantId])
-                .map((value) => (value ? String(value) : ''))
-                .filter(Boolean)
-        )
-    );
-    const restaurants = restaurantIds.length
-        ? await FoodRestaurant.find({ _id: { $in: restaurantIds } })
-            .select('restaurantName ownerName ownerPhone')
-            .lean()
-        : [];
-    const restaurantMap = new Map(restaurants.map((restaurant) => [String(restaurant._id), restaurant]));
+    doc.zoneId = targetZoneId;
+    preserveRestaurantReviewState(doc, 'admin-location-update');
+    await doc.save();
 
-    const hydratedList = list.map((category) => ({
-        ...category,
-        restaurantId: category?.restaurantId ? restaurantMap.get(String(category.restaurantId)) || category.restaurantId : category.restaurantId,
-        createdByRestaurantId: category?.createdByRestaurantId ? restaurantMap.get(String(category.createdByRestaurantId)) || category.createdByRestaurantId : category.createdByRestaurantId
-    }));
-    const categories = hydratedList.map((category) => serializeCategoryForResponse(category, { includeCounts: true, statsById }));
-
-    return { categories, total, page, limit };
+    return FoodRestaurant.findById(id)
+        .select('-__v')
+        .populate('zoneId', 'name zoneName serviceLocation isActive')
+        .lean();
 }
-
 export async function createCategory(body) {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) throw new ValidationError('Category name is required');
