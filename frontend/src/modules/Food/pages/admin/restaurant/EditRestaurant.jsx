@@ -361,12 +361,23 @@ export default function EditRestaurant() {
 
       const detectedZoneId = await detectZoneIdForCoords(latitude, longitude)
 
-      let reverseAddress = ""
+      let parsed = { formattedAddress: "" }
       try {
         const geocoder = new window.google.maps.Geocoder()
         const res = await geocoder.geocode({ location: { lat: latitude, lng: longitude } })
         if (res.results && res.results[0]) {
-          reverseAddress = res.results[0].formatted_address
+          const place = res.results[0]
+          const comps = Array.isArray(place?.address_components) ? place.address_components : []
+          const get = (types) =>
+            comps.find((c) => types.some((t) => c.types?.includes(t)))?.long_name || ""
+          
+          parsed = {
+            formattedAddress: place.formatted_address,
+            area: get(["sublocality_level_1", "sublocality", "neighborhood"]) || get(["locality"]),
+            city: get(["locality"]) || get(["administrative_area_level_2"]),
+            state: get(["administrative_area_level_1"]),
+            pincode: get(["postal_code"]),
+          }
         }
       } catch {}
 
@@ -375,8 +386,12 @@ export default function EditRestaurant() {
         zoneId: detectedZoneId || prev.zoneId || "",
         latitude,
         longitude,
-        formattedAddress: reverseAddress || prev.formattedAddress,
-        addressLine1: reverseAddress || prev.addressLine1,
+        formattedAddress: parsed.formattedAddress || prev.formattedAddress,
+        addressLine1: parsed.formattedAddress || prev.addressLine1,
+        area: parsed.area || prev.area,
+        city: parsed.city || prev.city,
+        state: parsed.state || prev.state,
+        pincode: parsed.pincode || prev.pincode,
       }))
     }
 
