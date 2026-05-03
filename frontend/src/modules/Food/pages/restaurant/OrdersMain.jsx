@@ -68,6 +68,28 @@ const getAllOrdersTimestamp = (order) =>
   order?.createdAt ||
   new Date().toISOString();
 
+const getOrderTotalValue = (orderLike) => {
+  if (!orderLike) return 0;
+
+  const directTotal = Number(orderLike.total);
+  if (Number.isFinite(directTotal) && directTotal > 0) return directTotal;
+
+  const pricingTotal = Number(orderLike.pricing?.total);
+  if (Number.isFinite(pricingTotal) && pricingTotal > 0) return pricingTotal;
+
+  const amountDue = Number(orderLike.payment?.amountDue);
+  if (Number.isFinite(amountDue) && amountDue > 0) return amountDue;
+
+  const items = Array.isArray(orderLike.items) ? orderLike.items : [];
+  const itemsTotal = items.reduce((sum, item) => {
+    const price = Number(item?.price || 0);
+    const qty = Number(item?.quantity || 0);
+    return sum + (Number.isFinite(price) ? price : 0) * (Number.isFinite(qty) ? qty : 0);
+  }, 0);
+
+  return Number.isFinite(itemsTotal) ? itemsTotal : 0;
+};
+
 const transformOrderForList = (order) => ({
   orderId: order.orderId || order._id,
   mongoId: order._id,
@@ -91,6 +113,8 @@ const transformOrderForList = (order) => ({
   photoUrl: order.items?.[0]?.image || null,
   photoAlt: order.items?.[0]?.name || "Order",
   paymentMethod: order.paymentMethod || order.payment?.method || null,
+  total: getOrderTotalValue(order),
+  sendCutlery: order.sendCutlery,
   deliveryPartnerId: order.deliveryPartnerId || null,
   dispatchStatus: order.dispatch?.status || null,
   preparingTimestamp: order.tracking?.preparing?.timestamp
@@ -3218,6 +3242,8 @@ function OrderCard({
   eta,
   itemsSummary,
   paymentMethod,
+  total = 0,
+  sendCutlery = true,
   photoUrl,
   photoAlt,
   deliveryPartnerId,
@@ -3237,19 +3263,68 @@ function OrderCard({
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
+  const handleSelect = () =>
+    onSelect?.({
+      orderId,
+      status,
+      customerName,
+      type,
+      tableOrToken,
+      timePlaced,
+      eta,
+      itemsSummary,
+      paymentMethod,
+      scheduledAt,
+    });
+
+  const statusToneClass = isReady
+    ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+    : normalizedStatus === "confirmed"
+      ? "bg-amber-50 text-amber-600 border-amber-100"
+      : "bg-slate-50 text-slate-500 border-slate-100";
+
+  const scheduledDisplay = scheduledAt
+    ? new Date(scheduledAt).toLocaleString("en-US", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      })
+    : null;
+
+  const riderStatusLabel = deliveryPartnerId
+    ? "Delivery partner updating is on the way"
+    : "Delivery partner not assigned";
+
+  const timelineLabel = isPreparing
+    ? `Preparing since ${timePlaced}`
+    : isReady
+      ? "Order is marked ready"
+      : scheduledDisplay
+        ? `Scheduled for ${scheduledDisplay}`
+        : `${statusLabel} order`;
+
+  const showResendAction =
+    (isPreparing || isReady || normalizedStatus === "confirmed") &&
+    dispatchStatus !== "accepted";
+
+  const normalizedPaymentMethod = String(paymentMethod || "Cash")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
   return (
-    <div className="w-full bg-white rounded-xl p-3 mb-3 border border-slate-100 shadow-sm relative overflow-hidden active:bg-slate-50 transition-colors">
+    <div className="relative mb-3 w-full overflow-hidden rounded-2xl border border-slate-100 bg-white p-3 shadow-sm transition-colors active:bg-slate-50 md:rounded-[22px] md:px-4 md:py-3.5">
       <div 
         className="absolute top-0 left-0 w-1 h-full" 
         style={{ backgroundColor: brandColor }}
       />
       
       <div
-        onClick={() => onSelect?.({ orderId, status, customerName, type, tableOrToken, timePlaced, eta, itemsSummary, paymentMethod, scheduledAt })}
-        className="flex gap-3 items-start cursor-pointer pl-1">
-        
-        {/* Photo Container - Smaller for mobile */}
-        <div className="h-14 w-14 rounded-lg overflow-hidden bg-slate-50 flex-shrink-0 border border-slate-100 mt-0.5">
+        onClick={handleSelect}
+        className="flex cursor-pointer items-start gap-3 pl-1 md:gap-4 md:pl-0">
+
+        <div className="mt-0.5 h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50 md:h-16 md:w-16 md:rounded-xl">
           {photoUrl ? (
             <img src={photoUrl} alt={photoAlt} className="h-full w-full object-cover" />
           ) : (
@@ -3261,29 +3336,34 @@ function OrderCard({
           )}
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 min-w-0 flex flex-col">
-          {/* Top Row: ID & Status Badge */}
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <h3 className="text-[13px] font-black text-slate-900 truncate">
-              #<span style={{ color: brandColor }}>{orderId}</span>
-            </h3>
-            
-            <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="min-w-0 flex-1 flex-col md:hidden">
+          <div className="mb-1 flex items-start justify-between gap-2 md:mb-0">
+            <div className="min-w-0">
+              <h3 className="truncate text-[13px] font-black text-slate-900 md:text-[15px]">
+                #<span style={{ color: brandColor }}>{orderId}</span>
+              </h3>
+              <p className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-tight text-slate-400 md:text-[11px]">
+                {customerName}
+              </p>
+              <p className="mt-1 truncate text-[10px] font-bold italic text-slate-600 md:mt-2 md:text-[14px] md:not-italic">
+                {itemsSummary}
+              </p>
+            </div>
+
+            <div className="flex flex-shrink-0 items-start gap-1.5 md:flex-col md:items-end md:gap-1">
               {scheduledAt && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-50 text-green-600 border border-green-100 text-[8px] font-black uppercase">
+                <span className="inline-flex items-center gap-1 rounded-full border border-green-100 bg-green-50 px-1.5 py-0.5 text-[8px] font-black uppercase text-green-600 md:px-2 md:py-1 md:text-[9px]">
                   <Calendar className="w-2 h-2" />
                   Scheduled
                 </span>
               )}
-              <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-black border uppercase tracking-wider ${
-                isReady ? "bg-emerald-50 text-emerald-600 border-emerald-100" : 
-                normalizedStatus === "confirmed" ? "bg-amber-50 text-amber-600 border-amber-100" : 
-                "bg-slate-50 text-slate-500 border-slate-100"
-              }`}>
+              <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider md:px-2 md:py-1 md:text-[9px] ${statusToneClass}`}>
                 {statusLabel}
               </span>
-              
+              <span className="hidden text-[10px] font-bold uppercase tracking-tight text-slate-400 md:block">
+                {type}
+              </span>
+
               {isPreparing && onCancel && (
                 <button
                   type="button"
@@ -3291,7 +3371,7 @@ function OrderCard({
                     e.stopPropagation();
                     onCancel({ orderId, mongoId, customerName });
                   }}
-                  className="p-1 rounded-full bg-rose-50 text-rose-500"
+                  className="rounded-full bg-rose-50 p-1 text-rose-500 md:p-1.5"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -3299,57 +3379,44 @@ function OrderCard({
             </div>
           </div>
 
-          {/* Customer & Type */}
-          <div className="flex items-center justify-between text-[9px] text-slate-400 font-bold uppercase tracking-tight mb-1">
+          <div className="mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-tight text-slate-400 md:hidden">
             <span className="truncate max-w-[60%]">{customerName}</span>
             <span className="whitespace-nowrap">{type}</span>
           </div>
 
-          {/* Items Summary - One line only */}
-          <p className="text-[10px] text-slate-600 font-bold truncate italic mb-2">
-            {itemsSummary}
-          </p>
-
-          {/* Bottom Actions Row - Clean Grid/Flex */}
-          <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-50 mt-auto">
+          <div className="mt-auto flex items-center justify-between gap-2 border-t border-slate-50 pt-2 md:mt-4 md:pt-3">
               {scheduledAt ? (
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[8px] font-bold text-green-600 uppercase">Scheduled For</span>
-                  <span className="text-[10px] font-black text-green-700">
-                    {new Date(scheduledAt).toLocaleString("en-US", {
-                      day: "numeric",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: true,
-                    })}
+                  <span className="text-[8px] font-bold uppercase text-green-600 md:text-[10px]">Scheduled For</span>
+                  <span className="text-[10px] font-black text-green-700 md:text-[12px]">
+                    {scheduledDisplay}
                   </span>
                 </div>
               ) : (
                 <div className="flex flex-col gap-0.5">
                   {!isReady && eta && (
-                    <div className="flex items-center gap-1">
-                      <span className="text-[8px] font-bold text-slate-400 uppercase">ETA</span>
-                      <span className="text-[11px] font-black text-slate-800">{eta}</span>
+                    <div className="flex items-center gap-1 md:gap-1.5">
+                      <span className="text-[8px] font-bold uppercase text-slate-400 md:text-[10px]">ETA</span>
+                      <span className="text-[11px] font-black text-slate-800 md:text-[22px] md:leading-none">{eta}</span>
                     </div>
                   )}
-                  <span className="text-[7px] text-slate-300 font-bold uppercase">{timePlaced}</span>
+                  <span className="text-[7px] font-bold uppercase text-slate-300 md:text-[10px]">{timePlaced}</span>
                 </div>
               )}
 
-            <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex flex-shrink-0 items-center gap-1.5 md:gap-2">
               {(isPreparing || isReady || normalizedStatus === "confirmed") && (
                 <>
                   {deliveryPartnerId && (
-                    <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600" title="Driver Assigned">
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 md:h-7 md:w-7" title="Driver Assigned">
+                      <svg className="h-3 w-3 md:h-4 md:w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                         <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </div>
                   )}
                   
                   {!deliveryPartnerId && isPreparing && (
-                    <div className="px-1.5 py-0.5 rounded bg-slate-50 text-slate-400 text-[7px] font-black border border-slate-100 uppercase tracking-tighter">
+                    <div className="rounded border border-slate-100 bg-slate-50 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-tighter text-slate-400 md:px-2 md:py-1 md:text-[9px]">
                       No Rider
                     </div>
                   )}
@@ -3372,8 +3439,111 @@ function OrderCard({
                     onMarkReady({ orderId, mongoId, customerName });
                   }}
                   disabled={isMarkingReady}
-                  className="px-3 py-1.5 rounded-lg text-[9px] font-black text-white shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+                  className="rounded-lg px-3 py-1.5 text-[9px] font-black text-white shadow-sm transition-transform active:scale-95 disabled:opacity-50 md:rounded-xl md:px-4 md:py-2 md:text-[11px]"
                   style={{ backgroundColor: brandColor }}>
+                  {isMarkingReady ? "..." : "MARK READY"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden min-w-0 flex-1 md:flex md:flex-col">
+          <div className="mb-2 flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h3 className="truncate text-[15px] font-black text-slate-900">
+                #<span style={{ color: brandColor }}>{orderId}</span>
+              </h3>
+              <p className="mt-1 truncate text-[11px] font-bold uppercase tracking-tight text-slate-400">
+                {customerName}
+              </p>
+              <p className="mt-2 truncate text-[14px] font-bold text-slate-700">
+                {itemsSummary}
+              </p>
+            </div>
+
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] ${statusToneClass}`}>
+                  {statusLabel}
+                </span>
+                {isPreparing && onCancel && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCancel({ orderId, mongoId, customerName });
+                    }}
+                    className="rounded-full bg-rose-50 p-1.5 text-rose-500"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <span className="text-[11px] font-bold uppercase tracking-tight text-slate-400">
+                {type}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-auto flex items-end justify-between gap-4">
+            <div className="flex flex-col gap-1">
+              {scheduledAt ? (
+                <>
+                  <span className="text-[10px] font-bold uppercase text-green-600">Scheduled For</span>
+                  <span className="text-[12px] font-black text-green-700">{scheduledDisplay}</span>
+                </>
+              ) : (
+                <>
+                  {!isReady && eta && (
+                    <div className="flex items-end gap-1.5">
+                      <span className="text-[10px] font-bold uppercase text-slate-400">ETA</span>
+                      <span className="text-[24px] font-black leading-none text-slate-800">{eta}</span>
+                    </div>
+                  )}
+                  <span className="text-[10px] font-bold uppercase text-slate-300">{timePlaced}</span>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {(isPreparing || isReady || normalizedStatus === "confirmed") && (
+                <>
+                  {deliveryPartnerId ? (
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-600" title="Driver Assigned">
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                        <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                  ) : isPreparing ? (
+                    <div className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1 text-[9px] font-black uppercase tracking-tight text-slate-400">
+                      No Rider
+                    </div>
+                  ) : null}
+
+                  {showResendAction && (
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <ResendNotificationButton
+                        orderId={orderId}
+                        mongoId={mongoId}
+                        onSuccess={onSelect}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {isPreparing && onMarkReady && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMarkReady({ orderId, mongoId, customerName });
+                  }}
+                  disabled={isMarkingReady}
+                  className="rounded-xl px-4 py-2 text-[11px] font-black text-white shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+                  style={{ backgroundColor: brandColor }}
+                >
                   {isMarkingReady ? "..." : "MARK READY"}
                 </button>
               )}
@@ -3447,6 +3617,8 @@ function PreparingOrders({
               dispatchStatus: order.dispatch?.status || null,
               paymentMethod:
                 order.paymentMethod || order.payment?.method || null,
+              total: getOrderTotalValue(order),
+              sendCutlery: order.sendCutlery,
               scheduledAt: order.scheduledAt || null,
             };
           });
@@ -3692,6 +3864,8 @@ function PreparingOrders({
                 photoUrl={order.photoUrl}
                 photoAlt={order.photoAlt}
                 paymentMethod={order.paymentMethod}
+                total={order.total}
+                sendCutlery={order.sendCutlery}
                 deliveryPartnerId={order.deliveryPartnerId}
                 dispatchStatus={order.dispatchStatus}
                 onSelect={onSelectOrder}

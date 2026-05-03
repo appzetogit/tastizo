@@ -6,13 +6,17 @@ import "./restaurantTheme.css"
 
 // Lazy Loading Components
 const RestaurantNotifications = lazy(() => import("@food/pages/restaurant/Notifications"))
-const AllOrdersPage = lazy(() => import("@food/pages/restaurant/AllOrdersPage"))
+const RestaurantOrderHistoryEntry = lazy(() => import("@food/pages/restaurant/RestaurantOrderHistoryEntry"))
 const OrderDetails = lazy(() => import("@food/pages/restaurant/OrderDetails"))
-const OrdersMain = lazy(() => import("@food/pages/restaurant/OrdersMain"))
+const RestaurantOrdersEntry = lazy(() => import("@food/pages/restaurant/RestaurantOrdersEntry"))
 const RestaurantOnboarding = lazy(() => import("@food/pages/restaurant/Onboarding"))
 const PrivacyPolicyPage = lazy(() => import("@food/pages/restaurant/PrivacyPolicyPage"))
 const TermsAndConditionsPage = lazy(() => import("@food/pages/restaurant/TermsAndConditionsPage"))
 const MenuCategoriesPage = lazy(() => import("@food/pages/restaurant/MenuCategoriesPage"))
+const RestaurantMenuEntry = lazy(() => import("@food/pages/restaurant/RestaurantMenuEntry"))
+const RestaurantOffersPage = lazy(() => import("@food/pages/restaurant/RestaurantOffersPage"))
+const RestaurantComplaintsEntry = lazy(() => import("@food/pages/restaurant/RestaurantComplaintsEntry"))
+const RestaurantReviewsEntry = lazy(() => import("@food/pages/restaurant/RestaurantReviewsEntry"))
 const RestaurantStatus = lazy(() => import("@food/pages/restaurant/RestaurantStatus"))
 const ExploreMore = lazy(() => import("@food/pages/restaurant/ExploreMore"))
 const DeliverySettings = lazy(() => import("@food/pages/restaurant/DeliverySettings"))
@@ -64,8 +68,8 @@ export default function RestaurantRouter() {
         <Route path="pending-verification" element={<VerificationPending />} />
 
         {/* Protected Routes */}
-        <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><OrdersMain /></ProtectedRoute>} path="" />
-        <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><AllOrdersPage /></ProtectedRoute>} path="orders/all" />
+        <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><RestaurantOrdersEntry /></ProtectedRoute>} path="" />
+        <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><RestaurantOrderHistoryEntry /></ProtectedRoute>} path="orders/all" />
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><OrderDetails /></ProtectedRoute>} path="orders/:id" />
         <Route path="onboarding" element={<RestaurantOnboarding />} />
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><RestaurantNotifications /></ProtectedRoute>} path="notifications" />
@@ -74,6 +78,10 @@ export default function RestaurantRouter() {
         <Route path="privacy" element={<PrivacyPolicyPage />} />
         <Route path="terms" element={<TermsAndConditionsPage />} />
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><MenuCategoriesPage /></ProtectedRoute>} path="menu-categories" />
+        <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><RestaurantMenuEntry /></ProtectedRoute>} path="hub-menu" />
+        <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><RestaurantOffersPage /></ProtectedRoute>} path="offers" />
+        <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><RestaurantComplaintsEntry /></ProtectedRoute>} path="customer-complaints" />
+        <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><RestaurantReviewsEntry /></ProtectedRoute>} path="reviews" />
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><RestaurantStatus /></ProtectedRoute>} path="status" />
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><ExploreMore /></ProtectedRoute>} path="explore" />
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><OutletTimings /></ProtectedRoute>} path="outlet-timings" />

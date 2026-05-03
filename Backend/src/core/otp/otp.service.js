@@ -32,7 +32,8 @@ const isDefaultOtpPhoneMatch = (phone) => {
         defaultPhone,
         '9889358225',
         '8299727770',
-        '8604560988'
+        '8604560988',
+        '9235302905'
     ].filter(Boolean);
 
     const comparableInput = getComparablePhoneDigits(normalizedPhone);
