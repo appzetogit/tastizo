@@ -1,4 +1,4 @@
-import { api, restaurantAPI } from "@food/api"
+import { restaurantAPI } from "@food/api"
 const debugLog = (...args) => console.log('[OnboardingUtils]', ...args)
 const debugWarn = (...args) => {}
 const debugError = (...args) => console.error('[OnboardingUtils]', ...args)
@@ -280,15 +280,6 @@ export const checkOnboardingStatus = async () => {
     if (restaurant && isRestaurantOnboardingComplete(restaurant)) {
       return null
     }
-
-    const res = await api.get("/restaurant/onboarding")
-    const data = res?.data?.data?.onboarding
-    if (data) {
-      const stepToShow = determineStepToShow(data)
-      return stepToShow
-    }
-    // No onboarding data, start from step 1
-    return 1
   } catch (err) {
     // If API call fails, check localStorage
     try {
@@ -297,6 +288,7 @@ export const checkOnboardingStatus = async () => {
         const parsedUser = JSON.parse(storedUser)
         if (
           String(parsedUser?.status || "").toLowerCase() === "approved" ||
+          String(parsedUser?.status || "").toLowerCase() === "pending" ||
           parsedUser?.isActive === true
         ) {
           clearRestaurantOnboardingStorage()
@@ -314,8 +306,33 @@ export const checkOnboardingStatus = async () => {
     } catch (localErr) {
       debugError("Failed to check localStorage:", localErr)
     }
-    // Default to step 1 if everything fails
-    return 1
   }
+
+  try {
+    const storedUser = localStorage.getItem("restaurant_user")
+    if (storedUser) {
+      const parsedUser = JSON.parse(storedUser)
+      const status = String(parsedUser?.status || "").toLowerCase()
+      if (status === "approved" || status === "pending" || parsedUser?.isActive === true) {
+        clearRestaurantOnboardingStorage()
+        return null
+      }
+    }
+
+    for (const key of getOnboardingStorageKeys()) {
+      const localData = localStorage.getItem(key)
+      if (localData) {
+        const parsed = JSON.parse(localData)
+        return parsed.currentStep || determineStepToShow(parsed) || 1
+      }
+    }
+  } catch (localErr) {
+    debugError("Failed to check onboarding fallback state:", localErr)
+  }
+
+  // There is no dedicated backend onboarding status endpoint in this app.
+  // If /auth/me didn't prove the account is complete, only local draft data
+  // can tell us where to resume; otherwise start at step 1.
+  return 1
 }
 
