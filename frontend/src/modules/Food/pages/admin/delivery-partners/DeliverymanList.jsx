@@ -651,9 +651,17 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
                         )}
                         {visibleColumns.availabilityStatus && (
                           <td className="px-6 py-4">
-                            <div className="flex flex-col">
-                              <span className="text-xs">
-                                Active Status: <span className={`${dm.status === 'Online' ? 'text-blue-600' : 'text-slate-600'} underline`}>{dm.status}</span>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs text-slate-500">
+                                Active Status: <span className={`${dm.status === 'approved' ? 'text-emerald-600' : 'text-amber-600'} font-semibold`}>
+                                  {dm.status}
+                                </span>
+                              </span>
+                              <span className="text-xs text-slate-500">
+                                Availability: <span className={`inline-flex items-center gap-1.5 font-bold ${dm.availabilityStatus === 'online' ? 'text-blue-600' : 'text-slate-400'}`}>
+                                  <span className={`w-2 h-2 rounded-full ${dm.availabilityStatus === 'online' ? 'bg-blue-600 animate-pulse' : 'bg-slate-300'}`}></span>
+                                  {dm.availabilityStatus === 'online' ? 'Online' : 'Offline'}
+                                </span>
                               </span>
                             </div>
                           </td>
@@ -778,6 +786,15 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
                       }`}>
                         {viewDetails.status === 'blocked' ? 'Rejected' : (viewDetails.status?.charAt(0).toUpperCase() + viewDetails.status?.slice(1) || "N/A")}
                       </span>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Availability</label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`w-2.5 h-2.5 rounded-full ${viewDetails.availabilityStatus === 'online' ? 'bg-blue-600 animate-pulse' : 'bg-slate-300'}`}></span>
+                        <span className={`text-sm font-bold ${viewDetails.availabilityStatus === 'online' ? 'text-blue-700' : 'text-slate-500'}`}>
+                          {viewDetails.availabilityStatus === 'online' ? 'Online' : 'Offline'}
+                        </span>
+                      </div>
                     </div>
                     {viewDetails.rejectionReason && (
                       <div className="col-span-2">

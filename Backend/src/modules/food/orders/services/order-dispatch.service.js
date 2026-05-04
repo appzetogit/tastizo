@@ -100,7 +100,7 @@ async function filterPartnersByCashLimit(partners = [], options = {}) {
   }).filter(Boolean);
 
   // Base block: riders with zero available limit should not receive fresh offers.
-  const baseEligible = withCapacity.filter((p) => Number(p.availableCashLimit || 0) > 0);
+  const baseEligible = withCapacity.filter((p) => Number(p.availableCashLimit || 0) >= 0);
   if (baseEligible.length === 0) return [];
 
   if (requiredAmount <= 0) return baseEligible;
@@ -145,12 +145,17 @@ async function listNearbyOnlineDeliveryPartners(
       },
     });
 
-    const partners = await FoodDeliveryPartner.find({
+    const query = {
       status: "approved",
       availabilityStatus: "online",
-      currentZoneId: new mongoose.Types.ObjectId(effectiveZoneId),
       _id: { $nin: busyPartnerIds },
-    })
+      $or: [
+        { currentZoneId: new mongoose.Types.ObjectId(effectiveZoneId) },
+        { zoneId: new mongoose.Types.ObjectId(effectiveZoneId), currentZoneId: { $in: [null, undefined] } }
+      ]
+    };
+
+    const partners = await FoodDeliveryPartner.find(query)
       .select("_id status name")
       .limit(Math.max(1, limit))
       .lean();
@@ -178,14 +183,17 @@ async function listNearbyOnlineDeliveryPartners(
   const allOnline = await FoodDeliveryPartner.find({
     status: "approved",
     availabilityStatus: "online",
-    currentZoneId: new mongoose.Types.ObjectId(effectiveZoneId),
     _id: { $nin: busyPartnerIds },
+    $or: [
+      { currentZoneId: new mongoose.Types.ObjectId(effectiveZoneId) },
+      { zoneId: new mongoose.Types.ObjectId(effectiveZoneId), currentZoneId: { $in: [null, undefined] } }
+    ]
   })
     .select("_id status currentLat currentLng lastLocationUpdatedAt name")
     .lean();
 
   const scored = [];
-  const STALE_GPS_MS = 10 * 60 * 1000;
+  const STALE_GPS_MS = 15 * 60 * 1000; // Relaxed to 15 mins for better production resilience
 
   for (const p of allOnline) {
     const isStale = !p.lastLocationUpdatedAt || (Date.now() - new Date(p.lastLocationUpdatedAt).getTime()) > STALE_GPS_MS;
@@ -207,8 +215,11 @@ async function listNearbyOnlineDeliveryPartners(
     const anyOnline = await FoodDeliveryPartner.find({
       status: 'approved',
       availabilityStatus: "online",
-      currentZoneId: new mongoose.Types.ObjectId(effectiveZoneId),
       _id: { $nin: busyPartnerIds },
+      $or: [
+        { currentZoneId: new mongoose.Types.ObjectId(effectiveZoneId) },
+        { zoneId: new mongoose.Types.ObjectId(effectiveZoneId), currentZoneId: { $in: [null, undefined] } }
+      ]
     })
       .select("_id status name")
       .limit(Math.max(1, limit))

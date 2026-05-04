@@ -3758,6 +3758,7 @@ export async function getDeliveryPartners(query) {
         zone: doc.city || doc.state || doc.address || '',
         vehicleType: doc.vehicleType || '',
         status: doc.status,
+        availabilityStatus: doc.availabilityStatus || 'offline',
         profilePhoto: doc.profilePhoto || null,
         profileImage: doc.profilePhoto ? { url: doc.profilePhoto } : null
     }));
