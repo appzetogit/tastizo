@@ -727,6 +727,34 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     }
   }, [isOnline, syncDeliveryZoneState]);
 
+  const trackingDepsRef = useRef({
+    activeOrder,
+    activePolyline,
+    tripStatus,
+    distanceToTarget,
+    eta,
+    reachPickup,
+    reachDrop,
+    syncDeliveryZoneState,
+    emitLocation,
+    isSimMode,
+  });
+
+  useEffect(() => {
+    trackingDepsRef.current = {
+      activeOrder,
+      activePolyline,
+      tripStatus,
+      distanceToTarget,
+      eta,
+      reachPickup,
+      reachDrop,
+      syncDeliveryZoneState,
+      emitLocation,
+      isSimMode,
+    };
+  }, [activeOrder, activePolyline, tripStatus, distanceToTarget, eta, reachPickup, reachDrop, syncDeliveryZoneState, emitLocation, isSimMode]);
+
   // 3. Location logic (Smart Frequency Tracking)
   useEffect(() => {
     if (!isOnline) {
@@ -742,8 +770,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     }
 
     const handlePositionUpdate = (pos) => {
+      const deps = trackingDepsRef.current;
       // CRITICAL: In Simulation Mode, we disable actual GPS to prevent overwriting our test position
-      if (isSimMode) return;
+      if (deps.isSimMode) return;
 
       const { latitude: lat, longitude: lng, heading, speed } = pos.coords;
       const now = Date.now();
@@ -762,18 +791,18 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         : speed || 0;
 
       // Phase 11: Geo-fencing Auto-arrival (within 100m) - Disabled in DEV so UI steps can be tested manually
-      if (!isSimMode && !import.meta.env.DEV && distanceToTarget && distanceToTarget <= 100 && !lastAutoArrivalRef.current[tripStatus]) {
-        if (tripStatus === 'PICKING_UP') {
-          lastAutoArrivalRef.current[tripStatus] = true;
-          reachPickup().catch(() => { lastAutoArrivalRef.current[tripStatus] = false; });
-        } else if (tripStatus === 'PICKED_UP') {
-          lastAutoArrivalRef.current[tripStatus] = true;
-          reachDrop().catch(() => { lastAutoArrivalRef.current[tripStatus] = false; });
+      if (!deps.isSimMode && !import.meta.env.DEV && deps.distanceToTarget && deps.distanceToTarget <= 100 && !lastAutoArrivalRef.current[deps.tripStatus]) {
+        if (deps.tripStatus === 'PICKING_UP') {
+          lastAutoArrivalRef.current[deps.tripStatus] = true;
+          deps.reachPickup().catch(() => { lastAutoArrivalRef.current[deps.tripStatus] = false; });
+        } else if (deps.tripStatus === 'PICKED_UP') {
+          lastAutoArrivalRef.current[deps.tripStatus] = true;
+          deps.reachDrop().catch(() => { lastAutoArrivalRef.current[deps.tripStatus] = false; });
         }
       }
 
-      if (distanceToTarget > 200) {
-        lastAutoArrivalRef.current[tripStatus] = false;
+      if (deps.distanceToTarget > 200) {
+        lastAutoArrivalRef.current[deps.tripStatus] = false;
       }
 
       // Check threshold for Sync (distance-based or 7s time-based)
@@ -791,27 +820,27 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
           heading: heading || 0,
           speed: speed || 0,
           accuracy: pos.coords.accuracy,
-          orderId: activeOrder?.orderId || activeOrder?._id,
+          orderId: deps.activeOrder?.orderId || deps.activeOrder?._id,
           status: 'on_the_way',
-          polyline: activePolyline
+          polyline: deps.activePolyline
         };
 
-        syncDeliveryZoneState(lat, lng, true, { 
+        deps.syncDeliveryZoneState(lat, lng, true, { 
           heading: heading || 0,
           speed: speed || 0,
           accuracy: pos.coords.accuracy 
         }).catch(() => {});
 
-        if (payload.orderId) emitLocation(payload);
+        if (payload.orderId) deps.emitLocation(payload);
 
         if (payload.orderId) {
           writeOrderTracking(payload.orderId, {
             lat,
             lng,
             heading: heading || 0,
-            polyline: activePolyline,
-            status: tripStatus,
-            eta: eta
+            polyline: deps.activePolyline,
+            status: deps.tripStatus,
+            eta: deps.eta
           }).catch(() => {});
         }
       }
@@ -848,7 +877,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     });
     
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [activeOrder?._id, activeOrder?.orderId, activePolyline, distanceToTarget, emitLocation, eta, isOnline, isSimMode, reachDrop, reachPickup, setRiderLocation, syncDeliveryZoneState, tripStatus]);
+  }, [isOnline, setRiderLocation]);
 
   // 3.5. Background Ping / Heartbeat
   // If watchPosition stops firing (e.g. app in background or device stationary),

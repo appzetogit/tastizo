@@ -452,6 +452,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         if (!isMounted || !mapContainerRef.current) return
 
         // Initial location (Indore center or current location)
+        // Note: We use the value from the hook at the time of initialization
         const initialLocation = location?.latitude && location?.longitude
           ? { lat: location.latitude, lng: location.longitude }
           : { lat: 22.7196, lng: 75.8577 }
@@ -469,7 +470,6 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           clickableIcons: false,
           gestureHandling: lockMapToAutocomplete ? "none" : "auto",
           // Hide basemap "tiles" (roads/labels/POIs) for pin-only UI.
-          // This keeps the map container usable for centering/pin placement without showing the full map details.
           styles: [
             { featureType: "all", elementType: "labels", stylers: [{ visibility: "off" }] },
             { featureType: "administrative", elementType: "geometry", stylers: [{ visibility: "off" }] },
@@ -498,8 +498,6 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
         greenMarkerRef.current = greenMarker
 
-        // Note: marker drag disabled; location updates only via autocomplete selection.
-
         // Function to create/update blue dot and accuracy circle
         const createBlueDotWithCircle = (position, accuracyValue) => {
           if (!isMounted || !map) return
@@ -510,12 +508,6 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           }
 
           const accuracyRadius = Math.max(accuracyValue || 50, 20) // Minimum 20m
-
-          debugLog("?? Creating/updating blue dot:", {
-            position: userPos,
-            accuracy: accuracyValue,
-            radius: accuracyRadius
-          })
 
           // Remove existing blue dot and circle if any
           if (userLocationMarkerRef.current) {
@@ -539,10 +531,10 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             map: map,
             icon: {
               path: google.maps.SymbolPath.CIRCLE,
-              scale: 10, // Blue dot size
-              fillColor: "#4285F4", // Google blue
+              scale: 10,
+              fillColor: "#4285F4",
               fillOpacity: 1,
-              strokeColor: "#FFFFFF", // White border
+              strokeColor: "#FFFFFF",
               strokeWeight: 3,
             },
             zIndex: google.maps.Marker.MAX_ZINDEX + 1,
@@ -557,74 +549,28 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             strokeOpacity: 0.4,
             strokeWeight: 1,
             fillColor: "#4285F4",
-            fillOpacity: 0.15, // Light transparent blue
+            fillOpacity: 0.15,
             map: map,
             center: userPos,
-            radius: accuracyRadius, // Meters
+            radius: accuracyRadius,
             zIndex: google.maps.Marker.MAX_ZINDEX,
             visible: true
           })
 
           blueDotCircleRef.current = accuracyCircle
           userLocationMarkerRef.current = blueDotMarker
-
-          debugLog("??? Blue dot and accuracy circle created successfully:", {
-            marker: blueDotMarker,
-            circle: accuracyCircle,
-            radius: accuracyRadius,
-            markerOnMap: blueDotMarker.getMap() === map,
-            circleOnMap: accuracyCircle.getMap() === map
-          })
-
-          // Force visibility check (silent fix - no error logging)
-          setTimeout(() => {
-            if (!isMounted || !map) return
-
-            const markerVisible = userLocationMarkerRef.current?.getVisible()
-            const circleVisible = blueDotCircleRef.current?.getVisible()
-            const markerOnMap = userLocationMarkerRef.current?.getMap() === map
-            const circleOnMap = blueDotCircleRef.current?.getMap() === map
-
-            // Silently fix marker visibility if needed
-            if (userLocationMarkerRef.current && (!markerOnMap || !markerVisible)) {
-              try {
-                userLocationMarkerRef.current.setMap(map)
-                userLocationMarkerRef.current.setVisible(true)
-                debugLog("? Blue dot marker visibility fixed")
-              } catch (e) {
-                // Silently handle - marker might not be ready yet
-              }
-            }
-
-            // Silently fix circle visibility if needed
-            if (blueDotCircleRef.current && (!circleOnMap || !circleVisible)) {
-              try {
-                blueDotCircleRef.current.setMap(map)
-                blueDotCircleRef.current.setVisible(true)
-                debugLog("? Accuracy circle visibility fixed")
-              } catch (e) {
-                // Silently handle - circle might not be ready yet
-              }
-            }
-          }, 1000)
         }
 
         // Wait for map to be fully ready before getting location
         google.maps.event.addListenerOnce(map, 'idle', () => {
-          debugLog("??? Map is ready, requesting user location...")
-
-          // Get user's current location and show Blue Dot
           if (navigator.geolocation) {
-            // First, get current position immediately
             navigator.geolocation.getCurrentPosition(
               (position) => {
                 if (!isMounted) return
                 createBlueDotWithCircle(position, position.coords.accuracy)
-                // Do not auto-update address from map on load when locked
               },
               (error) => {
                 debugWarn("Geolocation getCurrentPosition error:", error)
-                // Do not auto-update address from map on load when locked
               },
               {
                 enableHighAccuracy: true,
@@ -633,19 +579,12 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               }
             )
 
-            // Then, watch for position updates (live tracking)
             const watchId = navigator.geolocation.watchPosition(
               (position) => {
                 if (!isMounted) return
-                debugLog("?? Live location update:", {
-                  lat: position.coords.latitude,
-                  lng: position.coords.longitude,
-                  accuracy: position.coords.accuracy
-                })
                 createBlueDotWithCircle(position, position.coords.accuracy)
               },
               (error) => {
-                // Suppress timeout errors - they're non-critical
                 if (error.code !== 3) {
                   debugWarn("Geolocation watchPosition error:", error)
                 }
@@ -653,15 +592,11 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               {
                 enableHighAccuracy: true,
                 timeout: 10000,
-                maximumAge: 5000 // Allow 5 second old cached location
+                maximumAge: 5000
               }
             )
 
-            // Store watch ID for cleanup
             watchPositionIdRef.current = watchId
-          } else {
-            debugWarn("Geolocation not supported")
-            // Do not auto-update address from map on load when locked
           }
         })
 
@@ -677,12 +612,10 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
     return () => {
       isMounted = false
-      // Cleanup geolocation watch
       if (watchPositionIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchPositionIdRef.current)
         watchPositionIdRef.current = null
       }
-      // Cleanup markers
       if (greenMarkerRef.current) {
         greenMarkerRef.current.setMap(null)
       }
@@ -701,7 +634,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         }
       }
     }
-  }, [showAddressForm, GOOGLE_MAPS_API_KEY, location?.latitude, location?.longitude])
+  }, [showAddressForm, GOOGLE_MAPS_API_KEY])
 
   useEffect(() => {
     const handleEscape = (e) => {
