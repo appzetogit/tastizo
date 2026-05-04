@@ -58,16 +58,28 @@ export const syncDeliveryPartnerZoneRoom = async (
         io.in(deliveryRoom).socketsLeave(roomNames.deliveryZone(oldZone));
     }
 
-    if (isOnline && nextZone) {
-        io.in(deliveryRoom).socketsJoin(roomNames.deliveryZone(nextZone));
+    // Fallback to assigned zone if nextZone (live zone) is not available
+    let targetZone = nextZone;
+    if (!targetZone && isOnline) {
+        try {
+            const partner = await FoodDeliveryPartner.findById(deliveryPartnerId).select('zoneId').lean();
+            targetZone = normalizeZoneId(partner?.zoneId);
+        } catch (err) {
+            logger.warn(`[DeliverySocket] Failed to fetch fallback zone for ${deliveryPartnerId}: ${err.message}`);
+        }
+    }
+
+    if (isOnline && targetZone) {
+        io.in(deliveryRoom).socketsJoin(roomNames.deliveryZone(targetZone));
     }
 
     io.to(deliveryRoom).emit('delivery_zone_updated', {
         deliveryPartnerId: String(deliveryPartnerId),
         oldZoneId: oldZone,
-        currentZoneId: isOnline ? nextZone : null,
+        currentZoneId: isOnline ? (nextZone || targetZone) : null,
+        isLive: Boolean(nextZone),
         isOnline: Boolean(isOnline),
-        room: isOnline && nextZone ? roomNames.deliveryZone(nextZone) : null,
+        room: isOnline && targetZone ? roomNames.deliveryZone(targetZone) : null,
         updatedAt: Date.now(),
     });
 
@@ -193,18 +205,22 @@ export const initSocket = async (server) => {
                 });
 
                 FoodDeliveryPartner.findById(userId)
-                    .select('currentZoneId availabilityStatus')
+                    .select('currentZoneId zoneId availabilityStatus')
                     .lean()
                     .then((partner) => {
-                        const zoneId = normalizeZoneId(partner?.currentZoneId);
+                        const liveZoneId = normalizeZoneId(partner?.currentZoneId);
+                        const assignedZoneId = normalizeZoneId(partner?.zoneId);
+                        const effectiveZoneId = liveZoneId || assignedZoneId;
+                        
                         const isOnline = String(partner?.availabilityStatus || '').toLowerCase() === 'online';
-                        if (isOnline && zoneId) {
-                            socket.join(roomNames.deliveryZone(zoneId));
+                        if (isOnline && effectiveZoneId) {
+                            socket.join(roomNames.deliveryZone(effectiveZoneId));
                             logDeliverySocket('Auto-joined delivery zone room on connect', {
                                 socketId: socket.id,
                                 deliveryPartnerId: String(userId),
-                                zoneId,
-                                room: roomNames.deliveryZone(zoneId),
+                                zoneId: effectiveZoneId,
+                                isLive: Boolean(liveZoneId),
+                                room: roomNames.deliveryZone(effectiveZoneId),
                             });
                         }
                     })
