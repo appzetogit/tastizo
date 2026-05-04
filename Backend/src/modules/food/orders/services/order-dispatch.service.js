@@ -18,6 +18,39 @@ import {
 } from './order.helpers.js';
 import { resolveZoneFromAddressLike } from '../../shared/zoneResolver.js';
 
+const normalizeId = (value) => String(value || '').trim();
+
+function pushDispatchDebugReason(debug, reason, partner, extra = {}) {
+  if (!debug) return;
+  debug.counts[reason] = Number(debug.counts[reason] || 0) + 1;
+  if ((debug.samples?.length || 0) >= 12) return;
+  debug.samples.push({
+    partnerId: normalizeId(partner?._id || partner?.partnerId),
+    name: partner?.name || '',
+    reason,
+    ...extra,
+  });
+}
+
+function createDispatchDebugContext({ zoneId, maxKm, requiredAmount, restaurantHasLocation }) {
+  return {
+    zoneId: normalizeId(zoneId),
+    maxKm: Number(maxKm || 0),
+    requiredAmount: Number(requiredAmount || 0),
+    restaurantHasLocation: Boolean(restaurantHasLocation),
+    counts: {},
+    samples: [],
+    totals: {
+      approved: 0,
+      zoneMatched: 0,
+      online: 0,
+      busy: 0,
+      radiusEligible: 0,
+      finalEligible: 0,
+    },
+  };
+}
+
 async function filterPartnersByCashLimit(partners = [], options = {}) {
   if (!Array.isArray(partners) || partners.length === 0) return [];
   const requiredAmount = Math.max(0, Number(options.requiredAmount || 0));
@@ -133,8 +166,24 @@ async function listNearbyOnlineDeliveryPartners(
 
   const effectiveZoneId = String(zoneId || restaurant?.zoneId || '').trim();
   if (!effectiveZoneId || !mongoose.Types.ObjectId.isValid(effectiveZoneId)) {
-    return { restaurant: restaurant || null, partners: [] };
+    return {
+      restaurant: restaurant || null,
+      partners: [],
+      debug: createDispatchDebugContext({
+        zoneId: effectiveZoneId,
+        maxKm,
+        requiredAmount,
+        restaurantHasLocation: Boolean(restaurant?.location?.coordinates?.length),
+      }),
+    };
   }
+
+  const debug = createDispatchDebugContext({
+    zoneId: effectiveZoneId,
+    maxKm,
+    requiredAmount,
+    restaurantHasLocation: Boolean(restaurant?.location?.coordinates?.length),
+  });
 
   if (!restaurant?.location?.coordinates?.length) {
     const busyPartnerIds = await FoodOrder.distinct('dispatch.deliveryPartnerId', {
@@ -144,6 +193,44 @@ async function listNearbyOnlineDeliveryPartners(
         $nin: ['delivered', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin'],
       },
     });
+    const busyPartnerIdSet = new Set((busyPartnerIds || []).map((id) => String(id)));
+
+    const approvedPartners = await FoodDeliveryPartner.find({ status: 'approved' })
+      .select('_id name availabilityStatus zoneId currentZoneId')
+      .lean();
+
+    debug.totals.approved = approvedPartners.length;
+
+    for (const partner of approvedPartners) {
+      const partnerId = String(partner._id);
+      const currentZoneId = normalizeId(partner.currentZoneId);
+      const assignedZoneId = normalizeId(partner.zoneId);
+      const zoneMatched =
+        currentZoneId === effectiveZoneId ||
+        (!currentZoneId && assignedZoneId === effectiveZoneId);
+
+      if (!zoneMatched) {
+        pushDispatchDebugReason(debug, 'wrong_zone', partner, {
+          currentZoneId: currentZoneId || null,
+          assignedZoneId: assignedZoneId || null,
+        });
+        continue;
+      }
+      debug.totals.zoneMatched += 1;
+
+      if (String(partner.availabilityStatus || '').toLowerCase() !== 'online') {
+        pushDispatchDebugReason(debug, 'offline', partner, {
+          availabilityStatus: partner.availabilityStatus || 'offline',
+        });
+        continue;
+      }
+      debug.totals.online += 1;
+
+      if (busyPartnerIdSet.has(partnerId)) {
+        debug.totals.busy += 1;
+        pushDispatchDebugReason(debug, 'busy', partner);
+      }
+    }
 
     const query = {
       status: "approved",
@@ -164,10 +251,24 @@ async function listNearbyOnlineDeliveryPartners(
       partners.map((p) => ({ partnerId: p._id, ...p })),
       { requiredAmount, allowOverLimitFallback },
     );
+    const cashEligiblePartnerIds = new Set(
+      (cashEligiblePartners || []).map((partner) => String(partner.partnerId || partner._id)),
+    );
+
+    for (const partner of partners) {
+      if (cashEligiblePartnerIds.has(String(partner._id))) {
+        debug.totals.finalEligible += 1;
+      } else {
+        pushDispatchDebugReason(debug, 'cash_limit', partner, {
+          requiredAmount,
+        });
+      }
+    }
 
     return {
       restaurant: null,
       partners: cashEligiblePartners.map((p) => ({ partnerId: p.partnerId || p._id, distanceKm: null })),
+      debug,
     };
   }
 
@@ -175,10 +276,77 @@ async function listNearbyOnlineDeliveryPartners(
   const busyPartnerIds = await FoodOrder.distinct('dispatch.deliveryPartnerId', {
     'dispatch.deliveryPartnerId': { $ne: null },
     'dispatch.status': 'accepted',
-    orderStatus: {
-      $nin: ['delivered', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin'],
-    },
+      orderStatus: {
+        $nin: ['delivered', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin'],
+      },
   });
+  const busyPartnerIdSet = new Set((busyPartnerIds || []).map((id) => String(id)));
+
+  const approvedPartners = await FoodDeliveryPartner.find({ status: 'approved' })
+    .select('_id name availabilityStatus zoneId currentZoneId currentLat currentLng lastLocationUpdatedAt')
+    .lean();
+
+  debug.totals.approved = approvedPartners.length;
+  const STALE_GPS_MS = 15 * 60 * 1000; // Relaxed to 15 mins for better production resilience
+
+  for (const partner of approvedPartners) {
+    const partnerId = String(partner._id);
+    const currentZoneId = normalizeId(partner.currentZoneId);
+    const assignedZoneId = normalizeId(partner.zoneId);
+    const zoneMatched =
+      currentZoneId === effectiveZoneId ||
+      (!currentZoneId && assignedZoneId === effectiveZoneId);
+
+    if (!zoneMatched) {
+      pushDispatchDebugReason(debug, 'wrong_zone', partner, {
+        currentZoneId: currentZoneId || null,
+        assignedZoneId: assignedZoneId || null,
+      });
+      continue;
+    }
+    debug.totals.zoneMatched += 1;
+
+    if (String(partner.availabilityStatus || '').toLowerCase() !== 'online') {
+      pushDispatchDebugReason(debug, 'offline', partner, {
+        availabilityStatus: partner.availabilityStatus || 'offline',
+      });
+      continue;
+    }
+    debug.totals.online += 1;
+
+    if (busyPartnerIdSet.has(partnerId)) {
+      debug.totals.busy += 1;
+      pushDispatchDebugReason(debug, 'busy', partner);
+      continue;
+    }
+
+    const isStale =
+      !partner.lastLocationUpdatedAt ||
+      (Date.now() - new Date(partner.lastLocationUpdatedAt).getTime()) > STALE_GPS_MS;
+    if (partner.currentLat == null || partner.currentLng == null) {
+      pushDispatchDebugReason(debug, 'missing_live_location', partner, {
+        currentLat: partner.currentLat ?? null,
+        currentLng: partner.currentLng ?? null,
+      });
+      continue;
+    }
+    if (isStale) {
+      pushDispatchDebugReason(debug, 'stale_gps', partner, {
+        lastLocationUpdatedAt: partner.lastLocationUpdatedAt || null,
+      });
+      continue;
+    }
+
+    const d = haversineKm(rLat, rLng, partner.currentLat, partner.currentLng);
+    if (!Number.isFinite(d) || d > maxKm) {
+      pushDispatchDebugReason(debug, 'out_of_radius', partner, {
+        distanceKm: Number.isFinite(d) ? Number(d.toFixed(2)) : null,
+      });
+      continue;
+    }
+
+    debug.totals.radiusEligible += 1;
+  }
 
   const allOnline = await FoodDeliveryPartner.find({
     status: "approved",
@@ -193,7 +361,6 @@ async function listNearbyOnlineDeliveryPartners(
     .lean();
 
   const scored = [];
-  const STALE_GPS_MS = 15 * 60 * 1000; // Relaxed to 15 mins for better production resilience
 
   for (const p of allOnline) {
     const isStale = !p.lastLocationUpdatedAt || (Date.now() - new Date(p.lastLocationUpdatedAt).getTime()) > STALE_GPS_MS;
@@ -231,6 +398,7 @@ async function listNearbyOnlineDeliveryPartners(
         distanceKm: null,
         status: p.status,
       })),
+      debug,
     };
   }
 
@@ -238,8 +406,24 @@ async function listNearbyOnlineDeliveryPartners(
     requiredAmount,
     allowOverLimitFallback,
   });
+  const cashEligiblePartnerIds = new Set(
+    (cashEligibleFinal || []).map((partner) => String(partner.partnerId || partner._id)),
+  );
 
-  return { partners: cashEligibleFinal };
+  for (const partner of picked) {
+    if (cashEligiblePartnerIds.has(String(partner.partnerId || partner._id))) {
+      debug.totals.finalEligible += 1;
+    } else {
+      pushDispatchDebugReason(debug, 'cash_limit', partner, {
+        requiredAmount,
+        distanceKm: Number.isFinite(Number(partner.distanceKm))
+          ? Number(Number(partner.distanceKm).toFixed(2))
+          : null,
+      });
+    }
+  }
+
+  return { partners: cashEligibleFinal, debug };
 }
 
 export async function getDispatchSettings() {
@@ -340,7 +524,7 @@ export async function tryAutoAssign(orderId, options = {}) {
       requiredAmount,
       allowOverLimitFallback: true,
     };
-    const { partners } = await listNearbyOnlineDeliveryPartners(order.restaurantId, {
+    const { partners, debug } = await listNearbyOnlineDeliveryPartners(order.restaurantId, {
       ...searchOptions,
       zoneId: order.zoneId,
     });
@@ -366,6 +550,16 @@ export async function tryAutoAssign(orderId, options = {}) {
     }
 
     const eligible = partners.filter(p => !offeredIds.includes(p.partnerId.toString()));
+    logger.info('[DispatchDebug] Rider eligibility snapshot', {
+      orderId: String(order._id),
+      orderZoneId: String(order.zoneId || ''),
+      attempt,
+      maxKm,
+      requiredAmount,
+      offeredAlreadyCount: offeredIds.length,
+      debug,
+      eligiblePartnerIds: eligible.map((p) => String(p.partnerId)),
+    });
     logger.info('[Dispatch] Eligible delivery boys for order', {
       orderId: String(order._id),
       orderZoneId: String(order.zoneId || ''),

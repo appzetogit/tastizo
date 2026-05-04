@@ -348,10 +348,12 @@ export const updateDeliveryAvailability = async (userId, payload) => {
         lng <= 180;
 
     const oldZoneId = isValidObjectId(partner.currentZoneId) ? String(partner.currentZoneId) : null;
+    const assignedZoneId = isValidObjectId(partner.zoneId) ? String(partner.zoneId) : null;
     const matchedZone = hasCoordinates
         ? await resolveActiveZoneByCoordinates(lat, lng)
         : null;
     const nextZoneId = matchedZone?._id ? String(matchedZone._id) : null;
+    const preservedZoneId = oldZoneId || assignedZoneId || null;
 
     partner.availabilityStatus = validStatus;
     if (hasCoordinates) {
@@ -374,23 +376,28 @@ export const updateDeliveryAvailability = async (userId, payload) => {
         partner.lastLng = lng;
         partner.lastLocationAt = partner.lastLocationUpdatedAt;
     } else {
-        // Never keep a stale live zone when the client does not provide fresh coordinates.
-        partner.currentZoneId = null;
-        partner.currentLocation = undefined;
-        partner.currentLat = null;
-        partner.currentLng = null;
-        partner.lastLocationUpdatedAt = null;
-
         if (validStatus === 'online') {
-            logger.warn('[DeliveryZoneSync] Rider set online without valid coordinates; clearing live zone', {
+            logger.warn('[DeliveryZoneSync] Rider set online without valid coordinates; preserving last known zone/location', {
                 deliveryBoyId: String(userId),
                 oldZoneId,
+                assignedZoneId,
+                preservedZoneId,
             });
+        } else {
+            partner.currentZoneId = null;
+            partner.currentLocation = undefined;
+            partner.currentLat = null;
+            partner.currentLng = null;
+            partner.lastLocationUpdatedAt = null;
         }
     }
     await partner.save();
 
-    await syncDeliveryPartnerZoneRoom(String(userId), oldZoneId, nextZoneId, {
+    const effectiveZoneId = hasCoordinates
+        ? nextZoneId
+        : (validStatus === 'online' ? preservedZoneId : null);
+
+    await syncDeliveryPartnerZoneRoom(String(userId), oldZoneId, effectiveZoneId, {
         isOnline: validStatus === 'online'
     });
 
@@ -400,7 +407,7 @@ export const updateDeliveryAvailability = async (userId, payload) => {
         currentLng: hasCoordinates ? lng : null,
         matchedZoneId: nextZoneId,
         oldZoneId,
-        updatedZoneId: nextZoneId,
+        updatedZoneId: effectiveZoneId,
         availabilityStatus: validStatus
     });
 
@@ -408,7 +415,7 @@ export const updateDeliveryAvailability = async (userId, payload) => {
         availabilityStatus: partner.availabilityStatus,
         currentLat: hasCoordinates ? lat : partner.currentLat ?? null,
         currentLng: hasCoordinates ? lng : partner.currentLng ?? null,
-        currentZoneId: nextZoneId,
+        currentZoneId: effectiveZoneId,
         oldZoneId,
         matchedZone: toZoneSummary(matchedZone),
         lastLocationUpdatedAt: partner.lastLocationUpdatedAt || null

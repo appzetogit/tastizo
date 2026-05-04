@@ -243,7 +243,24 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
     travelMode: 'DRIVING',
   } : null;
 
-  const defaultCenter = { lat: 22.7196, lng: 75.8577 }; // Center on Indore as fallback
+  const defaultCenter = (() => {
+    try {
+      const raw = localStorage.getItem('deliveryBoyLastLocation');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length >= 2) {
+          const lat = Number(parsed[0]);
+          const lng = Number(parsed[1]);
+          if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            return { lat, lng };
+          }
+        }
+      }
+    } catch {
+      // Ignore storage read failures and use final fallback below.
+    }
+    return { lat: 25.3176, lng: 82.9739 }; // Varanasi fallback
+  })();
 
   return (
     <div className="absolute inset-0 z-0 text-gray-900 overflow-hidden flex flex-col">

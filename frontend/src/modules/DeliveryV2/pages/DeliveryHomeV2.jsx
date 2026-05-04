@@ -36,6 +36,7 @@ import useNotificationInbox from "@food/hooks/useNotificationInbox";
 
 const INCOMING_ORDER_STORAGE_KEY = 'delivery_v2_incoming_order';
 const OFFER_TTL_SECONDS = 30;
+const DELIVERY_LAST_LOCATION_STORAGE_KEY = 'deliveryBoyLastLocation';
 
 const safeReadJson = (key) => {
   try {
@@ -127,6 +128,34 @@ const clearPersistedIncomingOrder = () => {
     localStorage.removeItem(INCOMING_ORDER_STORAGE_KEY);
   } catch {
     // Ignore storage cleanup failures.
+  }
+};
+
+const readStoredDeliveryLocation = () => {
+  try {
+    const raw = localStorage.getItem(DELIVERY_LAST_LOCATION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length < 2) return null;
+    const lat = Number(parsed[0]);
+    const lng = Number(parsed[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+    return { lat, lng };
+  } catch {
+    return null;
+  }
+};
+
+const persistDeliveryLocation = (lat, lng) => {
+  try {
+    if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return;
+    localStorage.setItem(
+      DELIVERY_LAST_LOCATION_STORAGE_KEY,
+      JSON.stringify([Number(lat), Number(lng)]),
+    );
+  } catch {
+    // Ignore storage failures and keep in-memory flow alive.
   }
 };
 
@@ -404,6 +433,43 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
     return payload;
   }, [hydrateAvailableOrder]);
+
+  const syncUsingFallbackLocation = useCallback((reason = 'gps_fallback') => {
+    const fallbackLocation =
+      lastCoordRef.current ||
+      readStoredDeliveryLocation() ||
+      (riderLocation?.lat != null && riderLocation?.lng != null
+        ? { lat: Number(riderLocation.lat), lng: Number(riderLocation.lng) }
+        : null);
+
+    if (!fallbackLocation) {
+      return false;
+    }
+
+    const lat = Number(fallbackLocation.lat);
+    const lng = Number(fallbackLocation.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return false;
+    }
+
+    lastCoordRef.current = { lat, lng };
+    const previousHeading = Number(riderLocation?.heading || 0);
+    setRiderLocation({
+      ...(riderLocation || {}),
+      lat,
+      lng,
+      heading: previousHeading,
+    });
+
+    syncDeliveryZoneState(lat, lng, true, {
+      heading: 0,
+      speed: 0,
+      accuracy: null,
+      source: reason,
+    }).catch(() => {});
+
+    return true;
+  }, [riderLocation, setRiderLocation, syncDeliveryZoneState]);
 
   useEffect(() => {
     deliveryPartnerIdRef.current = resolveDeliveryPartnerIdFromClient();
@@ -780,6 +846,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       const currentRiderPos = { lat, lng, heading: heading || 0 };
       gpsErrorToastShownRef.current = false;
       setRiderLocation(currentRiderPos);
+      persistDeliveryLocation(lat, lng);
 
       // Calculate Rolling Average Speed for Smart ETA
       if (speed && speed > 0) {
@@ -846,11 +913,17 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       }
     };
 
-    navigator.geolocation.getCurrentPosition(handlePositionUpdate, () => {}, {
+    navigator.geolocation.getCurrentPosition(
+      handlePositionUpdate,
+      () => {
+        syncUsingFallbackLocation('gps_initial_timeout');
+      },
+      {
       enableHighAccuracy: false,
       maximumAge: 60000,
       timeout: 5000
-    });
+      },
+    );
 
     const watchId = navigator.geolocation.watchPosition(handlePositionUpdate, (error) => {
       console.warn('Geolocation watch failed', error);
@@ -869,6 +942,8 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
             ? 'We could not get your location in time. Please try again in an open area.'
             : 'We could not read your live location. Please check GPS and try again.';
 
+      syncUsingFallbackLocation(`gps_watch_error_${error?.code || 'unknown'}`);
+
       toast.error('GPS Unavailable', { description: errorDescription });
     }, { 
       enableHighAccuracy: true,
@@ -877,7 +952,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     });
     
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [isOnline, setRiderLocation]);
+  }, [isOnline, setRiderLocation, syncUsingFallbackLocation]);
 
   // 3.5. Background Ping / Heartbeat
   // If watchPosition stops firing (e.g. app in background or device stationary),
