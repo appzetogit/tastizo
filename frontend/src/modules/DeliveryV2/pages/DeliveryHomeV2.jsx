@@ -51,6 +51,23 @@ const safeReadJson = (key) => {
 const getIncomingOrderIdentity = (order) =>
   String(order?.orderId || order?._id || order?.orderMongoId || '').trim();
 
+const isMongoObjectId = (value) => /^[a-f0-9]{24}$/i.test(String(value || '').trim());
+
+const getOrderReferenceKeys = (order) => {
+  if (!order) return [];
+  return [
+    order?._id,
+    order?.orderMongoId,
+    order?.orderId,
+    order?.order_id,
+    order?.orderNumber,
+    order?.orderCode,
+    order?.displayOrderId,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+};
+
 const resolveDeliveryPartnerIdFromClient = () => {
   try {
     const storedUser =
@@ -240,6 +257,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const simInitializedRef = useRef(false);
   const deliveryPartnerIdRef = useRef('');
   const incomingOrderHydratedRef = useRef(false);
+  const availableOrdersRef = useRef([]);
   const pendingExternalOrderIdRef = useRef('');
   const lastOpenedExternalOrderIdRef = useRef('');
   const externalOrderFetchInFlightRef = useRef(false);
@@ -401,6 +419,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
             : Array.isArray(availablePayload)
               ? availablePayload
               : [];
+        availableOrdersRef.current = availableOrders;
 
         const nextCashLimitNotice =
           availablePayload?.cashLimit?.blocked ? availablePayload.cashLimit : null;
@@ -460,6 +479,30 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       return;
     }
 
+    const idType = isMongoObjectId(normalizedOrderId) ? 'mongo' : 'public';
+    console.log('[DeliveryWebView] detected id type', {
+      source,
+      orderId: normalizedOrderId,
+      idType,
+    });
+
+    const loadedOrders = [
+      incomingOrder,
+      newOrder,
+      activeOrder,
+      ...availableOrdersRef.current,
+      safeReadJson(INCOMING_ORDER_STORAGE_KEY),
+    ].filter(Boolean);
+    console.log('[DeliveryWebView] searching loaded orders', {
+      source,
+      orderId: normalizedOrderId,
+      loadedCount: loadedOrders.length,
+    });
+
+    const matchedLoadedOrder = loadedOrders.find((order) =>
+      getOrderReferenceKeys(order).includes(normalizedOrderId),
+    );
+
     const currentIncomingId = getIncomingOrderIdentity(incomingOrder);
     if (
       normalizedOrderId === currentIncomingId ||
@@ -474,6 +517,31 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       return;
     }
 
+    if (matchedLoadedOrder) {
+      console.log('[DeliveryWebView] order found', {
+        source,
+        orderId: normalizedOrderId,
+        resolvedFrom: 'loaded-orders',
+      });
+      if (tab !== 'feed') {
+        navigate('/food/delivery/feed');
+      }
+      setIsModalMinimized(false);
+      setIncomingOrder((prev) => {
+        const prevId = getIncomingOrderIdentity(prev);
+        const nextId = getIncomingOrderIdentity(matchedLoadedOrder);
+        return prevId === nextId && prev ? prev : matchedLoadedOrder;
+      });
+      lastOpenedExternalOrderIdRef.current = normalizedOrderId;
+      persistIncomingOrder(matchedLoadedOrder);
+      clearPendingPopupOrderId();
+      console.log('[DeliveryWebView] modal opened', {
+        source,
+        orderId: normalizedOrderId,
+      });
+      return;
+    }
+
     if (externalOrderFetchInFlightRef.current) {
       persistPendingPopupOrderId(normalizedOrderId);
       return;
@@ -482,10 +550,18 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     externalOrderFetchInFlightRef.current = true;
     try {
       const partnerId = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
+      console.log('[DeliveryWebView] fetching order by ref', {
+        source,
+        orderId: normalizedOrderId,
+      });
       const response = await deliveryAPI.getOrderDetails(normalizedOrderId);
-      const fetchedOrder = response?.data?.data || response?.data?.order || null;
+      const fetchedOrder =
+        response?.data?.data?.order ||
+        response?.data?.order ||
+        response?.data?.data ||
+        null;
 
-      console.log('[DeliveryWebView] order fetched', {
+      console.log('[DeliveryWebView] order found', {
         source,
         orderId: normalizedOrderId,
         fetched: Boolean(fetchedOrder),
@@ -517,7 +593,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       lastOpenedExternalOrderIdRef.current = normalizedOrderId;
       persistIncomingOrder(fetchedOrder);
       clearPendingPopupOrderId();
-      console.log('[DeliveryWebView] popup opened', {
+      console.log('[DeliveryWebView] modal opened', {
         source,
         orderId: normalizedOrderId,
       });
@@ -530,10 +606,12 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       externalOrderFetchInFlightRef.current = false;
     }
   }, [
+    activeOrder,
     clearPendingPopupOrderId,
     incomingOrder,
     isDashboardBootstrapping,
     navigate,
+    newOrder,
     persistPendingPopupOrderId,
     tab,
   ]);
@@ -640,7 +718,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   useEffect(() => {
     const queryOrderId = String(new URLSearchParams(location.search || '').get('orderId') || '').trim();
     if (!queryOrderId) return;
-    console.log('[DeliveryWebView] orderId received', queryOrderId);
+    console.log('[DeliveryWebView] query orderId received', queryOrderId);
     void openOrderPopupById(queryOrderId, 'url-query');
   }, [location.search, openOrderPopupById]);
 

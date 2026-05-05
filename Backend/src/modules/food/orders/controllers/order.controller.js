@@ -289,6 +289,17 @@ export async function getCurrentTripDeliveryController(req, res, next) {
     }
 }
 
+export async function getOrderByRefDeliveryController(req, res, next) {
+    try {
+        const deliveryPartnerId = req.user?.userId;
+        const orderRef = req.params.orderRef;
+        const order = await orderService.getOrderByRefDelivery(deliveryPartnerId, orderRef);
+        return sendResponse(res, 200, 'Order retrieved', { order });
+    } catch (err) {
+        next(err);
+    }
+}
+
 export async function createCollectQrController(req, res, next) {
     try {
         const deliveryPartnerId = req.user?.userId;

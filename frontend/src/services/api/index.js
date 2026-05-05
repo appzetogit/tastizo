@@ -1811,16 +1811,14 @@ export const deliveryAPI = {
     let cache = new Map(); // key -> { at, res }
     const CACHE_MS = 1200;
 
-    const isProbablyOrderIdentity = (value) => {
-      const raw = String(value || "").trim();
-      if (!raw) return false;
-      // Mongo ObjectId
-      return /^[a-f0-9]{24}$/i.test(raw);
-    };
+    const buildRequest = (key) =>
+      apiClient.get(`/food/delivery/orders/by-ref/${encodeURIComponent(key)}`, {
+        contextModule: "delivery",
+      });
 
     return (orderId) => {
       const key = String(orderId || "").trim();
-      if (!isProbablyOrderIdentity(key)) {
+      if (!key) {
         return Promise.resolve({
           data: { success: false, message: "Invalid order id", data: null },
           status: 200,
@@ -1838,8 +1836,7 @@ export const deliveryAPI = {
       const existing = inFlight.get(key);
       if (existing) return existing;
 
-      const p = apiClient
-        .get(`/food/delivery/orders/${key}`, { contextModule: "delivery" })
+      const p = buildRequest(key)
         .then((res) => {
           cache.set(key, { at: Date.now(), res });
           return res;

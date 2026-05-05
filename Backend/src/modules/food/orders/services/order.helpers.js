@@ -92,11 +92,14 @@ export function buildOrderIdentityFilter(orderIdOrMongoId) {
   if (mongoose.isValidObjectId(raw))
     return { _id: new mongoose.Types.ObjectId(raw) };
   
-  // Search BOTH underscore and camelCase variants for robust lookup
+  // Search legacy and public-facing order reference fields for robust lookup
   return { 
     $or: [
         { order_id: raw },
-        { orderId: raw }
+        { orderId: raw },
+        { orderNumber: raw },
+        { orderCode: raw },
+        { displayOrderId: raw }
     ]
   };
 }

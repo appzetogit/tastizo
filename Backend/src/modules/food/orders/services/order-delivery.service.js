@@ -307,6 +307,52 @@ export async function getCurrentTripDelivery(deliveryPartnerId) {
   return out;
 }
 
+export async function getOrderByRefDelivery(deliveryPartnerId, orderRef) {
+  const identity = buildOrderIdentityFilter(orderRef);
+  if (!identity) {
+    throw new ValidationError('Order reference required');
+  }
+
+  const partnerObjectId = new mongoose.Types.ObjectId(deliveryPartnerId);
+  const order = await FoodOrder.findOne({
+    ...identity,
+    $or: [
+      { 'dispatch.deliveryPartnerId': partnerObjectId },
+      { 'dispatch.offeredTo.partnerId': partnerObjectId },
+    ],
+  })
+    .populate({
+      path: 'restaurantId',
+      select: 'restaurantName name phone location addressLine1 area city state profileImage',
+    })
+    .populate({ path: 'userId', select: 'name phone' })
+    .lean();
+
+  if (!order) {
+    throw new NotFoundError('Order not found');
+  }
+
+  const assignedPartnerId = String(order?.dispatch?.deliveryPartnerId || '');
+  const wasOfferedToPartner = Array.isArray(order?.dispatch?.offeredTo)
+    && order.dispatch.offeredTo.some(
+      (entry) => String(entry?.partnerId || '') === String(deliveryPartnerId),
+    );
+
+  if (
+    assignedPartnerId
+    && assignedPartnerId !== String(deliveryPartnerId)
+    && order?.dispatch?.status === 'accepted'
+  ) {
+    throw new ForbiddenError('Order already accepted by another partner');
+  }
+
+  if (!wasOfferedToPartner && assignedPartnerId !== String(deliveryPartnerId)) {
+    throw new ForbiddenError('Order was not offered to this delivery partner');
+  }
+
+  return sanitizeOrderForExternal(order);
+}
+
 export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
   const { page, limit, skip } = buildPaginationOptions(query);
   const partner = await FoodDeliveryPartner.findById(deliveryPartnerId)

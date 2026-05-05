@@ -1488,6 +1488,10 @@ export async function getCurrentTripDelivery(deliveryPartnerId) {
   return deliveryService.getCurrentTripDelivery(deliveryPartnerId);
 }
 
+export async function getOrderByRefDelivery(deliveryPartnerId, orderRef) {
+  return deliveryService.getOrderByRefDelivery(deliveryPartnerId, orderRef);
+}
+
 // ----- Delivery: available, accept, reject, status -----
 export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
   return deliveryService.listOrdersAvailableDelivery(deliveryPartnerId, query);
