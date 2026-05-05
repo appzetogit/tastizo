@@ -20,6 +20,7 @@ import {
 import { resolveZoneFromAddressLike } from '../../shared/zoneResolver.js';
 
 const normalizeId = (value) => String(value || '').trim();
+const DELIVERY_OFFER_TTL_MS = 60 * 1000;
 
 function pushDispatchDebugReason(debug, reason, partner, extra = {}) {
   if (!debug) return;
@@ -503,7 +504,7 @@ export async function tryAutoAssign(orderId, options = {}) {
         orderMongoId: order._id.toString(),
         orderId: order._id.toString(),
         attempt: attempt + 1
-      }, { delay: 30000 });
+      }, { delay: DELIVERY_OFFER_TTL_MS });
       return order;
     }
 
@@ -531,7 +532,7 @@ export async function tryAutoAssign(orderId, options = {}) {
     });
     
     // Escalate only to admin after repeated same-zone sequential attempts.
-    const isPhase3 = attempt >= 6; // ~3 minutes at 30s intervals
+    const isPhase3 = attempt >= 6; // ~6 minutes at 60s intervals
 
     if (isPhase3) {
       logger.error(`[CRITICAL] Order ${order._id} unassigned for ${attempt} mins. Triggering Admin Alert (Phase 3).`);
@@ -582,7 +583,7 @@ export async function tryAutoAssign(orderId, options = {}) {
         orderMongoId: order._id.toString(),
         orderId: order._id.toString(),
         attempt: attempt + 1
-      }, { delay: 30000 }); // Retry faster (30s) if no one found
+      }, { delay: DELIVERY_OFFER_TTL_MS });
 
       return order;
     }
@@ -682,13 +683,13 @@ export async function tryAutoAssign(orderId, options = {}) {
     }
     await order.save();
 
-    // Re-check in 30s
+    // Re-check after the full rider offer window
     await addOrderJob({
       action: 'DISPATCH_TIMEOUT_CHECK',
       orderMongoId: order._id.toString(),
       orderId: order._id.toString(),
       attempt: attempt + 1
-    }, { delay: 30000 });
+    }, { delay: DELIVERY_OFFER_TTL_MS });
 
     return order;
   } finally {

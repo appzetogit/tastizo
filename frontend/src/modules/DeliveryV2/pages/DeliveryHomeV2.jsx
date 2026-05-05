@@ -36,7 +36,7 @@ import useNotificationInbox from "@food/hooks/useNotificationInbox";
 
 const INCOMING_ORDER_STORAGE_KEY = 'delivery_v2_incoming_order';
 const DELIVERY_PENDING_POPUP_ORDER_ID_KEY = 'delivery_pending_popup_order_id';
-const OFFER_TTL_SECONDS = 30;
+const OFFER_TTL_SECONDS = 60;
 const DELIVERY_LAST_LOCATION_STORAGE_KEY = 'deliveryBoyLastLocation';
 
 const safeReadJson = (key) => {

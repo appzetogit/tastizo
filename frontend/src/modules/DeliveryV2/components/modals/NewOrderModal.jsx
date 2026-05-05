@@ -6,6 +6,8 @@ import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { getHaversineDistance, calculateETA } from '@/modules/DeliveryV2/utils/geo';
 import { formatCurrency } from '@food/utils/currency';
 
+const DELIVERY_OFFER_TTL_SECONDS = 60;
+
 /**
  * NewOrderModal - Ported to Original 1:1 Theme with Slider Accept.
  * Matches the Zomato/Swiggy style Green Header + White Card.
@@ -29,7 +31,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
   const { deliveryPartner } = useDeliveryStore();
   const partnerId = deliveryPartner?._id || deliveryPartner?.partnerId || deliveryPartner?.id;
 
-  const [timeLeft, setTimeLeft] = useState(30);
+  const [timeLeft, setTimeLeft] = useState(DELIVERY_OFFER_TTL_SECONDS);
 
   useEffect(() => {
     if (!order) return;
@@ -48,7 +50,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
       const start = new Date(startTime).getTime();
       const now = Date.now();
       const diff = Math.floor((now - start) / 1000);
-      const remaining = Math.max(0, 30 - diff);
+      const remaining = Math.max(0, DELIVERY_OFFER_TTL_SECONDS - diff);
       setTimeLeft(remaining);
 
       if (remaining <= 0) {
@@ -56,7 +58,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
         return;
       }
     } else {
-      setTimeLeft(30);
+      setTimeLeft(DELIVERY_OFFER_TTL_SECONDS);
     }
 
     const timer = setInterval(() => {
