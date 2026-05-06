@@ -123,7 +123,8 @@ const dispatchSchema = new mongoose.Schema(
             allowOverLimit: { type: Boolean, default: false },
             requiredCashForOrder: { type: Number, default: 0 }
         }],
-        dispatchingAt: { type: Date }
+        dispatchingAt: { type: Date },
+        revivedAt: { type: Date, default: null }
     },
     { _id: false }
 );

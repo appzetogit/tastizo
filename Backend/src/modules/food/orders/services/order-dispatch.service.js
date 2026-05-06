@@ -739,12 +739,52 @@ export async function resendDeliveryNotificationRestaurant(orderId, restaurantId
   if (!order) throw new NotFoundError('Order not found');
 
   const activeStatuses = ['confirmed', 'preparing', 'ready_for_pickup', 'ready'];
-  if (!activeStatuses.includes(order.orderStatus)) {
+  const currentOrderStatus = String(order.orderStatus || '').trim();
+  const canReviveCancelledAdminOrder = currentOrderStatus === 'cancelled_by_admin';
+
+  if (!activeStatuses.includes(currentOrderStatus) && !canReviveCancelledAdminOrder) {
     throw new ValidationError(`Cannot resend notification for order in status: ${order.orderStatus}`);
   }
 
   if (order.dispatch?.status === 'accepted') {
     throw new ValidationError('A delivery partner has already accepted this order.');
+  }
+
+  if (canReviveCancelledAdminOrder) {
+    const refundStatus = String(order.payment?.refund?.status || 'none').toLowerCase();
+    const paymentStatus = String(order.payment?.status || '').toLowerCase();
+    if (refundStatus === 'processed' || paymentStatus === 'refunded') {
+      throw new ValidationError('Cannot resend this order because its refund has already been processed.');
+    }
+
+    const latestHistory = Array.isArray(order.statusHistory)
+      ? [...order.statusHistory].reverse()
+      : [];
+    const cancelledEntry = latestHistory.find((entry) => String(entry?.to || '') === 'cancelled_by_admin');
+    const reviveStatusCandidate = String(cancelledEntry?.from || '').trim().toLowerCase();
+    const nextOrderStatus = activeStatuses.includes(reviveStatusCandidate)
+      ? reviveStatusCandidate
+      : 'preparing';
+
+    pushStatusHistory(order, {
+      byRole: 'RESTAURANT',
+      byId: restaurantId,
+      from: 'cancelled_by_admin',
+      to: nextOrderStatus,
+      note: 'Restaurant manually revived order for fresh delivery re-dispatch',
+    });
+
+    order.orderStatus = nextOrderStatus;
+    order.dispatch.revivedAt = new Date();
+    logger.info('[DeliveryResend] Revived cancelled_by_admin order for fresh dispatch', {
+      orderId: String(order._id),
+      previousStatus: currentOrderStatus,
+      revivedTo: nextOrderStatus,
+      restaurantId: String(restaurantId),
+      revivedAt: order.dispatch.revivedAt,
+    });
+  } else {
+    order.dispatch.revivedAt = null;
   }
 
   const paymentMethod = String(order.payment?.method || 'cash').toLowerCase();
@@ -760,8 +800,22 @@ export async function resendDeliveryNotificationRestaurant(orderId, restaurantId
 
   order.dispatch.status = 'unassigned';
   order.dispatch.deliveryPartnerId = null;
+  order.dispatch.assignedAt = undefined;
+  order.dispatch.acceptedAt = undefined;
   order.dispatch.offeredTo = [];
+  order.markModified('dispatch');
+  order.markModified('statusHistory');
   await order.save();
+
+  const persistedAfterReset = await FoodOrder.findById(order._id)
+    .select('orderStatus dispatch.status dispatch.revivedAt')
+    .lean();
+  logger.info('[DeliveryResend] Persisted order state after manual resend reset', {
+    orderId: String(order._id),
+    orderStatus: persistedAfterReset?.orderStatus || '',
+    dispatchStatus: persistedAfterReset?.dispatch?.status || '',
+    revivedAt: persistedAfterReset?.dispatch?.revivedAt || null,
+  });
 
   await tryAutoAssign(order._id);
 

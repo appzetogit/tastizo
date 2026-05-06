@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'framer-motion';
 import { User, MapPin, FastForward, Clock, Phone, ChefHat, ChevronDown } from 'lucide-react';
 import { ActionSlider } from '@/modules/DeliveryV2/components/ui/ActionSlider';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
@@ -32,6 +33,12 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
   const partnerId = deliveryPartner?._id || deliveryPartner?.partnerId || deliveryPartner?.id;
 
   const [timeLeft, setTimeLeft] = useState(DELIVERY_OFFER_TTL_SECONDS);
+
+  useEffect(() => {
+    console.log('[NewOrderModal] render', {
+      orderId: order?.orderId || order?._id || '',
+    });
+  }, [order]);
 
   useEffect(() => {
     if (!order) return;
@@ -155,19 +162,35 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
         )}`
       : null;
 
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-1000 bg-black/60 flex items-end justify-center p-0"
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[1000] bg-black/60 flex items-end justify-center p-0 pointer-events-auto"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 2147483647,
+        background: 'rgba(0, 0, 0, 0.6)',
+        display: 'flex',
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+        padding: 0,
+        pointerEvents: 'auto',
+      }}
     >
-      <motion.div 
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      <div 
         className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[3rem] overflow-hidden shadow-[0_-20px_60px_rgba(0,0,0,0.5)] flex flex-col pt-1 sm:pt-2"
+        style={{
+          width: '100%',
+          maxWidth: '32rem',
+          background: '#ffffff',
+          borderTopLeftRadius: '1.5rem',
+          borderTopRightRadius: '1.5rem',
+          overflow: 'hidden',
+          boxShadow: '0 -20px 60px rgba(0,0,0,0.5)',
+          display: 'flex',
+          flexDirection: 'column',
+          paddingTop: '0.25rem',
+        }}
       >
         {/* Handle / Minimize */}
         <div className="w-full flex justify-center pb-1.5 pt-1 bg-white relative z-10 rounded-t-3xl sm:rounded-t-[3rem] -mb-1">
@@ -262,7 +285,13 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
             </button>
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
+
+  if (typeof document === 'undefined') {
+    return modalContent;
+  }
+
+  return createPortal(modalContent, document.body);
 };

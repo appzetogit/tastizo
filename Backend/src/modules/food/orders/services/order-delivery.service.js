@@ -315,10 +315,14 @@ export async function getOrderByRefDelivery(deliveryPartnerId, orderRef) {
 
   const partnerObjectId = new mongoose.Types.ObjectId(deliveryPartnerId);
   const order = await FoodOrder.findOne({
-    ...identity,
-    $or: [
-      { 'dispatch.deliveryPartnerId': partnerObjectId },
-      { 'dispatch.offeredTo.partnerId': partnerObjectId },
+    $and: [
+      identity,
+      {
+        $or: [
+          { 'dispatch.deliveryPartnerId': partnerObjectId },
+          { 'dispatch.offeredTo.partnerId': partnerObjectId },
+        ],
+      },
     ],
   })
     .populate({

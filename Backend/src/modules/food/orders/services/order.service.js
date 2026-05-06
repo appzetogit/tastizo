@@ -746,9 +746,17 @@ export async function autoCancelStaleOrders() {
   ];
 
   try {
-    const staleOrders = await FoodOrder.find({
+    const candidates = await FoodOrder.find({
       orderStatus: { $in: staleStatuses },
-      createdAt: { $lt: TWO_HOURS_AGO }
+      $or: [
+        { createdAt: { $lt: TWO_HOURS_AGO } },
+        { 'dispatch.revivedAt': { $ne: null, $lt: TWO_HOURS_AGO } },
+      ],
+    });
+
+    const staleOrders = candidates.filter((order) => {
+      const lastFreshAt = order.dispatch?.revivedAt || order.createdAt;
+      return lastFreshAt instanceof Date && lastFreshAt < TWO_HOURS_AGO;
     });
 
     if (staleOrders.length === 0) return;
@@ -758,6 +766,7 @@ export async function autoCancelStaleOrders() {
     for (const order of staleOrders) {
       const from = order.orderStatus;
       order.orderStatus = 'cancelled_by_admin';
+      order.dispatch.revivedAt = null;
       
       pushStatusHistory(order, {
         byRole: 'SYSTEM',
@@ -765,6 +774,8 @@ export async function autoCancelStaleOrders() {
         to: 'cancelled_by_admin',
         note: 'Auto-cancelled: Delivery exceeded 2 hours'
       });
+      order.markModified('dispatch');
+      order.markModified('statusHistory');
 
       // Handle refunds for paid orders
       const paymentMethod = String(order.payment?.method || "cash").toLowerCase();

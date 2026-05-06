@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { useProximityCheck } from '@/modules/DeliveryV2/hooks/useProximityCheck';
@@ -113,8 +114,8 @@ const getIncomingOrderRemainingSeconds = (order, partnerId) => {
   return Math.max(0, OFFER_TTL_SECONDS - elapsedSeconds);
 };
 
-const shouldKeepIncomingOrder = (order, partnerId) => {
-  if (!order) return false;
+const getIncomingOrderRejectionReason = (order, partnerId) => {
+  if (!order) return 'missing_order';
 
   const orderStatus = String(order?.orderStatus || order?.status || '').toLowerCase();
   const dispatchStatus = String(order?.dispatch?.status || '').toLowerCase();
@@ -123,14 +124,24 @@ const shouldKeepIncomingOrder = (order, partnerId) => {
   const remaining = getIncomingOrderRemainingSeconds(order, partnerId);
   const acceptedBySomeone = Boolean(order?.dispatch?.acceptedAt);
 
-  if (acceptedBySomeone) return false;
-  if (remaining <= 0) return false;
-  if (!wasOfferedToMe) return false;
-  if (dispatchStatus && !['unassigned', 'assigned', 'offered', 'offer_sent', 'pending'].includes(dispatchStatus)) {
-    return false;
+  if (acceptedBySomeone) return 'already_accepted';
+  if (remaining <= 0) return 'offer_expired';
+  if (!wasOfferedToMe) return 'not_offered_to_partner';
+  if (
+    dispatchStatus &&
+    !['unassigned', 'assigned', 'offered', 'offer_sent', 'pending'].includes(dispatchStatus)
+  ) {
+    return `dispatch_status_${dispatchStatus || 'unknown'}`;
+  }
+  if (!['confirmed', 'preparing', 'ready_for_pickup', 'ready'].includes(orderStatus)) {
+    return `order_status_${orderStatus || 'unknown'}`;
   }
 
-  return ['confirmed', 'preparing', 'ready_for_pickup', 'ready'].includes(orderStatus);
+  return '';
+};
+
+const shouldKeepIncomingOrder = (order, partnerId) => {
+  return !getIncomingOrderRejectionReason(order, partnerId);
 };
 
 const persistIncomingOrder = (order) => {
@@ -218,6 +229,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const { items: broadcastItems, unreadCount: notificationUnreadCount, markAsRead: markBroadcastAsRead, dismissAll: dismissAllBroadcast } = useNotificationInbox("delivery", { limit: 20 });
 
   const [incomingOrder, setIncomingOrder] = useState(null);
+  const [stickyIncomingOrder, setStickyIncomingOrder] = useState(null);
+  const [forcedPopupOrder, setForcedPopupOrder] = useState(null);
+  const [hardPopupOrder, setHardPopupOrder] = useState(null);
   const [cashLimitNotice, setCashLimitNotice] = useState(null);
   const [isDashboardBootstrapping, setIsDashboardBootstrapping] = useState(true);
   const [currentZoneId, setCurrentZoneId] = useState(() => {
@@ -261,6 +275,15 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const pendingExternalOrderIdRef = useRef('');
   const lastOpenedExternalOrderIdRef = useRef('');
   const externalOrderFetchInFlightRef = useRef(false);
+  const externalPopupLockRef = useRef(false);
+  const visibleIncomingOrder = hardPopupOrder || forcedPopupOrder || incomingOrder || stickyIncomingOrder;
+  const shouldRenderStickyIncomingPopup =
+    Boolean(visibleIncomingOrder) && (!isModalMinimized || externalPopupLockRef.current);
+  if (visibleIncomingOrder && !isModalMinimized) {
+    console.log('[DeliveryWebView] emergency portal render active', {
+      orderId: getIncomingOrderIdentity(visibleIncomingOrder),
+    });
+  }
 
   const isLoggingOut = useRef(false);
   const handleLogout = useCallback(() => {
@@ -299,6 +322,10 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     try {
       await acceptOrder(o);
       setIncomingOrder(null);
+      setStickyIncomingOrder(null);
+      setForcedPopupOrder(null);
+      setHardPopupOrder(null);
+      externalPopupLockRef.current = false;
       clearNewOrder();
       clearPersistedIncomingOrder();
     } catch (err) {
@@ -308,6 +335,10 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                       (err?.response?.status === 403);
       if (isTaken) {
         setIncomingOrder(null);
+        setStickyIncomingOrder(null);
+        setForcedPopupOrder(null);
+        setHardPopupOrder(null);
+        externalPopupLockRef.current = false;
         clearNewOrder();
         clearPersistedIncomingOrder();
       }
@@ -316,6 +347,10 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
   const handleRejectOrder = useCallback(() => {
     setIncomingOrder(null);
+    setStickyIncomingOrder(null);
+    setForcedPopupOrder(null);
+    setHardPopupOrder(null);
+    externalPopupLockRef.current = false;
     clearNewOrder();
     clearPersistedIncomingOrder();
   }, []);
@@ -479,6 +514,13 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       return;
     }
 
+    const partnerId = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
+    if (!partnerId) {
+      console.log('[DeliveryWebView] delivery partner id not ready yet, waiting before popup open', normalizedOrderId);
+      persistPendingPopupOrderId(normalizedOrderId);
+      return;
+    }
+
     const idType = isMongoObjectId(normalizedOrderId) ? 'mongo' : 'public';
     console.log('[DeliveryWebView] detected id type', {
       source,
@@ -518,6 +560,12 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     }
 
     if (matchedLoadedOrder) {
+      if (!shouldKeepIncomingOrder(matchedLoadedOrder, partnerId)) {
+        console.log('[DeliveryWebView] stale loaded order ignored, fetching fresh order by ref', {
+          source,
+          orderId: normalizedOrderId,
+        });
+      } else {
       console.log('[DeliveryWebView] order found', {
         source,
         orderId: normalizedOrderId,
@@ -527,11 +575,11 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         navigate('/food/delivery/feed');
       }
       setIsModalMinimized(false);
-      setIncomingOrder((prev) => {
-        const prevId = getIncomingOrderIdentity(prev);
-        const nextId = getIncomingOrderIdentity(matchedLoadedOrder);
-        return prevId === nextId && prev ? prev : matchedLoadedOrder;
-      });
+      externalPopupLockRef.current = true;
+      setIncomingOrder(matchedLoadedOrder);
+      setStickyIncomingOrder(matchedLoadedOrder);
+      setForcedPopupOrder(matchedLoadedOrder);
+      setHardPopupOrder(matchedLoadedOrder);
       lastOpenedExternalOrderIdRef.current = normalizedOrderId;
       persistIncomingOrder(matchedLoadedOrder);
       clearPendingPopupOrderId();
@@ -540,6 +588,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         orderId: normalizedOrderId,
       });
       return;
+      }
     }
 
     if (externalOrderFetchInFlightRef.current) {
@@ -549,7 +598,6 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
     externalOrderFetchInFlightRef.current = true;
     try {
-      const partnerId = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
       console.log('[DeliveryWebView] fetching order by ref', {
         source,
         orderId: normalizedOrderId,
@@ -573,9 +621,15 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       }
 
       if (!shouldKeepIncomingOrder(fetchedOrder, partnerId)) {
+        const rejectionReason = getIncomingOrderRejectionReason(fetchedOrder, partnerId);
         console.error('[DeliveryWebView] error if order not found', {
           orderId: normalizedOrderId,
-          reason: 'Order is stale, expired, or not eligible for this partner.',
+          reason: rejectionReason || 'Order is stale, expired, or not eligible for this partner.',
+          orderStatus: fetchedOrder?.orderStatus || fetchedOrder?.status || '',
+          dispatchStatus: fetchedOrder?.dispatch?.status || '',
+          remainingSeconds: getIncomingOrderRemainingSeconds(fetchedOrder, partnerId),
+          hasAcceptedAt: Boolean(fetchedOrder?.dispatch?.acceptedAt),
+          partnerId: partnerId || '',
         });
         return;
       }
@@ -585,11 +639,11 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       }
 
       setIsModalMinimized(false);
-      setIncomingOrder((prev) => {
-        const prevId = getIncomingOrderIdentity(prev);
-        const nextId = getIncomingOrderIdentity(fetchedOrder);
-        return prevId === nextId && prev ? prev : fetchedOrder;
-      });
+      externalPopupLockRef.current = true;
+      setIncomingOrder(fetchedOrder);
+      setStickyIncomingOrder(fetchedOrder);
+      setForcedPopupOrder(fetchedOrder);
+      setHardPopupOrder(fetchedOrder);
       lastOpenedExternalOrderIdRef.current = normalizedOrderId;
       persistIncomingOrder(fetchedOrder);
       clearPendingPopupOrderId();
@@ -698,6 +752,16 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   }, [isDashboardBootstrapping, openOrderPopupById, readPendingPopupOrderId]);
 
   useEffect(() => {
+    if (isDashboardBootstrapping) return;
+    const partnerId = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
+    if (!partnerId) return;
+    const pendingOrderId = readPendingPopupOrderId();
+    if (!pendingOrderId) return;
+    console.log('[DeliveryWebView] partner ready, retrying pending popup open', pendingOrderId);
+    void openOrderPopupById(pendingOrderId, 'partner-ready-retry');
+  }, [isDashboardBootstrapping, openOrderPopupById, readPendingPopupOrderId, location.pathname]);
+
+  useEffect(() => {
     const handleOpenOrderPopupEvent = (event) => {
       console.log('[DeliveryWebView] OPEN_ORDER_POPUP event received', event);
       const externalOrderId = String(event?.detail?.orderId || '').trim();
@@ -752,6 +816,10 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     if (!incomingOrderHydratedRef.current) return;
 
     if (activeOrder) {
+      if (externalPopupLockRef.current) {
+        console.log('[DeliveryWebView] keeping persisted popup because external popup lock is active');
+        return;
+      }
       clearPersistedIncomingOrder();
       return;
     }
@@ -762,8 +830,13 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       return;
     }
 
+    if (externalPopupLockRef.current && stickyIncomingOrder) {
+      persistIncomingOrder(stickyIncomingOrder);
+      return;
+    }
+
     clearPersistedIncomingOrder();
-  }, [incomingOrder, activeOrder]);
+  }, [incomingOrder, activeOrder, stickyIncomingOrder]);
 
   // 0. Auto-Simulation Effect (High-Precision Smooth Glide)
   const lastSimUpdateSentAt = useRef(0);
@@ -1235,8 +1308,30 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   }, [newOrder]);
 
   useEffect(() => {
+    const partnerId = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
+    if (shouldKeepIncomingOrder(incomingOrder, partnerId)) {
+      setStickyIncomingOrder(incomingOrder);
+      console.log('[DeliveryWebView] sticky popup order updated', {
+        orderId: getIncomingOrderIdentity(incomingOrder),
+      });
+    }
+  }, [incomingOrder]);
+
+  useEffect(() => {
     if (activeOrder && incomingOrder) {
-      setIncomingOrder(null);
+      const activeOrderId = getIncomingOrderIdentity(activeOrder);
+      const incomingOrderId = getIncomingOrderIdentity(incomingOrder);
+
+      if (activeOrderId && incomingOrderId && activeOrderId === incomingOrderId) {
+        console.log('[DeliveryWebView] clearing popup because order is now active', {
+          activeOrderId,
+        });
+        setIncomingOrder(null);
+        setStickyIncomingOrder(null);
+        setForcedPopupOrder(null);
+        setHardPopupOrder(null);
+        externalPopupLockRef.current = false;
+      }
     }
   }, [activeOrder, incomingOrder]);
 
@@ -1248,6 +1343,10 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     if (incomingId && String(incomingId) === String(claimedOrderId)) {
       toast.info('Order was taken by another delivery partner.', { duration: 4000 });
       setIncomingOrder(null);
+      setStickyIncomingOrder(null);
+      setForcedPopupOrder(null);
+      setHardPopupOrder(null);
+      externalPopupLockRef.current = false;
       clearNewOrder();
       clearPersistedIncomingOrder();
     }
@@ -1564,24 +1663,16 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       {/* OVERLAYS (Persistent if active) - Outside flex container to avoid clipping and z-index issues */}
       {(tab === 'feed' || activeOrder || incomingOrder) && (
         <AnimatePresence>
-          {!isModalMinimized && (
+          {!isModalMinimized && !hardPopupOrder && (
             <motion.div
               key="modal-container"
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-x-0 top-0 bottom-[92px] z-[300] pointer-events-none flex items-end"
+              className="fixed inset-x-0 top-0 bottom-[92px] z-[1200] pointer-events-none flex items-end"
             >
               <div className="w-full pointer-events-auto relative">
-                {incomingOrder && (
-                  <NewOrderModal 
-                    order={incomingOrder} 
-                    onAccept={handleAcceptOrder}
-                    onReject={handleRejectOrder}
-                    onMinimize={() => setIsModalMinimized(true)}
-                  />
-                )}
                 {(tripStatus === 'PICKING_UP' || tripStatus === 'REACHED_PICKUP') && (
                   <PickupActionModal 
                     order={activeOrder} 
@@ -1774,7 +1865,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       </BottomPopup>
 
       {/* Floating Minimize/Restore Toggle - Above navbar */}
-      {isModalMinimized && (activeOrder || incomingOrder || showVerification) && (
+      {isModalMinimized && !externalPopupLockRef.current && !hardPopupOrder && (activeOrder || incomingOrder || showVerification) && (
         <motion.div 
            initial={{ y: 100, opacity: 0 }}
            animate={{ y: 0, opacity: 1 }}
@@ -1793,6 +1884,78 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
               </div>
            </button>
         </motion.div>
+      )}
+
+      {typeof document !== 'undefined' && hardPopupOrder && createPortal(
+        <div
+          data-delivery-emergency-popup="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2147483647,
+            background: 'rgba(0,0,0,0.88)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            fontFamily: 'sans-serif',
+          }}
+        >
+          <div
+            style={{
+              width: 'min(92vw, 420px)',
+              background: '#ffffff',
+              border: '5px solid #ef4444',
+              borderRadius: '24px',
+              boxShadow: '0 18px 60px rgba(0,0,0,0.45)',
+              padding: '20px',
+            }}
+          >
+            <div style={{ fontSize: '12px', fontWeight: 900, color: '#ef4444', textTransform: 'uppercase' }}>
+              New Order Request
+            </div>
+            <div style={{ marginTop: '10px', fontSize: '22px', fontWeight: 900, color: '#111827', lineHeight: 1.2 }}>
+              {hardPopupOrder?.restaurantName || hardPopupOrder?.restaurant_name || hardPopupOrder?.restaurantId?.name || 'Restaurant'}
+            </div>
+            <div style={{ marginTop: '8px', fontSize: '14px', color: '#4b5563' }}>
+              Order: {hardPopupOrder?.orderId || hardPopupOrder?._id || 'N/A'}
+            </div>
+            <div style={{ marginTop: '8px', fontSize: '14px', color: '#4b5563' }}>
+              Customer: {hardPopupOrder?.customerName || hardPopupOrder?.user?.name || hardPopupOrder?.deliveryAddress?.fullName || 'Customer'}
+            </div>
+            <div style={{ marginTop: '16px', display: 'flex', gap: '10px' }}>
+              <button
+                onClick={handleRejectOrder}
+                style={{
+                  flex: 1,
+                  height: '48px',
+                  borderRadius: '14px',
+                  border: '1px solid #d1d5db',
+                  background: '#f9fafb',
+                  color: '#111827',
+                  fontWeight: 800,
+                }}
+              >
+                Pass
+              </button>
+              <button
+                onClick={() => handleAcceptOrder(hardPopupOrder)}
+                style={{
+                  flex: 1,
+                  height: '48px',
+                  borderRadius: '14px',
+                  border: 'none',
+                  background: '#111827',
+                  color: '#ffffff',
+                  fontWeight: 900,
+                }}
+              >
+                Accept
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {/* ─── 3. BOTTOM NAV (Fixed - Compact Pro) ─── */}
