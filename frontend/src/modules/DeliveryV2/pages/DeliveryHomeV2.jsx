@@ -26,7 +26,7 @@ import ProfileV2 from '@/modules/DeliveryV2/pages/ProfileV2';
 import { 
   Bell, HelpCircle, AlertTriangle, 
   Wallet, History, User as UserIcon, LayoutGrid,
-  Plus, Minus, Navigation2, Target, Play, CheckCircle2, Clock, ChevronDown,
+  Plus, Minus, Navigation2, Target, CheckCircle2, Clock, ChevronDown,
   Contact, Package
 } from 'lucide-react';
 
@@ -186,6 +186,12 @@ const persistDeliveryLocation = (lat, lng) => {
   } catch {
     // Ignore storage failures and keep in-memory flow alive.
   }
+};
+
+const formatEmergencyPopupCurrency = (value) => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return 'Rs 0';
+  return `Rs ${amount.toFixed(0)}`;
 };
 
 /** Minimal bottom-sheet popup (Restored from legacy FeedNavbar) */
@@ -1448,15 +1454,6 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                 <motion.div animate={{ x: isOnline ? 59 : 0 }} className="absolute left-1 w-6 h-6 bg-white rounded-full shadow-sm" />
               </button>
 
-              {/* DEV SIMULATION TOGGLE */}
-              {import.meta.env.DEV && (
-                 <button 
-                   onClick={() => setIsSimMode(!isSimMode)}
-                   className={`px-3 h-8 rounded-lg text-[9px] font-black border transition-all ${isSimMode ? 'bg-orange-500 border-orange-400 text-white animate-pulse' : 'bg-white/10 border-white/20 text-white/40'}`}
-                 >
-                   SIM
-                 </button>
-              )}
            </div>
           <div className="flex items-center gap-3">
              <button onClick={() => setShowEmergencyPopup(true)} className="w-9 h-9 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 border border-red-500/20 active:scale-95 transition-all shadow-lg"><AlertTriangle className="w-4 h-4" /></button>
@@ -1565,76 +1562,11 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                zoom={zoom}
              />
              
-             {/* SIMULATION INDICATOR */}
-             {isSimMode && (
-               <div className="absolute top-[180px] left-4 right-4 z-[100] bg-black/80 backdrop-blur-md rounded-xl p-4 border border-white/20 flex items-center justify-between shadow-2xl">
-                  <div className="flex items-center gap-4">
-                     <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center animate-pulse">
-                        <Play className="w-4 h-4 text-white fill-current" />
-                     </div>
-                     <div className="flex flex-col">
-                        <span className="text-orange-500 text-[10px] font-bold uppercase tracking-widest">Auto Navigation Active</span>
-                        <span className="text-white text-[11px] font-medium">Following actual road path...</span>
-                     </div>
-                  </div>
-                  <button onClick={() => setIsSimMode(false)} className="bg-white/10 text-white/50 hover:text-white px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border border-white/10">Stop</button>
-               </div>
-             )}
-
              <div className="absolute right-4 bottom-28 md:bottom-32 flex flex-col gap-4 z-[120]">
                 <div className="flex flex-col bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
                    <button onClick={() => setZoom(z => Math.min(22, z + 1))} className="p-3 hover:bg-gray-50 border-b border-gray-100 text-gray-900 active:scale-90 transition-all" aria-label="Zoom in"><Plus className="w-5 h-5 stroke-[2.75]" /></button>
                    <button onClick={() => setZoom(z => Math.max(8, z - 1))} className="p-3 hover:bg-gray-50 text-gray-900 active:scale-90 transition-all" aria-label="Zoom out"><Minus className="w-5 h-5 stroke-[2.75]" /></button>
                 </div>
-                <button 
-                  onClick={() => {
-                    const nextSimState = !isSimMode;
-                    setIsSimMode(nextSimState);
-
-                    if (nextSimState) {
-                      toast.warning('Simulation Mode Active');
-
-                      const parsePoint = (raw) => {
-                        if (!raw) return null;
-                        const lat = Number(raw.lat ?? raw.latitude);
-                        const lng = Number(raw.lng ?? raw.longitude);
-                        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-                        return { lat, lng };
-                      };
-
-                      const target =
-                        tripStatus === 'PICKED_UP' || tripStatus === 'REACHED_DROP'
-                          ? parsePoint(activeOrder?.customerLocation)
-                          : parsePoint(activeOrder?.restaurantLocation);
-
-                      const currentRider = useDeliveryStore.getState().riderLocation;
-                      const riderPoint = parsePoint(currentRider) || (target
-                        ? { lat: target.lat + 0.001, lng: target.lng + 0.001 }
-                        : null);
-
-                      if (riderPoint) {
-                        setRiderLocation({ lat: riderPoint.lat, lng: riderPoint.lng, heading: 0 });
-                      }
-
-                      if (riderPoint && target && (!simPath || simPath.length < 2)) {
-                        const steps = 60;
-                        const fallbackPath = Array.from({ length: steps + 1 }, (_, i) => {
-                          const t = i / steps;
-                          return {
-                            lat: riderPoint.lat + (target.lat - riderPoint.lat) * t,
-                            lng: riderPoint.lng + (target.lng - riderPoint.lng) * t,
-                          };
-                        });
-                        setSimPath(fallbackPath);
-                      }
-                    }
-                  }}
-                  className={`w-14 h-14 rounded-full shadow-2xl flex items-center justify-center border border-gray-100 transition-all ${isSimMode ? 'bg-orange-500 text-white' : 'bg-white text-green-500'}`}
-                >
-                  <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${isSimMode ? 'border-white' : 'border-green-500'}`}>
-                    <Play className={`w-4 h-4 fill-current ml-0.5 ${isSimMode ? 'animate-pulse' : ''}`} />
-                  </div>
-                </button>
                 <button 
                    onClick={() => mapRef.current?.setOptions({ gestureHandling: 'greedy' })} 
                    className="w-14 h-14 bg-white rounded-full shadow-2xl flex items-center justify-center text-blue-600 border border-gray-100 active:scale-90 transition-all"
@@ -1911,17 +1843,82 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
               padding: '20px',
             }}
           >
+            {(() => {
+              const orderId = hardPopupOrder?.orderId || hardPopupOrder?._id || 'N/A';
+              const restaurantName =
+                hardPopupOrder?.restaurantName ||
+                hardPopupOrder?.restaurant_name ||
+                hardPopupOrder?.restaurantId?.name ||
+                'Restaurant';
+              const customerName =
+                hardPopupOrder?.customerName ||
+                hardPopupOrder?.user?.name ||
+                hardPopupOrder?.deliveryAddress?.fullName ||
+                'Customer';
+              const earningAmount =
+                hardPopupOrder?.earnings ??
+                hardPopupOrder?.riderEarning ??
+                hardPopupOrder?.deliveryEarning ??
+                hardPopupOrder?.earningAmount ??
+                hardPopupOrder?.amount ??
+                hardPopupOrder?.deliveryFee ??
+                hardPopupOrder?.pricing?.deliveryFee ??
+                0;
+              const pickupLocation =
+                hardPopupOrder?.restaurantAddress ||
+                hardPopupOrder?.restaurant_address ||
+                hardPopupOrder?.restaurantId?.location?.address ||
+                hardPopupOrder?.restaurantId?.address ||
+                'Pickup address not available';
+              const dropLocation = [
+                hardPopupOrder?.customerAddress,
+                hardPopupOrder?.customer_address,
+                hardPopupOrder?.deliveryAddress?.street,
+                hardPopupOrder?.deliveryAddress?.address,
+                hardPopupOrder?.deliveryAddress?.landmark,
+              ]
+                .map((value) => String(value || '').trim())
+                .find(Boolean) || 'Drop address not available';
+
+              return (
+                <>
             <div style={{ fontSize: '12px', fontWeight: 900, color: '#ef4444', textTransform: 'uppercase' }}>
               New Order Request
             </div>
             <div style={{ marginTop: '10px', fontSize: '22px', fontWeight: 900, color: '#111827', lineHeight: 1.2 }}>
-              {hardPopupOrder?.restaurantName || hardPopupOrder?.restaurant_name || hardPopupOrder?.restaurantId?.name || 'Restaurant'}
+              {restaurantName}
             </div>
             <div style={{ marginTop: '8px', fontSize: '14px', color: '#4b5563' }}>
-              Order: {hardPopupOrder?.orderId || hardPopupOrder?._id || 'N/A'}
+              Order: {orderId}
             </div>
             <div style={{ marginTop: '8px', fontSize: '14px', color: '#4b5563' }}>
-              Customer: {hardPopupOrder?.customerName || hardPopupOrder?.user?.name || hardPopupOrder?.deliveryAddress?.fullName || 'Customer'}
+              Customer: {customerName}
+            </div>
+            <div style={{ marginTop: '12px', padding: '12px', background: '#fff5f5', borderRadius: '14px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 800, color: '#ef4444', textTransform: 'uppercase' }}>
+                Earning
+              </div>
+              <div style={{ marginTop: '4px', fontSize: '20px', fontWeight: 900, color: '#111827' }}>
+                {formatEmergencyPopupCurrency(earningAmount)}
+              </div>
+            </div>
+            <div style={{ marginTop: '12px', display: 'grid', gap: '10px' }}>
+              <div style={{ padding: '12px', background: '#f9fafb', borderRadius: '14px', border: '1px solid #e5e7eb' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#16a34a', textTransform: 'uppercase' }}>
+                  Pickup
+                </div>
+                <div style={{ marginTop: '4px', fontSize: '13px', lineHeight: 1.4, color: '#111827' }}>
+                  {pickupLocation}
+                </div>
+              </div>
+              <div style={{ padding: '12px', background: '#f9fafb', borderRadius: '14px', border: '1px solid #e5e7eb' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#2563eb', textTransform: 'uppercase' }}>
+                  Drop
+                </div>
+                <div style={{ marginTop: '4px', fontSize: '13px', lineHeight: 1.4, color: '#111827' }}>
+                  {dropLocation}
+                </div>
+              </div>
             </div>
             <div style={{ marginTop: '16px', display: 'flex', gap: '10px' }}>
               <button
@@ -1953,6 +1950,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                 Accept
               </button>
             </div>
+                </>
+              );
+            })()}
           </div>
         </div>,
         document.body,
