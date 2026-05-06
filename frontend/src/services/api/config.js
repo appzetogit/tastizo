@@ -1,13 +1,13 @@
+import { resolveApiBaseUrl, resolveBackendOrigin } from "./runtime";
+
 /**
  * API config.
  * - `axios.js` uses `VITE_API_BASE_URL` for real requests.
  * - `API_BASE_URL` is used by UI (e.g. banners/debug) and should reflect the same value.
  */
 
-export const API_BASE_URL =
-  typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
-    ? String(import.meta.env.VITE_API_BASE_URL).replace(/\/$/, "")
-    : "";
+export const API_BASE_URL = resolveApiBaseUrl();
+export const BACKEND_ORIGIN = resolveBackendOrigin();
 
 // Minimal shape so existing API_ENDPOINTS.* references do not break
 export const API_ENDPOINTS = {
@@ -68,4 +68,4 @@ export const API_ENDPOINTS = {
   DINING: { RESTAURANTS: "", RESTAURANT_BY_SLUG: "", CATEGORIES: "", BOOKING_CREATE: "", BOOKING_MY: "", BOOKING_RESTAURANT: "", BOOKING_STATUS: "", BOOKING_STATUS_RESTAURANT: "", OFFER_BANNERS: "", REVIEW_CREATE: "" },
 };
 
-export default { API_BASE_URL, API_ENDPOINTS };
+export default { API_BASE_URL, BACKEND_ORIGIN, API_ENDPOINTS };

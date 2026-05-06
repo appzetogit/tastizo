@@ -7,13 +7,11 @@
  */
 
 import axios from "axios";
+import { resolveApiBaseUrl } from "./runtime";
 
 // Prefer explicit env. If not set, default to /api/v1 so the Vite proxy can forward to backend.
 // This avoids hardcoding ports like 5000 that may conflict with local setups.
-const baseURL =
-  typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
-    ? String(import.meta.env.VITE_API_BASE_URL).replace(/\/$/, "")
-    : "/api/v1";
+const baseURL = resolveApiBaseUrl();
 
 const apiClient = axios.create({
   baseURL: baseURL || undefined,

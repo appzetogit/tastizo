@@ -11,6 +11,7 @@ import { Input } from "@food/components/ui/input"
 import { useLocation as useGeoLocation } from "@food/hooks/useLocation"
 import { useZone } from "@food/hooks/useZone"
 import { searchAPI } from "@/services/api"
+import { BACKEND_ORIGIN } from "@food/api/config"
 import { motion, AnimatePresence } from "framer-motion"
 
 // Helper to resolve media URLs consistently
@@ -18,11 +19,7 @@ const getMediaUrl = (url) => {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('http')) return url;
   
-  // Use VITE_API_BASE_URL to derive the backend origin
-  const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api/v1";
-  const origin = apiBase.split('/api/v1')[0];
-  
-  return `${origin}${url.startsWith('/') ? url : '/' + url}`;
+  return `${BACKEND_ORIGIN}${url.startsWith('/') ? url : '/' + url}`;
 };
 
 // Debounce hook for real-time search
