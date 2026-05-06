@@ -37,7 +37,7 @@ import useNotificationInbox from "@food/hooks/useNotificationInbox";
 
 const INCOMING_ORDER_STORAGE_KEY = 'delivery_v2_incoming_order';
 const DELIVERY_PENDING_POPUP_ORDER_ID_KEY = 'delivery_pending_popup_order_id';
-const OFFER_TTL_SECONDS = 60;
+const OFFER_TTL_SECONDS = 30;
 const DELIVERY_LAST_LOCATION_STORAGE_KEY = 'deliveryBoyLastLocation';
 
 const safeReadJson = (key) => {
@@ -133,7 +133,10 @@ const getIncomingOrderRejectionReason = (order, partnerId) => {
   ) {
     return `dispatch_status_${dispatchStatus || 'unknown'}`;
   }
-  if (!['confirmed', 'preparing', 'ready_for_pickup', 'ready'].includes(orderStatus)) {
+  if (
+    orderStatus &&
+    !['confirmed', 'preparing', 'ready_for_pickup', 'ready'].includes(orderStatus)
+  ) {
     return `order_status_${orderStatus || 'unknown'}`;
   }
 
@@ -192,6 +195,24 @@ const formatEmergencyPopupCurrency = (value) => {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return 'Rs 0';
   return `Rs ${amount.toFixed(0)}`;
+};
+
+const shouldLogDeliveryWebView = () => {
+  if (typeof window === 'undefined') return false;
+  try {
+    return (
+      window.localStorage.getItem('delivery_webview_debug') === '1' ||
+      window.location.search.includes('delivery_webview_debug=1')
+    );
+  } catch {
+    return false;
+  }
+};
+
+const debugDeliveryWebView = (...args) => {
+  if (shouldLogDeliveryWebView()) {
+    console.log(...args);
+  }
 };
 
 /** Minimal bottom-sheet popup (Restored from legacy FeedNavbar) */
@@ -504,26 +525,26 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         : '';
 
     if (!activeToken) {
-      console.log('[DeliveryWebView] delivery boy not logged in, storing orderId temporarily', normalizedOrderId);
+      debugDeliveryWebView('[DeliveryWebView] delivery boy not logged in, storing orderId temporarily', normalizedOrderId);
       persistPendingPopupOrderId(normalizedOrderId);
       return;
     }
 
     if (isDashboardBootstrapping) {
-      console.log('[DeliveryWebView] dashboard still loading, waiting before popup open', normalizedOrderId);
+      debugDeliveryWebView('[DeliveryWebView] dashboard still loading, waiting before popup open', normalizedOrderId);
       persistPendingPopupOrderId(normalizedOrderId);
       return;
     }
 
     const partnerId = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
     if (!partnerId) {
-      console.log('[DeliveryWebView] delivery partner id not ready yet, waiting before popup open', normalizedOrderId);
+      debugDeliveryWebView('[DeliveryWebView] delivery partner id not ready yet, waiting before popup open', normalizedOrderId);
       persistPendingPopupOrderId(normalizedOrderId);
       return;
     }
 
     const idType = isMongoObjectId(normalizedOrderId) ? 'mongo' : 'public';
-    console.log('[DeliveryWebView] detected id type', {
+    debugDeliveryWebView('[DeliveryWebView] detected id type', {
       source,
       orderId: normalizedOrderId,
       idType,
@@ -536,7 +557,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       ...availableOrdersRef.current,
       safeReadJson(INCOMING_ORDER_STORAGE_KEY),
     ].filter(Boolean);
-    console.log('[DeliveryWebView] searching loaded orders', {
+    debugDeliveryWebView('[DeliveryWebView] searching loaded orders', {
       source,
       orderId: normalizedOrderId,
       loadedCount: loadedOrders.length,
@@ -551,7 +572,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       normalizedOrderId === currentIncomingId ||
       normalizedOrderId === lastOpenedExternalOrderIdRef.current
     ) {
-      console.log('[DeliveryWebView] duplicate popup skipped for orderId', normalizedOrderId);
+      debugDeliveryWebView('[DeliveryWebView] duplicate popup skipped for orderId', normalizedOrderId);
       if (tab !== 'feed') {
         navigate('/food/delivery/feed');
       }
@@ -562,12 +583,12 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
     if (matchedLoadedOrder) {
       if (!shouldKeepIncomingOrder(matchedLoadedOrder, partnerId)) {
-        console.log('[DeliveryWebView] stale loaded order ignored, fetching fresh order by ref', {
+        debugDeliveryWebView('[DeliveryWebView] stale loaded order ignored, fetching fresh order by ref', {
           source,
           orderId: normalizedOrderId,
         });
       } else {
-      console.log('[DeliveryWebView] order found', {
+      debugDeliveryWebView('[DeliveryWebView] order found', {
         source,
         orderId: normalizedOrderId,
         resolvedFrom: 'loaded-orders',
@@ -584,7 +605,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       lastOpenedExternalOrderIdRef.current = normalizedOrderId;
       persistIncomingOrder(matchedLoadedOrder);
       clearPendingPopupOrderId();
-      console.log('[DeliveryWebView] modal opened', {
+      debugDeliveryWebView('[DeliveryWebView] modal opened', {
         source,
         orderId: normalizedOrderId,
       });
@@ -599,7 +620,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
     externalOrderFetchInFlightRef.current = true;
     try {
-      console.log('[DeliveryWebView] fetching order by ref', {
+      debugDeliveryWebView('[DeliveryWebView] fetching order by ref', {
         source,
         orderId: normalizedOrderId,
       });
@@ -610,7 +631,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         response?.data?.data ||
         null;
 
-      console.log('[DeliveryWebView] order found', {
+      debugDeliveryWebView('[DeliveryWebView] order found', {
         source,
         orderId: normalizedOrderId,
         fetched: Boolean(fetchedOrder),
@@ -648,7 +669,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       lastOpenedExternalOrderIdRef.current = normalizedOrderId;
       persistIncomingOrder(fetchedOrder);
       clearPendingPopupOrderId();
-      console.log('[DeliveryWebView] modal opened', {
+      debugDeliveryWebView('[DeliveryWebView] modal opened', {
         source,
         orderId: normalizedOrderId,
       });
@@ -683,7 +704,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     setCurrentZoneId((previousZoneId) => {
       const previousNormalized = previousZoneId ? String(previousZoneId) : null;
       if (nextZoneId !== previousNormalized) {
-        console.log('[DeliveryZone] Zone changed', {
+        debugDeliveryWebView('[DeliveryZone] Zone changed', {
           oldZoneId: previousNormalized,
           updatedZoneId: nextZoneId,
           latitude,
@@ -758,15 +779,15 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     if (!partnerId) return;
     const pendingOrderId = readPendingPopupOrderId();
     if (!pendingOrderId) return;
-    console.log('[DeliveryWebView] partner ready, retrying pending popup open', pendingOrderId);
+    debugDeliveryWebView('[DeliveryWebView] partner ready, retrying pending popup open', pendingOrderId);
     void openOrderPopupById(pendingOrderId, 'partner-ready-retry');
   }, [isDashboardBootstrapping, openOrderPopupById, readPendingPopupOrderId, location.pathname]);
 
   useEffect(() => {
     const handleOpenOrderPopupEvent = (event) => {
-      console.log('[DeliveryWebView] OPEN_ORDER_POPUP event received', event);
+      debugDeliveryWebView('[DeliveryWebView] OPEN_ORDER_POPUP event received', event);
       const externalOrderId = String(event?.detail?.orderId || '').trim();
-      console.log('[DeliveryWebView] orderId received', externalOrderId);
+      debugDeliveryWebView('[DeliveryWebView] orderId received', externalOrderId);
       if (!externalOrderId) {
         console.error('[DeliveryWebView] error if order not found', 'No orderId received in OPEN_ORDER_POPUP event');
         return;
@@ -783,7 +804,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   useEffect(() => {
     const queryOrderId = String(new URLSearchParams(location.search || '').get('orderId') || '').trim();
     if (!queryOrderId) return;
-    console.log('[DeliveryWebView] query orderId received', queryOrderId);
+    debugDeliveryWebView('[DeliveryWebView] query orderId received', queryOrderId);
     void openOrderPopupById(queryOrderId, 'url-query');
   }, [location.search, openOrderPopupById]);
 
@@ -818,7 +839,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
     if (activeOrder) {
       if (externalPopupLockRef.current) {
-        console.log('[DeliveryWebView] keeping persisted popup because external popup lock is active');
+        debugDeliveryWebView('[DeliveryWebView] keeping persisted popup because external popup lock is active');
         return;
       }
       clearPersistedIncomingOrder();
@@ -844,7 +865,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   useEffect(() => {
     let interval;
     if (isSimMode && simPath.length > 1 && simIndex < simPath.length - 1) {
-      console.log('[SimAuto] Glide Active âˆš');
+      debugDeliveryWebView('[SimAuto] Glide Active âˆš');
       
       interval = setInterval(() => {
         setSimProgress(prev => {
@@ -938,7 +959,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   // Do not reset on each route refresh, otherwise marker appears frozen.
   useEffect(() => {
     if (isSimMode) {
-      console.log('[SimAuto] Resetting simulation playhead...');
+      debugDeliveryWebView('[SimAuto] Resetting simulation playhead...');
       setSimIndex(0);
       setSimProgress(0);
       simInitializedRef.current = false;
@@ -1312,7 +1333,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     const partnerId = deliveryPartnerIdRef.current || resolveDeliveryPartnerIdFromClient();
     if (shouldKeepIncomingOrder(incomingOrder, partnerId)) {
       setStickyIncomingOrder(incomingOrder);
-      console.log('[DeliveryWebView] sticky popup order updated', {
+      debugDeliveryWebView('[DeliveryWebView] sticky popup order updated', {
         orderId: getIncomingOrderIdentity(incomingOrder),
       });
     }
@@ -1324,7 +1345,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       const incomingOrderId = getIncomingOrderIdentity(incomingOrder);
 
       if (activeOrderId && incomingOrderId && activeOrderId === incomingOrderId) {
-        console.log('[DeliveryWebView] clearing popup because order is now active', {
+        debugDeliveryWebView('[DeliveryWebView] clearing popup because order is now active', {
           activeOrderId,
         });
         setIncomingOrder(null);

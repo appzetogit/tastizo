@@ -10,12 +10,11 @@ const shouldLogDeliverySocket = () => {
   if (typeof window === 'undefined') return import.meta.env.DEV;
   try {
     return (
-      import.meta.env.DEV ||
       window.localStorage.getItem('delivery_socket_debug') === '1' ||
       window.location.search.includes('delivery_socket_debug=1')
     );
   } catch {
-    return import.meta.env.DEV;
+    return false;
   }
 };
 

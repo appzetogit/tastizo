@@ -35,12 +35,6 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
   const [timeLeft, setTimeLeft] = useState(DELIVERY_OFFER_TTL_SECONDS);
   const expiryHandledRef = useRef(false);
 
-  useEffect(() => {
-    console.log('[NewOrderModal] render', {
-      orderId: order?.orderId || order?._id || '',
-    });
-  }, [order]);
-
   const resolveOfferStartTime = useCallback(() => {
     if (!order) return null;
 
