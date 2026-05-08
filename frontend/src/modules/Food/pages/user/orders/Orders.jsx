@@ -9,6 +9,10 @@ const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
+const isCompletedOrder = (status) => {
+  const normalized = String(status || "").toLowerCase()
+  return normalized === "delivered" || normalized === "completed"
+}
 
 export default function Orders() {
   const navigate = useNavigate()
@@ -48,7 +52,7 @@ export default function Orders() {
   // Calculate countdown for an order
   const calculateCountdown = (order) => {
     if (!order || 
-        order.status === 'delivered' || 
+        isCompletedOrder(order.status) || 
         String(order.status).toLowerCase().includes('cancel')) {
       return null
     }
@@ -740,7 +744,7 @@ Order again from this restaurant in the ${companyName} app.`
               !isCancelled &&
               (order.payment?.status === 'failed')
 
-            const isDelivered = order.status === 'delivered'
+            const isDelivered = isCompletedOrder(order.status)
             const isRestaurantCancelled = order.isRestaurantCancelled || order.status === 'restaurant_cancelled'
             const isUserCancelled = order.isUserCancelled || (isCancelled && order.cancelledBy === 'user')
             // Prefer food image from first item; fallback to restaurant image, then generic food photo
@@ -1025,7 +1029,7 @@ Order again from this restaurant in the ${companyName} app.`
                         onClick={() => handleOpenRating(order)}
                         className="text-xs text-[#2A9C64] font-medium mt-0.5 flex items-center"
                       >
-                        Rate restaurant & delivery <span className="ml-0.5">&gt;</span>
+                        {order.deliveryPartnerId ? "Rate food & delivery" : "Rate food"} <span className="ml-0.5">&gt;</span>
                       </button>
                     </div>
                   ) : (
@@ -1072,7 +1076,7 @@ Order again from this restaurant in the ${companyName} app.`
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <Star className="w-5 h-5 fill-white" />
-                  Rate Your Delivery
+                  {ratingModalHasDeliveryPartner ? "Rate your food & delivery" : "Rate your food"}
                 </h2>
                 <button
                   type="button"

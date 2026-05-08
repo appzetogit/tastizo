@@ -13,6 +13,8 @@ import {
   MapPin,
   RotateCcw,
   FileText,
+  Star,
+  Loader2,
 } from "lucide-react"
 import { orderAPI, restaurantAPI } from "@food/api"
 import { useCart } from "@food/context/CartContext"
@@ -25,6 +27,10 @@ const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
+const isCompletedOrder = (status) => {
+  const normalized = String(status || "").toLowerCase()
+  return normalized === "delivered" || normalized === "completed"
+}
 
 export default function UserOrderDetails() {
   const navigate = useNavigate()
@@ -34,6 +40,12 @@ export default function UserOrderDetails() {
   const [order, setOrder] = useState(null)
   const [restaurant, setRestaurant] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showRatingModal, setShowRatingModal] = useState(false)
+  const [selectedRestaurantRating, setSelectedRestaurantRating] = useState(null)
+  const [selectedDeliveryRating, setSelectedDeliveryRating] = useState(null)
+  const [restaurantFeedbackText, setRestaurantFeedbackText] = useState("")
+  const [deliveryFeedbackText, setDeliveryFeedbackText] = useState("")
+  const [submittingRating, setSubmittingRating] = useState(false)
 
   useEffect(() => {
     const fetchOrderDetails = async () => {
@@ -357,6 +369,64 @@ export default function UserOrderDetails() {
     navigate(`/food/user/restaurants/${restaurantTarget}`)
   }
 
+  const hasDeliveryPartner = !!(order?.deliveryPartnerId || order?.deliveryPartnerName)
+  const hasRestaurantRating = Number.isFinite(Number(order?.ratings?.restaurant?.rating || order?.restaurantRating))
+  const hasDeliveryRating = Number.isFinite(Number(order?.ratings?.deliveryPartner?.rating || order?.deliveryPartnerRating))
+  const hasSubmittedRating = hasRestaurantRating && (!hasDeliveryPartner || hasDeliveryRating)
+
+  const openRatingModal = () => {
+    setSelectedRestaurantRating(Number(order?.ratings?.restaurant?.rating || order?.restaurantRating) || null)
+    setSelectedDeliveryRating(Number(order?.ratings?.deliveryPartner?.rating || order?.deliveryPartnerRating) || null)
+    setRestaurantFeedbackText(order?.ratings?.restaurant?.comment || "")
+    setDeliveryFeedbackText(order?.ratings?.deliveryPartner?.comment || "")
+    setShowRatingModal(true)
+  }
+
+  const closeRatingModal = () => {
+    setShowRatingModal(false)
+  }
+
+  const handleSubmitRating = async () => {
+    if (!order || selectedRestaurantRating === null || (hasDeliveryPartner && selectedDeliveryRating === null)) {
+      toast.error("Please select all required ratings first")
+      return
+    }
+
+    try {
+      setSubmittingRating(true)
+      const response = await orderAPI.submitOrderRatings(order._id || order.orderId || orderId, {
+        restaurantRating: selectedRestaurantRating,
+        deliveryPartnerRating: hasDeliveryPartner ? selectedDeliveryRating : undefined,
+        restaurantComment: restaurantFeedbackText || undefined,
+        deliveryPartnerComment: hasDeliveryPartner ? (deliveryFeedbackText || undefined) : undefined,
+      })
+
+      const updatedOrder = response?.data?.data?.order || response?.data?.order || null
+      if (updatedOrder) {
+        setOrder(updatedOrder)
+      } else {
+        setOrder((current) => ({
+          ...current,
+          ratings: {
+            ...(current?.ratings || {}),
+            restaurant: { rating: selectedRestaurantRating, comment: restaurantFeedbackText || "" },
+            ...(hasDeliveryPartner ? { deliveryPartner: { rating: selectedDeliveryRating, comment: deliveryFeedbackText || "" } } : {}),
+          },
+          restaurantRating: selectedRestaurantRating,
+          deliveryPartnerRating: hasDeliveryPartner ? selectedDeliveryRating : current?.deliveryPartnerRating,
+        }))
+      }
+
+      toast.success("Thanks for rating your order!")
+      closeRatingModal()
+    } catch (error) {
+      debugError("Error submitting order ratings:", error)
+      toast.error(error?.response?.data?.message || "Failed to submit rating")
+    } finally {
+      setSubmittingRating(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 pb-24 font-sans relative">
       {/* Header */}
@@ -382,7 +452,7 @@ export default function UserOrderDetails() {
           </div>
           <div>
             <h2 className="font-semibold text-gray-800">
-              {order.status === "delivered"
+              {isCompletedOrder(order.status)
                 ? "Order was delivered"
                 : (order.status === "cancelled" || order.status === "cancelled_by_restaurant" || order.status === "restaurant_cancelled") 
                   ? "Order was cancelled by restaurant"
@@ -627,6 +697,49 @@ export default function UserOrderDetails() {
             </div>
           </div>
         </div>
+
+        {isCompletedOrder(order.status) ? (
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            {hasSubmittedRating ? (
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">You rated this order</p>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
+                      Food {Number(order?.ratings?.restaurant?.rating || order?.restaurantRating)} <Star className="h-3 w-3 fill-current" />
+                    </span>
+                    {hasDeliveryPartner ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                        Delivery {Number(order?.ratings?.deliveryPartner?.rating || order?.deliveryPartnerRating)} <Star className="h-3 w-3 fill-current" />
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={openRatingModal}
+                  className="rounded-lg border border-[#2A9C64]/30 px-4 py-2 text-sm font-semibold text-[#2A9C64] hover:bg-[#2A9C64]/5"
+                >
+                  Update rating
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">How was your food?</p>
+                  <p className="mt-1 text-xs text-gray-500">Rate your completed order and share your feedback.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={openRatingModal}
+                  className="rounded-lg bg-[#2A9C64] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1E7A4A]"
+                >
+                  Rate food
+                </button>
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
 
       {/* Fixed Bottom Buttons */}
@@ -683,6 +796,101 @@ export default function UserOrderDetails() {
           </button>
         </div>
       )}
+
+      {showRatingModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="bg-gradient-to-r from-[#2A9C64] to-[#1E7A4A] px-6 py-5">
+              <h2 className="flex items-center gap-2 text-xl font-bold text-white">
+                <Star className="h-5 w-5 fill-white" />
+                {hasDeliveryPartner ? "Rate your food & delivery" : "Rate your food"}
+              </h2>
+              <p className="mt-1 text-sm text-white/90">{restaurantName}</p>
+            </div>
+
+            <div className="space-y-6 px-6 py-6">
+              <div>
+                <p className="mb-3 text-sm font-semibold text-gray-900">Food rating (out of 5)</p>
+                <div className="mb-3 flex items-center justify-center gap-2">
+                  {Array.from({ length: 5 }, (_, i) => i + 1).map((num) => {
+                    const isActive = (selectedRestaurantRating || 0) >= num
+                    return (
+                      <button
+                        key={`food-${num}`}
+                        type="button"
+                        onClick={() => setSelectedRestaurantRating(num)}
+                        className="p-2 transition-transform hover:scale-125 active:scale-95"
+                      >
+                        <Star className={`h-10 w-10 ${isActive ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
+                      </button>
+                    )
+                  })}
+                </div>
+                <textarea
+                  rows={2}
+                  value={restaurantFeedbackText}
+                  onChange={(event) => setRestaurantFeedbackText(event.target.value)}
+                  className="w-full resize-none rounded-xl border-2 border-gray-200 px-4 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-[#2A9C64] focus:outline-none focus:ring-2 focus:ring-[#2A9C64]"
+                  placeholder="Food feedback (optional)"
+                />
+              </div>
+
+              {hasDeliveryPartner ? (
+                <div>
+                  <p className="mb-3 text-sm font-semibold text-gray-900">Delivery rating (out of 5)</p>
+                  <div className="mb-3 flex items-center justify-center gap-2">
+                    {Array.from({ length: 5 }, (_, i) => i + 1).map((num) => {
+                      const isActive = (selectedDeliveryRating || 0) >= num
+                      return (
+                        <button
+                          key={`delivery-${num}`}
+                          type="button"
+                          onClick={() => setSelectedDeliveryRating(num)}
+                          className="p-2 transition-transform hover:scale-125 active:scale-95"
+                        >
+                          <Star className={`h-10 w-10 ${isActive ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={deliveryFeedbackText}
+                    onChange={(event) => setDeliveryFeedbackText(event.target.value)}
+                    className="w-full resize-none rounded-xl border-2 border-gray-200 px-4 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-[#2A9C64] focus:outline-none focus:ring-2 focus:ring-[#2A9C64]"
+                    placeholder="Delivery feedback (optional)"
+                  />
+                </div>
+              ) : null}
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeRatingModal}
+                  className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitRating}
+                  disabled={submittingRating || selectedRestaurantRating === null || (hasDeliveryPartner && selectedDeliveryRating === null)}
+                  className="flex-1 rounded-xl bg-[#2A9C64] py-3 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {submittingRating ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Submitting...
+                    </span>
+                  ) : (
+                    "Submit rating"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
