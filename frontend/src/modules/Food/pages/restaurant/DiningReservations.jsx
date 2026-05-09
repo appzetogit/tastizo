@@ -97,9 +97,6 @@ export default function DiningReservations() {
     const [diningSettingsError, setDiningSettingsError] = useState("")
     const [diningType, setDiningType] = useState([])
     const [availableCategories, setAvailableCategories] = useState([])
-    const [pendingRequest, setPendingRequest] = useState(null)
-    const [fetchingRequest, setFetchingRequest] = useState(true)
-
     const syncRestaurantMediaState = (restaurantData) => {
         setRestaurant(restaurantData || null)
         const coverImages = getCoverImages(restaurantData)
@@ -139,34 +136,6 @@ export default function DiningReservations() {
                             }
                         }
 
-                        const requestRes = await restaurantAPI.getPendingDiningRequest()
-                        const newPendingRequest = requestRes.data.success && requestRes.data.data ? requestRes.data.data : null
-
-                        if (pendingRequest && !newPendingRequest) {
-                            const updatedRes = await restaurantAPI.getCurrentRestaurant()
-                            const updatedData = getRestaurantFromResponse(updatedRes)
-                            
-                            // Simple check: if isEnabled matches what we requested, it was likely approved
-                            const requestedEnabled = pendingRequest.requestedSettings?.isEnabled
-                            const currentEnabled = updatedData?.diningSettings?.isEnabled
-                            
-                            if (requestedEnabled === currentEnabled) {
-                                toast.success("Dining settings updated and approved!")
-                            } else {
-                                toast.error("Your dining settings request was rejected by admin.")
-                            }
-                            
-                            syncRestaurantMediaState(updatedData)
-                        }
-
-                        setPendingRequest(newPendingRequest)
-
-                        if (newPendingRequest?.requestedSettings) {
-                            setDiningEnabled(newPendingRequest.requestedSettings.isEnabled)
-                            setMaxGuestsLimit(newPendingRequest.requestedSettings.maxGuests)
-                            const reqType = newPendingRequest.requestedSettings.diningType
-                            setDiningType(Array.isArray(reqType) ? reqType : (reqType ? [reqType] : []))
-                        }
                     }
                 }
             } catch (error) {
@@ -174,18 +143,12 @@ export default function DiningReservations() {
             } finally {
                 if (!isPoll) {
                     setLoading(false)
-                    setFetchingRequest(false)
                 }
             }
         }
 
         fetchAll()
-        let interval
-        if (pendingRequest) {
-            interval = setInterval(() => fetchAll(true), 15000)
-        }
-        return () => interval && clearInterval(interval)
-    }, [pendingRequest?._id])
+    }, [])
 
     const handleRestaurantPhotoUpload = async (event) => {
         const files = Array.from(event.target.files || [])
@@ -304,7 +267,7 @@ export default function DiningReservations() {
     }
 
     const handleSaveDiningSettings = async () => {
-        if (!restaurant || savingDiningSettings || pendingRequest) return
+        if (!restaurant || savingDiningSettings) return
 
         if (!diningType || diningType.length === 0) {
             setDiningSettingsError("Please select at least one dining category")
@@ -331,17 +294,17 @@ export default function DiningReservations() {
         setSavingDiningSettings(true)
 
         try {
-            const response = await restaurantAPI.requestDiningUpdate(nextDiningSettings)
+            const response = await restaurantAPI.updateDiningSettings(nextDiningSettings)
 
             if (response.data.success) {
-                setPendingRequest(response.data.data)
-                setDiningSettingsMessage("Update request sent to admin for approval.")
-                toast.success("Request sent for approval")
+                syncRestaurantMediaState(getRestaurantFromResponse(response))
+                setDiningSettingsMessage("Dining settings updated successfully.")
+                toast.success("Dining settings saved")
             }
         } catch (error) {
-            debugError("Error requesting dining settings update:", error)
-            setDiningSettingsError(error?.response?.data?.message || "Failed to submit request.")
-            toast.error(error?.response?.data?.message || "Failed to submit request")
+            debugError("Error updating dining settings:", error)
+            setDiningSettingsError(error?.response?.data?.message || "Failed to save settings.")
+            toast.error(error?.response?.data?.message || "Failed to save settings")
         } finally {
             setSavingDiningSettings(false)
         }
@@ -724,7 +687,6 @@ export default function DiningReservations() {
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        if (pendingRequest) return
                                         const newState = !diningEnabled
                                         setDiningEnabled(newState)
                                         if (!newState) {
@@ -734,7 +696,6 @@ export default function DiningReservations() {
                                             setMaxGuestsLimit(6)
                                         }
                                     }}
-                                    disabled={!!pendingRequest}
                                     className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${diningEnabled ? "bg-emerald-600" : "bg-slate-300"}`}
                                     aria-pressed={diningEnabled}
                                 >
@@ -757,19 +718,17 @@ export default function DiningReservations() {
                                             key={cat._id}
                                             type="button"
                                             onClick={() => {
-                                                if (pendingRequest) return
                                                 if (isSelected) {
                                                     setDiningType(diningType.filter(s => s !== cat.slug))
                                                 } else {
                                                     setDiningType([...diningType, cat.slug])
                                                 }
                                             }}
-                                            disabled={!!pendingRequest}
                                             className={`group relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all ${
                                                 isSelected 
                                                     ? "border-primary bg-primary/5 shadow-md scale-[1.02]" 
                                                     : "border-slate-100 bg-white hover:border-slate-200 active:scale-95"
-                                            } ${!!pendingRequest ? "cursor-not-allowed opacity-80" : ""}`}
+                                            }`}
                                         >
                                             <div className={`w-16 h-16 rounded-2xl mb-3 overflow-hidden shadow-sm border transition-transform ${isSelected ? "border-primary/20 scale-105" : "bg-white border-slate-100 group-hover:scale-105"}`}>
                                                 {cat.imageUrl ? (
@@ -811,10 +770,8 @@ export default function DiningReservations() {
                                     <button 
                                         type="button"
                                         onClick={() => {
-                                            if (pendingRequest) return
                                             setMaxGuestsLimit(Math.max(0, maxGuestsLimit - 1))
                                         }}
-                                        disabled={!!pendingRequest}
                                         className="w-10 h-10 flex items-center justify-center rounded-xl bg-white shadow-sm text-slate-600 hover:text-slate-900 active:scale-90 transition-all font-black text-xl disabled:opacity-50"
                                     >
                                         âˆ’
@@ -823,10 +780,8 @@ export default function DiningReservations() {
                                     <button 
                                         type="button"
                                         onClick={() => {
-                                            if (pendingRequest) return
                                             setMaxGuestsLimit(parseInt(maxGuestsLimit) + 1)
                                         }}
-                                        disabled={!!pendingRequest}
                                         className="w-10 h-10 flex items-center justify-center rounded-xl bg-white shadow-sm text-slate-600 hover:text-slate-900 active:scale-90 transition-all font-black text-xl disabled:opacity-50"
                                     >
                                         +
@@ -837,19 +792,12 @@ export default function DiningReservations() {
                             <button
                                 type="button"
                                 onClick={handleSaveDiningSettings}
-                                disabled={savingDiningSettings || !!pendingRequest}
+                                disabled={savingDiningSettings}
                                 className="rounded-full bg-slate-900 px-10 py-4 text-sm font-black text-white transition-all hover:bg-slate-800 hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 shadow-xl shadow-slate-200 uppercase tracking-widest"
                             >
-                                {savingDiningSettings ? "Saving..." : pendingRequest ? "Approval Pending" : "Save settings"}
+                                {savingDiningSettings ? "Saving..." : "Save settings"}
                             </button>
                         </div>
-
-                        {pendingRequest && (
-                            <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 flex items-center gap-2">
-                                <Clock4 className="w-4 h-4" />
-                                Your recent changes are waiting for admin approval. You cannot make new changes until the current request is processed.
-                            </div>
-                        )}
 
                         {(diningSettingsMessage || diningSettingsError) && (
                             <div className={`mt-4 rounded-xl border px-4 py-3 text-sm font-medium ${diningSettingsError

@@ -277,13 +277,15 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
         update.categoryName = categoryName || '';
     }
 
-    const shouldResubmitForApproval = Object.keys(update).length > 0;
+    const hasChanges = Object.keys(update).length > 0;
 
-    if (shouldResubmitForApproval) {
-        update.approvalStatus = 'pending';
-        update.requestedAt = new Date();
+    if (hasChanges) {
+        // Keep small restaurant-side edits live immediately instead of pushing
+        // every content tweak back into the admin approval queue.
+        update.approvalStatus = 'approved';
+        update.requestedAt = null;
         update.rejectionReason = '';
-        update.approvedAt = null;
+        update.approvedAt = existing.approvedAt || new Date();
         update.rejectedAt = null;
     }
 
@@ -292,23 +294,6 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
         { $set: update },
         { new: true }
     ).lean();
-
-    if (updated && shouldResubmitForApproval) {
-        try {
-            const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
-            void notifyAdminsSafely({
-                title: 'Updated Product Approval Request',
-                body: `Restaurant has updated and resubmitted "${updated.name}" for approval.`,
-                data: {
-                    type: 'approval_request',
-                    subType: 'food',
-                    id: String(updated._id)
-                }
-            });
-        } catch (e) {
-            console.error('Failed to notify admins of resubmitted food approval request:', e);
-        }
-    }
 
     return updated;
 }

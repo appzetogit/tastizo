@@ -313,18 +313,20 @@ export async function getOrderByRefDelivery(deliveryPartnerId, orderRef) {
     throw new ValidationError('Order reference required');
   }
 
+  const partner = await FoodDeliveryPartner.findById(deliveryPartnerId)
+    .select('currentZoneId availabilityStatus status')
+    .lean();
+
+  if (!partner?._id) {
+    throw new NotFoundError('Delivery partner not found');
+  }
+
   const partnerObjectId = new mongoose.Types.ObjectId(deliveryPartnerId);
-  const order = await FoodOrder.findOne({
-    $and: [
-      identity,
-      {
-        $or: [
-          { 'dispatch.deliveryPartnerId': partnerObjectId },
-          { 'dispatch.offeredTo.partnerId': partnerObjectId },
-        ],
-      },
-    ],
-  })
+  const partnerZoneId = String(partner.currentZoneId || '').trim();
+  const normalizedAvailability = String(partner.availabilityStatus || '').trim().toLowerCase();
+  const partnerCapacity = await getPartnerCashCapacity(deliveryPartnerId);
+
+  const order = await FoodOrder.findOne(identity)
     .populate({
       path: 'restaurantId',
       select: 'restaurantName name phone location addressLine1 area city state profileImage',
@@ -333,28 +335,87 @@ export async function getOrderByRefDelivery(deliveryPartnerId, orderRef) {
     .lean();
 
   if (!order) {
-    throw new NotFoundError('Order not found');
+    throw new NotFoundError(`Order reference ${String(orderRef || '').trim()} not found in current database`);
   }
 
+  const dispatchStatus = String(order?.dispatch?.status || '').trim().toLowerCase();
+  const orderStatus = String(order?.orderStatus || order?.status || '').trim().toLowerCase();
   const assignedPartnerId = String(order?.dispatch?.deliveryPartnerId || '');
   const wasOfferedToPartner = Array.isArray(order?.dispatch?.offeredTo)
     && order.dispatch.offeredTo.some(
       (entry) => String(entry?.partnerId || '') === String(deliveryPartnerId),
     );
 
+  const isAssignedToCurrentPartner = assignedPartnerId === String(deliveryPartnerId);
+  const isAcceptedByAnotherPartner =
+    assignedPartnerId &&
+    assignedPartnerId !== String(deliveryPartnerId) &&
+    dispatchStatus === 'accepted';
+
+  if (isAcceptedByAnotherPartner) {
+    throw new ForbiddenError(
+      `Order exists but is already accepted by another partner (dispatch status: ${dispatchStatus || 'unknown'})`,
+    );
+  }
+
+  if (isAssignedToCurrentPartner) {
+    return sanitizeOrderForExternal(order);
+  }
+
+  const isDispatchEligible = ['unassigned', 'assigned', 'offered', 'offer_sent', 'pending'].includes(dispatchStatus);
+  const isOrderStatusEligible = ['confirmed', 'preparing', 'ready_for_pickup', 'ready'].includes(orderStatus);
+  const isZoneEligible =
+    partnerZoneId &&
+    mongoose.Types.ObjectId.isValid(partnerZoneId) &&
+    String(order?.zoneId || '') === partnerZoneId;
+  const isPartnerOnline = normalizedAvailability === 'online';
+
+  if (wasOfferedToPartner && isDispatchEligible && isOrderStatusEligible) {
+    return sanitizeOrderForExternal(order);
+  }
+
   if (
-    assignedPartnerId
-    && assignedPartnerId !== String(deliveryPartnerId)
-    && order?.dispatch?.status === 'accepted'
+    !wasOfferedToPartner &&
+    isPartnerOnline &&
+    isZoneEligible &&
+    isDispatchEligible &&
+    isOrderStatusEligible &&
+    partnerCapacity.hasCapacity
   ) {
-    throw new ForbiddenError('Order already accepted by another partner');
+    // Support deep-link popup opening for still-available orders even if the
+    // offer list is stale or the rider opened the link before sync completed.
+    return sanitizeOrderForExternal(order);
   }
 
-  if (!wasOfferedToPartner && assignedPartnerId !== String(deliveryPartnerId)) {
-    throw new ForbiddenError('Order was not offered to this delivery partner');
+  const failureReasons = [];
+
+  if (!isPartnerOnline) {
+    failureReasons.push(`partner is ${normalizedAvailability || 'offline'}`);
+  }
+  if (!isZoneEligible) {
+    failureReasons.push(
+      `zone mismatch (partner zone: ${partnerZoneId || 'none'}, order zone: ${String(order?.zoneId || '') || 'none'})`,
+    );
+  }
+  if (!isDispatchEligible) {
+    failureReasons.push(`dispatch status ${dispatchStatus || 'unknown'} is no longer popup-eligible`);
+  }
+  if (!isOrderStatusEligible) {
+    failureReasons.push(`order status ${orderStatus || 'unknown'} is no longer popup-eligible`);
+  }
+  if (!partnerCapacity.hasCapacity) {
+    failureReasons.push(partnerCapacity.message || 'cash capacity blocked');
+  }
+  if (wasOfferedToPartner && (!isDispatchEligible || !isOrderStatusEligible)) {
+    failureReasons.push('offer exists but has expired or is no longer actionable');
+  }
+  if (!wasOfferedToPartner) {
+    failureReasons.push('order was not offered to this delivery partner');
   }
 
-  return sanitizeOrderForExternal(order);
+  throw new ForbiddenError(
+    `Order exists but cannot open popup: ${failureReasons.filter(Boolean).join('; ') || 'unknown eligibility failure'}`,
+  );
 }
 
 export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {

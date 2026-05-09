@@ -147,6 +147,14 @@ const shouldKeepIncomingOrder = (order, partnerId) => {
   return !getIncomingOrderRejectionReason(order, partnerId);
 };
 
+const extractAvailableOrders = (response) => {
+  const payload = response?.data?.data ?? response?.data ?? {};
+  if (Array.isArray(payload?.docs)) return payload.docs;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload)) return payload;
+  return [];
+};
+
 const persistIncomingOrder = (order) => {
   try {
     localStorage.setItem(INCOMING_ORDER_STORAGE_KEY, JSON.stringify(order));
@@ -660,6 +668,57 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       return;
     }
 
+    const buildDeliveryPopupDebug = (error, extra = {}) => ({
+      orderId: normalizedOrderId,
+      source,
+      status: error?.response?.status || null,
+      message: error?.response?.data?.message || error?.message || error,
+      payload: error?.response?.data || null,
+      ...extra,
+    });
+
+    const applyPopupOrder = (resolvedOrder, resolvedFrom = 'unknown') => {
+      if (!resolvedOrder || !(resolvedOrder._id || resolvedOrder.orderId)) {
+        return false;
+      }
+
+      if (!shouldKeepIncomingOrder(resolvedOrder, partnerId)) {
+        const rejectionReason = getIncomingOrderRejectionReason(resolvedOrder, partnerId);
+        console.error('[DeliveryWebView] error if order not found', {
+          ...buildDeliveryPopupDebug(null, {
+            reason: rejectionReason || 'Order is stale, expired, or not eligible for this partner.',
+            orderStatus: resolvedOrder?.orderStatus || resolvedOrder?.status || '',
+            dispatchStatus: resolvedOrder?.dispatch?.status || '',
+            remainingSeconds: getIncomingOrderRemainingSeconds(resolvedOrder, partnerId),
+            hasAcceptedAt: Boolean(resolvedOrder?.dispatch?.acceptedAt),
+            partnerId: partnerId || '',
+            resolvedFrom,
+          }),
+        });
+        return false;
+      }
+
+      if (tab !== 'feed') {
+        navigate('/food/delivery/feed');
+      }
+
+      setIsModalMinimized(false);
+      externalPopupLockRef.current = true;
+      setIncomingOrder(resolvedOrder);
+      setStickyIncomingOrder(resolvedOrder);
+      setForcedPopupOrder(resolvedOrder);
+      setHardPopupOrder(resolvedOrder);
+      lastOpenedExternalOrderIdRef.current = normalizedOrderId;
+      persistIncomingOrder(resolvedOrder);
+      clearPendingPopupOrderId();
+      debugDeliveryWebView('[DeliveryWebView] modal opened', {
+        source,
+        orderId: normalizedOrderId,
+        resolvedFrom,
+      });
+      return true;
+    };
+
     externalOrderFetchInFlightRef.current = true;
     try {
       debugDeliveryWebView('[DeliveryWebView] fetching order by ref', {
@@ -679,47 +738,50 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         fetched: Boolean(fetchedOrder),
       });
 
-      if (!fetchedOrder || !(fetchedOrder._id || fetchedOrder.orderId)) {
-        console.error('[DeliveryWebView] error if order not found', normalizedOrderId);
+      if (applyPopupOrder(fetchedOrder, 'by-ref')) {
         return;
       }
 
-      if (!shouldKeepIncomingOrder(fetchedOrder, partnerId)) {
-        const rejectionReason = getIncomingOrderRejectionReason(fetchedOrder, partnerId);
-        console.error('[DeliveryWebView] error if order not found', {
-          orderId: normalizedOrderId,
-          reason: rejectionReason || 'Order is stale, expired, or not eligible for this partner.',
-          orderStatus: fetchedOrder?.orderStatus || fetchedOrder?.status || '',
-          dispatchStatus: fetchedOrder?.dispatch?.status || '',
-          remainingSeconds: getIncomingOrderRemainingSeconds(fetchedOrder, partnerId),
-          hasAcceptedAt: Boolean(fetchedOrder?.dispatch?.acceptedAt),
-          partnerId: partnerId || '',
-        });
-        return;
-      }
-
-      if (tab !== 'feed') {
-        navigate('/food/delivery/feed');
-      }
-
-      setIsModalMinimized(false);
-      externalPopupLockRef.current = true;
-      setIncomingOrder(fetchedOrder);
-      setStickyIncomingOrder(fetchedOrder);
-      setForcedPopupOrder(fetchedOrder);
-      setHardPopupOrder(fetchedOrder);
-      lastOpenedExternalOrderIdRef.current = normalizedOrderId;
-      persistIncomingOrder(fetchedOrder);
-      clearPendingPopupOrderId();
-      debugDeliveryWebView('[DeliveryWebView] modal opened', {
+      debugDeliveryWebView('[DeliveryWebView] by-ref lookup missed, trying available orders fallback', {
         source,
         orderId: normalizedOrderId,
       });
+
+      const availableResponse = await deliveryAPI.getOrders({ limit: 50, page: 1, _ts: Date.now() });
+      const fallbackOrder = extractAvailableOrders(availableResponse).find((order) =>
+        getOrderReferenceKeys(order).includes(normalizedOrderId),
+      );
+
+      if (applyPopupOrder(fallbackOrder, 'available-orders')) {
+        return;
+      }
+
+      console.error('[DeliveryWebView] error if order not found', buildDeliveryPopupDebug(null));
     } catch (error) {
-      console.error('[DeliveryWebView] error if order not found', {
-        orderId: normalizedOrderId,
-        message: error?.response?.data?.message || error?.message || error,
-      });
+      try {
+        debugDeliveryWebView('[DeliveryWebView] by-ref request failed, trying available orders fallback', {
+          source,
+          orderId: normalizedOrderId,
+          message: error?.response?.data?.message || error?.message || error,
+        });
+
+        const availableResponse = await deliveryAPI.getOrders({ limit: 50, page: 1, _ts: Date.now() });
+        const fallbackOrder = extractAvailableOrders(availableResponse).find((order) =>
+          getOrderReferenceKeys(order).includes(normalizedOrderId),
+        );
+
+        if (applyPopupOrder(fallbackOrder, 'available-orders-after-error')) {
+          return;
+        }
+      } catch (fallbackError) {
+        debugDeliveryWebView('[DeliveryWebView] available orders fallback failed', {
+          source,
+          orderId: normalizedOrderId,
+          message: fallbackError?.response?.data?.message || fallbackError?.message || fallbackError,
+        });
+      }
+
+      console.error('[DeliveryWebView] error if order not found', buildDeliveryPopupDebug(error));
     } finally {
       externalOrderFetchInFlightRef.current = false;
     }

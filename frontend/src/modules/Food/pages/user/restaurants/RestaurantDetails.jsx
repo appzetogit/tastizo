@@ -72,6 +72,81 @@ const FOOD_IMAGE_FALLBACK = "https://picsum.photos/seed/food-fallback/800/600"
 const RUPEE_SYMBOL = "\u20B9"
 const RESTAURANT_DETAILS_FILTERS_STORAGE_KEY = "food-restaurant-details-filters"
 
+const normalizeOfferString = (value) => String(value || "").trim()
+
+const normalizeOfferTitle = (offer = {}) => {
+  const explicitTitle = normalizeOfferString(offer?.title || offer?.offerText || offer?.label)
+  if (explicitTitle) return explicitTitle
+
+  const discountValue = Number(offer?.discountValue) || 0
+  if (offer?.discountType === "percentage") return `${discountValue}% OFF`
+  if (discountValue > 0) return `Flat ${RUPEE_SYMBOL}${discountValue} OFF`
+  if (offer?.couponCode) return `Use ${String(offer.couponCode).trim().toUpperCase()}`
+  return "Offer available"
+}
+
+const normalizeOfferDescription = (offer = {}) => {
+  const explicitDescription = normalizeOfferString(
+    offer?.description || offer?.subtitle || offer?.subline,
+  )
+  if (explicitDescription) return explicitDescription
+
+  const parts = []
+  if (offer?.couponCode) {
+    parts.push(`Use code ${String(offer.couponCode).trim().toUpperCase()}`)
+  }
+  if (Number(offer?.minOrderValue) > 0) {
+    parts.push(`Min order ${RUPEE_SYMBOL}${Number(offer.minOrderValue)}`)
+  }
+  if (Number(offer?.maxDiscount) > 0) {
+    parts.push(`Max discount ${RUPEE_SYMBOL}${Number(offer.maxDiscount)}`)
+  }
+
+  return parts.join(" • ") || "Tap to view all offers"
+}
+
+const normalizeOfferForDisplay = (offer = {}) => ({
+  ...offer,
+  id: offer?.id || offer?.offerId || offer?._id || offer?.couponCode || `${Date.now()}-${Math.random()}`,
+  title: normalizeOfferTitle(offer),
+  description: normalizeOfferDescription(offer),
+  code: normalizeOfferString(offer?.code || offer?.couponCode).toUpperCase(),
+  couponCode: normalizeOfferString(offer?.couponCode || offer?.code).toUpperCase(),
+  discountValue: Number(offer?.discountValue) || 0,
+  minOrderValue: Number(offer?.minOrderValue) || 0,
+  maxDiscount: Number(offer?.maxDiscount) || 0,
+})
+
+const buildRestaurantOfferMatcher = ({ ids = [], slug = "", name = "" } = {}) => {
+  const normalizedIds = new Set(
+    ids.map((value) => String(value || "").trim()).filter(Boolean),
+  )
+  const normalizedSlug = String(slug || "").trim().toLowerCase()
+  const normalizedName = String(name || "").trim().toLowerCase()
+
+  return (offer = {}) => {
+    const scope = String(offer?.restaurantScope || "").trim().toLowerCase()
+    if (scope !== "selected") return true
+
+    const offerIds = [
+      offer?.restaurantId,
+      offer?.restaurant?._id,
+      offer?.restaurant?.id,
+      offer?.restaurant?.restaurantId,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+
+    if (offerIds.some((value) => normalizedIds.has(value))) return true
+
+    const offerSlug = String(offer?.restaurantSlug || "").trim().toLowerCase()
+    if (normalizedSlug && offerSlug && offerSlug === normalizedSlug) return true
+
+    const offerRestaurantName = String(offer?.restaurantName || "").trim().toLowerCase()
+    return Boolean(normalizedName && offerRestaurantName && offerRestaurantName === normalizedName)
+  }
+}
+
 function RestaurantDetailsContent() {
   const { slug } = useParams()
   const navigate = useNavigate()
@@ -588,7 +663,7 @@ function RestaurantDetailsContent() {
               || null,
             priceRange: actualRestaurant?.priceRange || apiRestaurant?.priceRange || onboardingStep4?.priceRange || "$$",
             offers: Array.isArray(actualRestaurant?.offers) ? actualRestaurant.offers : (Array.isArray(apiRestaurant?.offers) ? apiRestaurant.offers : []), // Will be populated from menu/offers API later
-            offerText: actualRestaurant?.offer || apiRestaurant?.offer || onboardingStep4?.offer || "FLAT 50% OFF",
+            offerText: actualRestaurant?.offer || apiRestaurant?.offer || onboardingStep4?.offer || "",
             offerCount: actualRestaurant?.offerCount || apiRestaurant?.offerCount || 0,
             restaurantOffers: {
               goldOffer: {
@@ -716,6 +791,39 @@ function RestaurantDetailsContent() {
             .filter(Boolean)
             .map((value) => String(value).trim())
             .filter((value, index, arr) => arr.indexOf(value) === index)
+
+          try {
+            const offersResponse = await restaurantAPI.getPublicOffers()
+            const offersList =
+              offersResponse?.data?.data?.allOffers ||
+              offersResponse?.data?.allOffers ||
+              []
+
+            const matchesRestaurantOffer = buildRestaurantOfferMatcher({
+              ids: normalizedLookupIds,
+              slug: transformedRestaurant.slug,
+              name: transformedRestaurant.name,
+            })
+
+            const restaurantOffers = Array.isArray(offersList)
+              ? offersList
+                  .filter(matchesRestaurantOffer)
+                  .map(normalizeOfferForDisplay)
+              : []
+
+            setRestaurant((prev) => ({
+              ...prev,
+              offers: restaurantOffers,
+              offerCount: restaurantOffers.length,
+              offerText: restaurantOffers[0]?.title || prev?.offerText || "",
+              restaurantOffers: {
+                ...(prev?.restaurantOffers || {}),
+                coupons: restaurantOffers,
+              },
+            }))
+          } catch (offersError) {
+            debugWarn("Failed to fetch public offers for restaurant details:", offersError)
+          }
 
           setLoadingMenuItems(true)
           if (normalizedLookupIds.length > 0) {
@@ -1995,7 +2103,6 @@ function RestaurantDetailsContent() {
 
   // Highlight offers/texts for the blue offer line
   const highlightOffers = [
-    "Upto 50% OFF",
     restaurant?.offerText || "",
     ...(Array.isArray(restaurant?.offers) ? restaurant.offers.map((offer) => offer?.title || "") : []),
   ]

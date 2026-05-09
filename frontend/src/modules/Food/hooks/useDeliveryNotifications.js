@@ -109,6 +109,20 @@ const resolveDeliveryPartnerIdFromClient = () => {
 const supportsBrowserNotifications = () =>
   typeof window !== 'undefined' && typeof Notification !== 'undefined';
 
+const buildDeliveryTargetUrl = (orderData = {}) => {
+  const orderId = String(
+    orderData?.orderId ||
+    orderData?.orderMongoId ||
+    orderData?.order_id ||
+    orderData?.order_mongo_id ||
+    orderData?.id ||
+    '',
+  ).trim();
+
+  if (!orderId) return '/food/delivery/feed';
+  return `/food/delivery/feed?orderId=${encodeURIComponent(orderId)}`;
+};
+
 const buildDeliveryOrderNotification = (orderData = {}) => {
   const orderId = orderData.orderId || orderData.orderMongoId || orderData.id || 'New';
   const itemCount = Array.isArray(orderData.items) ? orderData.items.length : 0;
@@ -122,7 +136,7 @@ const buildDeliveryOrderNotification = (orderData = {}) => {
     tag: `delivery-order-${orderId}`,
     data: {
       orderId,
-      targetUrl: '/delivery',
+      targetUrl: buildDeliveryTargetUrl(orderData),
     },
   };
 }
@@ -135,7 +149,7 @@ const triggerWebViewNativeNotification = async (orderData = {}) => {
     body: `Order #${orderData?.orderId || orderData?.orderMongoId || orderData?.id || ''}`.trim(),
     orderId: orderData?.orderId || orderData?.order_id || '',
     orderMongoId: orderData?.orderMongoId || orderData?.order_mongo_id || '',
-    targetUrl: '/delivery',
+    targetUrl: buildDeliveryTargetUrl(orderData),
   };
 
   try {

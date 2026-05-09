@@ -997,9 +997,15 @@ export const restaurantAPI = {
         return res;
       }),
   requestDiningUpdate: (body) =>
-    apiClient.post("/food/restaurant/dining-settings/request", body ?? {}, {
-      contextModule: "restaurant",
-    }),
+    apiClient
+      .patch("/food/restaurant/dining-settings", body ?? {}, {
+        contextModule: "restaurant",
+      })
+      .then((res) => {
+        restaurantCurrentCached = res;
+        restaurantCurrentCacheTime = Date.now();
+        return res;
+      }),
   getPendingDiningRequest: () =>
     apiClient.get("/food/restaurant/dining-settings/pending", {
       contextModule: "restaurant",

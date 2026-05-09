@@ -14,7 +14,6 @@ import {
     getRestaurantComplaints
 } from '../services/restaurant.service.js';
 import {
-    createDiningRequest,
     getPendingDiningRequest
 } from '../../dining/services/dining.service.js';
 import { validateRestaurantRegisterDto } from '../validators/restaurant.validator.js';
@@ -152,8 +151,8 @@ export const getRestaurantComplaintsController = async (req, res, next) => {
 export const createDiningRequestController = async (req, res, next) => {
     try {
         const restaurantId = req.user?.userId;
-        const request = await createDiningRequest(restaurantId, req.body || {});
-        return sendResponse(res, 201, 'Dining update request submitted successfully', request);
+        const restaurant = await updateCurrentRestaurantDiningSettings(restaurantId, req.body || {});
+        return sendResponse(res, 200, 'Dining settings updated successfully', { restaurant });
     } catch (error) {
         next(error);
     }
