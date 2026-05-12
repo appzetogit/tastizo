@@ -14,6 +14,7 @@ import PageNavbar from "@food/components/user/PageNavbar"
 import offerImage from "@food/assets/offerimage.png"
 import AddToCartAnimation from "@food/components/user/AddToCartAnimation"
 import OptimizedImage from "@food/components/OptimizedImage"
+import ReplaceCartDialog from "@food/components/user/ReplaceCartDialog"
 import api from "@food/api"
 import { restaurantAPI, adminAPI } from "@food/api"
 import { isModuleAuthenticated } from "@food/utils/auth"
@@ -88,7 +89,7 @@ export default function Under250() {
   const { location } = useLocation()
   const { zoneId, zoneStatus, isInService, isOutOfService } = useZone(location)
   const navigate = useNavigate()
-  const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
+  const { addToCart, updateQuantity, removeFromCart, getCartItem, cart, replaceCart } = useCart()
   const [activeCategory, setActiveCategory] = useState(initialFiltersRef.current.activeCategory)
   const [showSortPopup, setShowSortPopup] = useState(false)
   const [selectedSort, setSelectedSort] = useState(initialFiltersRef.current.selectedSort)
@@ -100,6 +101,14 @@ export default function Under250() {
   const [showShareOptions, setShowShareOptions] = useState(false)
   const [quantities, setQuantities] = useState({})
   const [bookmarkedItems, setBookmarkedItems] = useState(new Set())
+  const [replaceCartState, setReplaceCartState] = useState({
+    open: false,
+    currentRestaurantName: "",
+    nextRestaurantName: "",
+    replacementItems: [],
+    nextQuantity: 0,
+    itemId: "",
+  })
   const [viewCartButtonBottom, setViewCartButtonBottom] = useState("bottom-[92px]")
   const lastScrollY = useRef(0)
   const scrollLockYRef = useRef(0)
@@ -145,6 +154,16 @@ export default function Under250() {
   const handleApply = () => {
     setSelectedSort(draftSelectedSort)
     setShowSortPopup(false)
+  }
+
+  const closeReplaceCartDialog = () => {
+    setReplaceCartState((prev) => ({
+      ...prev,
+      open: false,
+      replacementItems: [],
+      nextQuantity: 0,
+      itemId: "",
+    }))
   }
 
   // Helper function to parse delivery time (e.g., "12-15 mins" -> 12 or average)
@@ -788,6 +807,21 @@ export default function Under250() {
         if (newQuantity > existingCartItem.quantity && sourcePosition) {
           const result = addToCart(cartItem, sourcePosition)
           if (result?.ok === false) {
+            if (result.code === "RESTAURANT_MISMATCH") {
+              setQuantities((prev) => ({
+                ...prev,
+                [item.id]: existingCartItem.quantity,
+              }))
+              setReplaceCartState({
+                open: true,
+                currentRestaurantName: cart[0]?.restaurant || cart[0]?.restaurantName || "",
+                nextRestaurantName: restaurant,
+                replacementItems: [{ ...cartItem, quantity: newQuantity }],
+                nextQuantity: newQuantity,
+                itemId: item.id,
+              })
+              return
+            }
             toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
             return
           }
@@ -802,6 +836,21 @@ export default function Under250() {
       } else {
         const result = addToCart(cartItem, sourcePosition)
         if (result?.ok === false) {
+          if (result.code === "RESTAURANT_MISMATCH") {
+            setQuantities((prev) => ({
+              ...prev,
+              [item.id]: 0,
+            }))
+            setReplaceCartState({
+              open: true,
+              currentRestaurantName: cart[0]?.restaurant || cart[0]?.restaurantName || "",
+              nextRestaurantName: restaurant,
+              replacementItems: [{ ...cartItem, quantity: newQuantity }],
+              nextQuantity: newQuantity,
+              itemId: item.id,
+            })
+            return
+          }
           toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
           return
         }
@@ -816,6 +865,16 @@ export default function Under250() {
     setShowItemDetail(false)
     setShowShareOptions(false)
   }, [])
+
+  const handleConfirmReplaceCart = () => {
+    if (!replaceCartState.replacementItems.length) return
+    replaceCart(replaceCartState.replacementItems)
+    setQuantities((prev) => ({
+      ...prev,
+      [replaceCartState.itemId]: replaceCartState.nextQuantity,
+    }))
+    closeReplaceCartDialog()
+  }
 
   const handleItemClick = (item, restaurant) => {
     // Add restaurant info to item for display
@@ -936,8 +995,19 @@ export default function Under250() {
   const shouldShowGrayscale = isOutOfService
 
   return (
-
     <div className={`relative min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
+      <ReplaceCartDialog
+        open={replaceCartState.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeReplaceCartDialog()
+          }
+        }}
+        currentRestaurantName={replaceCartState.currentRestaurantName}
+        nextRestaurantName={replaceCartState.nextRestaurantName}
+        onCancel={closeReplaceCartDialog}
+        onConfirm={handleConfirmReplaceCart}
+      />
       <div
         ref={stickyHeaderRef}
         className={`fixed top-0 left-0 right-0 z-40 w-full md:hidden transition-all duration-300 ${hasScrolledPastBanner

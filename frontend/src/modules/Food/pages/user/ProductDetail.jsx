@@ -16,6 +16,7 @@ import { Button } from "@food/components/ui/button"
 import { Badge } from "@food/components/ui/badge"
 import { Textarea } from "@food/components/ui/textarea"
 import { Label } from "@food/components/ui/label"
+import ReplaceCartDialog from "@food/components/user/ReplaceCartDialog"
 
 // Sample product data - in a real app, this would come from an API
 const productsData = {
@@ -96,9 +97,11 @@ export default function ProductDetail() {
   const navigate = useNavigate()
   const goBack = useAppBackNavigation()
   const product = productsData[parseInt(id)]
-  const { addToCart, isInCart, getCartItem, updateQuantity } = useCart()
+  const { cart, addToCart, isInCart, getCartItem, updateQuantity, replaceCart } = useCart()
   const { getAllOrders } = useOrders()
   const [quantity, setQuantity] = useState(1)
+  const [replaceCartOpen, setReplaceCartOpen] = useState(false)
+  const [pendingReplacementItem, setPendingReplacementItem] = useState(null)
   const [showReviewForm, setShowReviewForm] = useState(false)
   const [reviewForm, setReviewForm] = useState({
     rating: 5,
@@ -115,6 +118,7 @@ export default function ProductDetail() {
   const inCart = product ? isInCart(product.id) : false
   const cartItem = product ? getCartItem(product.id) : null
   const orders = getAllOrders()
+  const currentCartRestaurantName = cart[0]?.restaurant || cart[0]?.restaurantName || ""
 
   // Get order history for this product
   const orderHistory = useMemo(() => {
@@ -133,14 +137,34 @@ export default function ProductDetail() {
 
   const handleAddToCart = () => {
     if (product) {
-      for (let i = 0; i < quantity; i++) {
-        const result = addToCart(product)
-        if (result?.ok === false) {
-          alert(result.error || "Cannot add item from different restaurant. Please clear cart first.")
-          break
+      const replacementItem = { ...product, quantity }
+      const result = addToCart(product)
+      if (result?.ok === false) {
+        if (result.code === "RESTAURANT_MISMATCH") {
+          setPendingReplacementItem(replacementItem)
+          setReplaceCartOpen(true)
+          return
         }
+        alert(result.error || "Cannot add item from different restaurant. Please clear cart first.")
+        return
+      }
+
+      if (quantity > 1) {
+        updateQuantity(product.id, quantity)
       }
     }
+  }
+
+  const handleCancelReplaceCart = () => {
+    setReplaceCartOpen(false)
+    setPendingReplacementItem(null)
+  }
+
+  const handleConfirmReplaceCart = () => {
+    if (!pendingReplacementItem) return
+    replaceCart([pendingReplacementItem])
+    setReplaceCartOpen(false)
+    setPendingReplacementItem(null)
   }
 
   const handleIncrease = () => {
@@ -271,6 +295,14 @@ export default function ProductDetail() {
 
   return (
     <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 dark:from-[#0a0a0a] dark:via-[#0a0a0a] dark:to-[#0a0a0a]">
+      <ReplaceCartDialog
+        open={replaceCartOpen}
+        onOpenChange={setReplaceCartOpen}
+        currentRestaurantName={currentCartRestaurantName}
+        nextRestaurantName={product?.restaurant}
+        onCancel={handleCancelReplaceCart}
+        onConfirm={handleConfirmReplaceCart}
+      />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12">
 
         {/* Hero Image Section */}

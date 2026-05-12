@@ -55,7 +55,7 @@ export default function BottomNavOrders() {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-60 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <div className="fixed bottom-0 left-0 right-0 z-[60] px-3" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
       <div className="mx-auto flex w-full max-w-md items-end gap-2">
         <div className="flex-1 min-w-0">
           <div className="relative overflow-visible rounded-[30px] bg-[#2A9C64] py-2 pl-3 pr-2 shadow-[0_16px_40px_rgba(126,56,102,0.35)]">
@@ -75,14 +75,14 @@ export default function BottomNavOrders() {
                     {isActive && (
                       <motion.div
                         layoutId="bottomNavActive"
-                        className="absolute inset-0 -z-10 rounded-full bg-white/22"
+                        className="absolute inset-0 -z-10 rounded-full bg-white/20"
                         initial={false}
                         transition={{ type: "spring", stiffness: 500, damping: 30 }}
                       />
                     )}
                     <Icon
-                      className={`relative z-10 h-4.5 w-4.5 transition-colors duration-300 ease-in-out ${
-                        isActive ? "text-white" : "text-white/78"
+                      className={`relative z-10 h-5 w-5 transition-colors duration-300 ease-in-out ${
+                        isActive ? "text-white" : "text-white/80"
                       }`}
                     />
                     {/* Notification Dot */}
@@ -92,7 +92,7 @@ export default function BottomNavOrders() {
                     )}
                     <span
                       className={`relative z-10 whitespace-nowrap text-[11px] leading-none transition-colors duration-300 ease-in-out ${
-                        isActive ? "text-white" : "text-white/78"
+                        isActive ? "text-white" : "text-white/80"
                       }`}
                     >
                       {tab.label}

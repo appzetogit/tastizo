@@ -47,6 +47,7 @@ import AnimatedPage from "@food/components/user/AnimatedPage"
 import { useCart } from "@food/context/CartContext"
 import { useProfile } from "@food/context/ProfileContext"
 import AddToCartAnimation from "@food/components/user/AddToCartAnimation"
+import ReplaceCartDialog from "@food/components/user/ReplaceCartDialog"
 import { getCompanyNameAsync } from "@food/utils/businessSettings"
 import { isModuleAuthenticated } from "@food/utils/auth"
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
@@ -156,7 +157,7 @@ function RestaurantDetailsContent() {
   const showOnlyUnder250 = searchParams.get('under250') === 'true'
   const targetDishId = useMemo(() => String(searchParams.get('dish') || '').trim(), [searchParams])
   const routeRestaurant = routerLocation.state?.restaurant || null
-  const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
+  const { addToCart, updateQuantity, removeFromCart, getCartItem, cart, replaceCart } = useCart()
   const { vegMode, addDishFavorite, removeDishFavorite, isDishFavorite, getDishFavorites, getFavorites, addFavorite, removeFavorite, isFavorite } = useProfile()
   const { location: userLocation } = useLocation() // Get user's current location
   const { zoneId, zone, loading: loadingZone, isOutOfService } = useZone(userLocation) // Get user's zone for zone-based filtering
@@ -187,6 +188,14 @@ function RestaurantDetailsContent() {
   const [highlightedDishId, setHighlightedDishId] = useState(null)
   const [loadingMenuItems, setLoadingMenuItems] = useState(true)
   const [selectedMenuCategory, setSelectedMenuCategory] = useState("all")
+  const [replaceCartState, setReplaceCartState] = useState({
+    open: false,
+    currentRestaurantName: "",
+    nextRestaurantName: "",
+    replacementItems: [],
+    nextQuantity: 0,
+    lineItemId: "",
+  })
   const dishCardRefs = useRef({})
 
   const getLineItemIdForDish = (item, variant = null) =>
@@ -202,6 +211,16 @@ function RestaurantDetailsContent() {
     const variant = getVariantForDish(item, preferredVariantId)
     const lineItemId = getLineItemIdForDish(item, variant)
     return quantities[lineItemId] || 0
+  }
+
+  const closeReplaceCartDialog = () => {
+    setReplaceCartState((prev) => ({
+      ...prev,
+      open: false,
+      replacementItems: [],
+      nextQuantity: 0,
+      lineItemId: "",
+    }))
   }
 
   // Initialize filters from localStorage if available
@@ -1442,6 +1461,21 @@ function RestaurantDetailsContent() {
         if (newQuantity > existingCartItem.quantity && sourcePosition) {
           const result = addToCart(cartItem, sourcePosition)
           if (result?.ok === false) {
+            if (result.code === "RESTAURANT_MISMATCH") {
+              setQuantities((prev) => ({
+                ...prev,
+                [lineItemId]: existingCartItem.quantity,
+              }))
+              setReplaceCartState({
+                open: true,
+                currentRestaurantName: cart[0]?.restaurant || cart[0]?.restaurantName || "",
+                nextRestaurantName: restaurant.name,
+                replacementItems: [{ ...cartItem, quantity: newQuantity }],
+                nextQuantity: newQuantity,
+                lineItemId,
+              })
+              return
+            }
             toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
             return
           }
@@ -1462,6 +1496,21 @@ function RestaurantDetailsContent() {
         // Pass sourcePosition when adding a new item
         const result = addToCart(cartItem, sourcePosition)
         if (result?.ok === false) {
+          if (result.code === "RESTAURANT_MISMATCH") {
+            setQuantities((prev) => ({
+              ...prev,
+              [lineItemId]: 0,
+            }))
+            setReplaceCartState({
+              open: true,
+              currentRestaurantName: cart[0]?.restaurant || cart[0]?.restaurantName || "",
+              nextRestaurantName: restaurant.name,
+              replacementItems: [{ ...cartItem, quantity: newQuantity }],
+              nextQuantity: newQuantity,
+              lineItemId,
+            })
+            return
+          }
           toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
           return
         }
@@ -1470,6 +1519,16 @@ function RestaurantDetailsContent() {
         }
       }
     }
+  }
+
+  const handleConfirmReplaceCart = () => {
+    if (!replaceCartState.replacementItems.length) return
+    replaceCart(replaceCartState.replacementItems)
+    setQuantities((prev) => ({
+      ...prev,
+      [replaceCartState.lineItemId]: replaceCartState.nextQuantity,
+    }))
+    closeReplaceCartDialog()
   }
 
   const isRecommendedSection = (section) => {
@@ -2206,6 +2265,18 @@ function RestaurantDetailsContent() {
       className={`min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col transition-all duration-300 ${shouldShowGrayscale ? 'grayscale opacity-75' : ''
         }`}
     >
+      <ReplaceCartDialog
+        open={replaceCartState.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeReplaceCartDialog()
+          }
+        }}
+        currentRestaurantName={replaceCartState.currentRestaurantName}
+        nextRestaurantName={replaceCartState.nextRestaurantName}
+        onCancel={closeReplaceCartDialog}
+        onConfirm={handleConfirmReplaceCart}
+      />
       {/* Header - Back, Search, Menu (like reference image) */}
       <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-3 md:pt-4 lg:pt-5 pb-2 md:pb-3 bg-white dark:bg-[#0a0a0a]">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
