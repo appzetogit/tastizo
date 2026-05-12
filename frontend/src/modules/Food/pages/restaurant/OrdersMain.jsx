@@ -127,6 +127,90 @@ const transformOrderForList = (order) => ({
   scheduledAt: order.scheduledAt || null,
 });
 
+const getMediaUrl = (...values) => {
+  for (const value of values) {
+    if (!value) continue;
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "object") {
+      const candidate =
+        value.url ||
+        value.secure_url ||
+        value.secureUrl ||
+        value.publicUrl ||
+        value.src ||
+        "";
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+  }
+  return "";
+};
+
+const getDeliveryPartnerInfo = (order) => {
+  const topLevelPartner =
+    order?.deliveryPartnerId && typeof order.deliveryPartnerId === "object"
+      ? order.deliveryPartnerId
+      : null;
+  const deliveryPartnerProfile =
+    topLevelPartner ||
+    order?.dispatch?.deliveryPartnerId ||
+    order?.dispatch?.assignedTo ||
+    {};
+
+  return {
+    name:
+      order?.deliveryPartnerName ||
+      deliveryPartnerProfile?.fullName ||
+      deliveryPartnerProfile?.name ||
+      order?.dispatch?.deliveryPartnerName ||
+      "Delivery partner updating",
+    phone:
+      deliveryPartnerProfile?.phone ||
+      deliveryPartnerProfile?.phoneNumber ||
+      order?.dispatch?.deliveryPartnerPhone ||
+      "",
+    vehicle:
+      deliveryPartnerProfile?.vehicleNumber ||
+      deliveryPartnerProfile?.bikeNumber ||
+      deliveryPartnerProfile?.vehicle?.number ||
+      deliveryPartnerProfile?.vehicleNo ||
+      order?.dispatch?.vehicleNumber ||
+      order?.dispatch?.bikeNumber ||
+      "",
+    deliveryId:
+      deliveryPartnerProfile?.deliveryId ||
+      deliveryPartnerProfile?._id ||
+      deliveryPartnerProfile?.id ||
+      "",
+    rating:
+      Number(
+        deliveryPartnerProfile?.rating ??
+        order?.dispatch?.deliveryPartnerId?.rating ??
+        0,
+      ) || 0,
+    totalRatings:
+      Number(
+        deliveryPartnerProfile?.totalRatings ??
+        order?.dispatch?.deliveryPartnerId?.totalRatings ??
+        0,
+      ) || 0,
+    photo: getMediaUrl(
+      deliveryPartnerProfile?.profileImage,
+      deliveryPartnerProfile?.profilePhoto,
+      deliveryPartnerProfile?.avatar,
+      deliveryPartnerProfile?.documents?.photo,
+      deliveryPartnerProfile?.photo,
+      deliveryPartnerProfile?.photoUrl,
+      order?.dispatch?.deliveryPartnerId?.profileImage,
+      order?.dispatch?.deliveryPartnerId?.profilePhoto,
+      order?.dispatch?.deliveryPartnerId?.avatar,
+      order?.dispatch?.deliveryPartnerId?.documents?.photo,
+      order?.dispatch?.deliveryPartnerId?.photo,
+    ),
+  };
+};
+
 // Completed Orders List Component
 function CompletedOrders({ onSelectOrder, refreshToken = 0 }) {
   const [orders, setOrders] = useState([]);
@@ -720,7 +804,7 @@ function TableBookings() {
   );
 }
 
-function AllOrders({ onSelectOrder, onCancel }) {
+function AllOrders({ onSelectOrder, onCancel, onOpenRiderDetails }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -881,6 +965,7 @@ function AllOrders({ onSelectOrder, onCancel }) {
                 {...order}
                 eta={etaDisplay}
                 onSelect={onSelectOrder}
+                onOpenRiderDetails={onOpenRiderDetails}
                 onCancel={
                   normalizedStatus === "preparing" ? onCancel : undefined
                 }
@@ -935,6 +1020,7 @@ function SearchResults({ query, results, isLoading, onSelectOrder }) {
               key={order.orderId || order.mongoId}
               {...order}
               onSelect={onSelectOrder}
+              onOpenRiderDetails={onOpenRiderDetails}
             />
           ))}
         </div>
@@ -944,7 +1030,7 @@ function SearchResults({ query, results, isLoading, onSelectOrder }) {
 }
 
 // Scheduled Orders Component
-function ScheduledOrders({ onSelectOrder, refreshToken }) {
+function ScheduledOrders({ onSelectOrder, refreshToken, onOpenRiderDetails }) {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1072,6 +1158,8 @@ export default function OrdersMain() {
   const [orderToCancel, setOrderToCancel] = useState(null);
   const [acceptSwipeProgress, setAcceptSwipeProgress] = useState(0);
   const [isAcceptingOrder, setIsAcceptingOrder] = useState(false);
+  const [selectedRiderOrder, setSelectedRiderOrder] = useState(null);
+  const [selectedRiderOrderLoading, setSelectedRiderOrderLoading] = useState(false);
   const audioRef = useRef(null);
   const shownOrdersRef = useRef(new Set()); // Track orders already shown in popup
   const acceptSliderRef = useRef(null);
@@ -1088,6 +1176,36 @@ export default function OrdersMain() {
   const showNewOrderPopupRef = useRef(showNewOrderPopup);
   const isMutedRef = useRef(isMuted);
   const newOrderRef = useRef(null);
+
+  const closeRiderDetails = () => {
+    setSelectedRiderOrder(null);
+    setSelectedRiderOrderLoading(false);
+  };
+
+  const openRiderDetails = async (orderRef) => {
+    if (!orderRef) return;
+
+    setSelectedRiderOrder(orderRef);
+    setSelectedRiderOrderLoading(true);
+
+    try {
+      let response;
+      try {
+        response = await restaurantAPI.getOrderById(orderRef.orderId || orderRef.mongoId);
+      } catch {
+        const fallbackId = orderRef.mongoId || orderRef.orderMongoId;
+        if (!fallbackId || fallbackId === orderRef.orderId) throw new Error("Fallback rider order lookup failed");
+        response = await restaurantAPI.getOrderById(fallbackId);
+      }
+
+      const nextOrder = response?.data?.data?.order || response?.data?.data || null;
+      setSelectedRiderOrder(nextOrder || orderRef);
+    } catch {
+      setSelectedRiderOrder(orderRef);
+    } finally {
+      setSelectedRiderOrderLoading(false);
+    }
+  };
 
   // Pending counts for tabs
   const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
@@ -2237,6 +2355,7 @@ export default function OrdersMain() {
           <AllOrders
             onSelectOrder={handleSelectOrder}
             onCancel={handleCancelClick}
+            onOpenRiderDetails={openRiderDetails}
           />
         );
       case "preparing":
@@ -2246,6 +2365,7 @@ export default function OrdersMain() {
             onCancel={handleCancelClick}
             refreshToken={ordersRefreshToken}
             onStatusChanged={requestOrdersRefresh}
+            onOpenRiderDetails={openRiderDetails}
           />
         );
       case "ready":
@@ -2253,6 +2373,7 @@ export default function OrdersMain() {
           <ReadyOrders
             onSelectOrder={handleSelectOrder}
             refreshToken={ordersRefreshToken}
+            onOpenRiderDetails={openRiderDetails}
           />
         );
       case "out-for-delivery":
@@ -2260,6 +2381,7 @@ export default function OrdersMain() {
           <OutForDeliveryOrders
             onSelectOrder={handleSelectOrder}
             refreshToken={ordersRefreshToken}
+            onOpenRiderDetails={openRiderDetails}
           />
         );
       case "scheduled":
@@ -2267,6 +2389,7 @@ export default function OrdersMain() {
           <ScheduledOrders
             onSelectOrder={handleSelectOrder}
             refreshToken={ordersRefreshToken}
+            onOpenRiderDetails={openRiderDetails}
           />
         );
       case "completed":
@@ -2901,6 +3024,107 @@ export default function OrdersMain() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {selectedRiderOrder && (
+          <motion.div
+            className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={closeRiderDetails}>
+            <motion.div
+              className="w-[95%] max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}>
+              {(() => {
+                const riderInfo = getDeliveryPartnerInfo(selectedRiderOrder);
+                const riderPickupOtp = String(selectedRiderOrder?.pickupOtp || "").trim();
+
+                return (
+                  <>
+                    <div className="flex items-center justify-between border-b border-gray-200 px-4 py-4">
+                      <div>
+                        <p className="text-lg font-bold text-gray-900">Delivery partner details</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          Order #{selectedRiderOrder.orderId || String(selectedRiderOrder._id || "").slice(-6)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={closeRiderDetails}
+                        className="text-gray-400 transition hover:text-gray-700"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-5 p-4">
+                      {selectedRiderOrderLoading ? (
+                        <div className="flex items-center justify-center gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-4 text-sm font-medium text-gray-600">
+                          <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                          <span>Fetching delivery partner details...</span>
+                        </div>
+                      ) : null}
+
+                      <div className="flex items-start gap-4">
+                        {riderInfo.photo ? (
+                          <img
+                            src={riderInfo.photo}
+                            alt={riderInfo.name}
+                            className="h-20 w-20 rounded-3xl object-cover ring-1 ring-gray-200"
+                          />
+                        ) : (
+                          <div className="grid h-20 w-20 place-items-center rounded-3xl bg-emerald-50 text-2xl font-bold uppercase text-emerald-700 ring-1 ring-emerald-100">
+                            {String(riderInfo.name || "D").charAt(0)}
+                          </div>
+                        )}
+
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xl font-semibold text-gray-900">{riderInfo.name || "Delivery Partner"}</p>
+                          <p className="mt-1 text-sm text-gray-500">Assigned rider for quick restaurant coordination.</p>
+                          <p className="mt-2 text-sm font-medium text-gray-700">
+                            Rating: {selectedRiderOrderLoading ? "Loading..." : riderInfo.rating > 0 ? `${riderInfo.rating.toFixed(1)}${riderInfo.totalRatings > 0 ? ` (${riderInfo.totalRatings})` : ""}` : "Not rated"}
+                          </p>
+                          {riderPickupOtp ? (
+                            <div className="mt-3 inline-flex rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-[13px] font-black tracking-[0.28em] text-emerald-900">
+                              OTP {riderPickupOtp}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-sm font-medium text-gray-500">Contact number</span>
+                          <span className="text-sm font-semibold text-gray-900">
+                            {selectedRiderOrderLoading ? "Loading..." : riderInfo.phone || "Not available"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-sm font-medium text-gray-500">Bike number</span>
+                          <span className="text-sm font-semibold uppercase text-gray-900">
+                            {selectedRiderOrderLoading ? "Loading..." : riderInfo.vehicle || "Not available"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-sm font-medium text-gray-500">Partner ID</span>
+                          <span className="text-sm font-semibold text-gray-900">
+                            {selectedRiderOrderLoading ? "Loading..." : riderInfo.deliveryId || "Not available"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Reject Order Popup */}
       <AnimatePresence>
         {showRejectPopup && (
@@ -3253,6 +3477,7 @@ function OrderCard({
   pickupOtp,
   dispatchStatus,
   onSelect,
+  onOpenRiderDetails,
   onCancel,
   onMarkReady,
   isMarkingReady = false,
@@ -3280,6 +3505,18 @@ function OrderCard({
       paymentMethod,
       scheduledAt,
     });
+
+  const handleRiderDetails = (event) => {
+    event.stopPropagation();
+    if (!deliveryPartnerId) return;
+    onOpenRiderDetails?.({
+      orderId,
+      mongoId,
+      deliveryPartnerId,
+      deliveryPartnerName,
+      pickupOtp,
+    });
+  };
 
   const statusToneClass = isReady
     ? "bg-emerald-50 text-emerald-600 border-emerald-100"
@@ -3412,7 +3649,11 @@ function OrderCard({
               {(isPreparing || isReady || normalizedStatus === "confirmed") && (
                 <>
                   {deliveryPartnerId && (
-                    <div className="flex flex-col items-end gap-1 rounded-xl border border-emerald-100 bg-emerald-50 px-2 py-1 text-right">
+                    <button
+                      type="button"
+                      onClick={handleRiderDetails}
+                      className="flex flex-col items-end gap-1 rounded-xl border border-emerald-100 bg-emerald-50 px-2 py-1 text-right transition hover:border-emerald-200 hover:bg-emerald-100/70"
+                    >
                       <span className="text-[8px] font-black uppercase tracking-tight text-emerald-700 md:text-[9px]">
                         {deliveryPartnerName || "Delivery Partner"}
                       </span>
@@ -3421,7 +3662,7 @@ function OrderCard({
                           OTP {pickupOtp}
                         </span>
                       ) : null}
-                    </div>
+                    </button>
                   )}
                   
                   {!deliveryPartnerId && isPreparing && (
@@ -3519,7 +3760,12 @@ function OrderCard({
               {(isPreparing || isReady || normalizedStatus === "confirmed") && (
                 <>
                   {deliveryPartnerId ? (
-                    <div className="flex flex-col items-end gap-1 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-right" title={riderStatusLabel}>
+                    <button
+                      type="button"
+                      onClick={handleRiderDetails}
+                      className="flex flex-col items-end gap-1 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-right transition hover:border-emerald-200 hover:bg-emerald-100/70"
+                      title={riderStatusLabel}
+                    >
                       <span className="text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700">
                         {deliveryPartnerName || "Delivery Partner"}
                       </span>
@@ -3528,7 +3774,7 @@ function OrderCard({
                           OTP {pickupOtp}
                         </span>
                       ) : null}
-                    </div>
+                    </button>
                   ) : isPreparing ? (
                     <div className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1 text-[9px] font-black uppercase tracking-tight text-slate-400">
                       No Rider
@@ -3575,6 +3821,7 @@ function PreparingOrders({
   onCancel,
   refreshToken = 0,
   onStatusChanged,
+  onOpenRiderDetails,
 }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3887,6 +4134,7 @@ function PreparingOrders({
                 onSelect={onSelectOrder}
                 onCancel={onCancel}
                 onMarkReady={handleMarkReady}
+                onOpenRiderDetails={onOpenRiderDetails}
                 isMarkingReady={Boolean(
                   markingReadyOrderIds[order.mongoId || order.orderId],
                 )}
@@ -3900,7 +4148,7 @@ function PreparingOrders({
 }
 
 // Ready Orders List
-function ReadyOrders({ onSelectOrder, refreshToken = 0 }) {
+function ReadyOrders({ onSelectOrder, refreshToken = 0, onOpenRiderDetails }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -4012,6 +4260,7 @@ function ReadyOrders({ onSelectOrder, refreshToken = 0 }) {
               key={order.orderId || order.mongoId}
               {...order}
               onSelect={onSelectOrder}
+              onOpenRiderDetails={onOpenRiderDetails}
             />
           ))}
         </div>
@@ -4021,7 +4270,7 @@ function ReadyOrders({ onSelectOrder, refreshToken = 0 }) {
 }
 
 // Out for Delivery Orders List
-const OutForDeliveryOrders = ({ onSelectOrder, refreshToken = 0 }) => {
+const OutForDeliveryOrders = ({ onSelectOrder, refreshToken = 0, onOpenRiderDetails }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -4133,6 +4382,7 @@ const OutForDeliveryOrders = ({ onSelectOrder, refreshToken = 0 }) => {
               key={order.orderId || order.mongoId}
               {...order}
               onSelect={onSelectOrder}
+              onOpenRiderDetails={onOpenRiderDetails}
             />
           ))}
         </div>

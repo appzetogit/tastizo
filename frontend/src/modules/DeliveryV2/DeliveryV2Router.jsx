@@ -4,7 +4,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Loader from "@food/components/Loader";
 
 // Auth Pages (Lazy loaded)
-const Welcome = lazy(() => import("./pages/auth/Welcome"))
 const SignIn = lazy(() => import("./pages/auth/SignIn"))
 const OTP = lazy(() => import("./pages/auth/OTP"))
 const SignupStep1 = lazy(() => import("./pages/auth/SignupStep1"))
@@ -35,7 +34,7 @@ const DeliveryV2Router = () => {
     <Suspense fallback={<Loader />}>
       <Routes>
         {/* Auth routes */}
-        <Route path="welcome" element={<Welcome />} />
+        <Route path="welcome" element={<Navigate to="/food/delivery/login" replace />} />
         <Route path="login" element={<SignIn />} />
         <Route path="otp" element={<OTP />} />
         <Route path="signup" element={<Navigate to="/food/delivery/login" replace />} />

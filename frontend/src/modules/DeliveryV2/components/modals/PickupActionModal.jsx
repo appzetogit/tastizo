@@ -188,7 +188,7 @@ export const PickupActionModal = ({
                       <p className="text-sm font-medium text-gray-700 mb-3">
                         Ask the restaurant for the 4-digit pickup OTP before uploading the receipt or picking up the order.
                       </p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <input
                           type="tel"
                           inputMode="numeric"
@@ -196,13 +196,13 @@ export const PickupActionModal = ({
                           value={pickupOtp}
                           onChange={(e) => setPickupOtp(e.target.value.replace(/\D/g, '').slice(0, 4))}
                           placeholder="Enter OTP"
-                          className="flex-1 rounded-xl border border-orange-200 bg-white px-4 py-3 text-center text-lg font-bold tracking-[0.35em] text-gray-900 outline-none focus:border-orange-400"
+                          className="w-full flex-1 rounded-xl border border-orange-200 bg-white px-4 py-3 text-center text-base sm:text-lg font-bold tracking-[0.18em] sm:tracking-[0.35em] text-gray-900 outline-none focus:border-orange-400"
                         />
                         <button
                           type="button"
                           onClick={handleVerifyPickupOtp}
                           disabled={pickupOtp.length !== 4 || isVerifyingPickupOtp}
-                          className="rounded-xl bg-gray-900 px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-white disabled:opacity-50"
+                          className="w-full sm:w-auto sm:min-w-[92px] shrink-0 rounded-xl bg-gray-900 px-4 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.14em] sm:tracking-widest text-white disabled:opacity-50"
                         >
                           {isVerifyingPickupOtp ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Verify'}
                         </button>
@@ -258,7 +258,7 @@ export const PickupActionModal = ({
               </div>
 
               <div>
-                <p className={`text-center text-[10px] font-bold uppercase tracking-widest mb-3 ${billImageUploaded ? 'text-green-600' : 'text-gray-400'}`}>
+                <p className={`px-2 text-center text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.12em] sm:tracking-widest leading-relaxed mb-3 break-words ${billImageUploaded ? 'text-green-600' : 'text-gray-400'}`}>
                   {needsPickupOtp && !isPickupOtpVerified
                     ? "Verify pickup otp to unlock bill upload"
                     : billImageUploaded

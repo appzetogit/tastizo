@@ -614,7 +614,7 @@ export async function listOrdersUser(userId, query) {
         "restaurantId",
         "restaurantName profileImage area city location rating totalRatings",
       )
-      .populate("dispatch.deliveryPartnerId", "name fullName phone phoneNumber rating totalRatings profileImage avatar vehicleNumber vehicleType vehicleName")
+      .populate("dispatch.deliveryPartnerId", "name fullName phone phoneNumber rating totalRatings profileImage profilePhoto avatar vehicleNumber vehicleType vehicleName")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -640,7 +640,7 @@ export async function getOrderById(
       "restaurantId",
       "restaurantName ownerPhone profileImage area city location rating totalRatings primaryContactNumber",
     )
-    .populate("dispatch.deliveryPartnerId", "name fullName phone phoneNumber rating totalRatings profileImage avatar vehicleNumber vehicleType vehicleName")
+    .populate("dispatch.deliveryPartnerId", "name fullName phone phoneNumber rating totalRatings profileImage profilePhoto avatar vehicleNumber vehicleType vehicleName")
     .populate("userId", "name fullName phone email")
     .select("+deliveryOtp +pickupOtp")
     .lean();
@@ -1236,7 +1236,7 @@ export async function listOrdersRestaurant(restaurantId, query) {
     FoodOrder.find(filter)
       .populate(
         "dispatch.deliveryPartnerId",
-        "name fullName phone phoneNumber rating totalRatings profileImage avatar vehicleNumber vehicleType vehicleName",
+        "name fullName phone phoneNumber rating totalRatings profileImage profilePhoto avatar vehicleNumber vehicleType vehicleName",
       )
       .populate("userId", "name phone email profileImage")
       .select("+pickupOtp")
@@ -1710,7 +1710,7 @@ export async function listOrdersAdmin(query) {
       .select("+deliveryOtp")
       .populate("userId", "name phone email")
       .populate("restaurantId", "restaurantName area city ownerPhone")
-      .populate("dispatch.deliveryPartnerId", "name fullName phone phoneNumber profileImage avatar vehicleNumber vehicleType vehicleName")
+      .populate("dispatch.deliveryPartnerId", "name fullName phone phoneNumber profileImage profilePhoto avatar vehicleNumber vehicleType vehicleName")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)

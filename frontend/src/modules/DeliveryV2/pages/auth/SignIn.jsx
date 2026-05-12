@@ -130,16 +130,31 @@ export default function DeliverySignIn() {
         <div className="flex flex-1 flex-col bg-white">
           <div>
             <div
-              className="flex min-h-[360px] w-full items-center justify-center overflow-hidden rounded-b-[2rem] bg-white pt-4 pb-6"
+              className="flex h-[45vh] w-full items-center justify-center overflow-hidden rounded-b-[2rem] bg-white pt-4 pb-2"
             >
-              <img
+              <motion.img
                 src={deliveryImage}
                 alt="Delivery partner"
-                className="h-full max-h-[320px] w-full object-cover"
+                initial={{ opacity: 0, scale: 0.88, y: 18 }}
+                animate={{
+                  opacity: 1,
+                  scale: 1,
+                  y: [0, -8, 0],
+                }}
+                transition={{
+                  opacity: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+                  scale: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+                  y: {
+                    duration: 3.2,
+                    ease: "easeInOut",
+                    repeat: Infinity,
+                  },
+                }}
+                className="h-auto max-h-[194px] w-auto max-w-[63%] object-contain"
               />
             </div>
 
-            <div className="bg-white pt-10 pb-4">
+            <div className="bg-white pt-7 pb-4">
               <div className="px-4 text-center sm:px-5">
                 <motion.h1
                   initial="hidden"

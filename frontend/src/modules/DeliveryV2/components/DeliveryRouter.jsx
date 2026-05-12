@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react"
-import { Routes, Route } from "react-router-dom"
+import { Routes, Route, Navigate } from "react-router-dom"
 import DeliveryLayout from "./DeliveryLayout"
 import ProtectedRoute from "./ProtectedRoute"
 import Loader from "@food/components/Loader"
@@ -45,7 +45,6 @@ const CustomerTipsBalancePage = lazy(() => import("@food/pages/delivery/Customer
 const PocketDetails = lazy(() => import("@food/pages/delivery/PocketDetails"))
 
 // Auth pages
-const Welcome = lazy(() => import("@food/pages/delivery/auth/Welcome"))
 const SignIn = lazy(() => import("@food/pages/delivery/auth/SignIn"))
 const OTP = lazy(() => import("@food/pages/delivery/auth/OTP"))
 const Signup = lazy(() => import("@food/pages/delivery/auth/Signup"))
@@ -57,7 +56,7 @@ export default function DeliveryRouter() {
     <Suspense fallback={<Loader />}>
       <Routes>
         {/* Auth routes */}
-        <Route path="welcome" element={<Welcome />} />
+        <Route path="welcome" element={<Navigate to="/food/delivery/login" replace />} />
         <Route path="login" element={<SignIn />} />
         <Route path="otp" element={<OTP />} />
         <Route path="signup" element={<Signup />} />

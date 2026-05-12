@@ -79,6 +79,89 @@ const formatToolbarDateLabel = (value) => {
   return `${day}${suffix} ${date.toLocaleDateString("en-IN", { month: "short" })}`
 }
 
+const getMediaUrl = (...values) => {
+  for (const value of values) {
+    if (!value) continue
+    if (typeof value === "string" && value.trim()) return value.trim()
+    if (typeof value === "object") {
+      const candidate =
+        value.url ||
+        value.secure_url ||
+        value.secureUrl ||
+        value.publicUrl ||
+        value.src ||
+        ""
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim()
+      }
+    }
+  }
+  return ""
+}
+
+const getDeliveryPartnerInfo = (order) => {
+  const topLevelPartner =
+    order?.deliveryPartnerId && typeof order.deliveryPartnerId === "object"
+      ? order.deliveryPartnerId
+      : null
+  const deliveryPartnerProfile =
+    topLevelPartner ||
+    order?.dispatch?.deliveryPartnerId ||
+    order?.dispatch?.assignedTo ||
+    {}
+
+  return {
+    profile: deliveryPartnerProfile,
+    name:
+      order?.deliveryPartnerName ||
+      deliveryPartnerProfile?.fullName ||
+      deliveryPartnerProfile?.name ||
+      order?.dispatch?.deliveryPartnerName ||
+      "Delivery partner updating",
+    phone:
+      deliveryPartnerProfile?.phone ||
+      deliveryPartnerProfile?.phoneNumber ||
+      order?.dispatch?.deliveryPartnerPhone ||
+      "",
+    vehicle:
+      deliveryPartnerProfile?.vehicleNumber ||
+      deliveryPartnerProfile?.bikeNumber ||
+      deliveryPartnerProfile?.vehicle?.number ||
+      deliveryPartnerProfile?.vehicleNo ||
+      order?.dispatch?.vehicleNumber ||
+      order?.dispatch?.bikeNumber ||
+      "",
+    deliveryId:
+      deliveryPartnerProfile?.deliveryId ||
+      deliveryPartnerProfile?._id ||
+      deliveryPartnerProfile?.id ||
+      "",
+    rating: Number(
+      deliveryPartnerProfile?.rating ??
+      order?.dispatch?.deliveryPartnerId?.rating ??
+      0,
+    ) || 0,
+    totalRatings: Number(
+      deliveryPartnerProfile?.totalRatings ??
+      order?.dispatch?.deliveryPartnerId?.totalRatings ??
+      0,
+    ) || 0,
+    photo: getMediaUrl(
+      deliveryPartnerProfile?.profileImage,
+      deliveryPartnerProfile?.profilePhoto,
+      deliveryPartnerProfile?.avatar,
+      deliveryPartnerProfile?.documents?.photo,
+      deliveryPartnerProfile?.photo,
+      deliveryPartnerProfile?.photoUrl,
+      order?.dispatch?.deliveryPartnerId?.profileImage,
+      order?.dispatch?.deliveryPartnerId?.profilePhoto,
+      order?.dispatch?.deliveryPartnerId?.avatar,
+      order?.dispatch?.deliveryPartnerId?.documents?.photo,
+      order?.dispatch?.deliveryPartnerId?.photo,
+    ),
+  }
+}
+
 const formatRelativePlacedLabel = (value) => {
   if (!value) return "Placed recently"
   const date = new Date(value)
@@ -661,6 +744,9 @@ export function DesktopOrdersView({ embedded = false }) {
   const [rejectReason, setRejectReason] = useState("")
   const [showCancellationPopup, setShowCancellationPopup] = useState(false)
   const [cancellationPopupText, setCancellationPopupText] = useState("")
+  const [selectedRiderOrder, setSelectedRiderOrder] = useState(null)
+  const [selectedRiderOrderDetail, setSelectedRiderOrderDetail] = useState(null)
+  const [selectedRiderOrderLoading, setSelectedRiderOrderLoading] = useState(false)
   const audioRef = useRef(null)
   const audioUnlockedRef = useRef(false)
   const shownDesktopPopupOrdersRef = useMemo(() => new Set(), [])
@@ -872,6 +958,38 @@ export function DesktopOrdersView({ embedded = false }) {
     [reloadOrders],
   )
 
+  const closeRiderDetails = useCallback(() => {
+    setSelectedRiderOrder(null)
+    setSelectedRiderOrderDetail(null)
+    setSelectedRiderOrderLoading(false)
+  }, [])
+
+  const openRiderDetails = useCallback(async (order) => {
+    if (!order) return
+
+    setSelectedRiderOrder(order)
+    setSelectedRiderOrderDetail(null)
+    setSelectedRiderOrderLoading(true)
+
+    try {
+      let response
+      try {
+        response = await restaurantAPI.getOrderById(order.orderId || order._id)
+      } catch {
+        const fallbackId = order._id || order.orderMongoId
+        if (!fallbackId || fallbackId === order.orderId) throw new Error("Fallback rider order lookup failed")
+        response = await restaurantAPI.getOrderById(fallbackId)
+      }
+
+      const nextOrder = response?.data?.data?.order || response?.data?.data || null
+      setSelectedRiderOrderDetail(nextOrder || order)
+    } catch {
+      setSelectedRiderOrderDetail(order)
+    } finally {
+      setSelectedRiderOrderLoading(false)
+    }
+  }, [])
+
   const filteredOrders = useMemo(() => {
     return orders
       .filter((order) => orderGroups[activeTab]?.includes(normalizeStatus(order.status)))
@@ -985,14 +1103,11 @@ export function DesktopOrdersView({ embedded = false }) {
               const showResendAction = (isPreparing || isReady) && dispatchStatus !== "accepted"
               const statusLabel = isPicked ? "PICKED UP" : isReady ? "READY" : isPreparing ? "PREPARING" : "ORDER"
               const requestCountdown = getOrderCountdownSeconds(order)
-              const rider =
-                order?.deliveryPartnerName ||
-                order?.deliveryPartnerId?.fullName ||
-                order?.deliveryPartnerId?.name ||
-                order?.dispatch?.deliveryPartnerId?.fullName ||
-                order?.dispatch?.deliveryPartnerId?.name ||
-                order?.dispatch?.assignedTo?.name ||
-                "Delivery partner updating"
+              const riderInfo = getDeliveryPartnerInfo(order)
+              const rider = riderInfo.name
+              const riderPhone = riderInfo.phone
+              const riderVehicle = riderInfo.vehicle
+              const riderPhoto = riderInfo.photo
               const pickupOtp = String(order?.pickupOtp || "").trim()
               return (
                 <article
@@ -1064,17 +1179,48 @@ export function DesktopOrdersView({ embedded = false }) {
                         <div className="flex items-center gap-2">
                           {!isRequest && (
                             <>
-                              {order?.deliveryPartnerId ? (
-                                <div className="flex flex-col items-end gap-1 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-right" title={rider}>
-                                  <span className="text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700">
-                                    {rider || "Delivery Partner"}
-                                  </span>
-                                  {pickupOtp ? (
-                                    <span className="text-[12px] font-black tracking-[0.28em] text-emerald-900">
-                                      OTP {pickupOtp}
-                                    </span>
-                                  ) : null}
-                                </div>
+                              {order?.deliveryPartnerId || order?.dispatch?.deliveryPartnerId || order?.dispatch?.assignedTo ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openRiderDetails(order)}
+                                  className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-left transition hover:border-emerald-200 hover:bg-emerald-100/70"
+                                  title={`Open rider details for ${rider}`}
+                                >
+                                  <div className="flex items-start gap-2.5">
+                                    {riderPhoto ? (
+                                      <img
+                                        src={riderPhoto}
+                                        alt={rider || "Delivery partner"}
+                                        className="h-10 w-10 rounded-xl object-cover ring-1 ring-emerald-200"
+                                      />
+                                    ) : (
+                                      <div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-xs font-black uppercase text-emerald-700 ring-1 ring-emerald-200">
+                                        {String(rider || "D").charAt(0)}
+                                      </div>
+                                    )}
+
+                                    <div className="flex flex-col items-end gap-1 text-right">
+                                      <span className="text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700">
+                                        {rider || "Delivery Partner"}
+                                      </span>
+                                      {pickupOtp ? (
+                                        <span className="text-[12px] font-black tracking-[0.28em] text-emerald-900">
+                                          OTP {pickupOtp}
+                                        </span>
+                                      ) : null}
+                                      {riderPhone ? (
+                                        <span className="text-[10px] font-semibold text-emerald-800">
+                                          {riderPhone}
+                                        </span>
+                                      ) : null}
+                                      {riderVehicle ? (
+                                        <span className="text-[10px] font-semibold uppercase text-emerald-700/90">
+                                          Bike {riderVehicle}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </button>
                               ) : isPreparing ? (
                                 <div className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1 text-[9px] font-black uppercase tracking-tight text-slate-400">
                                   No Rider
@@ -1360,6 +1506,86 @@ export function DesktopOrdersView({ embedded = false }) {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {selectedRiderOrder ? (
+        (() => {
+          const riderOrder = selectedRiderOrderDetail || selectedRiderOrder
+          const riderInfo = getDeliveryPartnerInfo(riderOrder)
+          const riderPickupOtp = String(riderOrder?.pickupOtp || "").trim()
+          return (
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/35 p-6">
+              <div className="w-full max-w-[460px] overflow-hidden rounded-[22px] border border-[#dfe5ef] bg-white shadow-[0_22px_80px_rgba(15,23,42,0.24)]">
+                <div className="flex items-center justify-between border-b border-[#e9edf3] px-5 py-4">
+                  <div>
+                    <p className="text-lg font-semibold text-[#252b36]">Delivery partner details</p>
+                    <p className="mt-1 text-sm text-[#6e7688]">
+                      Order #{riderOrder.orderId || String(riderOrder._id || "").slice(-6)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeRiderDetails}
+                    className="text-[#70798c] transition hover:text-[#252b36]"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-5 p-5">
+                  {selectedRiderOrderLoading ? (
+                    <div className="flex items-center justify-center gap-3 rounded-2xl border border-[#edf0f5] bg-[#fcfdff] px-4 py-5 text-sm font-medium text-[#6e7688]">
+                      <Loader2 className="h-4 w-4 animate-spin text-[#9da6ba]" />
+                      <span>Fetching delivery partner details...</span>
+                    </div>
+                  ) : null}
+
+                  <div className="flex items-start gap-4">
+                    {riderInfo.photo ? (
+                      <img
+                        src={riderInfo.photo}
+                        alt={riderInfo.name}
+                        className="h-20 w-20 rounded-3xl object-cover ring-1 ring-[#dde4f2]"
+                      />
+                    ) : (
+                      <div className="grid h-20 w-20 place-items-center rounded-3xl bg-[#eef3ff] text-2xl font-bold uppercase text-[#4f78ee]">
+                        {String(riderInfo.name || "D").charAt(0)}
+                      </div>
+                    )}
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xl font-semibold text-[#2b3343]">{riderInfo.name || "Delivery Partner"}</p>
+                      <p className="mt-1 text-sm text-[#7b8498]">Assigned rider for quick restaurant coordination.</p>
+                      <p className="mt-2 text-sm font-medium text-[#4f586d]">
+                        Rating: {selectedRiderOrderLoading ? "Loading..." : riderInfo.rating > 0 ? `${riderInfo.rating.toFixed(1)}${riderInfo.totalRatings > 0 ? ` (${riderInfo.totalRatings})` : ""}` : "Not rated"}
+                      </p>
+                      {riderPickupOtp ? (
+                        <div className="mt-3 inline-flex rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-[13px] font-black tracking-[0.28em] text-emerald-900">
+                          OTP {riderPickupOtp}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 rounded-2xl border border-[#edf0f5] bg-[#fcfdff] p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-sm font-medium text-[#6e7688]">Contact number</span>
+                      <span className="text-sm font-semibold text-[#2b3343]">{selectedRiderOrderLoading ? "Loading..." : riderInfo.phone || "Not available"}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-sm font-medium text-[#6e7688]">Bike number</span>
+                      <span className="text-sm font-semibold uppercase text-[#2b3343]">{selectedRiderOrderLoading ? "Loading..." : riderInfo.vehicle || "Not available"}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-sm font-medium text-[#6e7688]">Partner ID</span>
+                      <span className="text-sm font-semibold text-[#2b3343]">{selectedRiderOrderLoading ? "Loading..." : riderInfo.deliveryId || "Not available"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })()
       ) : null}
     </div>
   )
