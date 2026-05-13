@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom"
 import { Tag, User, Truck, UtensilsCrossed } from "lucide-react"
 import { useState, useEffect } from "react"
+import { createPortal } from "react-dom"
 import api from "@food/api"
 
 export default function BottomNavigation() {
@@ -8,6 +9,12 @@ export default function BottomNavigation() {
   const location = useLocation()
   const pathname = location.pathname
   const [under250PriceLimit, setUnder250PriceLimit] = useState(250)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
 
   // Fetch landing settings to get dynamic price limit
   useEffect(() => {
@@ -44,10 +51,14 @@ export default function BottomNavigation() {
     pathname === ""
   )
 
-  return (
+  if (!mounted || typeof document === "undefined") {
+    return null
+  }
+
+  return createPortal(
     <div
-      className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-gray-800 z-50 shadow-lg"
-      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      className="mobile-bottom-nav bottom-nav bottom-navigation md:hidden bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-gray-800 shadow-lg"
+      style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 0px)" }}
     >
       <div className="flex items-center justify-around h-auto px-2 sm:px-4">
         {/* Delivery Tab */}
@@ -154,6 +165,7 @@ export default function BottomNavigation() {
           )}
         </Link>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
