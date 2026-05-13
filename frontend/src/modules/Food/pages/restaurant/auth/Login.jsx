@@ -1,173 +1,262 @@
 import { useEffect, useRef, useState } from "react"
+import { motion } from "framer-motion"
 import { useNavigate, Link } from "react-router-dom"
-import { motion, AnimatePresence } from "framer-motion"
-import { ShieldCheck, Utensils, Star, Heart, ArrowRight, Loader2, Store } from "lucide-react"
-import { toast } from "sonner"
+import { AlertCircle, ChevronDown, Loader2, Check } from "lucide-react"
+import AnimatedPage from "@food/components/user/AnimatedPage"
+import { Button } from "@food/components/ui/button"
+import { Input } from "@food/components/ui/input"
 import { restaurantAPI } from "@food/api"
-import logoNew from "@/assets/logo.png"
-
-const DEFAULT_COUNTRY_CODE = "+91"
+const REMEMBER_LOGIN_KEY = "restaurant_login_phone"
+const TASTIZO_BG = "#239858"
+const headingWords = ["India's", "#1", "Restaurant", "Partner", "Management", "Platform"]
 
 export default function RestaurantLogin() {
   const navigate = useNavigate()
-  const phoneInputRef = useRef(null)
-  const [phone, setPhone] = useState(() => sessionStorage.getItem("restaurantLoginPhone") || "")
-  const [loading, setLoading] = useState(false)
-  const submitting = useRef(false)
 
-  const validatePhone = (num) => {
-    const digits = num.replace(/\D/g, "")
-    if (digits.length !== 10) return false
-    return ["6", "7", "8", "9"].includes(digits[0])
-  }
+  const [formData, setFormData] = useState({
+    phone: "",
+    countryCode: "+91",
+  })
+  const [rememberLogin, setRememberLogin] = useState(true)
+  const [phoneError, setPhoneError] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const submittingRef = useRef(false)
 
-  const handleSendOTP = async (e) => {
-    if (e) e.preventDefault()
-    if (!validatePhone(phone)) {
-      toast.error("Please enter a valid 10-digit mobile number")
+  useEffect(() => {
+    const storedPhone = localStorage.getItem(REMEMBER_LOGIN_KEY) || ""
+    if (storedPhone) {
+      setFormData((prev) => ({ ...prev, phone: storedPhone }))
+      setRememberLogin(true)
       return
     }
-    if (submitting.current) return
-    submitting.current = true
-    setLoading(true)
 
-    const fullPhone = `${DEFAULT_COUNTRY_CODE} ${phone}`.trim()
+    const stored = sessionStorage.getItem("restaurantAuthData")
+    if (!stored) return
 
     try {
+      const data = JSON.parse(stored)
+      const fullPhone = String(data.phone || "").trim()
+      const phoneDigits = fullPhone.replace(/^\+91\s*/, "").replace(/\D/g, "").slice(0, 10)
+      setFormData((prev) => ({
+        ...prev,
+        phone: phoneDigits || prev.phone,
+      }))
+    } catch {
+      // Ignore invalid session data and keep the form empty.
+    }
+  }, [])
+
+  const validatePhone = (phone) => {
+    if (!phone.trim()) return "Phone number is required"
+    const cleanPhone = phone.replace(/\D/g, "")
+    if (!/^\d{10}$/.test(cleanPhone)) return "Phone number must be exactly 10 digits"
+    if (!["6", "7", "8", "9"].includes(cleanPhone[0])) {
+      return "Please enter a valid Indian mobile number"
+    }
+    return ""
+  }
+
+  const handleChange = (e) => {
+    const { name } = e.target
+    let { value } = e.target
+
+    if (name === "phone") {
+      value = value.replace(/\D/g, "").slice(0, 10)
+      setPhoneError(validatePhone(value))
+    }
+
+    setFormData((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    const nextPhoneError = validatePhone(formData.phone)
+    setPhoneError(nextPhoneError)
+    if (nextPhoneError) return
+    if (submittingRef.current) return
+
+    submittingRef.current = true
+    setIsLoading(true)
+    setPhoneError("")
+
+    try {
+      const countryCode = formData.countryCode?.trim() || "+91"
+      const phoneDigits = String(formData.phone ?? "").replace(/\D/g, "").slice(0, 10)
+      const fullPhone = `${countryCode} ${phoneDigits}`
+
       await restaurantAPI.sendOTP(fullPhone, "login")
+
+      if (rememberLogin) {
+        localStorage.setItem(REMEMBER_LOGIN_KEY, phoneDigits)
+      } else {
+        localStorage.removeItem(REMEMBER_LOGIN_KEY)
+      }
+
       const authData = {
         method: "phone",
         phone: fullPhone,
+        email: null,
         isSignUp: false,
         module: "restaurant",
       }
+
       sessionStorage.setItem("restaurantAuthData", JSON.stringify(authData))
-      sessionStorage.setItem("restaurantLoginPhone", phone)
-      toast.success("Verification code sent!")
-      navigate("/food/restaurant/otp")
-    } catch (apiErr) {
-      const msg = apiErr?.response?.data?.message || apiErr?.message || "Failed to send OTP."
-      toast.error(msg)
+      navigate("/restaurant/otp")
+    } catch (apiError) {
+      const message =
+        apiError?.response?.data?.message ||
+        apiError?.response?.data?.error ||
+        "Failed to send OTP. Please try again."
+      setPhoneError(message)
     } finally {
-      setLoading(false)
-      submitting.current = false
+      setIsLoading(false)
+      submittingRef.current = false
     }
   }
 
-  const primaryColor = "#2A9C64"
-
   return (
-    <div className="min-h-screen bg-[#2A9C64] flex flex-col relative font-['Poppins']">
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className="w-full max-w-[440px]"
-        >
-          {/* Logo & Header */}
-          <div className="text-center mb-8">
-            <motion.div
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 200, damping: 20 }}
-              className="relative inline-block mb-4"
+    <AnimatedPage
+      className="min-h-screen flex items-start justify-center overflow-hidden"
+      style={{ backgroundColor: TASTIZO_BG }}
+    >
+      <div className="mx-auto flex min-h-screen w-full sm:max-w-[400px] flex-col overflow-hidden">
+        <div className="flex flex-1 flex-col bg-white">
+          <div>
+            <div
+              className="flex min-h-[360px] w-full items-center justify-center rounded-b-[2rem] pt-6 pb-10"
+              style={{ backgroundColor: TASTIZO_BG }}
             >
-              <img 
-                src={logoNew} 
-                alt="Tastizo Logo" 
-                className="w-32 h-32 md:w-36 md:h-36 object-contain mx-auto"
+              <img
+                src="/image.png"
+                alt="Tastizo"
+                className="h-[14.4rem] w-auto object-contain sm:h-[16.8rem]"
               />
-            </motion.div>
-
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="text-gray-400 dark:text-gray-500 font-bold text-xs uppercase tracking-[0.3em]"
-            >
-              RESTAURANT PARTNER
-            </motion.p>
-          </div>
-
-          {/* Login Card */}
-          <div className="bg-white rounded-2xl p-8 sm:p-12 shadow-lg border border-gray-100">
-
-            <div className="mb-10 text-center sm:text-left">
-              <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-2 font-['Outfit'] tracking-tight">
-                Partner Login
-              </h2>
-              <div className="h-1 w-10 bg-[#2A9C64] rounded-full mb-3 hidden sm:block" />
-              <p className="text-base text-gray-500 dark:text-gray-400 font-medium">
-                Enter your registered mobile number to manage your restaurant
-              </p>
             </div>
 
-            <form onSubmit={handleSendOTP} className="space-y-8">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-[#2A9C64] uppercase tracking-[0.2em] ml-1">Mobile Number</label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none">
-                    <span className="text-sm font-bold text-[#2A9C64] border-r border-gray-200 dark:border-gray-800 pr-3">+91</span>
-                  </div>
-                  <input
-                    ref={phoneInputRef}
-                    type="tel"
-                    required
-                    autoFocus
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                    maxLength={10}
-                    className="block w-full pl-16 pr-6 py-4 bg-gray-50 dark:bg-gray-900/50 text-gray-900 dark:text-white border-2 border-transparent focus:border-[#2A9C64]/50 rounded-2xl outline-none transition-all placeholder:text-gray-300 font-bold text-lg shadow-sm"
-                    placeholder="00000 00000"
-                  />
-                </div>
+            <div className="bg-white pt-10 pb-4">
+              <div className="px-4 text-center sm:px-5">
+                <motion.h1
+                  initial="hidden"
+                  animate="visible"
+                  variants={{
+                    hidden: {},
+                    visible: {
+                      transition: {
+                        staggerChildren: 0.06,
+                        delayChildren: 0.1,
+                      },
+                    },
+                  }}
+                  className="text-[1.6rem] sm:text-[1.8rem] font-semibold leading-[1.18] tracking-[-0.03em] text-black"
+                >
+                  {headingWords.map((word) => (
+                    <motion.span
+                      key={word}
+                      variants={{
+                        hidden: { opacity: 0, y: 18, filter: "blur(6px)" },
+                        visible: {
+                          opacity: 1,
+                          y: 0,
+                          filter: "blur(0px)",
+                          transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+                        },
+                      }}
+                      className="mr-[0.3em] inline-block last:mr-0"
+                    >
+                      {word}
+                    </motion.span>
+                  ))}
+                </motion.h1>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading || phone.length < 10}
-                className="w-full py-4.5 bg-[#2A9C64] hover:bg-[#6a2f56] disabled:bg-gray-200 dark:disabled:bg-gray-800 disabled:text-gray-400 text-white rounded-2xl font-bold text-lg shadow-xl shadow-[#2A9C64]/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 group overflow-hidden relative"
-              >
-                {loading ? (
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                ) : (
-                  <>
-                    <span>Get Start</span>
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </>
-                )}
-                <motion.div
-                  className="absolute inset-0 bg-white/20 translate-x-[-100%]"
-                  whileHover={{ translateX: "100%" }}
-                  transition={{ duration: 0.6 }}
-                />
-              </button>
-            </form>
+              <form onSubmit={handleSubmit} className="mt-6 space-y-3.5 px-4 sm:px-5">
+                <div className="flex items-stretch gap-3">
+                  <button
+                    type="button"
+                    className="flex w-[102px] shrink-0 items-center justify-between rounded-2xl border border-[#d7d5d2] bg-white px-4 text-[1rem] font-medium text-[#221f1b]"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="font-semibold">IN</span>
+                      <span className="text-[#6a6662]">+91</span>
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-[#8a847d]" />
+                  </button>
+
+                  <Input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={10}
+                    placeholder="Enter Phone Number"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    className={`h-14 flex-1 rounded-2xl border bg-white px-4 text-lg text-[#7d4f1c] placeholder:text-[#9f6d37] focus-visible:ring-0 focus-visible:border-[#8a2323] ${
+                      phoneError ? "border-red-400" : "border-[#d7d5d2]"
+                    }`}
+                    aria-invalid={phoneError ? "true" : "false"}
+                  />
+                </div>
+
+                {phoneError ? (
+                  <div className="flex items-center gap-1.5 pl-1 text-sm text-red-600">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>{phoneError}</span>
+                  </div>
+                ) : null}
+
+                <label className="flex cursor-pointer items-center gap-3 pt-1 text-[0.98rem] text-[#3e3a36]">
+                  <input
+                    type="checkbox"
+                    checked={rememberLogin}
+                    onChange={(e) => setRememberLogin(e.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <span
+                    className={`flex h-5 w-5 items-center justify-center rounded-md transition-colors ${
+                      rememberLogin ? "bg-[#2a9c64] text-white" : "border border-[#cfc7bf] bg-white text-transparent"
+                    }`}
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </span>
+                  <span>Remember my login for faster sign-in</span>
+                </label>
+
+                <Button
+                  type="submit"
+                  className="mt-2 h-14 w-full rounded-2xl bg-[#2a9c64] text-lg font-bold text-white transition-all hover:bg-[#238653] active:scale-[0.99]"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Sending OTP...
+                    </>
+                  ) : (
+                    "Continue"
+                  )}
+                </Button>
+              </form>
+            </div>
           </div>
 
-          {/* Footer Info */}
-          <div className="mt-8 text-center">
-            <p className="text-[11px] text-gray-400 font-medium leading-relaxed max-w-[320px] mx-auto">
-              By continuing, you agree to Tastizo's <br />
-              <Link to="/food/restaurant/terms" className="text-gray-900 dark:text-white font-bold hover:text-[#2A9C64] transition-colors">Terms of Service</Link> & <Link to="/food/restaurant/privacy" className="text-gray-900 dark:text-white font-bold hover:text-[#2A9C64] transition-colors">Privacy Policy</Link>
-            </p>
-          </div>
-
-          <div className="mt-12 flex justify-center items-center gap-6 opacity-30 grayscale hover:opacity-60 transition-opacity">
-            <div className="flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Business Verified</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Heart className="w-4 h-4" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Partner Success</span>
+          <div className="mt-auto bg-white px-4 pt-4 pb-3 sm:px-5">
+            <div className="text-center text-[0.78rem] leading-5 text-[#67635f]">
+              <p>By continuing, you agree to our</p>
+              <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5">
+                <Link to="/restaurant/terms" className="underline underline-offset-2 hover:text-black transition-colors">
+                  Terms of Service
+                </Link>
+                <span>•</span>
+                <Link to="/restaurant/privacy" className="underline underline-offset-2 hover:text-black transition-colors">
+                  Privacy Policy
+                </Link>
+              </div>
             </div>
           </div>
-        </motion.div>
+        </div>
       </div>
-    </div>
+    </AnimatedPage>
   )
 }
-

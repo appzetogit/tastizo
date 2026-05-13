@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   checkOnboardingStatus,
   isRestaurantOnboardingComplete,
@@ -126,6 +126,26 @@ const transformOrderForList = (order) => ({
   sortTimestamp: new Date(getAllOrdersTimestamp(order)).getTime(),
   scheduledAt: order.scheduledAt || null,
 });
+
+const transformOrderForSheet = (order) => {
+  const base = transformOrderForList(order);
+  return {
+    ...base,
+    status: order.status || base.status || "pending",
+    cancellationReason:
+      order.cancellationReason || order.cancelReason || "",
+    rejectionReason:
+      order.rejectionReason || order.rejectReason || "",
+    eta: order.estimatedDeliveryTime
+      ? `${order.estimatedDeliveryTime} mins`
+      : base.eta,
+    deliveryPartnerId:
+      order.deliveryPartnerId ||
+      order.dispatch?.deliveryPartnerId?._id ||
+      order.dispatch?.deliveryPartnerId ||
+      null,
+  };
+};
 
 const getMediaUrl = (...values) => {
   for (const value of values) {
@@ -1129,6 +1149,7 @@ function ScheduledOrders({ onSelectOrder, refreshToken, onOpenRiderDetails }) {
 
 
 export default function OrdersMain() {
+  const location = useLocation();
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState("all");
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -1176,11 +1197,54 @@ export default function OrdersMain() {
   const showNewOrderPopupRef = useRef(showNewOrderPopup);
   const isMutedRef = useRef(isMuted);
   const newOrderRef = useRef(null);
+  const lastQueryOrderIdRef = useRef("");
 
   const closeRiderDetails = () => {
     setSelectedRiderOrder(null);
     setSelectedRiderOrderLoading(false);
   };
+
+  const openOrderSheetById = useCallback(async (orderId) => {
+    const normalizedOrderId = String(orderId || "").trim();
+    if (!normalizedOrderId) return;
+
+    try {
+      let response;
+
+      try {
+        response = await restaurantAPI.getOrderById(normalizedOrderId);
+      } catch {
+        const ordersResponse = await restaurantAPI.getOrders({ page: 1, limit: 100 });
+        const rows = ordersResponse?.data?.data?.orders || [];
+        const matchedOrder = rows.find((order) => {
+          const refs = [
+            order?._id,
+            order?.mongoId,
+            order?.orderMongoId,
+            order?.orderId,
+            order?.order_id,
+          ]
+            .map((value) => String(value || "").trim())
+            .filter(Boolean);
+          return refs.includes(normalizedOrderId);
+        });
+
+        if (!matchedOrder) {
+          throw new Error(`Order not found for ${normalizedOrderId}`);
+        }
+
+        response = { data: { data: matchedOrder } };
+      }
+
+      const nextOrder = response?.data?.data?.order || response?.data?.data || null;
+      if (!nextOrder) return;
+
+      setSelectedOrder(transformOrderForSheet(nextOrder));
+      setIsSheetOpen(true);
+    } catch (error) {
+      debugWarn("Failed to open restaurant order from query param:", normalizedOrderId, error);
+    }
+  }, []);
 
   const openRiderDetails = async (orderRef) => {
     if (!orderRef) return;
@@ -2331,6 +2395,24 @@ export default function OrdersMain() {
       });
     }
   }, [activeFilter]);
+
+  useEffect(() => {
+    const queryOrderId = String(
+      new URLSearchParams(location.search || "").get("orderId") || "",
+    ).trim();
+
+    if (!queryOrderId) {
+      lastQueryOrderIdRef.current = "";
+      return;
+    }
+
+    if (lastQueryOrderIdRef.current === queryOrderId) {
+      return;
+    }
+
+    lastQueryOrderIdRef.current = queryOrderId;
+    void openOrderSheetById(queryOrderId);
+  }, [location.search, openOrderSheetById]);
 
   const handleSelectOrder = (order) => {
     setSelectedOrder(order);

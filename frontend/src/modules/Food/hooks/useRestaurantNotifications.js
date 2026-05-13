@@ -15,6 +15,21 @@ const resolveAudioSource = (source) => {
 const supportsBrowserNotifications = () =>
   typeof window !== 'undefined' && typeof Notification !== 'undefined';
 
+const buildRestaurantTargetUrl = (orderData = {}) => {
+  const orderId = String(
+    orderData?.orderId ||
+    orderData?.order_id ||
+    orderData?.orderMongoId ||
+    orderData?.order_mongo_id ||
+    orderData?._id ||
+    orderData?.id ||
+    ''
+  ).trim();
+
+  if (!orderId) return '/restaurant/orders';
+  return `/restaurant/orders?orderId=${encodeURIComponent(orderId)}`;
+};
+
 const buildRestaurantOrderNotification = (orderData = {}) => {
   const orderId = orderData.orderId || orderData.orderMongoId || 'New';
   const itemCount = Array.isArray(orderData.items) ? orderData.items.length : 0;
@@ -28,7 +43,7 @@ const buildRestaurantOrderNotification = (orderData = {}) => {
     tag: `restaurant-order-${orderId}`,
     data: {
       orderId,
-      targetUrl: `/restaurant/orders/${orderData.orderMongoId || orderData.orderId || ''}`,
+      targetUrl: buildRestaurantTargetUrl(orderData),
     },
   };
 }
@@ -41,7 +56,7 @@ const triggerWebViewNativeNotification = async (orderData = {}) => {
     body: `Order #${orderData?.orderId || orderData?.orderMongoId || orderData?.id || ''}`.trim(),
     orderId: orderData?.orderId || orderData?.order_id || '',
     orderMongoId: orderData?.orderMongoId || orderData?.order_mongo_id || '',
-    targetUrl: `/restaurant/orders/${orderData?.orderMongoId || orderData?.orderId || ''}`,
+    targetUrl: buildRestaurantTargetUrl(orderData),
   };
 
   try {

@@ -76,6 +76,7 @@ export default function RestaurantRouter() {
           }
         >
           <Route path="" element={<RestaurantOrdersEntry />} />
+          <Route path="orders" element={<RestaurantOrdersEntry />} />
           <Route path="orders/all" element={<RestaurantOrderHistoryEntry />} />
           <Route path="orders/:id" element={<OrderDetails />} />
           <Route path="notifications" element={<RestaurantNotifications />} />

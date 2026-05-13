@@ -10,28 +10,40 @@ import {
 import useNotificationInbox from "@food/hooks/useNotificationInbox"
 import { useRestaurantNotifications } from "@food/hooks/useRestaurantNotifications"
 
-const getOrdersTabs = (basePath = "/food/restaurant") => [
-  { id: "orders", label: "Orders", icon: FileText, route: `${basePath}` },
+const getOrdersTabs = (basePath = "/restaurant") => [
+  { id: "orders", label: "Orders", icon: FileText, route: `${basePath}/orders` },
   { id: "inventory", label: "Inventory", icon: Package, route: `${basePath}/inventory` },
   { id: "feedback", label: "Feedback", icon: MessageSquare, route: `${basePath}/feedback` },
   { id: "explore", label: "Explore", icon: Compass, route: `${basePath}/explore` },
 ]
 
-const findActiveTab = (tabs, pathname) =>
-  tabs
+const normalizeRestaurantPathname = (pathname = "") => {
+  const value = String(pathname || "").trim()
+  if (value.startsWith("/food/restaurant")) {
+    const normalized = value.replace(/^\/food\/restaurant/, "/restaurant")
+    return normalized || "/restaurant"
+  }
+  return value || "/restaurant"
+}
+
+const findActiveTab = (tabs, pathname) => {
+  const normalizedPathname = normalizeRestaurantPathname(pathname)
+
+  if (normalizedPathname === "/restaurant" || normalizedPathname === "/restaurant/orders") {
+    return tabs.find((tab) => tab.id === "orders")
+  }
+
+  return tabs
     .slice()
     .sort((a, b) => b.route.length - a.route.length)
-    .find((tab) => pathname === tab.route || pathname.startsWith(tab.route + "/"))
+    .find((tab) => normalizedPathname === tab.route || normalizedPathname.startsWith(tab.route + "/"))
+}
 
 export default function BottomNavOrders() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-
-  const basePath = pathname.includes("/food/restaurant")
-    ? "/food/restaurant"
-    : pathname.includes("/restaurant")
-    ? "/food/restaurant"
-    : "/food/restaurant"
+  const normalizedPathname = useMemo(() => normalizeRestaurantPathname(pathname), [pathname])
+  const basePath = "/restaurant"
 
   const { unreadCount } = useNotificationInbox("restaurant", { limit: 20, pollMs: 60 * 1000 })
   const { newOrder, newReservation } = useRestaurantNotifications();
@@ -44,12 +56,12 @@ export default function BottomNavOrders() {
   }
 
   const activeTab = useMemo(() => {
-    const match = findActiveTab(tabs, pathname)
+    const match = findActiveTab(tabs, normalizedPathname)
     return match?.id || "orders"
-  }, [tabs, pathname])
+  }, [tabs, normalizedPathname])
 
   const handleTabClick = (tab) => {
-    if (tab.route && tab.route !== pathname) {
+    if (tab.route && tab.route !== normalizedPathname) {
       navigate(tab.route)
     }
   }

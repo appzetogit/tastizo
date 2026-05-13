@@ -555,7 +555,12 @@ export default function OrdersPage() {
         order={notificationOrder}
         onClose={clearNewOrder}
         onViewOrder={(order) => {
-          navigate(`/restaurant/orders/${order.orderMongoId || order.orderId}`)
+          const nextOrderId = order.orderId || order.orderMongoId || order._id || order.id
+          navigate(
+            nextOrderId
+              ? `/restaurant/orders?orderId=${encodeURIComponent(nextOrderId)}`
+              : `/restaurant/orders`
+          )
         }}
       />
     </div>

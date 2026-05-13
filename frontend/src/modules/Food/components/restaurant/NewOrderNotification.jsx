@@ -15,7 +15,12 @@ export default function NewOrderNotification({ order, onClose, onViewOrder }) {
     if (onViewOrder) {
       onViewOrder(order);
     } else {
-      navigate(`/restaurant/orders/${order.orderMongoId || order.orderId}`);
+      const nextOrderId = order.orderId || order.orderMongoId || order._id || order.id;
+      navigate(
+        nextOrderId
+          ? `/restaurant/orders?orderId=${encodeURIComponent(nextOrderId)}`
+          : `/restaurant/orders`,
+      );
     }
     onClose();
   };
