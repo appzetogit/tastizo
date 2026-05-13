@@ -11,6 +11,17 @@ import { FoodRestaurant } from '../../modules/food/restaurant/models/restaurant.
 
 const router = express.Router();
 
+const normalizePlatform = (platform) => {
+    const normalized = String(platform || '').trim().toLowerCase();
+    if (normalized === 'mobile' || normalized === 'android' || normalized === 'ios') {
+        return 'mobile';
+    }
+    if (normalized === 'web') {
+        return 'web';
+    }
+    return undefined;
+};
+
 const getOwnerContext = (req) => ({
     ownerType: req.user?.role,
     ownerId: req.user?.userId
@@ -73,7 +84,7 @@ router.post('/save', authMiddleware, async (req, res, next) => {
     try {
         const { ownerType, ownerId } = getOwnerContext(req);
         const token = String(req.body?.token || '').trim();
-        const platform = req.body?.platform === 'mobile' ? 'mobile' : 'web';
+        const platform = normalizePlatform(req.body?.platform) || 'web';
 
         console.log(`[FCM-DEBUG] /save request received: ownerType=${ownerType}, ownerId=${ownerId}, platform=${platform}, tokenPreview=${token?.slice(0, 10)}...`);
 
@@ -127,7 +138,7 @@ const handleRemoveToken = async (req, res, next) => {
     try {
         const { ownerType, ownerId } = getOwnerContext(req);
         const token = String(req.params?.token || req.body?.token || '').trim();
-        const platform = req.body?.platform === 'mobile' ? 'mobile' : req.body?.platform === 'web' ? 'web' : undefined;
+        const platform = normalizePlatform(req.body?.platform);
 
         if (!ownerType || !ownerId) {
             return sendError(res, 401, 'Authentication required');
@@ -149,7 +160,7 @@ router.delete('/remove/:token', authMiddleware, handleRemoveToken);
 router.post('/test', authMiddleware, async (req, res, next) => {
     try {
         const { ownerType, ownerId } = getOwnerContext(req);
-        const platform = req.body?.platform === 'mobile' ? 'mobile' : req.body?.platform === 'web' ? 'web' : undefined;
+        const platform = normalizePlatform(req.body?.platform);
 
         if (!ownerType || !ownerId) {
             return sendError(res, 401, 'Authentication required');

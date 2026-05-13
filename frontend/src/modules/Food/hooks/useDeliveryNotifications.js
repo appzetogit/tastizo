@@ -211,6 +211,7 @@ export const useDeliveryNotifications = () => {
   const [claimedOrderId, setClaimedOrderId] = useState(null); // set when another partner claims an order
   const [adminNotification, setAdminNotification] = useState(null);
   const joinedDeliveryRoomRef = useRef(null);
+  const currentZoneIdRef = useRef(currentZoneId);
   const ALERT_LOOP_INTERVAL_MS = 4500;
   const ALERT_LOOP_MAX_MS = 120000;
   const ALERT_DEDUPE_MS = 15000;
@@ -474,6 +475,10 @@ export const useDeliveryNotifications = () => {
       debugWarn('Delivery recovery sync failed:', error?.message || error);
     }
   }, [deliveryPartnerId, handleIncomingOrderAlert]);
+
+  useEffect(() => {
+    currentZoneIdRef.current = currentZoneId;
+  }, [currentZoneId]);
 
   const joinDeliveryRoomIfPossible = useCallback(() => {
     if (!socketRef.current?.connected || !deliveryPartnerId) {
@@ -918,7 +923,7 @@ export const useDeliveryNotifications = () => {
         debugLog('Ignoring new_order not meant for this delivery partner', {
           orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
           deliveryPartnerId,
-          currentZoneId,
+          currentZoneId: currentZoneIdRef.current,
         });
         return;
       }
@@ -936,7 +941,7 @@ export const useDeliveryNotifications = () => {
         debugLog('Ignoring new_order_available not meant for this delivery partner', {
           orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
           deliveryPartnerId,
-          currentZoneId,
+          currentZoneId: currentZoneIdRef.current,
         });
         return;
       }
@@ -1074,7 +1079,7 @@ export const useDeliveryNotifications = () => {
         socketRef.current = null;
       }
     };
-  }, [currentZoneId, deliveryPartnerId, handleIncomingOrderAlert, joinDeliveryRoomIfPossible, playNotificationSound, recoverDeliveryState, showBackgroundOrderNotification, shouldAcceptSocketOrderForPartner, startAlertLoop, stopAlertLoop]);
+  }, [deliveryPartnerId, handleIncomingOrderAlert, joinDeliveryRoomIfPossible, playNotificationSound, recoverDeliveryState, showBackgroundOrderNotification, shouldAcceptSocketOrderForPartner, startAlertLoop, stopAlertLoop]);
 
   useEffect(() => {
     if (!deliveryPartnerId) {

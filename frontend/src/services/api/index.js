@@ -47,6 +47,14 @@ const emptyDataStub = () =>
     config: {},
   });
 
+const normalizeFcmPlatform = (platform) => {
+  const normalized = String(platform || "").trim().toLowerCase();
+  if (normalized === "mobile" || normalized === "android" || normalized === "ios") {
+    return "mobile";
+  }
+  return "web";
+};
+
 export const api = {
   get: (_url, _config) => emptyDataStub(),
   post: (_url, _data, _config) => emptyDataStub(),
@@ -1152,20 +1160,22 @@ export const restaurantAPI = {
     }),
   saveFcmToken: (token, platform = "web") => {
     if (!token) return Promise.reject(new Error("FCM token is required"));
+    const normalizedPlatform = normalizeFcmPlatform(platform);
     const path =
-      platform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save";
+      normalizedPlatform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save";
     return apiClient.post(
       path,
-      { token: String(token), platform },
+      { token: String(token), platform: normalizedPlatform },
       { contextModule: "restaurant" },
     );
   },
   removeFcmToken: (token, platform = "web") => {
     if (!token) return Promise.reject(new Error("FCM token is required"));
+    const normalizedPlatform = normalizeFcmPlatform(platform);
     return apiClient.delete(
       `/fcm-tokens/remove/${encodeURIComponent(String(token))}`,
       {
-        data: { token: String(token), platform },
+        data: { token: String(token), platform: normalizedPlatform },
         contextModule: "restaurant",
       },
     );
@@ -1715,20 +1725,22 @@ export const deliveryAPI = {
   },
   saveFcmToken: (token, platform = "web") => {
     if (!token) return Promise.reject(new Error("FCM token is required"));
+    const normalizedPlatform = normalizeFcmPlatform(platform);
     const path =
-      platform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save";
+      normalizedPlatform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save";
     return apiClient.post(
       path,
-      { token: String(token), platform },
+      { token: String(token), platform: normalizedPlatform },
       { contextModule: "delivery" },
     );
   },
   removeFcmToken: (token, platform = "web") => {
     if (!token) return Promise.reject(new Error("FCM token is required"));
+    const normalizedPlatform = normalizeFcmPlatform(platform);
     return apiClient.delete(
       `/fcm-tokens/remove/${encodeURIComponent(String(token))}`,
       {
-        data: { token: String(token), platform },
+        data: { token: String(token), platform: normalizedPlatform },
         contextModule: "delivery",
       },
     );
@@ -1749,18 +1761,95 @@ export const deliveryAPI = {
       contextModule: "delivery",
     }),
   /** PATCH /food/delivery/availability - set online/offline (and optional lat/lng). */
-  updateOnlineStatus: (isOnline) =>
-    apiClient.patch(
-      "/food/delivery/availability",
-      { status: isOnline ? "online" : "offline" },
-      { contextModule: "delivery" },
-    ),
-  updateLocation: (latitude, longitude, isOnline, extras = {}) =>
-    apiClient.patch(
-      "/food/delivery/availability",
-      { status: isOnline ? "online" : "offline", latitude, longitude, ...extras },
-      { contextModule: "delivery" },
-    ),
+  updateOnlineStatus: (() => {
+    let inFlight = new Map();
+    let recent = new Map();
+    const CACHE_MS = 4000;
+
+    const buildKey = (payload) => JSON.stringify(payload);
+
+    return (isOnline) => {
+      const payload = { status: isOnline ? "online" : "offline" };
+      const key = buildKey(payload);
+      const now = Date.now();
+      const cached = recent.get(key);
+      if (cached && now - cached.at < CACHE_MS) {
+        return Promise.resolve(cached.res);
+      }
+
+      const existing = inFlight.get(key);
+      if (existing) return existing;
+
+      const p = apiClient
+        .patch("/food/delivery/availability", payload, {
+          contextModule: "delivery",
+        })
+        .then((res) => {
+          recent.set(key, { at: Date.now(), res });
+          return res;
+        })
+        .finally(() => {
+          inFlight.delete(key);
+        });
+
+      inFlight.set(key, p);
+      return p;
+    };
+  })(),
+  updateLocation: (() => {
+    let inFlight = new Map();
+    let recent = new Map();
+    const CACHE_MS = 4000;
+
+    const normalizeCoord = (value) => {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return null;
+      return Number(num.toFixed(6));
+    };
+
+    const buildKey = (payload) =>
+      JSON.stringify(
+        Object.keys(payload)
+          .sort()
+          .reduce((acc, key) => {
+            acc[key] = payload[key];
+            return acc;
+          }, {}),
+      );
+
+    return (latitude, longitude, isOnline, extras = {}) => {
+      const payload = {
+        status: isOnline ? "online" : "offline",
+        latitude: normalizeCoord(latitude),
+        longitude: normalizeCoord(longitude),
+        ...extras,
+      };
+      const key = buildKey(payload);
+      const now = Date.now();
+      const cached = recent.get(key);
+      if (cached && now - cached.at < CACHE_MS) {
+        return Promise.resolve(cached.res);
+      }
+
+      const existing = inFlight.get(key);
+      if (existing) return existing;
+
+      const p = apiClient
+        .patch("/food/delivery/availability", payload, {
+          contextModule: "delivery",
+        })
+        .then((res) => {
+          recent.set(key, { at: Date.now(), res });
+          return res;
+        })
+        .finally(() => {
+          inFlight.delete(key);
+        });
+
+      inFlight.set(key, p);
+      return p;
+    };
+  })(),
   /** Orders */
   getOrders: (() => {
     // Collapse duplicate list fetches triggered by multiple effects + StrictMode.
@@ -2207,7 +2296,7 @@ export const userAPI = {
     }),
   saveFcmToken: (token, options = {}) => {
     if (!token) return Promise.reject(new Error("FCM token is required"));
-    const platform = options?.platform === "mobile" ? "mobile" : "web";
+    const platform = normalizeFcmPlatform(options?.platform);
     const path =
       platform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save";
     return apiClient.post(
@@ -2218,7 +2307,7 @@ export const userAPI = {
   },
   removeFcmToken: (token, options = {}) => {
     if (!token) return Promise.reject(new Error("FCM token is required"));
-    const platform = options?.platform === "mobile" ? "mobile" : "web";
+    const platform = normalizeFcmPlatform(options?.platform);
     return apiClient.delete(
       `/fcm-tokens/remove/${encodeURIComponent(String(token))}`,
       {
@@ -2228,7 +2317,7 @@ export const userAPI = {
     );
   },
   testFcmNotification: (options = {}) => {
-    const platform = options?.platform === "mobile" ? "mobile" : "web";
+    const platform = normalizeFcmPlatform(options?.platform);
     return apiClient.post("/fcm-tokens/test", { platform }, { contextModule: "user" });
   },
 };

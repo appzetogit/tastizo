@@ -233,7 +233,14 @@ const shouldRemoveTokenFromError = (errorJson, response) => {
 
 const getOwnerModel = (ownerType) => OWNER_MODELS[String(ownerType || '').toUpperCase()] || null;
 
-const getTokenFieldForPlatform = (platform) => OWNER_TOKEN_FIELDS[platform === 'mobile' ? 'mobile' : 'web'];
+const normalizePlatform = (platform) => {
+    const normalized = String(platform || '').trim().toLowerCase();
+    return normalized === 'mobile' || normalized === 'android' || normalized === 'ios'
+        ? 'mobile'
+        : 'web';
+};
+
+const getTokenFieldForPlatform = (platform) => OWNER_TOKEN_FIELDS[normalizePlatform(platform)];
 
 const normalizeTokenList = (tokens = []) => {
     const normalized = [...new Set((Array.isArray(tokens) ? tokens : [tokens]).map(sanitizeString).filter(Boolean))];
@@ -274,7 +281,7 @@ export const upsertFirebaseDeviceToken = async ({ ownerType, ownerId, token, pla
         throw new Error('ownerType, ownerId, and token are required.');
     }
 
-    const normalizedPlatform = platform === 'mobile' ? 'mobile' : 'web';
+    const normalizedPlatform = normalizePlatform(platform);
     const model = getOwnerModel(ownerType);
     if (!model) {
         console.error(`[FCM-DEBUG] upsert - Unsupported owner type: ${ownerType}`);
