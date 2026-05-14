@@ -420,10 +420,9 @@ export default function Home() {
       if (!categoriesSection) return;
 
       const rect = categoriesSection.getBoundingClientRect();
-      const sectionBottom = rect.bottom + currentScrollY;
 
-      // When to show/hide the sticky header
-      if (currentScrollY > sectionBottom) {
+      // Show stuck bar as soon as this section reaches the top of viewport
+      if (rect.top <= 0) {
         setIsStickyHeaderVisible(true);
       } else {
         setIsStickyHeaderVisible(false);
@@ -2701,161 +2700,168 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* "What's on your mind today?" Section - Now with Sticky Logic */}
-                <div
-                  id="categories-section"
-                  className="px-4 py-2.5 space-y-3 bg-white dark:bg-[#0a0a0a]"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white min-w-0 flex-shrink leading-tight">What's on your mind today?</h2>
-                    <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
-                    <Link to="/food/user/categories" className="text-sm font-bold text-gray-400 dark:text-gray-500 flex items-center gap-0.5 whitespace-nowrap shrink-0">
-                      View All <ArrowDownUp className="h-3 w-3 rotate-90" />
-                    </Link>
-                  </div>
-
-                  {/* Categories Horizontal Slider */}
-                  <div className="flex overflow-x-auto gap-1.5 pb-2 scrollbar-hide -mx-4 px-4 mask-edge-fade">
-                    {displayCategories.map((category, index) => (
-                      <Link
-                        key={category.id || index}
-                        to={`/food/user/category/${category.slug}`}
-                        className="flex-shrink-0 flex flex-col items-center gap-2.5 group w-[92px]"
-                      >
-                        <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-md border-2 border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] group-active:scale-95 transition-all duration-300">
-                          {/* Shining Glint Effect */}
-                          <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
-                            <motion.div
-                              animate={{
-                                x: ['-200%', '200%'],
-                              }}
-                              transition={{
-                                duration: 2,
-                                repeat: Infinity,
-                                repeatDelay: 3 + index * 0.5,
-                                ease: "easeInOut"
-                              }}
-                              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-20deg] w-[150%] h-full"
-                            />
-                          </div>
-
-                          <OptimizedImage
-                            src={category.image}
-                            alt={category.name}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                          />
-                        </div>
-                        <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300 text-center leading-tight line-clamp-1 w-full px-0.5">
-                          {category.name}
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Dynamic Sticky Header (Search + Slider + Filters) */}
                 <AnimatePresence>
                   {isStickyHeaderVisible && (
                     <motion.div
-                      initial={{ y: -200 }}
-                      animate={{ y: 0 }}
-                      exit={{ y: -200 }}
-                      transition={{ duration: 0.3, ease: "easeOut" }}
-                      className="fixed top-0 left-0 right-0 z-[100] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md shadow-lg border-b border-gray-100 dark:border-white/5 safe-top"
+                      initial={{ y: -32, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{ y: -32, opacity: 0 }}
+                      transition={{ duration: 0.22, ease: "easeOut" }}
+                      className="fixed top-0 left-0 right-0 z-[100] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md border-b border-gray-100 dark:border-white/5"
                     >
-                      {/* Search Bar Row (appears when scrolling up) */}
-                      <AnimatePresence>
-                        {showStickySearch && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="px-4 pt-3 pb-2"
-                          >
-                            <div
-                              className="bg-white dark:bg-[#1a1a1a] rounded-2xl flex items-center px-4 py-3 cursor-pointer border-2 border-[#2A9C64]/30 dark:border-[#2A9C64]/50 shadow-md"
-                              onClick={handleSearchFocus}
-                            >
-                              <Search className="h-5 w-5 text-[#2A9C64] dark:text-[#a14b84] mr-3" strokeWidth={2.5} />
-                              <div className="flex-1 relative h-5 overflow-hidden">
-                                <span className="absolute inset-0 text-base text-gray-400 font-medium">Search "biryani"</span>
-                              </div>
-                              <div className="h-5 w-[1px] bg-gray-200 dark:bg-white/10 mx-2" />
-                              <Mic className="h-5 w-5 text-[#2A9C64] dark:text-[#a14b84]" />
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-
-                      {/* Categories Slider (Increased Icon Size) */}
-                      <div className="flex overflow-x-auto gap-5 py-3 pb-2 scrollbar-hide px-4 mask-edge-fade">
-                        {displayCategories.map((category, index) => (
-                          <Link
-                            key={`sticky-${category.id || index}`}
-                            to={`/food/user/category/${category.slug}`}
-                            className="flex-shrink-0 flex flex-col items-center gap-1.5 group w-[74px]"
-                          >
-                            <div className="w-18 h-18 rounded-full overflow-hidden border-2 border-gray-100 dark:border-white/10 shadow-md bg-white dark:bg-white/5 transition-transform group-active:scale-95">
-                              <OptimizedImage
-                                src={category.image}
-                                alt={category.name}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                            <span className="text-[9px] font-bold text-gray-700 dark:text-gray-300 text-center truncate w-full uppercase tracking-tighter">
-                              {category.name}
-                            </span>
+                      <div className="px-4 pt-2.5 pb-2 space-y-3 bg-white dark:bg-[#0a0a0a]">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white min-w-0 flex-shrink leading-tight">What's on your mind today?</h2>
+                          <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
+                          <Link to="/food/user/categories" className="text-sm font-bold text-gray-400 dark:text-gray-500 flex items-center gap-0.5 whitespace-nowrap shrink-0">
+                            View All <ArrowDownUp className="h-3 w-3 rotate-90" />
                           </Link>
-                        ))}
+                        </div>
+
+                        <div className="flex overflow-x-auto gap-1.5 pb-2 scrollbar-hide -mx-4 px-4 mask-edge-fade">
+                          {displayCategories.map((category, index) => (
+                            <Link
+                              key={`fixed-${category.id || index}`}
+                              to={`/food/user/category/${category.slug}`}
+                              className="flex-shrink-0 flex flex-col items-center gap-2.5 group w-[92px]"
+                            >
+                              <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-md border-2 border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] group-active:scale-95 transition-all duration-300">
+                                <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
+                                  <motion.div
+                                    animate={{ x: ['-200%', '200%'] }}
+                                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 + index * 0.5, ease: "easeInOut" }}
+                                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-20deg] w-[150%] h-full"
+                                  />
+                                </div>
+                                <OptimizedImage
+                                  src={category.image}
+                                  alt={category.name}
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                                />
+                              </div>
+                              <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300 text-center leading-tight line-clamp-1 w-full px-0.5">
+                                {category.name}
+                              </span>
+                            </Link>
+                          ))}
+                        </div>
                       </div>
 
-                      {/* Integrated Filters Row */}
-                      <div className="px-4 pb-3">
+                      <section className="pt-2.5 pb-3 px-4 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md transition-colors duration-300">
                         <div
-                          className="flex items-center gap-2 overflow-x-auto scrollbar-hide"
+                          className="flex items-center gap-2 overflow-x-auto scrollbar-hide px-4 py-0.5"
                           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
                         >
                           <button
                             type="button"
                             onClick={() => setIsFilterOpen(true)}
-                            className="h-8 px-3 rounded-full flex items-center gap-1.5 bg-white dark:bg-white/10 border border-gray-200 dark:border-white/5 shadow-sm whitespace-nowrap"
+                            className="h-9 px-4 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-bold transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 shadow-sm active:scale-95"
                           >
-                            <SlidersHorizontal className="h-3.5 w-3.5" />
-                            <span className="text-[10px] font-bold uppercase">Filters</span>
+                            <SlidersHorizontal className="h-4 w-4 text-black" />
+                            <span className="text-xs font-bold text-black dark:text-white uppercase tracking-tight">
+                              Filters
+                            </span>
                           </button>
 
                           {[
                             { id: "delivery-under-30", label: "Under 30 mins" },
                             { id: "delivery-under-45", label: "Under 45 mins" },
                             { id: "distance-under-1km", label: "Under 1km", icon: MapPin },
+                            { id: "distance-under-2km", label: "Under 2km", icon: MapPin },
                           ].map((filter) => {
                             const Icon = filter.icon;
                             const isActive = activeFilters.has(filter.id);
                             return (
                               <button
-                                key={filter.id}
+                                key={`fixed-filter-${filter.id}`}
                                 type="button"
-                                onClick={() => toggleFilter(filter.id)}
-                                className={`h-8 px-4 rounded-full flex items-center gap-2 whitespace-nowrap transition-all font-bold text-[10px] uppercase ${isActive
-                                  ? "bg-[#2A9C64] text-white"
-                                  : "bg-white dark:bg-white/5 border border-gray-100 dark:border-white/5 text-gray-600 dark:text-gray-400"
+                                onClick={() => {
+                                  const nextFilters = new Set(activeFilters);
+                                  if (nextFilters.has(filter.id)) {
+                                    nextFilters.delete(filter.id);
+                                  } else {
+                                    nextFilters.add(filter.id);
+                                  }
+                                  setActiveFilters(nextFilters);
+                                  void applyFiltersAndRefetch(nextFilters, sortBy, selectedCuisine);
+                                }}
+                                className={`h-9 px-4 rounded-full flex items-center gap-2 whitespace-nowrap flex-shrink-0 transition-all font-bold shadow-sm active:scale-95 ${isActive
+                                  ? "bg-[#2A9C64] text-white border border-[#2A9C64] hover:bg-orange-700"
+                                  : "bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
                                   }`}
                               >
-                                {Icon && <Icon className="h-3 w-3" />}
-                                {filter.label}
+                                {Icon && (
+                                  <Icon className={`h-3.5 w-3.5 ${isActive ? "fill-white" : ""}`} />
+                                )}
+                                <span className="text-xs font-bold tracking-tight">
+                                  {filter.label}
+                                </span>
                               </button>
                             );
                           })}
                         </div>
-                      </div>
+                      </section>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
-                {/* Filters Sticky Sidebar Header */}
-                <section className="py-2.5 px-4 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md sticky top-0 z-[40] -mx-4 w-[calc(100%+2rem)] transition-colors duration-300">
+                <div
+                  id="categories-section"
+                  className="sticky top-0 z-[40] -mx-4 w-[calc(100%+2rem)] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md transition-colors duration-300"
+                >
+                  {/* "What's on your mind today?" Section - Now with Sticky Logic */}
+                  <div className="px-4 pt-2.5 pb-2 space-y-3 bg-white dark:bg-[#0a0a0a]">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white min-w-0 flex-shrink leading-tight">What's on your mind today?</h2>
+                      <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
+                      <Link to="/food/user/categories" className="text-sm font-bold text-gray-400 dark:text-gray-500 flex items-center gap-0.5 whitespace-nowrap shrink-0">
+                        View All <ArrowDownUp className="h-3 w-3 rotate-90" />
+                      </Link>
+                    </div>
+
+                    {/* Categories Horizontal Slider */}
+                    <div className="flex overflow-x-auto gap-1.5 pb-2 scrollbar-hide -mx-4 px-4 mask-edge-fade">
+                      {displayCategories.map((category, index) => (
+                        <Link
+                          key={category.id || index}
+                          to={`/food/user/category/${category.slug}`}
+                          className="flex-shrink-0 flex flex-col items-center gap-2.5 group w-[92px]"
+                        >
+                          <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-md border-2 border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] group-active:scale-95 transition-all duration-300">
+                            {/* Shining Glint Effect */}
+                            <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
+                              <motion.div
+                                animate={{
+                                  x: ['-200%', '200%'],
+                                }}
+                                transition={{
+                                  duration: 2,
+                                  repeat: Infinity,
+                                  repeatDelay: 3 + index * 0.5,
+                                  ease: "easeInOut"
+                                }}
+                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-20deg] w-[150%] h-full"
+                              />
+                            </div>
+
+                            <OptimizedImage
+                              src={category.image}
+                              alt={category.name}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                            />
+                          </div>
+                          <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300 text-center leading-tight line-clamp-1 w-full px-0.5">
+                            {category.name}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Filters Sticky Sidebar Header */}
+                  <section className="pt-2.5 pb-3 px-4 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md transition-colors duration-300">
                   <div
-                    className="flex items-center gap-2 overflow-x-auto scrollbar-hide px-4"
+                    className="flex items-center gap-2 overflow-x-auto scrollbar-hide px-4 py-0.5"
                     style={{
                       scrollbarWidth: "none",
                       msOverflowStyle: "none",
@@ -2915,7 +2921,8 @@ export default function Home() {
                       );
                     })}
                   </div>
-                </section>
+                  </section>
+                </div>
 
               </motion.div>
             ) : (

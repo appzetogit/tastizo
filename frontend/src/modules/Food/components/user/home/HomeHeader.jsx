@@ -83,6 +83,70 @@ export default function HomeHeader({
     );
   }, [broadcastNotifications, notifications]);
 
+  const savedAddressLabel = useMemo(() => {
+    if (location?.label && String(location.label).trim()) {
+      return String(location.label).trim();
+    }
+    if (savedAddressText && String(savedAddressText).trim()) {
+      return String(savedAddressText).trim();
+    }
+    try {
+      const stored = localStorage.getItem("userLocation");
+      if (!stored) return "";
+      const parsed = JSON.parse(stored);
+      return parsed?.label && String(parsed.label).trim() ? String(parsed.label).trim() : "";
+    } catch {
+      return "";
+    }
+  }, [location?.label, savedAddressText]);
+
+  const displayArea = useMemo(() => {
+    const topStr = location?.area || location?.mainTitle || location?.address?.split(",")?.[0] || "Select Location";
+    if (/^-?\d+(\.\d+)?$/.test(String(topStr).trim())) {
+      return "Current Location";
+    }
+    return topStr;
+  }, [location?.area, location?.mainTitle, location?.address]);
+
+  const displayAddress = useMemo(() => {
+    if (savedAddressLabel) {
+      return savedAddressLabel
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .slice(0, 3)
+        .join(", ");
+    }
+
+    const addr = location?.address || "";
+    const city = location?.city || "Indore";
+    const area = location?.area || "";
+
+    let compactAddress = addr;
+    if (city) {
+      compactAddress = compactAddress.replace(new RegExp(`,?\\s*${city}\\s*`, "gi"), "").trim();
+    }
+    if (area && area.length > 3) {
+      compactAddress = compactAddress.replace(new RegExp(`^${area},?\\s*`, "i"), "").trim();
+    }
+
+    if (
+      /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(addr.trim()) ||
+      /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(compactAddress.trim()) ||
+      !compactAddress ||
+      compactAddress === ","
+    ) {
+      return "Pinpoint location";
+    }
+
+    return compactAddress
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(", ");
+  }, [location?.address, location?.city, location?.area, savedAddressLabel]);
+
   const unreadCount = notifications.filter(n => !n.read).length + broadcastUnreadCount;
 
   const handleDeleteNotification = (id, source = "local") => {
@@ -118,41 +182,13 @@ export default function HomeHeader({
             </div>
             <div className="flex min-w-0 flex-col items-start text-left">
               <div className="flex items-center justify-start gap-1">
-                <span className="text-[13px] font-black text-white truncate">
-                  {(() => {
-                    const topStr = location?.area || location?.mainTitle || (location?.address?.split(',')[0]) || "Select Location";
-                    // If it looks like a latitude/longitude number, show "Current Location"
-                    if (/^-?\d+(\.\d+)?$/.test(topStr.trim())) {
-                      return "Current Location";
-                    }
-                    return topStr;
-                  })()}
+                <span className="max-w-[150px] text-[13px] font-black text-white truncate">
+                  {displayArea}
                 </span>
                 <ChevronDown className="h-3 w-3 text-white/70" />
               </div>
-              <span className="text-[10px] font-medium text-white/80 truncate leading-tight mt-0.5">
-                {(() => {
-                  const addr = location?.address || savedAddressText || "";
-                  const city = location?.city || "Indore";
-                  const area = location?.area || "";
-                  
-                  let displayAddr = addr;
-                  if (city) {
-                    displayAddr = displayAddr.replace(new RegExp(`,?\\s*${city}\\s*`, 'gi'), '').trim();
-                  }
-                  if (area && area.length > 3) {
-                    displayAddr = displayAddr.replace(new RegExp(`^${area},?\\s*`, 'i'), '').trim();
-                  }
-                  
-                  // Check if it's just coordinates or essentially empty
-                  if (/^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(addr.trim()) || /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(displayAddr.trim())) {
-                    return "Pinpoint location";
-                  }
-                  if (!displayAddr || displayAddr === ",") {
-                    return "Pinpoint location"; // Fallback instead of saying "Base address" if it gets empty
-                  }
-                  return displayAddr;
-                })()}
+              <span className="max-w-[170px] text-[10px] font-medium text-white/80 truncate leading-tight mt-0.5">
+                {displayAddress}
               </span>
               <span className="text-[9px] font-black text-white/50 uppercase tracking-[0.2em] leading-tight mt-1">
                 {location?.city || "Indore"}
