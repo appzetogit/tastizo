@@ -13,7 +13,14 @@ function App() {
 
   const shouldHideSplashForRoute = useMemo(() => {
     const pathname = location.pathname || ''
-    return pathname.startsWith('/restaurant') || pathname.startsWith('/food/restaurant')
+    return (
+      pathname === '/' ||
+      pathname === '/food' ||
+      pathname.startsWith('/user') ||
+      pathname.startsWith('/food/') ||
+      pathname.startsWith('/restaurant') ||
+      pathname.startsWith('/food/restaurant')
+    )
   }, [location.pathname])
 
   const handleSplashFinish = () => {
