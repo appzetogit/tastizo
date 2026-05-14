@@ -99,7 +99,7 @@ export default function HomeHeader({
   };
 
   return (
-    <div className="relative pt-2 pb-0 px-4 transition-all duration-700 overflow-hidden bg-transparent shadow-none">
+    <div className="relative pt-7 pb-0 px-4 transition-all duration-700 overflow-hidden bg-transparent shadow-none">
       {/* Subtle Artistic Glows - Adds depth without being 'boring' */}
       <div className="absolute top-[-20%] right-[-10%] w-48 h-48 bg-[#2A9C64]/5 blur-[80px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-20%] left-[-10%] w-48 h-48 bg-[#48c479]/5 blur-[80px] rounded-full pointer-events-none" />
@@ -107,17 +107,17 @@ export default function HomeHeader({
       {/* Main Header Content */}
       <div className="relative z-10 space-y-2.5">
         {/* Row 1: Location, Toggle, and Notifications */}
-        <div className="flex items-center justify-between gap-3">
+        <div className="relative w-full pr-20">
           {/* Location Selector */}
           <div
-            className="flex items-center gap-2 cursor-pointer group min-w-0 flex-1"
+            className="flex min-w-0 w-full items-center gap-2 cursor-pointer group justify-start"
             onClick={handleLocationClick}
           >
             <div className="bg-white/10 p-1 rounded-lg group-active:scale-95 transition-all">
               <MapPin className="h-3.5 w-3.5 text-white/90 fill-white/20" />
             </div>
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-1">
+            <div className="flex min-w-0 flex-col items-start text-left">
+              <div className="flex items-center justify-start gap-1">
                 <span className="text-[13px] font-black text-white truncate">
                   {(() => {
                     const topStr = location?.area || location?.mainTitle || (location?.address?.split(',')[0]) || "Select Location";
@@ -161,7 +161,7 @@ export default function HomeHeader({
           </div>
 
           {/* Right Actions: Veg Toggle & Bell */}
-          <div className="flex items-center gap-2.5">
+          <div className="absolute right-0 top-0 flex shrink-0 items-center gap-2.5">
             {/* Pure Veg Toggle */}
             <div 
               className={`flex items-center gap-1.5 px-2 py-1 rounded-full border transition-all duration-300 ${vegMode ? 'border-white/40 bg-white/10' : 'border-white/10 bg-white/5'}`}

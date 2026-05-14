@@ -2159,7 +2159,7 @@ export default function Cart() {
       {/* Header - Sticky at top */}
       <div className="bg-white dark:bg-[#1a1a1a] border-b dark:border-gray-800 sticky top-0 z-20 flex-shrink-0">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between px-3 md:px-6 py-2 md:py-3">
+          <div className="flex items-center justify-between px-3 md:px-6 pt-7 pb-2 md:pt-7 md:pb-3">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <Button 
                 variant="ghost" 
@@ -2190,7 +2190,7 @@ export default function Cart() {
       </div>
 
       {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-44 md:pb-52">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pt-4 pb-44 md:pt-4 md:pb-52">
         {/* Savings Banner */}
         {savings > 0 && (
           <div className="bg-blue-100 dark:bg-blue-900/20 px-4 md:px-6 py-2 md:py-3 flex-shrink-0">
@@ -2202,7 +2202,7 @@ export default function Cart() {
           </div>
         )}
 
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 pb-4 md:pb-6">
           <div className="max-w-3xl mx-auto">
             {/* Main Cart Content */}
             <div className="space-y-2 md:space-y-4">

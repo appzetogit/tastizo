@@ -2278,7 +2278,7 @@ function RestaurantDetailsContent() {
         onConfirm={handleConfirmReplaceCart}
       />
       {/* Header - Back, Search, Menu (like reference image) */}
-      <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-3 md:pt-4 lg:pt-5 pb-2 md:pb-3 bg-white dark:bg-[#0a0a0a]">
+      <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-7 md:pt-7 lg:pt-7 pb-2 md:pb-3 bg-white dark:bg-[#0a0a0a]">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           {/* Back Button */}
           <Button

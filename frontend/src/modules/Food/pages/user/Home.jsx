@@ -2852,11 +2852,8 @@ export default function Home() {
                   )}
                 </AnimatePresence>
 
-                {/* Admin Hero Banners Section - Now below categories */}
-                {HeroBannerSection}
-
                 {/* Filters Sticky Sidebar Header */}
-                <section className="py-2.5 px-4 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md sticky top-0 z-[40] -mx-4 w-[calc(100%+2rem)] border-b border-gray-100 dark:border-white/5 shadow-sm transition-colors duration-300">
+                <section className="py-2.5 px-4 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md sticky top-0 z-[40] -mx-4 w-[calc(100%+2rem)] transition-colors duration-300">
                   <div
                     className="flex items-center gap-2 overflow-x-auto scrollbar-hide px-4"
                     style={{

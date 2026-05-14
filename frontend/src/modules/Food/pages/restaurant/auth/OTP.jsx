@@ -270,7 +270,7 @@ export default function RestaurantOTP() {
   return (
     <AnimatedPage className="min-h-screen bg-white">
       <div className="mx-auto flex min-h-screen w-full max-w-[390px] flex-col bg-white">
-        <div className="flex items-center border-b border-[#e9e9e9] px-5 py-5">
+        <div className="flex items-center border-b border-[#e9e9e9] px-5 pt-7 pb-5">
           <button
             onClick={() => navigate("/food/restaurant/login")}
             className="p-1"
@@ -284,7 +284,7 @@ export default function RestaurantOTP() {
           <span className="w-7 shrink-0" aria-hidden="true" />
         </div>
 
-        <div className="flex flex-1 flex-col px-7 pt-10 pb-8">
+        <div className="flex flex-1 flex-col px-7 pt-7 pb-8">
           <div className="text-center">
             <div className="space-y-3">
               <h2 className="text-[1.05rem] font-medium leading-7 text-black">

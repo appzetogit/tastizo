@@ -10,6 +10,7 @@ export default function BottomNavigation() {
   const pathname = location.pathname
   const [under250PriceLimit, setUnder250PriceLimit] = useState(250)
   const [mounted, setMounted] = useState(false)
+  const [isHiddenOnScroll, setIsHiddenOnScroll] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -31,6 +32,38 @@ export default function BottomNavigation() {
         if (!cancelled) setUnder250PriceLimit(250)
       })
     return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let lastScrollY = window.scrollY
+    let ticking = false
+
+    const updateVisibility = () => {
+      const currentScrollY = window.scrollY
+      const scrollDelta = currentScrollY - lastScrollY
+      const isNearTop = currentScrollY < 24
+
+      if (isNearTop) {
+        setIsHiddenOnScroll(false)
+      } else if (scrollDelta > 6) {
+        setIsHiddenOnScroll(true)
+      }
+
+      lastScrollY = currentScrollY
+      ticking = false
+    }
+
+    const handleScroll = () => {
+      if (ticking) return
+      ticking = true
+      window.requestAnimationFrame(updateVisibility)
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+    }
   }, [])
 
   // Normalize: strip /food prefix for easier matching
@@ -57,7 +90,7 @@ export default function BottomNavigation() {
 
   return createPortal(
     <div
-      className="mobile-bottom-nav bottom-nav bottom-navigation md:hidden bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-gray-800 shadow-lg"
+      className={`mobile-bottom-nav bottom-nav bottom-navigation md:hidden bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-gray-800 shadow-lg transition-transform duration-300 ease-out ${isHiddenOnScroll ? "translate-y-full pointer-events-none" : "translate-y-0"}`}
       style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 0px)" }}
     >
       <div className="flex items-center justify-around h-auto px-2 sm:px-4">

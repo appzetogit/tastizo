@@ -500,7 +500,7 @@ export default function DeliveryOTP() {
   return (
     <AnimatedPage className="min-h-screen bg-white flex flex-col">
       {/* Header */}
-      <div className="relative flex items-center justify-center py-4 px-4 border-b border-gray-200">
+      <div className="relative flex items-center justify-center pt-7 pb-4 px-4 border-b border-gray-200">
         <button
           onClick={() => navigate("/food/delivery/login")}
           className="absolute left-4 top-1/2 -translate-y-1/2"
@@ -512,7 +512,7 @@ export default function DeliveryOTP() {
       </div>
 
       {/* Main Content */}
-      <div className="flex flex-col justify-center px-6 pt-8 pb-12">
+      <div className="flex flex-col justify-center px-6 pt-7 pb-12">
         <div className="max-w-md mx-auto w-full space-y-8">
           {/* Message */}
           <div className="text-center space-y-2">
