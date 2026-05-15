@@ -47,6 +47,8 @@ export default function BottomNavigation() {
         setIsHiddenOnScroll(false)
       } else if (scrollDelta > 6) {
         setIsHiddenOnScroll(true)
+      } else if (scrollDelta < -2) {
+        setIsHiddenOnScroll(false)
       }
 
       lastScrollY = currentScrollY

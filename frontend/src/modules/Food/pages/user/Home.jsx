@@ -2709,15 +2709,7 @@ export default function Home() {
                       transition={{ duration: 0.22, ease: "easeOut" }}
                       className="fixed top-0 left-0 right-0 z-[100] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md border-b border-gray-100 dark:border-white/5"
                     >
-                      <div className="px-4 pt-2.5 pb-2 space-y-3 bg-white dark:bg-[#0a0a0a]">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white min-w-0 flex-shrink leading-tight">What's on your mind today?</h2>
-                          <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
-                          <Link to="/food/user/categories" className="text-sm font-bold text-gray-400 dark:text-gray-500 flex items-center gap-0.5 whitespace-nowrap shrink-0">
-                            View All <ArrowDownUp className="h-3 w-3 rotate-90" />
-                          </Link>
-                        </div>
-
+                      <div className="px-4 pt-8 pb-2 space-y-3 bg-white dark:bg-[#0a0a0a]">
                         <div className="flex overflow-x-auto gap-1.5 pb-2 scrollbar-hide -mx-4 px-4 mask-edge-fade">
                           {displayCategories.map((category, index) => (
                             <Link
@@ -2811,13 +2803,15 @@ export default function Home() {
                 >
                   {/* "What's on your mind today?" Section - Now with Sticky Logic */}
                   <div className="px-4 pt-2.5 pb-2 space-y-3 bg-white dark:bg-[#0a0a0a]">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white min-w-0 flex-shrink leading-tight">What's on your mind today?</h2>
-                      <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
-                      <Link to="/food/user/categories" className="text-sm font-bold text-gray-400 dark:text-gray-500 flex items-center gap-0.5 whitespace-nowrap shrink-0">
-                        View All <ArrowDownUp className="h-3 w-3 rotate-90" />
-                      </Link>
-                    </div>
+                    {!isStickyHeaderVisible && (
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white min-w-0 flex-shrink leading-tight">What's on your mind today?</h2>
+                        <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
+                        <Link to="/food/user/categories" className="text-sm font-bold text-gray-400 dark:text-gray-500 flex items-center gap-0.5 whitespace-nowrap shrink-0">
+                          View All <ArrowDownUp className="h-3 w-3 rotate-90" />
+                        </Link>
+                      </div>
+                    )}
 
                     {/* Categories Horizontal Slider */}
                     <div className="flex overflow-x-auto gap-1.5 pb-2 scrollbar-hide -mx-4 px-4 mask-edge-fade">
