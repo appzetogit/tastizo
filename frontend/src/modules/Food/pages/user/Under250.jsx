@@ -1430,7 +1430,7 @@ export default function Under250() {
           <>
             {/* Backdrop */}
             <motion.div
-              className="fixed inset-0 bg-black/40 z-[9999]"
+              className="fixed inset-0 bg-black/40 z-[1000000]"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -1440,7 +1440,7 @@ export default function Under250() {
 
             {/* Item Detail Bottom Sheet */}
             <motion.div
-              className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-2xl lg:max-w-4xl xl:max-w-5xl z-[10000] bg-white dark:bg-[#1a1a1a] rounded-t-3xl shadow-2xl max-h-[90vh] md:max-h-[85vh] flex flex-col"
+              className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-2xl lg:max-w-4xl xl:max-w-5xl z-[1000001] bg-white dark:bg-[#1a1a1a] rounded-t-3xl shadow-2xl max-h-[90vh] md:max-h-[85vh] flex flex-col"
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
@@ -1658,7 +1658,7 @@ export default function Under250() {
         {showShareOptions && selectedItem && (
           <>
             <motion.div
-              className="fixed inset-0 bg-black/40 z-[10020]"
+              className="fixed inset-0 bg-black/40 z-[1000020]"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -1670,7 +1670,7 @@ export default function Under250() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ duration: 0.2, type: "spring", damping: 28, stiffness: 320 }}
-              className="fixed bottom-0 left-0 right-0 z-[10021] bg-white dark:bg-[#1a1a1a] rounded-t-3xl shadow-2xl px-4 py-4"
+              className="fixed bottom-0 left-0 right-0 z-[1000021] bg-white dark:bg-[#1a1a1a] rounded-t-3xl shadow-2xl px-4 py-4"
             >
               <div className="flex justify-center pb-3">
                 <div className="w-12 h-1 bg-gray-300 rounded-full" />

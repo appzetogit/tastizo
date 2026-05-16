@@ -143,7 +143,7 @@ export async function calculateOrderPricing(userId, dto) {
   const gstRate = feeSettings.gstRate != null ? Number(feeSettings.gstRate) : 0;
   const tax =
     Number.isFinite(gstRate) && gstRate > 0
-      ? Math.round(subtotal * (gstRate / 100))
+      ? Math.round((subtotal + packagingFee + deliveryFee + platformFee) * (gstRate / 100))
       : 0;
 
   let discount = 0;

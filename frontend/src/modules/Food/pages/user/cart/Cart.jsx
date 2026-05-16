@@ -1191,7 +1191,7 @@ export default function Cart() {
     : null
   const platformFee = pricing != null ? (pricing.platformFee ?? 0) : (feeSettings.platformFee ?? 0)
   const packagingFee = pricing != null ? (pricing.packagingFee ?? 0) : (feeSettings.packagingFee ?? 0)
-  const gstCharges = pricing != null ? (pricing.tax ?? 0) : Math.round(subtotal * ((feeSettings.gstRate ?? 0) / 100))
+  const gstCharges = pricing != null ? (pricing.tax ?? 0) : Math.round((subtotal + deliveryFee + platformFee + packagingFee) * ((feeSettings.gstRate ?? 0) / 100))
   const discount = pricing?.discount || (appliedCoupon ? Math.min(appliedCoupon.discount, subtotal * 0.5) : 0)
   const totalBeforeDiscount = subtotal + deliveryFee + platformFee + packagingFee + gstCharges
   const total = pricing?.total || (totalBeforeDiscount - discount)

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BellRing, Loader2, Search, Send, Trash2 } from "lucide-react";
+import { BellRing, Loader2, RefreshCw, Search, Send, Trash2 } from "lucide-react";
 import { adminAPI } from "@food/api";
 
 const TARGET_OPTIONS = [
@@ -52,6 +52,7 @@ export default function NotificationBroadcast() {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [resendingId, setResendingId] = useState(null);
   const [recipientLoading, setRecipientLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [allRecipients, setAllRecipients] = useState([]);
@@ -191,6 +192,24 @@ export default function NotificationBroadcast() {
       window.dispatchEvent(new Event("adminBroadcastUpdated"));
       await loadHistory();
     } catch {}
+  };
+
+  const handleResend = async (id) => {
+    if (!id || resendingId) return;
+    if (!window.confirm("Are you sure you want to resend this notification?")) return;
+
+    try {
+      setResendingId(id);
+      await adminAPI.resendBroadcastNotification(id);
+      window.dispatchEvent(new Event("adminBroadcastUpdated"));
+      await loadHistory();
+      // Scroll to top to show it was added if needed, though history refresh usually enough
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (error) {
+      console.error("Failed to resend:", error);
+    } finally {
+      setResendingId(null);
+    }
   };
 
   return (
@@ -352,7 +371,16 @@ export default function NotificationBroadcast() {
                     <td className="py-4 pr-4 text-slate-700">{item?.targetLabel || item?.targetType}</td>
                     <td className="py-4 pr-4 text-slate-700">{item?.targetCount || item?.targets?.length || 0}</td>
                     <td className="py-4 pr-4 text-slate-500 whitespace-nowrap">{toDateLabel(item?.createdAt)}</td>
-                    <td className="py-4 text-right">
+                    <td className="py-4 text-right flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        disabled={submitting || !!resendingId}
+                        onClick={() => handleResend(item?._id)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${resendingId === item?._id ? "animate-spin" : ""}`} />
+                        Resend
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleDelete(item?._id)}

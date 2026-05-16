@@ -394,8 +394,12 @@ export const adminAPI = {
       contextModule: "admin",
     }),
   deleteBroadcastNotification: (id) =>
-    apiClient.delete(`/food/admin/notifications/broadcast/${String(id)}`, {
-      contextModule: "admin",
+    apiClient.delete('/food/admin/notifications/broadcast/' + String(id), {
+      contextModule: 'admin',
+    }),
+  resendBroadcastNotification: (id) =>
+    apiClient.post('/food/admin/notifications/broadcast/' + String(id) + '/resend', {}, {
+      contextModule: 'admin',
     }),
   /** List restaurants for admin. Requires admin auth. */
   getRestaurants: (params = {}, config = {}) =>

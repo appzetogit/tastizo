@@ -30,6 +30,7 @@ router.use(requireAdmin);
 router.post('/notifications/broadcast', notificationBroadcastController.createBroadcastNotificationController);
 router.get('/notifications/broadcast', notificationBroadcastController.getBroadcastNotificationsController);
 router.delete('/notifications/broadcast/:id', notificationBroadcastController.deleteBroadcastNotificationController);
+router.post('/notifications/broadcast/:id/resend', notificationBroadcastController.resendBroadcastNotificationController);
 
 // ----- Customers -----
 router.get('/customers', adminController.getCustomers);

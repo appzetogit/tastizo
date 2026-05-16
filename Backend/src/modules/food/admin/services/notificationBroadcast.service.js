@@ -320,3 +320,23 @@ export const deleteBroadcastNotification = async (broadcastId) => {
         deletedInboxCount: Number(result?.deletedCount || 0)
     };
 };
+
+export const resendBroadcastNotification = async (broadcastId, adminId) => {
+    const normalizedId = toObjectId(broadcastId, 'broadcastId');
+    const existing = await BroadcastNotification.findById(normalizedId).lean();
+
+    if (!existing) {
+        throw new NotFoundError('Broadcast notification not found');
+    }
+
+    const payload = {
+        title: existing.title,
+        message: existing.message,
+        targetType: existing.targetType,
+        targetIds: existing.targetIds || [],
+        targets: existing.targets || [],
+        link: existing.link || ''
+    };
+
+    return createBroadcastNotification({ body: payload, adminId });
+};

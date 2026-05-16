@@ -2658,6 +2658,72 @@ export async function updateRestaurantLocation(id, body = {}) {
         .populate('zoneId', 'name zoneName serviceLocation isActive')
         .lean();
 }
+export async function getCategories(query = {}) {
+    const limit = Math.min(Math.max(parseInt(query.limit, 10) || 100, 1), 1000);
+    const page = Math.max(parseInt(query.page, 10) || 1, 1);
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+    if (query.approvalStatus && ['pending', 'approved', 'rejected'].includes(query.approvalStatus)) {
+        filter.approvalStatus = query.approvalStatus;
+    }
+    if (query.isApproved !== undefined) {
+        filter.isApproved = query.isApproved === true;
+    }
+    if (query.zoneId) {
+        if (query.zoneId === 'global') {
+            filter.zoneId = { $exists: false };
+        } else if (mongoose.Types.ObjectId.isValid(query.zoneId)) {
+            filter.zoneId = new mongoose.Types.ObjectId(query.zoneId);
+        }
+    }
+    if (query.search && String(query.search).trim()) {
+        const term = String(query.search).trim();
+        filter.name = { $regex: term, $options: 'i' };
+    }
+
+    const [list, total] = await Promise.all([
+        FoodCategory.find(filter)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .populate('restaurantId', 'restaurantName name')
+            .populate('createdByRestaurantId', 'restaurantName name')
+            .populate('zoneId', 'name zoneName serviceLocation')
+            .lean(),
+        FoodCategory.countDocuments(filter)
+    ]);
+
+    const categories = await Promise.all(list.map(async (c) => {
+        const itemCount = await FoodItem.countDocuments({ categoryId: c._id });
+        return {
+            id: c._id,
+            _id: c._id,
+            name: c.name,
+            image: c.image || '',
+            type: c.type || '',
+            foodTypeScope: c.foodTypeScope || 'Both',
+            approvalStatus: c.approvalStatus || 'approved',
+            isApproved: c.isApproved !== false,
+            rejectionReason: c.rejectionReason || '',
+            isActive: c.isActive !== false,
+            status: c.isActive !== false, // compatibility
+            sortOrder: c.sortOrder || 0,
+            itemCount,
+            zoneId: c.zoneId,
+            isGlobal: !c.restaurantId,
+            restaurantId: c.restaurantId,
+            createdByRestaurantId: c.createdByRestaurantId,
+            restaurant: c.restaurantId ? { id: c.restaurantId._id, name: c.restaurantId.restaurantName || c.restaurantId.name } : null,
+            createdByRestaurant: c.createdByRestaurantId ? { id: c.createdByRestaurantId._id, name: c.createdByRestaurantId.restaurantName || c.createdByRestaurantId.name } : null,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt
+        };
+    }));
+
+    return { categories, total, page, limit };
+}
+
 export async function createCategory(body) {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) throw new ValidationError('Category name is required');

@@ -2,7 +2,8 @@ import { sendResponse, sendError } from '../../../../utils/response.js';
 import {
     createBroadcastNotification,
     getBroadcastNotifications,
-    deleteBroadcastNotification
+    deleteBroadcastNotification,
+    resendBroadcastNotification
 } from '../services/notificationBroadcast.service.js';
 
 export const createBroadcastNotificationController = async (req, res) => {
@@ -35,5 +36,14 @@ export const deleteBroadcastNotificationController = async (req, res) => {
         return sendResponse(res, 200, 'Broadcast notification deleted successfully', data);
     } catch (error) {
         return sendError(res, error.statusCode || 500, error.message || 'Failed to delete broadcast notification');
+    }
+};
+
+export const resendBroadcastNotificationController = async (req, res) => {
+    try {
+        const data = await resendBroadcastNotification(req.params?.id, req.user?.userId);
+        return sendResponse(res, 201, 'Broadcast notification resent successfully', data);
+    } catch (error) {
+        return sendError(res, error.statusCode || 500, error.message || 'Failed to resend broadcast notification');
     }
 };

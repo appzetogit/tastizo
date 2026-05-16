@@ -643,12 +643,6 @@ export default function ItemDetailsPage() {
         return
       }
 
-      if (otherPlatformGst === "" || !Number.isFinite(Number(otherPlatformGst))) {
-        setOtherPlatformGstError(true)
-        toast.error("Other platform GST is required")
-        setUploadingImages(false)
-        return
-      }
       setOtherPlatformGstError(false)
 
       const variantPayload = normalizedVariants.map((variant) => ({
@@ -665,7 +659,7 @@ export default function ItemDetailsPage() {
           description: itemDescription.trim(),
           price: hasVariants ? undefined : parsedBasePrice,
           priceOnOtherPlatforms: priceOnOtherPlatforms ? Number(priceOnOtherPlatforms) : null,
-          otherPlatformGst: Number(otherPlatformGst),
+          otherPlatformGst: otherPlatformGst ? Number(otherPlatformGst) : null,
           variants: variantPayload,
           image: allImageUrls.length > 0 ? allImageUrls[0] : "",
           foodType: foodType,
@@ -689,7 +683,7 @@ export default function ItemDetailsPage() {
           description: itemDescription.trim(),
           price: hasVariants ? undefined : parsedBasePrice,
           priceOnOtherPlatforms: priceOnOtherPlatforms ? Number(priceOnOtherPlatforms) : null,
-          otherPlatformGst: Number(otherPlatformGst),
+          otherPlatformGst: otherPlatformGst ? Number(otherPlatformGst) : null,
           variants: variantPayload,
           image: allImageUrls.length > 0 ? allImageUrls[0] : "",
           foodType: foodType,
@@ -1089,7 +1083,7 @@ export default function ItemDetailsPage() {
 
                   <div className="relative">
                     <label className="block text-xs text-gray-600 mb-1">
-                      Other platform GST (%) <span className="text-red-500">*</span>
+                      Other platform GST (%) <span className="text-gray-400 text-xs font-normal">(Optional)</span>
                     </label>
                     <div className="relative">
                       <input
@@ -1110,9 +1104,7 @@ export default function ItemDetailsPage() {
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-600">%</span>
                     </div>
-                    {otherPlatformGstError && (
-                      <p className="mt-1.5 text-xs text-red-500">Other platform GST is required</p>
-                    )}
+                    {/* Error message removed since it's optional */}
                     <p className="mt-1.5 text-xs text-gray-500">
                       Enter the GST rate applied on other platforms for this item.
                     </p>
