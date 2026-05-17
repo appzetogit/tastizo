@@ -139,9 +139,9 @@ export default function SignIn() {
             className="flex flex-col items-center justify-center z-10"
           >
             <img
-              src="/logo.png"
+              src={logoNew}
               alt="Tastizo"
-              className="h-64 lg:h-80 w-auto object-contain "
+              className="h-64 lg:h-80 w-auto object-contain"
             />
           </motion.div>
         </div>
@@ -311,7 +311,7 @@ export default function SignIn() {
               style={{ backgroundColor: TASTIZO_BG }}
             >
               <img
-                src="/TASTIZO.png"
+                src={logoNew}
                 alt="Tastizo"
                 className="h-48 w-auto object-contain sm:h-56"
               />
