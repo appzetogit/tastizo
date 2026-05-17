@@ -851,7 +851,20 @@ export default function Cart() {
       try {
         setLoadingAddons(true)
         debugLog("?? Fetching addons for restaurant ID:", idString)
-        const response = await restaurantAPI.getAddonsByRestaurantId(idString)
+        const config = {}
+        const coords = defaultAddress?.location?.coordinates
+        if (Array.isArray(coords) && coords.length === 2) {
+          config.params = {
+            lng: coords[0],
+            lat: coords[1],
+            zoneId: zoneId || undefined
+          }
+        } else if (zoneId) {
+          config.params = {
+            zoneId
+          }
+        }
+        const response = await restaurantAPI.getAddonsByRestaurantId(idString, config)
         debugLog("? Addons API response received:", response?.data)
         debugLog("?? Response structure:", {
           success: response?.data?.success,
@@ -899,7 +912,16 @@ export default function Cart() {
         return
       }
 
-      // Wait for restaurantData to be loaded (including fallback search)
+      // Try resolving restaurant ID directly from cart items FIRST to start loading instantly!
+      const immediateId = cartRestaurantObjectId || cartRestaurantPublicId || restaurantData?._id || restaurantData?.restaurantId;
+      
+      if (immediateId) {
+        debugLog("? Using immediate cart restaurant ID for instant addons loading:", immediateId)
+        fetchAddonsWithId(immediateId)
+        return
+      }
+
+      // If we don't have it in cart items (fallback), wait for restaurantData
       if (loadingRestaurant) {
         debugLog("? Waiting for restaurantData to load (including fallback search)...")
         return
@@ -925,7 +947,7 @@ export default function Cart() {
     }
 
     fetchAddons()
-  }, [restaurantData, cart.length, loadingRestaurant])
+  }, [restaurantData, cart.length, loadingRestaurant, defaultAddress, zoneId, cartRestaurantObjectId, cartRestaurantPublicId])
 
   // Fetch coupons for items in cart
   useEffect(() => {

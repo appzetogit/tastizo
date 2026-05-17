@@ -1352,21 +1352,18 @@ export default function Home() {
     location,
   ]);
 
-  const { zoneId: effectiveZoneId } = useZone(effectiveLocation);
-
   const {
-    isOutOfService: isSavedAddressOutOfService,
-    loading: savedAddressZoneLoading,
-    error: savedAddressZoneError,
-  } = useZone(defaultSavedAddressLocation);
+    isOutOfService: isEffectiveLocationOutOfService,
+    loading: effectiveLocationZoneLoading,
+    zoneId: effectiveZoneId,
+  } = useZone(effectiveLocation);
 
-  const hasSavedAddress = Boolean(defaultSavedAddress && savedAddressText);
+  const isActuallyEmpty = !loadingRestaurants && (restaurantsData || []).length === 0;
+  const hasActiveFilters = activeFilters.size > 0 || Boolean(selectedCuisine) || Boolean(sortBy);
+
   const shouldShowOutOfZoneHome =
-    hasSavedAddress &&
-    Boolean(defaultSavedAddressLocation) &&
-    !savedAddressZoneLoading &&
-    !savedAddressZoneError &&
-    isSavedAddressOutOfService;
+    (!effectiveLocationZoneLoading && isEffectiveLocationOutOfService) ||
+    (isActuallyEmpty && !hasActiveFilters && !effectiveLocationZoneLoading && !isLoadingFilterResults);
 
   // Mock points value - replace with actual points from context/store
   const userPoints = 99;
@@ -2489,24 +2486,10 @@ export default function Home() {
 
   return (
 
-    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a] pb-16 md:pb-6 overflow-x-clip">
-      {shouldShowOutOfZoneHome && (
-        <div className="fixed inset-0 z-[90] pointer-events-none">
-          <div className="absolute inset-0 bg-slate-300/35 backdrop-blur-[1px]" />
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 px-4">
-            <div className="rounded-xl border border-red-200 bg-red-50/95 text-red-700 px-4 py-2 shadow-sm text-sm sm:text-base font-semibold max-w-[calc(100vw-2rem)] text-center">
-              You are out of zone
-            </div>
-          </div>
-        </div>
-      )}
+    <div className={`relative min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowOutOfZoneHome ? 'pb-6' : 'pb-16 md:pb-6'} overflow-x-clip`}>
 
-      <div
-        className={
-          shouldShowOutOfZoneHome
-            ? "grayscale opacity-70 transition-all duration-300"
-            : "transition-all duration-300"
-        }>
+
+      <div className="transition-all duration-300">
         {/* Unified Background for Entire Page - Vibrant Food Theme */}
         <div className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none overflow-hidden z-0">
           {/* Main Background */}
@@ -2814,7 +2797,7 @@ export default function Home() {
                     )}
 
                     {/* Categories Horizontal Slider */}
-                    <div className="flex overflow-x-auto gap-1.5 pb-2 scrollbar-hide -mx-4 px-4 mask-edge-fade">
+                    <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-hide px-5 mask-edge-fade">
                       {displayCategories.map((category, index) => (
                         <Link
                           key={category.id || index}
@@ -2853,9 +2836,9 @@ export default function Home() {
                   </div>
 
                   {/* Filters Sticky Sidebar Header */}
-                  <section className="pt-2.5 pb-3 px-4 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md transition-colors duration-300">
+                  <section className="pt-2.5 pb-3 px-0 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md transition-colors duration-300">
                   <div
-                    className="flex items-center gap-2 overflow-x-auto scrollbar-hide px-4 py-0.5"
+                    className="flex items-center gap-2.5 overflow-x-auto scrollbar-hide px-5 py-0.5"
                     style={{
                       scrollbarWidth: "none",
                       msOverflowStyle: "none",
@@ -2933,7 +2916,7 @@ export default function Home() {
           </AnimatePresence>
         </div>
 
-        {recommendedForYouRestaurants.length > 0 && (
+        {!shouldShowOutOfZoneHome && recommendedForYouRestaurants.length > 0 && (
           <motion.section
             className="content-auto pt-1 sm:pt-2"
             initial={false}
@@ -2986,17 +2969,17 @@ export default function Home() {
           </motion.section>
         )}
 
-        {/* Explore More Section */}
-        <motion.section
-          className="content-auto pt-2 sm:pt-3 lg:pt-4"
-          initial={false}
-          animate={{ opacity: 1, y: 0 }}>
-          <div className="px-4 mb-6 flex items-center gap-2">
-            <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white leading-tight">
-              {exploreMoreHeading}
-            </h2>
-            <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
-          </div>
+        {!shouldShowOutOfZoneHome && (
+          <motion.section
+            className="content-auto pt-2 sm:pt-3 lg:pt-4"
+            initial={false}
+            animate={{ opacity: 1, y: 0 }}>
+            <div className="px-4 mb-6 flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white leading-tight">
+                {exploreMoreHeading}
+              </h2>
+              <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
+            </div>
           <div className="px-4 pb-4 lg:pb-6">
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 sm:gap-5 md:gap-6">
               {showExploreSkeleton ? (
@@ -3055,12 +3038,13 @@ export default function Home() {
             </div>
           </div>
         </motion.section>
+      )}
 
         {/* Featured Foods - Horizontal Scroll */}
 
         {/* Restaurants - Enhanced with Animations */}
         <motion.section
-          className="content-auto space-y-0 pt-3 sm:pt-4 lg:pt-6 pb-8 md:pb-10"
+          className={`content-auto space-y-0 pt-3 sm:pt-4 lg:pt-6 ${shouldShowOutOfZoneHome ? "pb-0" : "pb-8 md:pb-10"}`}
           initial={false}
           animate={{ opacity: 1 }}>
           <div className="px-4 mb-3 lg:mb-4">
@@ -3077,7 +3061,59 @@ export default function Home() {
             className={`relative ${showRestaurantSkeleton ? "min-h-[360px] sm:min-h-[420px]" : ""}`}>
             {/* Loading Overlay */}
             <AnimatePresence>
-              {showRestaurantSkeleton && (
+              {shouldShowOutOfZoneHome ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-col items-center justify-center py-12 px-6 text-center"
+                >
+                  <div className="relative w-64 h-64 sm:w-80 sm:h-80 mb-6">
+                    <div className="absolute inset-0 bg-gradient-to-b from-green-50 to-white rounded-full opacity-60" />
+                    <motion.img
+                      animate={{ y: [0, -10, 0] }}
+                      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                      src="/tastizo_chef_green.png"
+                      alt="Coming Soon Chef"
+                      className="relative z-10 w-full h-full object-contain"
+                    />
+                    {/* Decorative Floating Icons */}
+                    <motion.div
+                      animate={{ y: [0, -10, 0] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                      className="absolute top-10 -left-4 text-orange-200"
+                    >
+                      <UtensilsCrossed className="w-8 h-8 opacity-40" />
+                    </motion.div>
+                    <motion.div
+                      animate={{ y: [0, 10, 0] }}
+                      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+                      className="absolute bottom-10 -right-4 text-amber-200"
+                    >
+                      <Flame className="w-8 h-8 opacity-40" />
+                    </motion.div>
+                    <motion.div
+                      animate={{ scale: [1, 1.1, 1] }}
+                      transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                      className="absolute top-1/2 -right-8 text-rose-200"
+                    >
+                      <Leaf className="w-6 h-6 opacity-30" />
+                    </motion.div>
+                  </div>
+
+                  <div className="space-y-3 mb-8">
+                    <h2 className="text-3xl font-black text-[#3a142c] tracking-tight">Coming Soon!</h2>
+                    <p className="text-gray-500 max-w-xs mx-auto leading-relaxed text-sm sm:text-base">
+                      Currently we are not operating on this area. We are coming soon to your location!
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2 mb-8">
+                    <div className="w-8 h-1.5 rounded-full bg-gray-100" />
+                    <div className="w-12 h-1.5 rounded-full bg-green-200" />
+                    <div className="w-8 h-1.5 rounded-full bg-gray-100" />
+                  </div>
+                </motion.div>
+              ) : showRestaurantSkeleton && (
                 <motion.div
                   className="absolute inset-0 z-10 rounded-lg bg-white/94 dark:bg-[#1a1a1a]/94"
                   initial={{ opacity: 0 }}
@@ -3094,9 +3130,10 @@ export default function Home() {
                 </motion.div>
               )}
             </AnimatePresence>
-            <div
-              className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-4 lg:gap-5 xl:gap-6 px-4 pt-1 sm:pt-1.5 lg:pt-2 items-stretch ${isLoadingFilterResults || loadingRestaurants ? "opacity-50" : "opacity-100"} transition-opacity duration-300`}>
-              {visibleRestaurants.map((restaurant, index) => {
+            {!shouldShowOutOfZoneHome && (
+              <div
+                className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-4 lg:gap-5 xl:gap-6 px-4 pt-1 sm:pt-1.5 lg:pt-2 items-stretch ${isLoadingFilterResults || loadingRestaurants ? "opacity-50" : "opacity-100"} transition-opacity duration-300`}>
+                {visibleRestaurants.map((restaurant, index) => {
                 const nameStr =
                   typeof restaurant?.name === "string"
                     ? restaurant.name.trim()
@@ -3296,6 +3333,7 @@ export default function Home() {
                 );
               })}
             </div>
+          )}
           </div>
           <div className="flex flex-col items-center pt-2 sm:pt-3 gap-2 px-4">
             {hasMoreRestaurants && (

@@ -14,11 +14,12 @@ const toRestaurantPath = (value) => {
 }
 
 const getNormalizedRestaurantPath = (pathname) => {
-  if (pathname.startsWith("/food/restaurant")) {
-    return pathname.slice("/food/restaurant".length) || "/"
+  const lower = String(pathname || "").trim().toLowerCase()
+  if (lower.startsWith("/food/restaurant")) {
+    return lower.slice("/food/restaurant".length) || "/"
   }
 
-  return pathname || "/"
+  return lower || "/"
 }
 
 const resolveRestaurantBackPath = ({ pathname, state }) => {
@@ -86,26 +87,31 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
     normalizedPath === "/privacy" ||
     normalizedPath === "/terms"
   ) {
-    return explicitBackPath || "/food/restaurant"
+    return explicitBackPath || "/food/restaurant/explore"
   }
 
   if (
     normalizedPath === "/reviews" ||
     /^\/reviews\/[^/]+\/reply$/.test(normalizedPath) ||
     normalizedPath === "/ratings-reviews" ||
-    normalizedPath === "/dish-ratings"
+    normalizedPath === "/dish-ratings" ||
+    normalizedPath === "/feedback"
   ) {
-    return explicitBackPath || "/food/restaurant/reviews"
+    return explicitBackPath || "/food/restaurant/explore"
   }
 
   if (
     normalizedPath === "/help-centre/support" ||
     normalizedPath === "/share-feedback"
   ) {
-    return explicitBackPath || "/food/restaurant/feedback"
+    return explicitBackPath || "/food/restaurant/explore"
   }
 
   if (normalizedPath === "/reservations") {
+    return explicitBackPath || "/food/restaurant/explore"
+  }
+
+  if (normalizedPath === "/hub-finance") {
     return explicitBackPath || "/food/restaurant/explore"
   }
 
@@ -124,7 +130,7 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
     return explicitBackPath
   }
 
-  return "/food/restaurant"
+  return "/food/restaurant/explore"
 }
 
 export default function useRestaurantBackNavigation() {

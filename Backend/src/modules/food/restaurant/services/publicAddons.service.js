@@ -21,9 +21,7 @@ const restaurantMatchesResolvedZone = (restaurant, resolvedZone) => {
 
 export async function getPublicApprovedRestaurantAddons(restaurantIdOrSlug, zoneQuery = {}) {
     const value = String(restaurantIdOrSlug || '').trim();
-    const resolvedZone = await resolveZoneFromQuery(zoneQuery || {});
     if (!value) throw new ValidationError('Restaurant id is required');
-    if (!resolvedZone?._id) return null;
     let restaurant = null;
     if (/^[0-9a-fA-F]{24}$/.test(value)) {
         restaurant = await FoodRestaurant.findOne(buildPublicVisibleRestaurantFilter({ _id: value }))
@@ -36,7 +34,13 @@ export async function getPublicApprovedRestaurantAddons(restaurantIdOrSlug, zone
             .lean();
     }
 
-    if (!restaurant?._id || !restaurantMatchesResolvedZone(restaurant, resolvedZone)) {
+    if (!restaurant?._id) {
+        return null;
+    }
+
+    // Only validate resolved zone if a valid zone was passed/resolved
+    const resolvedZone = await resolveZoneFromQuery(zoneQuery || {});
+    if (resolvedZone?._id && !restaurantMatchesResolvedZone(restaurant, resolvedZone)) {
         return null;
     }
 
