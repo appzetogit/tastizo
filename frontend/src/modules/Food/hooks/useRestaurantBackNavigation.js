@@ -6,9 +6,10 @@ const toRestaurantPath = (value) => {
   const trimmed = value.trim()
 
   if (!trimmed) return null
-  if (trimmed.startsWith("/food/restaurant")) return trimmed
-  if (trimmed === "/restaurant") return "/food/restaurant"
-  if (trimmed.startsWith("/restaurant/")) return `/food${trimmed}`
+  if (trimmed.startsWith("/restaurant")) return trimmed
+  if (trimmed.startsWith("/food/restaurant")) {
+    return trimmed.slice("/food".length)
+  }
 
   return null
 }
@@ -17,6 +18,9 @@ const getNormalizedRestaurantPath = (pathname) => {
   const lower = String(pathname || "").trim().toLowerCase()
   if (lower.startsWith("/food/restaurant")) {
     return lower.slice("/food/restaurant".length) || "/"
+  }
+  if (lower.startsWith("/restaurant")) {
+    return lower.slice("/restaurant".length) || "/"
   }
 
   return lower || "/"
@@ -27,11 +31,11 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
   const explicitBackPath = toRestaurantPath(state?.backTo) || toRestaurantPath(state?.from)
 
   if (normalizedPath === "/orders/all") {
-    return explicitBackPath || "/food/restaurant/explore"
+    return explicitBackPath || "/restaurant/explore"
   }
 
   if (/^\/orders\/[^/]+$/.test(normalizedPath)) {
-    return explicitBackPath || "/food/restaurant/orders/all"
+    return explicitBackPath || "/restaurant/orders/all"
   }
 
   if (
@@ -39,7 +43,7 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
     /^\/food\/[^/]+$/.test(normalizedPath) ||
     /^\/food\/[^/]+\/edit$/.test(normalizedPath)
   ) {
-    return explicitBackPath || "/food/restaurant/food/all"
+    return explicitBackPath || "/restaurant/inventory"
   }
 
   if (
@@ -47,14 +51,14 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
     /^\/advertisements\/[^/]+$/.test(normalizedPath) ||
     /^\/advertisements\/[^/]+\/edit$/.test(normalizedPath)
   ) {
-    return explicitBackPath || "/food/restaurant/advertisements"
+    return explicitBackPath || "/restaurant/advertisements"
   }
 
   if (
     normalizedPath === "/coupon/new" ||
     /^\/coupon\/[^/]+\/edit$/.test(normalizedPath)
   ) {
-    return explicitBackPath || "/food/restaurant/coupon"
+    return explicitBackPath || "/restaurant/coupon"
   }
 
   if (
@@ -72,7 +76,7 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
     /^\/outlet-timings\/[^/]+$/.test(normalizedPath) ||
     normalizedPath === "/zone-setup"
   ) {
-    return explicitBackPath || "/food/restaurant/explore"
+    return explicitBackPath || "/restaurant/explore"
   }
 
   if (
@@ -87,7 +91,7 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
     normalizedPath === "/privacy" ||
     normalizedPath === "/terms"
   ) {
-    return explicitBackPath || "/food/restaurant/explore"
+    return explicitBackPath || "/restaurant/explore"
   }
 
   if (
@@ -97,40 +101,40 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
     normalizedPath === "/dish-ratings" ||
     normalizedPath === "/feedback"
   ) {
-    return explicitBackPath || "/food/restaurant/explore"
+    return explicitBackPath || "/restaurant/explore"
   }
 
   if (
     normalizedPath === "/help-centre/support" ||
     normalizedPath === "/share-feedback"
   ) {
-    return explicitBackPath || "/food/restaurant/explore"
+    return explicitBackPath || "/restaurant/explore"
   }
 
   if (normalizedPath === "/reservations") {
-    return explicitBackPath || "/food/restaurant/explore"
+    return explicitBackPath || "/restaurant/explore"
   }
 
   if (normalizedPath === "/hub-finance") {
-    return explicitBackPath || "/food/restaurant/explore"
+    return explicitBackPath || "/restaurant/explore"
   }
 
   if (
     normalizedPath === "/finance-details" ||
     normalizedPath === "/download-report"
   ) {
-    return explicitBackPath || "/food/restaurant/hub-finance"
+    return explicitBackPath || "/restaurant/hub-finance"
   }
 
   if (/^\/hub-menu\/item\/[^/]+$/.test(normalizedPath)) {
-    return explicitBackPath || "/food/restaurant/explore"
+    return explicitBackPath || "/restaurant/inventory"
   }
 
   if (explicitBackPath && explicitBackPath !== pathname) {
     return explicitBackPath
   }
 
-  return "/food/restaurant/explore"
+  return "/restaurant/explore"
 }
 
 export default function useRestaurantBackNavigation() {

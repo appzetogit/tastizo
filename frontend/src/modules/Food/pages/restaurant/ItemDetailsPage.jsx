@@ -80,6 +80,7 @@ export default function ItemDetailsPage() {
   const [gst, setGst] = useState("5.0")
   const [isRecommended, setIsRecommended] = useState(false)
   const [isInStock, setIsInStock] = useState(true)
+  const [isSpicy, setIsSpicy] = useState(false)
   const [weightPerServing, setWeightPerServing] = useState("")
   const [calorieCount, setCalorieCount] = useState("")
   const [proteinCount, setProteinCount] = useState("")
@@ -137,6 +138,7 @@ export default function ItemDetailsPage() {
     setGst(item.gst?.toString() || "5.0")
     setIsRecommended(item.isRecommended || false)
     setIsInStock(item.isAvailable !== false)
+    setIsSpicy(item.isSpicy === true || item.isSpicy === 1 || String(item.isSpicy) === "true")
     setSelectedTags(item.tags || [])
 
     const existingImages = Array.isArray(item.images) && item.images.length > 0
@@ -672,6 +674,7 @@ export default function ItemDetailsPage() {
           image: allImageUrls.length > 0 ? allImageUrls[0] : "",
           foodType: foodType,
           isAvailable: isInStock,
+          isSpicy: isSpicy,
           preparationTime: preparationTime || "",
           categoryId: categoryId || undefined,
           categoryName,
@@ -696,6 +699,7 @@ export default function ItemDetailsPage() {
           image: allImageUrls.length > 0 ? allImageUrls[0] : "",
           foodType: foodType,
           isAvailable: isInStock,
+          isSpicy: isSpicy,
           preparationTime: preparationTime || "",
           categoryId: categoryId || undefined,
           categoryName,
@@ -1235,13 +1239,23 @@ export default function ItemDetailsPage() {
               <ThumbsUp className="w-4 h-4" />
               <span>Recommend</span>
             </button>
-            <div className="flex items-center gap-2">
-              <Switch
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch
                 checked={isInStock}
                 onCheckedChange={setIsInStock}
                 className="data-[state=unchecked]:bg-gray-300"
               />
               <span className="text-sm text-gray-700">In stock</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={isSpicy}
+                  onCheckedChange={setIsSpicy}
+                  className="data-[state=unchecked]:bg-gray-300"
+                />
+                <span className="text-sm text-gray-700">Spicy</span>
+              </div>
             </div>
           </div>
 
