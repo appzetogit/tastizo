@@ -131,7 +131,7 @@ async function getRiderEarning(distanceKm) {
   }
 
   if (!Number.isFinite(earning) || earning <= 0) return 0;
-  return Math.round(earning);
+  return Math.round(earning * 100) / 100;
 }
 
 function extractLatLng(locationLike) {

@@ -135,6 +135,8 @@ const normalizeCartData = (rawCart) => {
     })
 }
 
+const normalizeCartItem = (item) => normalizeCartData([item])[0] || null
+
 const resolveCartEntryId = (items, itemId, variantId = "") => {
   const normalizedItemId = String(itemId || "")
   const safeItems = Array.isArray(items) ? items : []
@@ -191,12 +193,21 @@ export function CartProvider({ children }) {
   }, [cart])
 
   const addToCart = (item, sourcePosition = null) => {
+    const normalizedIncomingItem = normalizeCartItem(item)
+    if (!normalizedIncomingItem) {
+      return {
+        ok: false,
+        error: "Invalid item data. Please refresh the page.",
+        code: "INVALID_ITEM",
+      }
+    }
+
     const safeCart = normalizeCartData(cart)
     if (safeCart.length > 0) {
       const firstItemRestaurantId = safeCart[0]?.restaurantId
       const firstItemRestaurantName = safeCart[0]?.restaurant
-      const newItemRestaurantId = item?.restaurantId
-      const newItemRestaurantName = item?.restaurant
+      const newItemRestaurantId = normalizedIncomingItem.restaurantId
+      const newItemRestaurantName = normalizedIncomingItem.restaurant
       const normalizeName = (name) => (name ? String(name).trim().toLowerCase() : '')
 
       const firstRestaurantNameNormalized = normalizeName(firstItemRestaurantName)
@@ -219,7 +230,7 @@ export function CartProvider({ children }) {
       }
     }
 
-    if (!item?.restaurantId && !item?.restaurant) {
+    if (!normalizedIncomingItem.restaurantId && !normalizedIncomingItem.restaurant) {
       return {
         ok: false,
         error: 'Item is missing restaurant information. Please refresh the page.',
@@ -234,8 +245,8 @@ export function CartProvider({ children }) {
       if (safePrev.length > 0) {
         const firstItemRestaurantId = safePrev[0]?.restaurantId;
         const firstItemRestaurantName = safePrev[0]?.restaurant;
-        const newItemRestaurantId = item?.restaurantId;
-        const newItemRestaurantName = item?.restaurant;
+        const newItemRestaurantId = normalizedIncomingItem.restaurantId;
+        const newItemRestaurantName = normalizedIncomingItem.restaurant;
         
         // Normalize restaurant names for comparison (trim and case-insensitive)
         const normalizeName = (name) => name ? name.trim().toLowerCase() : '';
@@ -269,15 +280,15 @@ export function CartProvider({ children }) {
         }
       }
       
-      const existing = safePrev.find((i) => i.id === item.id)
+      const existing = safePrev.find((i) => i.id === normalizedIncomingItem.id)
       if (existing) {
         // Set last add event for animation when incrementing existing item
         if (sourcePosition) {
           setLastAddEvent({
             product: {
-              id: item.id,
-              name: item.name,
-              imageUrl: item.image || item.imageUrl,
+              id: normalizedIncomingItem.id,
+              name: normalizedIncomingItem.name,
+              imageUrl: normalizedIncomingItem.image || normalizedIncomingItem.imageUrl,
             },
             sourcePosition,
           })
@@ -285,25 +296,25 @@ export function CartProvider({ children }) {
           setTimeout(() => setLastAddEvent(null), 1500)
         }
         return safePrev.map((i) =>
-          i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+          i.id === normalizedIncomingItem.id ? { ...i, quantity: i.quantity + 1 } : i
         )
       }
       
       // Validate item has required restaurant info
-      if (!item.restaurantId && !item.restaurant) {
+      if (!normalizedIncomingItem.restaurantId && !normalizedIncomingItem.restaurant) {
         debugError('âŒ Cannot add item: Missing restaurant information!', item);
         return safePrev;
       }
       
-      const newItem = { ...item, quantity: 1 }
+      const newItem = { ...normalizedIncomingItem, quantity: 1 }
       
       // Set last add event for animation if sourcePosition is provided
       if (sourcePosition) {
         setLastAddEvent({
           product: {
-            id: item.id,
-            name: item.name,
-            imageUrl: item.image || item.imageUrl,
+            id: normalizedIncomingItem.id,
+            name: normalizedIncomingItem.name,
+            imageUrl: normalizedIncomingItem.image || normalizedIncomingItem.imageUrl,
           },
           sourcePosition,
         })

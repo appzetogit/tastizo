@@ -78,6 +78,8 @@ export default function DiningReservations() {
     const [loading, setLoading] = useState(true)
     const [restaurant, setRestaurant] = useState(null)
     const [searchTerm, setSearchTerm] = useState("")
+    const [activeBillPromptId, setActiveBillPromptId] = useState(null)
+    const [billInputAmount, setBillInputAmount] = useState("")
     const [restaurantPhoto, setRestaurantPhoto] = useState("")
     const [restaurantPhotos, setRestaurantPhotos] = useState([])
     const [menuPhotos, setMenuPhotos] = useState([])
@@ -323,6 +325,37 @@ export default function DiningReservations() {
         } catch (error) {
             debugError("Error updating status:", error)
             toast.error("Failed to update status")
+        }
+    }
+
+    const handleSendBill = async (booking) => {
+        const amt = parseFloat(billInputAmount)
+        if (isNaN(amt) || amt <= 0) {
+            toast.error("Please enter a valid bill amount")
+            return
+        }
+
+        try {
+            const commissionPct = restaurant?.diningSettings?.commissionPct ?? 10
+            const response = await diningAPI.sendDiningBill(booking._id, amt, commissionPct)
+            if (response.data.success) {
+                setBookings(prev => prev.map(b =>
+                    b._id === booking._id ? {
+                        ...b,
+                        billAmount: amt,
+                        commissionPct,
+                        commissionAmount: Number((amt * (commissionPct / 100)).toFixed(2)),
+                        billStatus: "pending",
+                        billSentAt: new Date().toISOString()
+                    } : b
+                ))
+                toast.success("Bill sent successfully")
+                setActiveBillPromptId(null)
+                setBillInputAmount("")
+            }
+        } catch (error) {
+            debugError("Error sending bill:", error)
+            toast.error("Failed to send bill")
         }
     }
 
@@ -967,6 +1000,62 @@ export default function DiningReservations() {
                                                                     Check-out
                                                                 </button>
                                                             )}
+                                                            {booking.status === 'completed' && !booking.billAmount && (
+                                                                activeBillPromptId === booking._id ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <input
+                                                                            type="number"
+                                                                            placeholder="Amount (₹)"
+                                                                            value={billInputAmount}
+                                                                            onChange={(e) => setBillInputAmount(e.target.value)}
+                                                                            className="w-24 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-500"
+                                                                        />
+                                                                        <button
+                                                                            onClick={() => handleSendBill(booking)}
+                                                                            className="px-2 py-1 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 transition-colors"
+                                                                        >
+                                                                            Send
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setActiveBillPromptId(null)
+                                                                                setBillInputAmount("")
+                                                                            }}
+                                                                            className="px-2 py-1 bg-slate-200 text-slate-700 text-xs font-bold rounded hover:bg-slate-300 transition-colors"
+                                                                        >
+                                                                            Cancel
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setActiveBillPromptId(booking._id)
+                                                                            setBillInputAmount("")
+                                                                        }}
+                                                                        className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                                                                    >
+                                                                        Send Bill
+                                                                    </button>
+                                                                )
+                                                            )}
+                                                            {booking.status === 'completed' && booking.billAmount && (
+                                                                <div className="flex flex-col items-end gap-0.5">
+                                                                    <span className="text-xs font-bold text-slate-700">
+                                                                        Bill: ₹{booking.billAmount}
+                                                                    </span>
+                                                                    <span className={`text-[9px] font-black uppercase tracking-wider ${
+                                                                        booking.billStatus === 'paid' ? 'text-emerald-600' : 'text-amber-600'
+                                                                    }`}>
+                                                                        {booking.billStatus === 'paid' ? 'PAID' : 'SENT (UNPAID)'}
+                                                                    </span>
+                                                                    {booking.billStatus === 'paid' && (
+                                                                        <div className="text-[9px] text-slate-500 font-medium text-right mt-1 bg-slate-50 p-1.5 rounded border border-slate-100">
+                                                                            <div>Admin Fee ({booking.commissionPct ?? 10}%): <span className="font-bold text-indigo-600">₹{(booking.billAmount * ((booking.commissionPct ?? 10) / 100)).toFixed(2)}</span></div>
+                                                                            <div>Your Share: <span className="font-bold text-emerald-600">₹{(booking.billAmount - (booking.billAmount * ((booking.commissionPct ?? 10) / 100))).toFixed(2)}</span></div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                             {booking.specialRequest && (
                                                                 <button
                                                                     title={booking.specialRequest}
@@ -1080,6 +1169,72 @@ export default function DiningReservations() {
                                                         Check-out
                                                     </button>
                                                 )}
+                                                {booking.status === 'completed' && !booking.billAmount && (
+                                                    activeBillPromptId === booking._id ? (
+                                                        <div className="flex-1 flex flex-col gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200">
+                                                            <input
+                                                                type="number"
+                                                                placeholder="Amount (₹)"
+                                                                value={billInputAmount}
+                                                                onChange={(e) => setBillInputAmount(e.target.value)}
+                                                                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
+                                                            />
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => handleSendBill(booking)}
+                                                                    className="flex-1 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors"
+                                                                >
+                                                                    Send
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setActiveBillPromptId(null)
+                                                                        setBillInputAmount("")
+                                                                    }}
+                                                                    className="flex-1 py-1.5 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-300 transition-colors"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => {
+                                                                setActiveBillPromptId(booking._id)
+                                                                setBillInputAmount("")
+                                                            }}
+                                                            className="flex-1 py-2.5 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 transition-colors uppercase tracking-widest"
+                                                        >
+                                                            Send Bill
+                                                        </button>
+                                                    )
+                                                )}
+                                                {booking.status === 'completed' && booking.billAmount && (
+                                                     <div className="flex-1 flex flex-col gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                                                         <div className="flex items-center justify-between w-full">
+                                                             <span className="text-xs font-bold text-slate-700">
+                                                                 Bill Amount: ₹{booking.billAmount}
+                                                             </span>
+                                                             <span className={`text-[10px] font-black uppercase tracking-wider ${
+                                                                 booking.billStatus === 'paid' ? 'text-emerald-600' : 'text-amber-600'
+                                                             }`}>
+                                                                 {booking.billStatus === 'paid' ? 'PAID' : 'SENT (UNPAID)'}
+                                                             </span>
+                                                         </div>
+                                                         {booking.billStatus === 'paid' && (
+                                                             <div className="text-[10px] text-slate-500 font-medium w-full border-t border-slate-200/60 pt-1.5 mt-0.5 space-y-0.5">
+                                                                 <div className="flex justify-between">
+                                                                     <span>Admin Commission ({booking.commissionPct ?? 10}%):</span>
+                                                                     <span className="font-bold text-indigo-600">₹{(booking.billAmount * ((booking.commissionPct ?? 10) / 100)).toFixed(2)}</span>
+                                                                 </div>
+                                                                 <div className="flex justify-between">
+                                                                     <span>Your Payout:</span>
+                                                                     <span className="font-bold text-emerald-600">₹{(booking.billAmount - (booking.billAmount * ((booking.commissionPct ?? 10) / 100))).toFixed(2)}</span>
+                                                                 </div>
+                                                             </div>
+                                                         )}
+                                                     </div>
+                                                 )}
                                             </div>
                                         </motion.div>
                                     ))}

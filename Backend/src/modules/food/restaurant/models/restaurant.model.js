@@ -361,6 +361,7 @@ const restaurantSchema = new mongoose.Schema(
       isEnabled: { type: Boolean, default: false },
       maxGuests: { type: Number, default: 6 },
       diningType: { type: [String], default: ["family-dining"] },
+      commissionPct: { type: Number, default: 10 },
     },
     menu: {
       sections: { type: Array, default: [] },

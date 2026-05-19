@@ -29,6 +29,8 @@ const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 const INVENTORY_RECOMMENDED_KEY = "restaurant_inventory_recommended_map"
+const NO_CATEGORY_ID = "__no_category__"
+const NO_CATEGORY_LABEL = "No category"
 
 
 const getUploadErrorMessage = (error, fileName = "image") => {
@@ -54,8 +56,8 @@ export default function ItemDetailsPage() {
   const location = useLocation()
   const isNewItem = id === "new"
   const groupId = location.state?.groupId
-  const defaultCategory = location.state?.category || "Select category"
-  const defaultCategoryId = location.state?.categoryId || ""
+  const defaultCategory = location.state?.category || NO_CATEGORY_LABEL
+  const defaultCategoryId = location.state?.categoryId || NO_CATEGORY_ID
   const fileInputRef = useRef(null)
 
   // Initialize state with empty values - will be populated from API
@@ -118,9 +120,9 @@ export default function ItemDetailsPage() {
     setItemData(item)
 
     setItemName(item.name || "")
-    setCategory(item.category || item.categoryName || defaultCategory)
-    setSelectedCategoryId(item.categoryId || "")
-    setSubCategory(item.subCategory || item.category || item.categoryName || "Starters")
+    setCategory(item.category || item.categoryName || NO_CATEGORY_LABEL)
+    setSelectedCategoryId(item.categoryId || NO_CATEGORY_ID)
+    setSubCategory(item.subCategory || item.category || item.categoryName || "")
     setServesInfo(item.servesInfo || "")
     setItemSizeQuantity(item.itemSizeQuantity || "")
     setItemSizeUnit(item.itemSizeUnit || "piece")
@@ -257,10 +259,10 @@ export default function ItemDetailsPage() {
 
           debugLog('Formatted restaurant categories:', formattedCategories)
           setCategories(formattedCategories)
-          if (!selectedCategoryId && formattedCategories.length > 0) {
+          if (!selectedCategoryId && !isNewItem && formattedCategories.length > 0) {
             const preferredName = String(category || defaultCategory || "").trim()
             const matchedByName = formattedCategories.find((cat) => cat.name === preferredName)
-            const nextCategory = matchedByName || (isNewItem ? formattedCategories[0] : null)
+            const nextCategory = matchedByName || null
             if (nextCategory) {
               setSelectedCategoryId(nextCategory.id)
               setCategory(nextCategory.name)
@@ -483,6 +485,13 @@ export default function ItemDetailsPage() {
   }
 
   const handleCategorySelect = (catId, subCat) => {
+    if (String(catId || "") === NO_CATEGORY_ID) {
+      setSelectedCategoryId(NO_CATEGORY_ID)
+      setCategory(NO_CATEGORY_LABEL)
+      setSubCategory("")
+      setIsCategoryPopupOpen(false)
+      return
+    }
     const selectedCategory = categories.find(c => c.id === catId)
     setSelectedCategoryId(selectedCategory?.id || "")
     setCategory(selectedCategory?.name || "")
@@ -595,17 +604,16 @@ export default function ItemDetailsPage() {
       const matchedCategory = Array.isArray(categories)
         ? categories.find((c) => String(c?.id || "") === String(selectedCategoryId || ""))
         : null
-      const categoryId = matchedCategory?.id || matchedCategory?._id || null
-      const categoryName = matchedCategory?.name || category || ""
-
-      if (!categoryId) {
-        toast.error("Please select an approved category first")
-        setIsCategoryPopupOpen(true)
-        setUploadingImages(false)
-        return
-      }
+      const isNoCategorySelected = String(selectedCategoryId || "") === NO_CATEGORY_ID
+      const categoryId = isNoCategorySelected
+        ? null
+        : (matchedCategory?.id || matchedCategory?._id || null)
+      const categoryName = isNoCategorySelected
+        ? ""
+        : (matchedCategory?.name || category || "")
 
       if (
+        categoryId &&
         matchedCategory?.foodTypeScope &&
         matchedCategory.foodTypeScope !== "Both" &&
         matchedCategory.foodTypeScope !== foodType
@@ -929,7 +937,7 @@ export default function ItemDetailsPage() {
               className="w-full px-4 py-3 border border-gray-300 rounded-lg text-left flex items-center justify-between bg-white hover:bg-gray-50 transition-colors"
             >
               <span className="text-sm text-gray-900">
-                {category || "Select category"}
+                {category || NO_CATEGORY_LABEL}
               </span>
               <ChevronDown className="w-5 h-5 text-gray-500" />
             </button>
@@ -1291,6 +1299,13 @@ export default function ItemDetailsPage() {
                   <div className="text-center py-12 space-y-4">
                     <p className="text-sm text-gray-500">No categories available</p>
                     <button
+                      onClick={() => handleCategorySelect(NO_CATEGORY_ID, "")}
+                      className="inline-flex items-center gap-2 px-4 py-2 border border-[#2A9C64] text-[#2A9C64] rounded-lg font-semibold hover:bg-[#2A9C6408] transition-colors"
+                    >
+                      <Check className="w-5 h-5" />
+                      Continue without category
+                    </button>
+                    <button
                       onClick={() => {
                         setIsCategoryPopupOpen(false)
                         navigate('/restaurant/menu-categories')
@@ -1303,6 +1318,25 @@ export default function ItemDetailsPage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
+                    <button
+                      onClick={() => handleCategorySelect(NO_CATEGORY_ID, "")}
+                      className={`w-full rounded-lg px-4 py-3 text-left transition-colors ${
+                        String(selectedCategoryId || "") === NO_CATEGORY_ID
+                          ? "bg-gray-900 text-white"
+                          : "bg-gray-50 text-gray-900 hover:bg-gray-100"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-medium">{NO_CATEGORY_LABEL}</span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                          String(selectedCategoryId || "") === NO_CATEGORY_ID
+                            ? "border-white/30 bg-white/10 text-white"
+                            : "border-slate-200 bg-slate-100 text-slate-700"
+                        }`}>
+                          Optional
+                        </span>
+                      </div>
+                    </button>
                     {categories.map((cat) => (
                       <button
                         key={cat.id}

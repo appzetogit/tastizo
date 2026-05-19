@@ -12,10 +12,18 @@ import {
     createSettlementController,
     processSettlementController,
     listRefundsController,
-    getRefundsByOrderController
+    getRefundsByOrderController,
+    createDiningPaymentController,
+    validateDiningCouponController
 } from './payment.controller.js';
 
 const router = express.Router();
+
+// ─── Dining Coupon Validation ───
+router.post('/validate-dining-coupon', validateDiningCouponController);
+
+// ─── Dining Payment ───
+router.post('/dining-payment', createDiningPaymentController);
 
 // ─── Payment history for an order (user sees their payment trail) ───
 router.get('/orders/:orderId/payments', getPaymentHistoryController);

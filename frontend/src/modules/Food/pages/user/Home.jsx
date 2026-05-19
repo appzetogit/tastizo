@@ -258,6 +258,18 @@ const RestaurantImageCarousel = React.memo(
       return () => clearTimeout(shimmerTimeout);
     }, [renderSrc]);
 
+    useEffect(() => {
+      if (images.length <= 1) return undefined;
+
+      const autoSlideInterval = window.setInterval(() => {
+        if (!isSwiping.current) {
+          setCurrentIndex((prev) => (prev + 1) % images.length);
+        }
+      }, 3000);
+
+      return () => window.clearInterval(autoSlideInterval);
+    }, [images.length]);
+
     // Handle touch events for swipe
     const handleTouchStart = (e) => {
       touchStartX.current = e.touches[0].clientX;
@@ -275,7 +287,7 @@ const RestaurantImageCarousel = React.memo(
     };
 
     const handleTouchEnd = (e) => {
-      if (!isSwiping.current) return;
+      if (!isSwiping.current || images.length <= 1) return;
 
       touchEndX.current = e.changedTouches[0].clientX;
       const diff = touchStartX.current - touchEndX.current;
@@ -670,6 +682,26 @@ export default function Home() {
 
     },
     [buildRestaurantImageCandidates],
+  );
+
+  const extractRestaurantCardImages = useCallback(
+    (restaurant) => {
+      if (!restaurant || typeof restaurant !== "object") return [];
+
+      return extractImages([
+        ...(Array.isArray(restaurant.coverImages)
+          ? restaurant.coverImages
+          : [restaurant.coverImages]
+        ).filter(Boolean),
+        restaurant.coverImage,
+        ...(Array.isArray(restaurant.menuImages)
+          ? restaurant.menuImages
+          : [restaurant.menuImages]
+        ).filter(Boolean),
+        restaurant.profileImage,
+      ]);
+    },
+    [extractImages],
   );
 
   useEffect(() => {
@@ -1358,12 +1390,11 @@ export default function Home() {
     zoneId: effectiveZoneId,
   } = useZone(effectiveLocation);
 
-  const isActuallyEmpty = !loadingRestaurants && (restaurantsData || []).length === 0;
-  const hasActiveFilters = activeFilters.size > 0 || Boolean(selectedCuisine) || Boolean(sortBy);
-
-  const shouldShowOutOfZoneHome =
+  const hasConfirmedOutOfZone =
     (!effectiveLocationZoneLoading && isEffectiveLocationOutOfService) ||
-    (isActuallyEmpty && !hasActiveFilters && !effectiveLocationZoneLoading && !isLoadingFilterResults);
+    (!zoneLoading && isOutOfService);
+
+  const shouldShowOutOfZoneHome = hasConfirmedOutOfZone;
 
   // Mock points value - replace with actual points from context/store
   const userPoints = 99;
@@ -1660,32 +1691,13 @@ export default function Home() {
                   : "Multi-cuisine";
 
               // Legacy-safe image extraction (supports old schema variants).
-              const coverImages = extractImages([
-                ...(Array.isArray(restaurant.coverImages) ? restaurant.coverImages : [restaurant.coverImages]).filter(Boolean),
-                restaurant.coverImage,
-              ]);
-
-              const profileImageCandidates = extractImages([
-                ...buildRestaurantImageCandidates(restaurant.profileImage),
-                ...buildRestaurantImageCandidates(
-                  restaurant.onboarding?.step2?.profileImageUrl,
-                ),
-                ...buildRestaurantImageCandidates(restaurant.image),
-                ...buildRestaurantImageCandidates(restaurant.imageUrl),
-              ]);
-              const profileImageUrl = profileImageCandidates[0] || "";
-
-              const allImages = Array.from(
-                new Set(
-                  [
-                    ...coverImages,
-                    ...profileImageCandidates,
-                  ].filter(Boolean),
-                ),
+              const allImages = extractRestaurantCardImages(restaurant).slice(
+                0,
+                3,
               );
 
               // Keep single image for backward compatibility
-              const image = allImages[0] || profileImageUrl || "";
+              const image = allImages[0] || "";
               const offerText = restaurant.offer || null;
 
               return {
@@ -1855,6 +1867,7 @@ export default function Home() {
     },
     [
       extractImages,
+      extractRestaurantCardImages,
       buildRestaurantImageCandidates,
       effectiveLocation?.latitude,
       effectiveLocation?.longitude,
@@ -2240,13 +2253,10 @@ export default function Home() {
         Array.isArray(restaurant?.cuisines) && restaurant.cuisines.length > 0
           ? restaurant.cuisines[0]
           : "Multi-cuisine";
-      const imageCandidates = extractImages([
-        ...(Array.isArray(restaurant?.coverImages)
-          ? restaurant.coverImages
-          : [restaurant?.coverImages]
-        ).filter(Boolean),
-        restaurant?.profileImage,
-      ]);
+      const imageCandidates = extractRestaurantCardImages(restaurant).slice(
+        0,
+        3,
+      );
       const image = imageCandidates[0] || foodImages[0];
 
       return {
@@ -2298,7 +2308,7 @@ export default function Home() {
     recommendedRestaurantIds,
     recommendedRestaurantsFromSettings,
     restaurantsData,
-    extractImages,
+    extractRestaurantCardImages,
     normalizeImageUrl,
     matchesVegMode,
   ]);

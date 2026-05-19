@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { Bell, Menu, ChevronDown, Calendar, Download, ArrowRight, FileText, Wallet, X } from "lucide-react"
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders"
-import { restaurantAPI } from "@food/api"
+import { restaurantAPI, diningAPI } from "@food/api"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -32,6 +32,8 @@ export default function HubFinance() {
   const [submittingWithdrawal, setSubmittingWithdrawal] = useState(false)
   const [withdrawalRequests, setWithdrawalRequests] = useState([])
   const [loadingWithdrawals, setLoadingWithdrawals] = useState(false)
+  const [diningTransactions, setDiningTransactions] = useState([])
+  const [loadingDiningTransactions, setLoadingDiningTransactions] = useState(false)
 
   // Fetch finance data on mount
   useEffect(() => {
@@ -147,6 +149,246 @@ export default function HubFinance() {
     }
   }, [financeData])
 
+  const restaurantFinanceRef = useMemo(() => {
+    if (restaurantData) return restaurantData
+    return financeData?.restaurant || null
+  }, [restaurantData, financeData])
+
+  useEffect(() => {
+    const fetchDiningTransactions = async () => {
+      if (!restaurantFinanceRef) {
+        setDiningTransactions([])
+        return
+      }
+
+      try {
+        setLoadingDiningTransactions(true)
+        const response = await diningAPI.getRestaurantBookings(restaurantFinanceRef)
+        const bookings = Array.isArray(response?.data?.data) ? response.data.data : []
+
+        const paidDiningTransactions = bookings
+          .filter((booking) => String(booking?.billStatus || "").toLowerCase() === "paid")
+          .map((booking) => {
+            const grossAmount = Number(booking?.billAmount || 0)
+            const commissionPct = Number(booking?.commissionPct ?? 10)
+            const commissionAmount = Number(
+              booking?.commissionAmount ?? (grossAmount * (commissionPct / 100)).toFixed(2),
+            )
+            const restaurantEarning = Number((grossAmount - commissionAmount).toFixed(2))
+            const paidAt =
+              booking?.billPaidAt ||
+              booking?.updatedAt ||
+              booking?.billSentAt ||
+              booking?.createdAt ||
+              null
+            const guestCount = Number(booking?.guests || 0)
+
+            return {
+              id: String(booking?._id || booking?.id || booking?.bookingId || `dining-${Math.random()}`),
+              type: "dining",
+              orderId: booking?.bookingId || booking?._id || "N/A",
+              bookingId: booking?.bookingId || booking?._id || "N/A",
+              createdAt: paidAt,
+              billPaidAt: booking?.billPaidAt || null,
+              totalAmount: grossAmount,
+              orderTotal: grossAmount,
+              amount: grossAmount,
+              grossAmount,
+              payout: restaurantEarning,
+              restaurantEarning,
+              commission: commissionAmount,
+              commissionAmount,
+              commissionPct,
+              paymentMethod: "Dining bill",
+              orderStatus: "Paid",
+              foodNames:
+                guestCount > 0 ? `Dining bill • ${guestCount} guest${guestCount === 1 ? "" : "s"}` : "Dining bill",
+              items: [
+                {
+                  name: "Dining bill",
+                  quantity: guestCount > 0 ? guestCount : 1,
+                },
+              ],
+              guestName: booking?.user?.name || "Guest",
+              sourceData: booking,
+            }
+          })
+          .sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime())
+
+        setDiningTransactions(paidDiningTransactions)
+      } catch (error) {
+        debugError("Error fetching dining transactions:", error)
+        setDiningTransactions([])
+      } finally {
+        setLoadingDiningTransactions(false)
+      }
+    }
+
+    fetchDiningTransactions()
+  }, [restaurantFinanceRef])
+
+  const selectedDateBounds = useMemo(() => parseDateRange(selectedDateRange), [selectedDateRange])
+
+  const filteredDiningTransactions = useMemo(() => {
+    if (!selectedDateBounds?.startDate || !selectedDateBounds?.endDate) return diningTransactions
+
+    const startTime = new Date(selectedDateBounds.startDate).getTime()
+    const endTime = new Date(selectedDateBounds.endDate).getTime()
+
+    const backendBookingIds = new Set()
+    const currentOrders = financeData?.currentCycle?.orders || []
+    currentOrders.forEach(o => {
+      if (o.type === 'dining') {
+        backendBookingIds.add(String(o.orderId || '').trim())
+        backendBookingIds.add(String(o.bookingId || '').trim())
+        backendBookingIds.add(String(o._id || '').trim())
+      }
+    })
+    const pastOrders = pastCyclesData?.orders || []
+    pastOrders.forEach(o => {
+      if (o.type === 'dining') {
+        backendBookingIds.add(String(o.orderId || '').trim())
+        backendBookingIds.add(String(o.bookingId || '').trim())
+        backendBookingIds.add(String(o._id || '').trim())
+      }
+    })
+
+    return diningTransactions.filter((transaction) => {
+      const id = String(transaction?.id || '').trim()
+      const bookingId = String(transaction?.bookingId || '').trim()
+      const orderId = String(transaction?.orderId || '').trim()
+
+      if (backendBookingIds.size > 0 && (
+        (id && backendBookingIds.has(id)) ||
+        (bookingId && backendBookingIds.has(bookingId)) ||
+        (orderId && backendBookingIds.has(orderId))
+      )) {
+        return false
+      }
+
+      const transactionTime = new Date(
+        transaction?.billPaidAt || transaction?.createdAt || 0,
+      ).getTime()
+      return !Number.isNaN(transactionTime) && transactionTime >= startTime && transactionTime <= endTime
+    })
+  }, [diningTransactions, selectedDateBounds, financeData, pastCyclesData])
+
+  const currentCycleRange = useMemo(() => {
+    const monthMap = {
+      Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+      Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+    }
+
+    const startMeta = financeData?.currentCycle?.start
+    const endMeta = financeData?.currentCycle?.end
+    const startMonth = monthMap[String(startMeta?.month || "").slice(0, 3)]
+    const endMonth = monthMap[String(endMeta?.month || startMeta?.month || "").slice(0, 3)]
+    const startDay = Number(startMeta?.day)
+    const endDay = Number(endMeta?.day)
+    const startYearRaw = Number(startMeta?.year)
+    const endYearRaw = Number(endMeta?.year ?? startMeta?.year)
+
+    if (
+      startMonth === undefined ||
+      endMonth === undefined ||
+      !Number.isFinite(startDay) ||
+      !Number.isFinite(endDay)
+    ) {
+      return null
+    }
+
+    const normalizeYear = (value) => {
+      if (!Number.isFinite(value)) return new Date().getFullYear()
+      return value < 100 ? 2000 + value : value
+    }
+
+    const startDate = new Date(normalizeYear(startYearRaw), startMonth, startDay, 0, 0, 0, 0)
+    const endDate = new Date(normalizeYear(endYearRaw), endMonth, endDay, 23, 59, 59, 999)
+
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return null
+    return { startDate, endDate }
+  }, [financeData])
+
+  const currentCycleDiningTransactions = useMemo(() => {
+    if (!currentCycleRange?.startDate || !currentCycleRange?.endDate) return diningTransactions
+
+    const startTime = currentCycleRange.startDate.getTime()
+    const endTime = currentCycleRange.endDate.getTime()
+
+    const backendBookingIds = new Set()
+    const currentOrders = financeData?.currentCycle?.orders || []
+    currentOrders.forEach(o => {
+      if (o.type === 'dining') {
+        backendBookingIds.add(String(o.orderId || '').trim())
+        backendBookingIds.add(String(o.bookingId || '').trim())
+        backendBookingIds.add(String(o._id || '').trim())
+      }
+    })
+
+    return diningTransactions.filter((transaction) => {
+      const id = String(transaction?.id || '').trim()
+      const bookingId = String(transaction?.bookingId || '').trim()
+      const orderId = String(transaction?.orderId || '').trim()
+
+      if (backendBookingIds.size > 0 && (
+        (id && backendBookingIds.has(id)) ||
+        (bookingId && backendBookingIds.has(bookingId)) ||
+        (orderId && backendBookingIds.has(orderId))
+      )) {
+        return false
+      }
+
+      const transactionTime = new Date(
+        transaction?.billPaidAt || transaction?.createdAt || 0,
+      ).getTime()
+      return !Number.isNaN(transactionTime) && transactionTime >= startTime && transactionTime <= endTime
+    })
+  }, [diningTransactions, currentCycleRange, financeData])
+
+  const currentCycleDiningSummary = useMemo(() => {
+    return currentCycleDiningTransactions.reduce(
+      (summary, transaction) => {
+        summary.count += 1
+        summary.gross += Number(transaction?.totalAmount || 0)
+        summary.earnings += Number(transaction?.payout || transaction?.restaurantEarning || 0)
+        summary.commission += Number(transaction?.commission || transaction?.commissionAmount || 0)
+        return summary
+      },
+      { count: 0, gross: 0, earnings: 0, commission: 0 },
+    )
+  }, [currentCycleDiningTransactions])
+
+  const normalizeOrderTransactions = (orders = [], type = "order") =>
+    (Array.isArray(orders) ? orders : []).map((order, index) => ({
+      ...order,
+      id: String(order?.orderId || order?._id || order?.id || `${type}-${index}`),
+      type: order?.type || type,
+      createdAt: order?.createdAt || order?.deliveredAt || order?.updatedAt || null,
+      totalAmount: Number(order?.totalAmount || order?.orderTotal || order?.amount || 0),
+      payout: Number(order?.payout || order?.restaurantEarning || 0),
+      commission: Number(order?.commission || 0),
+      foodNames: order?.foodNames || (Array.isArray(order?.items) ? order.items.map((item) => item?.name).filter(Boolean).join(", ") : ""),
+    }))
+
+  const sortTransactionsByLatest = (transactions = []) =>
+    [...transactions].sort(
+      (a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime(),
+    )
+
+  const payoutTransactions = useMemo(() => {
+    if (Array.isArray(pastCyclesData?.orders)) {
+      return sortTransactionsByLatest([
+        ...normalizeOrderTransactions(pastCyclesData.orders, "order"),
+        ...filteredDiningTransactions,
+      ])
+    }
+
+    return sortTransactionsByLatest([
+      ...normalizeOrderTransactions(financeData?.currentCycle?.orders || [], "order"),
+      ...currentCycleDiningTransactions,
+    ])
+  }, [pastCyclesData, filteredDiningTransactions, financeData, currentCycleDiningTransactions])
+
   const invoiceOrders = useMemo(() => {
     const allOrdersMap = new Map()
     
@@ -171,12 +413,36 @@ export default function HubFinance() {
     return Array.from(allOrdersMap.values())
   }, [financeData, pastCyclesData])
 
+  const invoiceDiningTransactions = useMemo(() => {
+    const allDiningMap = new Map()
+
+    currentCycleDiningTransactions.forEach((transaction) => {
+      allDiningMap.set(transaction.id, transaction)
+    })
+
+    filteredDiningTransactions.forEach((transaction) => {
+      if (!allDiningMap.has(transaction.id)) {
+        allDiningMap.set(transaction.id, transaction)
+      }
+    })
+
+    return Array.from(allDiningMap.values())
+  }, [currentCycleDiningTransactions, filteredDiningTransactions])
+
+  const invoiceTransactions = useMemo(
+    () => sortTransactionsByLatest([
+      ...normalizeOrderTransactions(invoiceOrders, "order"),
+      ...invoiceDiningTransactions,
+    ]),
+    [invoiceOrders, invoiceDiningTransactions],
+  )
+
   const invoiceSummary = useMemo(() => {
-    const earnings = invoiceOrders.reduce((sum, order) => sum + (order.payout || order.restaurantEarning || 0), 0)
-    const commission = invoiceOrders.reduce((sum, order) => sum + (order.commission || 0), 0)
-    const gross = invoiceOrders.reduce((sum, order) => sum + (order.totalAmount || order.orderTotal || 0), 0)
-    return { earnings, commission, gross, count: invoiceOrders.length }
-  }, [invoiceOrders])
+    const earnings = invoiceTransactions.reduce((sum, transaction) => sum + Number(transaction?.payout || transaction?.restaurantEarning || 0), 0)
+    const commission = invoiceTransactions.reduce((sum, transaction) => sum + Number(transaction?.commission || transaction?.commissionAmount || 0), 0)
+    const gross = invoiceTransactions.reduce((sum, transaction) => sum + Number(transaction?.totalAmount || transaction?.orderTotal || transaction?.amount || 0), 0)
+    return { earnings, commission, gross, count: invoiceTransactions.length }
+  }, [invoiceTransactions])
 
   const handleViewDetails = () => {
     navigate("/restaurant/finance-details", { state: { financeData, restaurantData } })
@@ -210,7 +476,7 @@ export default function HubFinance() {
   }
 
   // Parse date range string to extract start and end dates
-  const parseDateRange = (dateRangeStr) => {
+  function parseDateRange(dateRangeStr) {
     try {
       if (!dateRangeStr || typeof dateRangeStr !== 'string') return null;
 
@@ -368,7 +634,10 @@ export default function HubFinance() {
       })
     }
     
-    const allOrders = Array.from(allOrdersMap.values())
+    const allTransactions = sortTransactionsByLatest([
+      ...normalizeOrderTransactions(Array.from(allOrdersMap.values()), "order"),
+      ...invoiceDiningTransactions,
+    ])
     
     return {
       restaurantName,
@@ -379,12 +648,12 @@ export default function HubFinance() {
         end: currentCycleDates.end,
         month: currentCycleDates.month,
         year: currentCycleDates.year,
-        estimatedPayout: `₹${(currentCycle.estimatedPayout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        orders: currentCycle.totalOrders || 0,
+        estimatedPayout: `₹${((currentCycle.estimatedPayout || 0) + currentCycleDiningSummary.earnings).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        orders: (currentCycle.totalOrders || 0) + currentCycleDiningSummary.count,
         payoutDate: currentCycle.payoutDate ? new Date(currentCycle.payoutDate).toLocaleDateString('en-IN') : "-"
       },
       pastCycles: pastCyclesData,
-      allOrders: allOrders
+      allOrders: allTransactions
     }
   }
 
@@ -522,15 +791,16 @@ export default function HubFinance() {
         </div>
 
         <div class="section">
-          <div class="section-title">Detailed Order Wise Report</div>
+          <div class="section-title">Detailed Transaction Wise Report</div>
           ${reportData.allOrders && reportData.allOrders.length > 0 ? `
             <table class="orders-table">
               <thead>
                 <tr>
                   <th style="width: 14%;">Cycle</th>
-                  <th style="width: 15%;">Order ID</th>
+                  <th style="width: 12%;">Type</th>
+                  <th style="width: 15%;">Ref ID</th>
                   <th style="width: 12%;">Date</th>
-                  <th style="width: 28%;">Items</th>
+                  <th style="width: 24%;">Details</th>
                   <th style="width: 8%;">Qty</th>
                   <th style="width: 11%;">Amount</th>
                   <th style="width: 12%;">Earning</th>
@@ -543,11 +813,13 @@ export default function HubFinance() {
                   const itemQuantities = order.items ? order.items.map(item => (item.quantity || 1).toString()).join(', ') : 'N/A'
                   const orderAmount = order.totalAmount || order.orderTotal || order.amount || 0
                   const earning = order.payout || order.restaurantEarning || 0
+                  const typeLabel = order.type === 'dining' ? 'Dining' : 'Order'
                   
                   return `
                     <tr>
                       <td>${order.cycle || 'N/A'}</td>
-                      <td>${order.orderId || 'N/A'}</td>
+                      <td>${typeLabel}</td>
+                      <td>${order.orderId || order.bookingId || 'N/A'}</td>
                       <td>${orderDate}</td>
                       <td>${foodItems}</td>
                       <td>${itemQuantities}</td>
@@ -559,7 +831,7 @@ export default function HubFinance() {
               </tbody>
               <tfoot>
                 <tr style="background-color: #e8f5e9; font-weight: bold;">
-                  <td colspan="5" style="text-align: right;">Total Earnings:</td>
+                  <td colspan="6" style="text-align: right;">Total Earnings:</td>
                   <td colspan="2">₹${reportData.allOrders.reduce((sum, order) => sum + (order.payout || order.restaurantEarning || 0), 0).toFixed(2)}</td>
                 </tr>
               </tfoot>
@@ -792,16 +1064,27 @@ export default function HubFinance() {
                 ) : (
                   <>
                     <p className="text-4xl font-bold text-gray-900 mb-2">
-                      ₹{(financeData?.currentCycle?.estimatedPayout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₹{((financeData?.currentCycle?.estimatedPayout || 0) + currentCycleDiningSummary.earnings).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                     <p className="text-sm text-gray-600 mb-4">
                       {financeData?.currentCycle?.totalOrders || 0} {financeData?.currentCycle?.totalOrders === 1 ? 'order' : 'orders'}
+                      {currentCycleDiningSummary.count > 0 ? ` • ${currentCycleDiningSummary.count} dining bill${currentCycleDiningSummary.count === 1 ? '' : 's'}` : ''}
                     </p>
+                    {currentCycleDiningSummary.count > 0 ? (
+                      <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 mb-4">
+                        <p className="text-xs font-medium text-gray-700">
+                          Dining added: ₹{currentCycleDiningSummary.earnings.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          Gross ₹{currentCycleDiningSummary.gross.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} • Commission ₹{currentCycleDiningSummary.commission.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    ) : null}
                     <button
                       onClick={() => setShowWithdrawalModal(true)}
-                      disabled={!(financeData?.currentCycle?.estimatedPayout > 0)}
+                      disabled={!(((financeData?.currentCycle?.estimatedPayout || 0) + currentCycleDiningSummary.earnings) > 0)}
                       className={`w-full py-3 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 mt-4 transition-colors ${
-                        financeData?.currentCycle?.estimatedPayout > 0
+                        ((financeData?.currentCycle?.estimatedPayout || 0) + currentCycleDiningSummary.earnings) > 0
                           ? "bg-black text-white hover:bg-gray-800"
                           : "bg-gray-200 text-gray-500 cursor-not-allowed"
                       }`}
@@ -1059,74 +1342,46 @@ export default function HubFinance() {
                   <div className="bg-white rounded-lg p-4">
                     <p className="text-sm text-gray-600 text-center">Loading past cycles...</p>
                   </div>
+                ) : loadingDiningTransactions ? (
+                  <div className="bg-white rounded-lg p-4">
+                    <p className="text-sm text-gray-600 text-center">Loading dining transactions...</p>
+                  </div>
                 ) : (
                   <>
-                    {/* Show past cycles orders if available */}
-                    {pastCyclesData && pastCyclesData.orders && pastCyclesData.orders.length > 0 ? (
+                    {payoutTransactions.length > 0 ? (
                       <div className="bg-white rounded-lg p-4 space-y-3">
-                        {pastCyclesData.orders.map((order, index) => (
-                          <div key={order.orderId || index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
+                        {payoutTransactions.map((transaction, index) => (
+                          <div key={transaction.id || transaction.orderId || index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
                                 <p className="text-sm font-semibold text-gray-900 mb-1">
-                                  Order ID: {order.orderId || 'N/A'}
+                                  {transaction.type === "dining" ? "Dining ID" : "Order ID"}: {transaction.orderId || transaction.bookingId || 'N/A'}
                                 </p>
                                 <p className="text-xs text-gray-600">
-                                  {order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'}
+                                  {transaction.foodNames || (transaction.items && transaction.items.map(item => item.name).join(', ')) || 'N/A'}
                                 </p>
+                                {transaction.type === "dining" ? (
+                                  <p className="text-[11px] text-gray-500 mt-1">
+                                    Commission ₹{Number(transaction.commission || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} • Paid {formatDateTime(transaction.billPaidAt || transaction.createdAt)}
+                                  </p>
+                                ) : null}
                               </div>
                               <div className="text-right ml-4">
                                 <p className="text-sm font-bold text-gray-900">
-                                  ₹{(order.payout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  ₹{Number(transaction.payout || transaction.restaurantEarning || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
                                 <p className="text-xs text-gray-500">
-                                  Earning
+                                  {transaction.type === "dining" ? "Net earning" : "Earning"}
                                 </p>
                               </div>
                             </div>
                           </div>
                         ))}
                       </div>
-                    ) : (pastCyclesData && pastCyclesData.orders && pastCyclesData.orders.length === 0) ? (
-                      <div className="bg-white rounded-lg p-8 text-center border border-dashed border-gray-300">
-                        <p className="text-sm text-gray-500 italic">No orders found for this selected range.</p>
-                      </div>
-                    ) : null}
-
-                    {/* Show current cycle orders if past cycles data is not requested or not being viewed */}
-                    {(!pastCyclesData || !pastCyclesData.orders) && !loadingPastCycles && financeData?.currentCycle?.orders && financeData.currentCycle.orders.length > 0 && (
-                      <div className="bg-white rounded-lg p-4 space-y-3">
-                        {financeData.currentCycle.orders.map((order, index) => (
-                          <div key={order.orderId || index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <p className="text-sm font-semibold text-gray-900 mb-1">
-                                  Order ID: {order.orderId || 'N/A'}
-                                </p>
-                                <p className="text-xs text-gray-600">
-                                  {order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'}
-                                </p>
-                              </div>
-                              <div className="text-right ml-4">
-                                <p className="text-sm font-bold text-gray-900">
-                                  ₹{(order.payout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  Earning
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {(!pastCyclesData || (!pastCyclesData.orders || pastCyclesData.orders.length === 0)) && 
-                     (!financeData?.currentCycle?.orders || financeData.currentCycle.orders.length === 0) && 
-                     !loadingPastCycles && !loading && (
+                    ) : (
                       <div className="bg-white rounded-lg p-12 text-center border border-gray-200">
                         <p className="text-gray-400 mb-2">No transaction history available</p>
-                        <p className="text-xs text-gray-500">Your earnings and order payouts will appear here.</p>
+                        <p className="text-xs text-gray-500">Your order payouts and paid dining bills will appear here.</p>
                       </div>
                     )}
                   </>
@@ -1142,7 +1397,7 @@ export default function HubFinance() {
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Invoices & Taxes Summary</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="rounded-md bg-gray-50 p-3">
-                  <p className="text-xs text-gray-600">Orders</p>
+                  <p className="text-xs text-gray-600">Transactions</p>
                   <p className="text-base font-semibold text-gray-900">{invoiceSummary.count}</p>
                 </div>
                 <div className="rounded-md bg-gray-50 p-3">
@@ -1161,27 +1416,36 @@ export default function HubFinance() {
             </div>
 
             <div className="bg-white rounded-lg p-4 border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Order invoice details</h3>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Transaction invoice details</h3>
               {loading ? (
                 <p className="text-sm text-gray-500">Loading invoice data...</p>
-              ) : invoiceOrders.length === 0 ? (
+              ) : loadingDiningTransactions ? (
+                <p className="text-sm text-gray-500">Loading dining invoice data...</p>
+              ) : invoiceTransactions.length === 0 ? (
                 <p className="text-sm text-gray-500">No invoice data available for selected range.</p>
               ) : (
                 <div className="space-y-2">
-                  {invoiceOrders.map((order, index) => (
-                    <div key={`${order.orderId || index}-invoice`} className="border border-gray-100 rounded-md p-3">
+                  {invoiceTransactions.map((transaction, index) => (
+                    <div key={`${transaction.id || transaction.orderId || index}-invoice`} className="border border-gray-100 rounded-md p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-sm font-medium text-gray-900">Order: {order.orderId || "N/A"}</p>
-                          <p className="text-xs text-gray-600 mt-0.5">
-                            {order.paymentMethod || "N/A"} | {order.orderStatus || "N/A"}
+                          <p className="text-sm font-medium text-gray-900">
+                            {transaction.type === "dining" ? "Dining" : "Order"}: {transaction.orderId || transaction.bookingId || "N/A"}
                           </p>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            {transaction.paymentMethod || "N/A"} | {transaction.orderStatus || "N/A"}
+                          </p>
+                          {transaction.type === "dining" ? (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Commission: ₹{Number(transaction.commission || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | Net: ₹{Number(transaction.payout || transaction.restaurantEarning || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                          ) : null}
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-semibold text-gray-900">
-                            ₹{(order.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ₹{Number(transaction.totalAmount || transaction.orderTotal || transaction.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
-                          <p className="text-xs text-gray-500">Total</p>
+                          <p className="text-xs text-gray-500">{transaction.type === "dining" ? "Bill total" : "Total"}</p>
                         </div>
                       </div>
                     </div>
@@ -1227,7 +1491,7 @@ export default function HubFinance() {
                 
                 <div className="mb-4">
                   <p className="text-sm text-gray-600 mb-2">
-                    Available Balance: <span className="font-semibold text-gray-900">₹{(financeData?.currentCycle?.estimatedPayout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    Available Balance: <span className="font-semibold text-gray-900">₹{((financeData?.currentCycle?.estimatedPayout || 0) + currentCycleDiningSummary.earnings).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </p>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Enter Amount to Withdraw
@@ -1235,14 +1499,14 @@ export default function HubFinance() {
                   <input
                     type="number"
                     min="0.01"
-                    max={financeData?.currentCycle?.estimatedPayout || 0}
+                    max={(financeData?.currentCycle?.estimatedPayout || 0) + currentCycleDiningSummary.earnings}
                     step="0.01"
                     value={withdrawalAmount}
                     onChange={(e) => setWithdrawalAmount(e.target.value)}
                     placeholder="0.00"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none"
                   />
-                  {withdrawalAmount && parseFloat(withdrawalAmount) > (financeData?.currentCycle?.estimatedPayout || 0) && (
+                  {withdrawalAmount && parseFloat(withdrawalAmount) > ((financeData?.currentCycle?.estimatedPayout || 0) + currentCycleDiningSummary.earnings) && (
                     <p className="text-sm text-red-600 mt-1">Amount cannot exceed available balance</p>
                   )}
                 </div>
@@ -1264,7 +1528,7 @@ export default function HubFinance() {
                         alert('Please enter a valid amount')
                         return
                       }
-                      if (amount > (financeData?.currentCycle?.estimatedPayout || 0)) {
+                      if (amount > ((financeData?.currentCycle?.estimatedPayout || 0) + currentCycleDiningSummary.earnings)) {
                         alert('Amount cannot exceed available balance')
                         return
                       }
@@ -1299,7 +1563,7 @@ export default function HubFinance() {
                         setSubmittingWithdrawal(false)
                       }
                     }}
-                    disabled={submittingWithdrawal || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || parseFloat(withdrawalAmount) > (financeData?.currentCycle?.estimatedPayout || 0)}
+                    disabled={submittingWithdrawal || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || parseFloat(withdrawalAmount) > ((financeData?.currentCycle?.estimatedPayout || 0) + currentCycleDiningSummary.earnings)}
                     className="flex-1 px-4 py-3 bg-black text-white rounded-lg font-medium hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                   >
                     {submittingWithdrawal ? 'Submitting...' : 'Submit Request'}

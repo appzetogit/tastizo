@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { restaurantAPI } from "@food/api";
-import { normalizeImageUrl, extractImages, calculateDistance, slugify } from "@food/utils/common";
+import { normalizeImageUrl, extractRestaurantCardImages, calculateDistance, slugify } from "@food/utils/common";
 
 export const useHomeData = (location, zoneId) => {
   const [loadingConfig, setLoadingConfig] = useState(true);
@@ -59,10 +59,7 @@ export const useHomeData = (location, zoneId) => {
           const rLng = rLoc?.longitude || (rLoc?.coordinates?.[0]);
           
           let distInKm = calculateDistance(userLat, userLng, rLat, rLng);
-          const coverImgs = extractImages(r.coverImages);
-          const menuImgs = extractImages(r.menuImages);
-          const profileImgs = extractImages(r.profileImage || r.image);
-          const allImgs = Array.from(new Set([...coverImgs, ...menuImgs, ...profileImgs]));
+          const allImgs = extractRestaurantCardImages(r).slice(0, 3);
 
           return {
             ...r,

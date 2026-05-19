@@ -40,7 +40,7 @@ const RestaurantImageCarousel = React.memo(({ restaurant, priority = false, back
   const images = React.useMemo(() => {
     const sourceImages = Array.isArray(restaurant.images) && restaurant.images.length > 0
       ? restaurant.images
-      : [restaurant.image];
+      : [restaurant.image, restaurant?.profileImage?.url, restaurant?.profileImage];
 
     const validImages = sourceImages
       .filter((img) => typeof img === "string")
@@ -94,6 +94,18 @@ const RestaurantImageCarousel = React.memo(({ restaurant, priority = false, back
     return () => clearTimeout(shimmerTimeout);
   }, [renderSrc]);
 
+  useEffect(() => {
+    if (images.length <= 1) return undefined;
+
+    const autoSlideInterval = window.setInterval(() => {
+      if (!isSwiping.current) {
+        setCurrentIndex((prev) => (prev + 1) % images.length);
+      }
+    }, 3000);
+
+    return () => window.clearInterval(autoSlideInterval);
+  }, [images.length]);
+
   const handleTouchStart = (e) => {
     touchStartX.current = e.touches[0].clientX;
     isSwiping.current = false;
@@ -108,7 +120,7 @@ const RestaurantImageCarousel = React.memo(({ restaurant, priority = false, back
   };
 
   const handleTouchEnd = (e) => {
-    if (!isSwiping.current) return;
+    if (!isSwiping.current || images.length <= 1) return;
     const touchEndX = e.changedTouches[0].clientX;
     const diff = touchStartX.current - touchEndX;
     const minSwipeDistance = 50;

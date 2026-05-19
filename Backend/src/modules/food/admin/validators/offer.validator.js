@@ -4,6 +4,7 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 
 const createOfferSchema = z.object({
     couponCode: z.string().min(1, 'Coupon code is required'),
+    couponType: z.enum(['delivery', 'dining']).default('delivery'),
     discountType: z.enum(['percentage', 'flat-price']).default('percentage'),
     discountValue: z.number().positive('Discount value must be greater than 0'),
     customerScope: z.enum(['all', 'first-time']).default('all'),
@@ -22,6 +23,7 @@ export const validateCreateOfferDto = (body) => {
     const normalized = {
         ...body,
         couponCode: typeof body?.couponCode === 'string' ? body.couponCode.trim() : body?.couponCode,
+        couponType: body?.couponType || 'delivery',
         discountType: body?.discountType,
         discountValue: Number(body?.discountValue),
         customerScope: body?.customerScope,
@@ -70,10 +72,11 @@ export const validateCreateOfferDto = (body) => {
         maxDiscount = Math.max(0, Number(maxDiscount) || 0);
     } else {
         maxDiscount = undefined; // ignore for flat-price
-    }
+     }
 
     return {
         couponCode: result.data.couponCode.trim().toUpperCase(),
+        couponType: result.data.couponType,
         discountType: result.data.discountType,
         discountValue: result.data.discountValue,
         customerScope: result.data.customerScope,

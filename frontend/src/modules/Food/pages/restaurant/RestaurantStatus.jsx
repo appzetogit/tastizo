@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
 import Lenis from "lenis"
 import { ArrowLeft, Settings, ChevronRight } from "lucide-react"
 import { Switch } from "@food/components/ui/switch"
@@ -32,7 +31,6 @@ const persistRestaurantOnlineStatus = (isOnline) => {
 
 export default function RestaurantStatus() {
   const navigate = useNavigate()
-  const goBack = useRestaurantBackNavigation()
   const [deliveryStatus, setDeliveryStatus] = useState(false)
   const [restaurantData, setRestaurantData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -338,7 +336,7 @@ export default function RestaurantStatus() {
       <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <button 
-            onClick={goBack}
+            onClick={() => navigate("/food/restaurant/explore")}
             className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
             aria-label="Go back"
           >

@@ -1815,12 +1815,25 @@ export async function updateDeliveryCommissionRule(id, body) {
 
 export async function deleteDeliveryCommissionRule(id) {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+    const existing = await FoodDeliveryCommissionRule.find({}).lean();
+    const candidate = existing.filter((r) => String(r._id) !== String(id));
+    validateCommissionRuleSet(candidate);
     const deleted = await FoodDeliveryCommissionRule.findByIdAndDelete(id).lean();
     return deleted ? { id } : null;
 }
 
 export async function toggleDeliveryCommissionRuleStatus(id, status) {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+    const existing = await FoodDeliveryCommissionRule.find({}).lean();
+    const candidate = existing.map((r) =>
+        String(r._id) === String(id)
+            ? {
+                  ...r,
+                  status: Boolean(status)
+              }
+            : r
+    );
+    validateCommissionRuleSet(candidate);
     const updated = await FoodDeliveryCommissionRule.findByIdAndUpdate(
         id,
         { $set: { status: Boolean(status) } },
@@ -3533,6 +3546,7 @@ export async function getAllOffers(_query = {}) {
             restaurantName,
             dishName: 'All Items',
             couponCode: o.couponCode,
+            couponType: o.couponType || 'delivery',
             customerGroup: o.customerScope === 'first-time' ? 'new' : 'all',
             discountType: o.discountType,
             discountPercentage,
@@ -3561,6 +3575,7 @@ export async function createAdminOffer(body) {
 
     const doc = await FoodOffer.create({
         couponCode: body.couponCode,
+        couponType: body.couponType || 'delivery',
         discountType: body.discountType,
         discountValue: body.discountValue,
         customerScope: body.customerScope,

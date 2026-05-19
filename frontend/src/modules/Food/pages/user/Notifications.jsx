@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { ArrowLeft, Bell, CheckCircle2, Clock, Tag, Gift, AlertCircle, Trash2, X } from "lucide-react"
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import { Button } from "@food/components/ui/button"
 import { Card, CardContent } from "@food/components/ui/card"
 import { Badge } from "@food/components/ui/badge"
 import useNotificationInbox from "@food/hooks/useNotificationInbox"
+import { diningAPI } from "@food/api"
 
 // Initial mock notification data (fallback if localStorage is empty)
 const DEFAULT_NOTIFICATIONS = [
@@ -42,6 +43,7 @@ const ICON_MAP = {
 }
 
 export default function Notifications() {
+  const navigate = useNavigate()
   const [notificationsList, setNotificationsList] = useState(() => {
     const saved = localStorage.getItem('food_user_notifications')
     return saved ? JSON.parse(saved) : DEFAULT_NOTIFICATIONS
@@ -53,6 +55,56 @@ export default function Notifications() {
     dismiss: dismissBroadcastNotification,
     dismissAll: dismissAllBroadcastNotifications,
   } = useNotificationInbox("user", { limit: 100 })
+
+  // Dynamic Dining Bill Notification Injector
+  useEffect(() => {
+    const fetchDiningBills = async () => {
+      try {
+        const response = await diningAPI.getBookings()
+        if (response.data.success && Array.isArray(response.data.data)) {
+          const completedBillBookings = response.data.data.filter(b => 
+            b.status === "completed" && 
+            b.billAmount > 0 && 
+            b.billStatus === "pending"
+          )
+
+          if (completedBillBookings.length > 0) {
+            setNotificationsList(prev => {
+              const existingIds = new Set(prev.map(n => n.id))
+              const newNotifications = []
+
+              completedBillBookings.forEach(booking => {
+                const notifId = `bill-${booking._id}`
+                if (!existingIds.has(notifId)) {
+                  newNotifications.push({
+                    id: notifId,
+                    type: "alert",
+                    title: `Dining Bill Received: ${booking.restaurant?.name || 'Restaurant'}`,
+                    message: `Your final dining bill of ₹${booking.billAmount} is ready. Click here to review and pay.`,
+                    time: "Just now",
+                    timestamp: new Date(booking.billSentAt || Date.now()).getTime(),
+                    read: false,
+                    icon: "AlertCircle",
+                    iconColor: "text-indigo-600",
+                    bookingId: booking._id
+                  })
+                }
+              })
+
+              if (newNotifications.length > 0) {
+                return [...newNotifications, ...prev]
+              }
+              return prev
+            })
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching dining bills for notifications:", error)
+      }
+    }
+
+    fetchDiningBills()
+  }, [])
 
   // Persistence: Save to localStorage whenever list updates
   useEffect(() => {
@@ -200,7 +252,12 @@ export default function Notifications() {
             return (
               <Card
                 key={notification.id}
-                onClick={() => handleMarkAsRead(notification.id, notification.source)}
+                onClick={() => {
+                  handleMarkAsRead(notification.id, notification.source)
+                  if (notification.bookingId) {
+                    navigate("/user/bookings")
+                  }
+                }}
                 className={`relative cursor-pointer transition-all duration-200 py-1 hover:shadow-md ${!notification.read ? "bg-red-50/50 dark:bg-red-900/20 border-red-200 dark:border-red-800" : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
                   }`}
               >

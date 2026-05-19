@@ -19,7 +19,8 @@ export const ImageSourcePicker = ({
   title = "Update photo",
   description = "Choose how you want to upload your photo.",
   fileNamePrefix = "upload",
-  galleryInputRef = null
+  galleryInputRef = null,
+  multiple = false,
 }) => {
   
   const handleOpenCamera = async () => {
@@ -40,7 +41,8 @@ export const ImageSourcePicker = ({
       onClose()
       await openGallery({
         onSelectFile: onFileSelect,
-        fileNamePrefix: fileNamePrefix
+        fileNamePrefix: fileNamePrefix,
+        multiple,
       })
     } catch (error) {
       console.error("Gallery error caught in ImageSourcePicker:", error)

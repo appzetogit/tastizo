@@ -19,6 +19,12 @@ export const connectDB = async () => {
             FoodRestaurant.createIndexes(),
             FoodOrder.createIndexes()
         ]);
+        try {
+            await mongoose.connection.db.collection('food_transactions').dropIndex('orderId_1');
+            logger.info('Dropped unique orderId_1 index on food_transactions successfully');
+        } catch (e) {
+            // Index might not exist, ignore
+        }
         logger.info(`MongoDB connected: ${conn.connection.host}`);
     } catch (error) {
         logger.error(`MongoDB connection error: ${error.message}`);

@@ -2,7 +2,10 @@ import mongoose from 'mongoose';
 
 const foodTransactionSchema = new mongoose.Schema({
     // Identifiers
-    orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodOrder', required: true, unique: true, index: true },
+    orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodOrder', required: false, index: true },
+    bookingId: { type: String, index: true },
+    orderReadableId: { type: String, index: true },
+    type: { type: String, enum: ['delivery', 'dining'], default: 'delivery', index: true },
 
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodUser', required: true, index: true },
     restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodRestaurant', required: true, index: true },
@@ -11,7 +14,7 @@ const foodTransactionSchema = new mongoose.Schema({
     // Core Payment Info
     paymentMethod: { 
         type: String, 
-        enum: ['cash', 'razorpay', 'razorpay_qr', 'wallet'], 
+        enum: ['cash', 'razorpay', 'razorpay_qr', 'wallet', 'dining_bill'], 
         required: true 
     },
     status: { 

@@ -28,6 +28,12 @@ const diningRestaurantSchema = new mongoose.Schema(
             default: 6,
             min: 0
         },
+        commissionPct: {
+            type: Number,
+            default: 10,
+            min: 0,
+            max: 100
+        },
         pureVegRestaurant: {
             type: Boolean,
             required: true,

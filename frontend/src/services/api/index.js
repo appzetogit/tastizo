@@ -5,6 +5,7 @@
 import apiClient from "./axios.js";
 import { API_ENDPOINTS } from "./config.js";
 import * as authService from "./auth.js";
+import { addDiningBillPayment } from "../../modules/Food/utils/walletState.js";
 
 const stub = () =>
   Promise.resolve({
@@ -1041,9 +1042,14 @@ export const restaurantAPI = {
     if (!file) return Promise.reject(new Error("File is required"));
     const formData = new FormData();
     formData.append("file", file);
-    return apiClient.post("/food/restaurant/profile/profile-image", formData, {
-      contextModule: "restaurant",
-    });
+    return apiClient
+      .post("/food/restaurant/profile/profile-image", formData, {
+        contextModule: "restaurant",
+      })
+      .then((res) => {
+        clearRestaurantCurrentCache();
+        return res;
+      });
   },
   /** Upload a menu/cover image (multipart). Does not auto-attach; use updateProfile(menuImages) after. */
   uploadMenuImage: (file) => {
@@ -1061,9 +1067,14 @@ export const restaurantAPI = {
     }
     const formData = new FormData();
     normalizedFiles.forEach((file) => formData.append("files", file));
-    return apiClient.post("/food/restaurant/profile/cover-images", formData, {
-      contextModule: "restaurant",
-    });
+    return apiClient
+      .post("/food/restaurant/profile/cover-images", formData, {
+        contextModule: "restaurant",
+      })
+      .then((res) => {
+        clearRestaurantCurrentCache();
+        return res;
+      });
   },
   uploadMenuImages: (files = []) => {
     const normalizedFiles = Array.from(files || []).filter(Boolean);
@@ -1072,9 +1083,14 @@ export const restaurantAPI = {
     }
     const formData = new FormData();
     normalizedFiles.forEach((file) => formData.append("files", file));
-    return apiClient.post("/food/restaurant/profile/menu-images", formData, {
-      contextModule: "restaurant",
-    });
+    return apiClient
+      .post("/food/restaurant/profile/menu-images", formData, {
+        contextModule: "restaurant",
+      })
+      .then((res) => {
+        clearRestaurantCurrentCache();
+        return res;
+      });
   },
   /** Public Offers for users (global/selected restaurant) */
   getPublicOffers: () => apiClient.get("/food/restaurant/offers"),
@@ -1585,6 +1601,11 @@ let restaurantCurrentInFlight = null;
 let restaurantCurrentCached = null;
 let restaurantCurrentCacheTime = 0;
 const RESTAURANT_CURRENT_CACHE_MS = 3000;
+const clearRestaurantCurrentCache = () => {
+  restaurantCurrentInFlight = null;
+  restaurantCurrentCached = null;
+  restaurantCurrentCacheTime = 0;
+};
 
 const getRestaurantCurrentOnce = () => {
   const now = Date.now();
@@ -2587,9 +2608,18 @@ const collectRestaurantBookingKeys = (restaurantCandidate) => {
     raw?.restaurant?.restaurantNameNormalized,
   ];
 
+  // Post-process values to add REST-formatted equivalents of 24-char hex ObjectIds
+  const additionalValues = [];
+  values.forEach((val) => {
+    if (val && typeof val === "string" && /^[0-9a-fA-F]{24}$/.test(val)) {
+      const restId = `REST${val.slice(-6).padStart(6, "0")}`;
+      additionalValues.push(restId);
+    }
+  });
+
   return Array.from(
     new Set(
-      values
+      [...values, ...additionalValues]
         .map((value) => String(value || "").trim())
         .filter(Boolean),
     ),
@@ -2635,6 +2665,12 @@ const byLatest = (a, b) =>
   new Date(a?.createdAt || a?.date || 0).getTime();
 
 export const diningAPI = {
+  validateDiningCoupon: (couponCode, billAmount, restaurantId) =>
+    apiClient.post("/food/payments/validate-dining-coupon", {
+      couponCode: String(couponCode || "").trim().toUpperCase(),
+      billAmount: Number(billAmount),
+      restaurantId: restaurantId || undefined,
+    }),
   getCategories: (params = {}) =>
     apiClient.get("/food/dining/categories/public", { params }),
   getRestaurants: (params = {}) =>
@@ -2728,6 +2764,106 @@ export const diningAPI = {
     return Promise.resolve({
       data: { success: Boolean(updated), data: updated },
     });
+  },
+  sendDiningBill: (bookingId, amount, commissionPct = 10) => {
+    const id = String(bookingId || "").trim();
+    const amt = Number(amount) || 0;
+    const bookings = getStoredBookings();
+
+    const next = bookings.map((booking) => {
+      const bookingKey = String(booking?._id || booking?.id || "");
+      if (bookingKey !== id) return booking;
+      const commPct = Number(commissionPct) ?? 10;
+      return {
+        ...booking,
+        billAmount: amt,
+        commissionPct: commPct,
+        commissionAmount: Number((amt * (commPct / 100)).toFixed(2)),
+        billStatus: "pending",
+        billSentAt: new Date().toISOString(),
+      };
+    });
+
+    saveStoredBookings(next);
+    const updated = next.find((booking) => String(booking?._id || booking?.id || "") === id) || null;
+
+    return Promise.resolve({
+      data: { success: Boolean(updated), data: updated },
+    });
+  },
+  payDiningBill: (bookingId, couponCode) => {
+    const id = String(bookingId || "").trim();
+    const bookings = getStoredBookings();
+    const bookingToPay = bookings.find((booking) => String(booking?._id || booking?.id || "") === id);
+
+    if (!bookingToPay) {
+      return Promise.reject(new Error("Booking not found"));
+    }
+
+    const grossAmount = Number(bookingToPay?.billAmount || 0);
+    const commissionPct = Number(bookingToPay?.commissionPct ?? 10);
+    const commissionAmount = Number(
+      bookingToPay?.commissionAmount ?? (grossAmount * (commissionPct / 100)).toFixed(2),
+    );
+    const payoutAmount = Number((grossAmount - commissionAmount).toFixed(2));
+    const paidAt = new Date().toISOString();
+
+    let walletTransaction = null;
+    const next = bookings.map((booking) => {
+      const bookingKey = String(booking?._id || booking?.id || "");
+      if (bookingKey !== id) return booking;
+
+      const alreadyPaid = String(booking?.billStatus || "").toLowerCase() === "paid";
+      if (!alreadyPaid) {
+        walletTransaction = addDiningBillPayment({
+          bookingId: bookingKey,
+          grossAmount,
+          commissionAmount,
+          payoutAmount,
+          guestCount: Number(booking?.guests || 0),
+          restaurantName: booking?.restaurant?.name || booking?.restaurantName || "",
+          paidAt,
+        });
+      }
+
+      return {
+        ...booking,
+        billStatus: "paid",
+        billPaidAt: paidAt,
+        restaurantPayout: payoutAmount,
+        appliedCouponCode: couponCode || null,
+        restaurantWalletTransactionId:
+          booking?.restaurantWalletTransactionId ||
+          walletTransaction?.id ||
+          null,
+      };
+    });
+
+    saveStoredBookings(next);
+    const updated = next.find((booking) => String(booking?._id || booking?.id || "") === id) || null;
+
+    const restaurantId = bookingToPay?.restaurant?._id || bookingToPay?.restaurant?.id || bookingToPay?.restaurantId || bookingToPay?.restaurantRef;
+    const userId = bookingToPay?.userId || bookingToPay?.user?._id || bookingToPay?.user?.id;
+
+    // Call backend API to record dining payment in database
+    return apiClient
+      .post("/food/payments/dining-payment", {
+        bookingId: id,
+        restaurantId,
+        userId,
+        totalAmount: grossAmount,
+        commissionPct,
+        paymentMethod: "dining_bill",
+        couponCode: couponCode || undefined,
+      })
+      .then(() => {
+        return { data: { success: Boolean(updated), data: updated } };
+      })
+      .catch((err) => {
+        debugError("Failed to sync dining payment to backend:", err);
+        // Fallback: still return updated object so UI doesn't break
+        return { data: { success: Boolean(updated), data: updated } };
+      });
   },
   createReview: (payload = {}) => {
     const bookingId = String(payload?.bookingId || "").trim();

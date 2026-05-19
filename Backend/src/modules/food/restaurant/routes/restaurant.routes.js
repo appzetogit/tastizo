@@ -137,6 +137,7 @@ router.post(
     requireRestaurant,
     upload.array('files', 20),
     async (req, res, next) => {
+        await invalidateCache('restaurants:*');
         await invalidateCache('restaurant_detail:*');
         next();
     },

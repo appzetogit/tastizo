@@ -64,6 +64,26 @@ export const extractImages = (source, backendOrigin = "") => {
 };
 
 /**
+ * Builds a carousel-safe image list for restaurant cards.
+ * Priority:
+ * 1. coverImages / coverImage
+ * 2. menuImages
+ * 3. profileImage
+ */
+export const extractRestaurantCardImages = (restaurant, backendOrigin = "") => {
+  if (!restaurant || typeof restaurant !== "object") return [];
+
+  const rawCandidates = [
+    ...(Array.isArray(restaurant.coverImages) ? restaurant.coverImages : [restaurant.coverImages]).filter(Boolean),
+    restaurant.coverImage,
+    ...(Array.isArray(restaurant.menuImages) ? restaurant.menuImages : [restaurant.menuImages]).filter(Boolean),
+    restaurant.profileImage,
+  ];
+
+  return Array.from(new Set(extractImages(rawCandidates, backendOrigin))).filter(Boolean);
+};
+
+/**
  * Calculates distance between two coordinates in kilometers using Haversine formula
  */
 export const calculateDistance = (lat1, lng1, lat2, lng2) => {

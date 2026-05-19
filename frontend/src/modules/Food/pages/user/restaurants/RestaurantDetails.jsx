@@ -638,9 +638,9 @@ function RestaurantDetailsContent() {
           const normalizedProfileImage = actualRestaurant?.profileImage || apiRestaurant?.profileImage || onboardingStep2?.profileImageUrl || null
           const normalizedCoverImages =
             Array.isArray(actualRestaurant?.coverImages) && actualRestaurant.coverImages.length > 0
-              ? actualRestaurant.coverImages
+              ? actualRestaurant.coverImages.slice(0, 3)
               : Array.isArray(apiRestaurant?.coverImages) && apiRestaurant.coverImages.length > 0
-                ? apiRestaurant.coverImages
+                ? apiRestaurant.coverImages.slice(0, 3)
                 : []
           const normalizedMenuImages =
             Array.isArray(actualRestaurant?.menuImages) && actualRestaurant.menuImages.length > 0
@@ -673,8 +673,6 @@ function RestaurantDetailsContent() {
             locationObject: locationObj, // Store full location object for reference
             image: normalizedCoverImages?.[0]?.url
               || normalizedCoverImages?.[0]
-              || normalizedProfileImage?.url
-              || normalizedProfileImage
               || (normalizedMenuImages.length > 0
                 ? (normalizedMenuImages[0]?.url || normalizedMenuImages[0])
                 : null)
@@ -1340,6 +1338,13 @@ function RestaurantDetailsContent() {
       return
     }
 
+    // Intercept if the food has variants but no preferredVariant has been selected yet (e.g. clicked ADD from main list)
+    if (hasFoodVariants(item) && !preferredVariant) {
+      setSelectedItem(item)
+      setShowItemDetail(true)
+      return
+    }
+
     const resolvedVariant = preferredVariant || getDefaultFoodVariant(item)
     const lineItemId = getLineItemIdForDish(item, resolvedVariant)
 
@@ -1718,7 +1723,11 @@ function RestaurantDetailsContent() {
         deliveryTime: restaurant.deliveryTime || restaurant.estimatedDeliveryTime || "",
         distance: restaurant.distance || "",
         priceRange: restaurant.priceRange || "",
-        image: restaurant.profileImageUrl?.url || restaurant.image || ""
+        image:
+          restaurant.coverImages?.[0]?.url ||
+          restaurant.coverImages?.[0] ||
+          restaurant.image ||
+          ""
       })
       toast.success("Restaurant added to collection")
     }
@@ -3624,18 +3633,18 @@ function RestaurantDetailsContent() {
 
                 {/* Item Detail Bottom Sheet */}
                 <motion.div
-                  className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[10000] bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl shadow-2xl max-h-[90vh] md:max-w-2xl lg:max-w-3xl w-full md:w-auto flex flex-col"
+                  className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[10000] bg-[#f4f4f6] dark:bg-[#111111] rounded-t-3xl md:rounded-3xl shadow-2xl max-h-[90vh] md:max-w-2xl lg:max-w-3xl w-full md:w-auto flex flex-col"
                   initial={{ y: "100%" }}
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ duration: 0.15, type: "spring", damping: 30, stiffness: 400 }}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {/* Close Button - Top Center Above Popup with 4px gap */}
-                  <div className="absolute -top-[44px] left-1/2 -translate-x-1/2 z-[10001]">
+                  {/* Premium Centered Top-Floating Close Button */}
+                  <div className="absolute -top-[48px] left-1/2 -translate-x-1/2 z-[10001]">
                     <motion.button
                       onClick={() => setShowItemDetail(false)}
-                      className="h-10 w-10 rounded-full bg-gray-800 flex items-center justify-center hover:bg-gray-900 transition-colors shadow-lg"
+                      className="h-10 w-10 rounded-full bg-gray-800/90 flex items-center justify-center hover:bg-gray-900 transition-all shadow-lg active:scale-95 border border-white/10"
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
@@ -3645,111 +3654,168 @@ function RestaurantDetailsContent() {
                     </motion.button>
                   </div>
 
-                  {/* Image Section */}
-                  <div className="relative w-full h-64 overflow-hidden rounded-t-3xl">
-                    {selectedItem.image ? (
-                      <img
-                        src={selectedItem.image}
-                        alt={selectedItem.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                        <span className="text-sm text-gray-400">No image available</span>
+                  {/* Content Section with beautiful spacing and grey canvas */}
+                  <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
+                    {/* CARD 1: Food Details */}
+                    <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl p-3 flex flex-col gap-3 shadow-sm border border-gray-150/40 dark:border-gray-850/40">
+                      {/* Image Container */}
+                      <div className="relative w-full h-64 overflow-hidden rounded-xl">
+                        {selectedItem.image ? (
+                          <img
+                            src={selectedItem.image}
+                            alt={selectedItem.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                            <span className="text-sm text-gray-400">No image available</span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {/* Bookmark and Share Icons Overlay */}
-                    <div className="absolute bottom-4 right-4 flex items-center gap-3">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleBookmarkClick(selectedItem)
-                        }}
-                        className={`h-10 w-10 rounded-full border flex items-center justify-center transition-all duration-300 ${isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)
-                          ? "border-red-500 dark:border-red-400 bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400"
-                          : "border-white dark:border-gray-800 bg-white/90 dark:bg-[#1a1a1a]/90 text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-[#2a2a2a]"
-                          }`}
-                      >
-                        <Bookmark
-                          className={`h-5 w-5 transition-all duration-300 ${isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id) ? "fill-red-500 dark:fill-red-400" : ""
-                            }`}
-                        />
-                      </button>
-                      <button className="h-10 w-10 rounded-full border border-white dark:border-gray-800 bg-white/90 dark:bg-[#1a1a1a]/90 text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-[#2a2a2a] flex items-center justify-center transition-colors">
-                        <Share2 className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </div>
 
-                  {/* Content Section */}
-                  <div className="flex-1 overflow-y-auto px-4 py-4">
-                    {/* Item Name and Indicator */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2 flex-1">
+                      {/* Veg Badge + Spicy Label Row */}
+                      <div className="flex items-center gap-3">
+                        {/* Veg/Non-veg Indicator */}
                         <div className={`h-5 w-5 rounded border-2 ${selectedItem.foodType === "Veg" ? "border-green-600 bg-green-50" : "border-red-600 bg-red-50"} dark:border-gray-600 dark:bg-gray-900/30 flex items-center justify-center flex-shrink-0`}>
                           <div className={`h-2.5 w-2.5 rounded-full ${selectedItem.foodType === "Veg" ? "bg-green-600" : "bg-red-600"}`} />
                         </div>
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+
+                        {/* Spicy Label */}
+                        {(selectedItem.isSpicy || selectedItem.spicy || selectedItem.name?.toLowerCase().includes('spicy') || selectedItem.name?.toLowerCase().includes('manchurian') || selectedItem.tags?.includes('Spicy')) && (
+                          <div className="flex items-center gap-1 text-[#2A9C64] font-semibold text-xs bg-[#2A9C640F] dark:bg-[#2A9C64]/15 px-2 py-0.5 rounded border border-[#2A9C6430]">
+                            <span>🌶️</span>
+                            <span>Spicy</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Food Name + Bookmark & Share Row */}
+                      <div className="flex items-start justify-between gap-4">
+                        <h2 className="text-xl font-extrabold text-gray-900 dark:text-white leading-snug">
                           {selectedItem.name}
                         </h2>
+
+                        {/* Bookmark and Share side by side on same row */}
+                        <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleBookmarkClick(selectedItem);
+                            }}
+                            className={`h-8 w-8 rounded-full border flex items-center justify-center transition-all duration-300 ${
+                              isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)
+                                ? "border-[#2A9C64] bg-[#2A9C640F] text-[#2A9C64] dark:border-[#2A9C64] dark:bg-[#2A9C64]/15"
+                                : "border-gray-250 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] text-gray-500 dark:text-gray-400 hover:bg-gray-50"
+                            }`}
+                          >
+                            <Bookmark
+                              className={`h-4.5 w-4.5 transition-all duration-300 ${
+                                isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id) ? "fill-[#2A9C64] dark:fill-[#2A9C64]" : ""
+                              }`}
+                            />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleShareClick(selectedItem);
+                            }}
+                            className="h-8 w-8 rounded-full border border-gray-250 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] text-gray-500 dark:text-gray-400 hover:bg-gray-50 flex items-center justify-center transition-colors"
+                          >
+                            <Share2 className="h-4.5 w-4.5" />
+                          </button>
+                        </div>
                       </div>
+
+                      {/* Highly Reordered Progress Bar */}
+                      {isRecommendedItem(selectedItem) && (
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div className="h-full bg-green-600 dark:bg-green-500 rounded-full" style={{ width: '40%' }} />
+                          </div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold whitespace-nowrap">
+                            Highly reordered
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Description */}
+                      {selectedItem.description && (
+                        <p className="text-sm text-gray-555 dark:text-gray-400 leading-relaxed font-normal">
+                          {selectedItem.description}
+                        </p>
+                      )}
+
+                      {/* Coupon eligibility message */}
+                      {selectedItem.notEligibleForCoupons && (
+                        <p className="text-xs text-gray-400 dark:text-gray-500 font-bold tracking-wide uppercase">
+                          NOT ELIGIBLE FOR COUPONS
+                        </p>
+                      )}
                     </div>
 
-                    {/* Description */}
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 leading-relaxed">
-                      {selectedItem.description}
-                    </p>
-
-                    {/* Highly Reordered Progress Bar */}
-                    {isRecommendedItem(selectedItem) && (
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className="flex-1 h-0.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div className="h-full bg-green-500 dark:bg-green-400 rounded-full" style={{ width: '50%' }} />
-                        </div>
-                        <span className="text-xs text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
-                          highly reordered
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Not Eligible for Coupons */}
-                    {selectedItem.notEligibleForCoupons && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-4">
-                        NOT ELIGIBLE FOR COUPONS
-                      </p>
-                    )}
-
+                    {/* CARD 2: Quantity Selection (Variants) */}
                     {hasFoodVariants(selectedItem) && (
-                      <div className="mb-4">
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Choose a variant</p>
-                        <div className="flex flex-wrap gap-2">
-                          {getFoodVariants(selectedItem).map((variant) => (
-                            <button
-                              key={variant.id}
-                              type="button"
-                              onClick={() => setSelectedVariantId(variant.id)}
-                              className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
-                                String(selectedVariantId || "") === String(variant.id)
-                                  ? "border-red-500 bg-red-50 text-red-600 dark:border-red-400 dark:bg-red-900/30 dark:text-red-200"
-                                  : "border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-[#2a2a2a] dark:text-gray-300"
-                              }`}
-                            >
-                              {variant.name} Â· {RUPEE_SYMBOL}{Math.round(variant.price)}
-                            </button>
-                          ))}
+                      <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl p-4 shadow-sm border border-gray-150/40 dark:border-gray-850/40">
+                        {/* Zomato-style Section Title with bullet Required */}
+                        <div className="mb-4">
+                          <h3 className="text-base font-bold text-gray-900 dark:text-white">Quantity</h3>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold mt-0.5">
+                            Required &bull; Select any 1 option
+                          </p>
+                        </div>
+
+                        {/* Variants List with Radio Buttons */}
+                        <div className="space-y-0 divide-y divide-gray-100 dark:divide-gray-800">
+                          {getFoodVariants(selectedItem).map((variant) => {
+                            const isSelected = String(selectedVariantId || "") === String(variant.id)
+                            return (
+                              <div
+                                key={variant.id}
+                                onClick={() => setSelectedVariantId(variant.id)}
+                                className="flex items-center justify-between py-3.5 cursor-pointer group transition-colors select-none"
+                              >
+                                <div className="flex flex-col">
+                                  <span className={`text-base font-semibold transition-colors ${
+                                    isSelected ? "text-gray-900 dark:text-white font-bold" : "text-gray-700 dark:text-gray-300"
+                                  }`}>
+                                    {variant.name}
+                                  </span>
+                                  <span className="text-sm font-extrabold text-gray-900 dark:text-white mt-0.5">
+                                    {RUPEE_SYMBOL}{Math.round(variant.price)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-center">
+                                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                                    isSelected
+                                      ? "border-[#2A9C64] dark:border-[#2A9C64] bg-white dark:bg-[#1a1a1a]"
+                                      : "border-gray-250 dark:border-gray-700 group-hover:border-[#2A9C64]/60"
+                                  }`}>
+                                    {isSelected && (
+                                      <motion.div
+                                        layoutId="activeRadioDot"
+                                        className="w-2.5 h-2.5 rounded-full bg-[#2A9C64] dark:bg-[#2A9C64]"
+                                        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
                     )}
                   </div>
 
                   {/* Bottom Action Bar */}
-                  <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-4 bg-white dark:bg-[#1a1a1a]">
+                  <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-4 bg-white dark:bg-[#1a1a1a] shadow-[0_-4px_12px_rgba(0,0,0,0.03)] rounded-b-3xl">
                     <div className="flex items-center gap-4">
                       {/* Quantity Selector */}
-                      <div className={`flex items-center gap-3 border-2 rounded-lg px-3 h-[44px] bg-white dark:bg-[#2a2a2a] ${shouldShowGrayscale
-                        ? 'border-gray-300 dark:border-gray-700 opacity-50'
-                        : 'border-gray-300 dark:border-gray-700'
-                        }`}>
+                      <div className={`flex items-center gap-3 border rounded-xl px-3 h-11 bg-[#2A9C640F] dark:bg-[#2A9C64]/15 transition-all duration-300 ${
+                        shouldShowGrayscale
+                          ? 'border-gray-200 dark:border-gray-800 opacity-50 cursor-not-allowed'
+                          : 'border-[#2A9C6430] hover:border-[#2A9C64] shadow-sm'
+                       }`}>
                         <button
                           onClick={(e) => {
                             if (!shouldShowGrayscale) {
@@ -3758,21 +3824,22 @@ function RestaurantDetailsContent() {
                                 Math.max(0, getDishQuantity(selectedItem, selectedVariantId) - 1),
                                 e,
                                 getVariantForDish(selectedItem, selectedVariantId),
-                              )
+                              );
                             }
                           }}
                           disabled={getDishQuantity(selectedItem, selectedVariantId) === 0 || shouldShowGrayscale}
                           className={`${shouldShowGrayscale
-                            ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
-                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed'
-                            }`}
+                            ? 'text-gray-300 dark:text-gray-650 cursor-not-allowed'
+                            : 'text-[#2A9C64] dark:text-[#2A9C64] hover:scale-110 active:scale-95 transition-all disabled:text-[#2A9C6440] dark:disabled:text-[#2A9C6430] disabled:cursor-not-allowed'
+                          }`}
                         >
                           <Minus className="h-5 w-5" />
                         </button>
-                        <span className={`text-lg font-semibold min-w-[2rem] text-center ${shouldShowGrayscale
-                          ? 'text-gray-400 dark:text-gray-600'
-                          : 'text-gray-900 dark:text-white'
-                          }`}>
+                        <span className={`text-lg font-extrabold min-w-[2rem] text-center ${
+                          shouldShowGrayscale
+                            ? 'text-gray-400 dark:text-gray-600'
+                            : 'text-[#2A9C64] dark:text-[#2A9C64]'
+                        }`}>
                           {getDishQuantity(selectedItem, selectedVariantId)}
                         </span>
                         <button
@@ -3783,13 +3850,13 @@ function RestaurantDetailsContent() {
                                 getDishQuantity(selectedItem, selectedVariantId) + 1,
                                 e,
                                 getVariantForDish(selectedItem, selectedVariantId),
-                              )
+                              );
                             }
                           }}
                           disabled={shouldShowGrayscale}
                           className={shouldShowGrayscale
-                            ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
-                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                            ? 'text-gray-300 dark:text-gray-650 cursor-not-allowed'
+                            : 'text-[#2A9C64] dark:text-[#2A9C64] hover:scale-110 active:scale-95 transition-all'
                           }
                         >
                           <Plus className="h-5 w-5" />
@@ -3798,10 +3865,11 @@ function RestaurantDetailsContent() {
 
                       {/* Add Item Button */}
                       <Button
-                        className={`flex-1 h-[44px] rounded-lg font-semibold flex items-center justify-center gap-2 ${shouldShowGrayscale
-                          ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-600 cursor-not-allowed opacity-50'
-                          : 'bg-red-500 hover:bg-red-600 text-white'
-                          }`}
+                        className={`flex-1 h-11 rounded-xl font-extrabold flex items-center justify-center gap-1.5 transition-all duration-350 transform active:scale-97 ${
+                          shouldShowGrayscale
+                            ? 'bg-gray-355 dark:bg-gray-700 text-gray-500 dark:text-gray-600 cursor-not-allowed opacity-50'
+                            : 'bg-[#2A9C64] hover:bg-[#1E7A4A] text-white shadow-md shadow-[#2A9C64]/15 hover:shadow-[#2A9C64]/25'
+                        }`}
                         onClick={(e) => {
                           if (!shouldShowGrayscale) {
                             updateItemQuantity(
@@ -3809,25 +3877,15 @@ function RestaurantDetailsContent() {
                               getDishQuantity(selectedItem, selectedVariantId) + 1,
                               e,
                               getVariantForDish(selectedItem, selectedVariantId),
-                            )
-                            setShowItemDetail(false)
+                            );
+                            setShowItemDetail(false);
                           }
                         }}
                         disabled={shouldShowGrayscale}
                       >
-                        <span>Add item</span>
-                        <div className="flex items-center gap-1">
-                          {selectedItem.originalPrice && selectedItem.originalPrice > selectedItem.price && (
-                            <span className="text-sm line-through text-red-200">
-                              {RUPEE_SYMBOL}{Math.round(selectedItem.originalPrice)}
-                            </span>
-                          )}
-                          <span className="text-base font-bold">
-                            {hasFoodVariants(selectedItem)
-                              ? `${getVariantForDish(selectedItem, selectedVariantId)?.name || "Default"} Â· ${RUPEE_SYMBOL}${Math.round(getVariantForDish(selectedItem, selectedVariantId)?.price || selectedItem.price)}`
-                              : `${RUPEE_SYMBOL}${Math.round(selectedItem.price)}`}
-                          </span>
-                        </div>
+                        <span className="tracking-wide text-base font-extrabold">
+                          Add item {RUPEE_SYMBOL}{Math.round(getVariantForDish(selectedItem, selectedVariantId)?.price || selectedItem.price)}
+                        </span>
                       </Button>
                     </div>
                   </div>
@@ -4226,9 +4284,9 @@ function RestaurantDetailsContent() {
                            <div className="flex items-center justify-between gap-4">
                               <div className="flex items-center gap-4">
                                 <div className="h-12 w-12 flex items-center justify-center bg-white dark:bg-[#1a1a1a] rounded-xl overflow-hidden border border-emerald-100 dark:border-emerald-900/30 shadow-sm">
-                                  {restaurant?.profileImage ? (
+                                  {restaurant?.coverImages?.[0]?.url || restaurant?.coverImages?.[0] ? (
                                     <img 
-                                      src={restaurant.profileImage} 
+                                      src={restaurant?.coverImages?.[0]?.url || restaurant?.coverImages?.[0]} 
                                       alt="Restaurant" 
                                       className="h-full w-full object-cover" 
                                       onError={(e) => {

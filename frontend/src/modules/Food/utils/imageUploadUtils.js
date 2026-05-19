@@ -4,6 +4,7 @@ const openTransientImageInput = ({
   onSelectFile,
   accept = "image/*",
   capture = undefined,
+  multiple = false,
 }) => {
   if (typeof document === "undefined") {
     throw new Error("Document is not available")
@@ -12,7 +13,7 @@ const openTransientImageInput = ({
   const input = document.createElement("input")
   input.type = "file"
   input.accept = accept
-  input.multiple = false
+  input.multiple = multiple
   if (capture) {
     input.setAttribute("capture", capture)
   }
@@ -33,8 +34,10 @@ const openTransientImageInput = ({
   }
 
   input.onchange = (event) => {
-    const file = event?.target?.files?.[0] || null
-    if (file) onSelectFile(file)
+    const files = Array.from(event?.target?.files || [])
+    if (files.length > 0) {
+      onSelectFile(multiple ? files : files[0])
+    }
     cleanup()
   }
 
@@ -206,7 +209,7 @@ export const openCamera = async ({ onSelectFile, fileNamePrefix = "camera-photo"
 /**
  * Open gallery via Flutter bridge or browser fallback
  */
-export const openGallery = async ({ onSelectFile, fileNamePrefix = "gallery-photo" }) => {
+export const openGallery = async ({ onSelectFile, fileNamePrefix = "gallery-photo", multiple = false }) => {
   if (!onSelectFile || typeof onSelectFile !== "function") {
     console.warn("openGallery: onSelectFile callback not provided")
     return
@@ -220,6 +223,7 @@ export const openGallery = async ({ onSelectFile, fileNamePrefix = "gallery-phot
     openTransientImageInput({
       onSelectFile,
       accept: "image/*",
+      multiple,
     })
   } catch (error) {
     console.error("Gallery pick failed:", error)

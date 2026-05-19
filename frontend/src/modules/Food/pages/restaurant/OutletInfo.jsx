@@ -31,7 +31,7 @@ import { Input } from "@food/components/ui/input"
 import { restaurantAPI } from "@food/api"
 import { toast } from "sonner"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
-import { isFlutterBridgeAvailable, convertBase64ToFile } from "@food/utils/imageUploadUtils"
+import { convertBase64ToFile, openGallery } from "@food/utils/imageUploadUtils"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -57,6 +57,19 @@ const normalizeImageEntry = (image) => {
   }
 
   return null
+}
+
+const getNormalizedCoverImages = (restaurant) => {
+  if (!restaurant || typeof restaurant !== "object") return []
+
+  const sourceImages =
+    restaurant.coverImages && Array.isArray(restaurant.coverImages) && restaurant.coverImages.length > 0
+      ? restaurant.coverImages
+      : restaurant.menuImages
+
+  return Array.isArray(sourceImages)
+    ? sourceImages.map(normalizeImageEntry).filter(Boolean)
+    : []
 }
 
 // Helper component for reusable action buttons
@@ -99,6 +112,18 @@ export default function OutletInfo() {
   const profileImageInputRef = useRef(null)
   const menuImageInputRef = useRef(null)
   const [activePicker, setActivePicker] = useState(null) // { type: 'profile' | 'cover', ref: any, title: string, multiple: boolean }
+
+  const syncRestaurantImages = (data) => {
+    if (!data) return
+
+    if (data.profileImage?.url) {
+      setThumbnailImage(data.profileImage.url)
+    }
+
+    const normalizedCoverImages = getNormalizedCoverImages(data)
+    setCoverImages(normalizedCoverImages)
+    setMainImage(normalizedCoverImages[0]?.url || DEFAULT_BANNER_IMAGE)
+  }
 
   // Format address from location object
   const formatAddress = (location) => {
@@ -149,22 +174,7 @@ export default function OutletInfo() {
           }
           
           // Set images
-          if (data.profileImage?.url) {
-            setThumbnailImage(data.profileImage.url)
-          }
-          // Use coverImages if available, otherwise fallback to menuImages for backward compatibility
-          if (data.coverImages && Array.isArray(data.coverImages) && data.coverImages.length > 0) {
-            const normalizedCoverImages = data.coverImages.map(normalizeImageEntry).filter(Boolean)
-            setCoverImages(normalizedCoverImages)
-            setMainImage(normalizedCoverImages[0]?.url || DEFAULT_BANNER_IMAGE)
-          } else if (data.menuImages && Array.isArray(data.menuImages) && data.menuImages.length > 0) {
-            const normalizedMenuImages = data.menuImages.map(normalizeImageEntry).filter(Boolean)
-            setCoverImages(normalizedMenuImages)
-            setMainImage(normalizedMenuImages[0]?.url || DEFAULT_BANNER_IMAGE)
-          } else {
-            setCoverImages([])
-            setMainImage(DEFAULT_BANNER_IMAGE)
-          }
+          syncRestaurantImages(data)
         }
       } catch (error) {
         if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
@@ -260,16 +270,9 @@ export default function OutletInfo() {
       setImageType('menu')
       setUploadingCount(fileArray.length)
 
-      // Get current images
       const currentResponse = await restaurantAPI.getCurrentRestaurant()
       const currentData = currentResponse?.data?.data?.restaurant || currentResponse?.data?.restaurant
-      const sourceImages =
-        currentData?.coverImages && Array.isArray(currentData.coverImages) && currentData.coverImages.length > 0
-          ? currentData.coverImages
-          : currentData?.menuImages
-      const existingImages = Array.isArray(sourceImages)
-        ? sourceImages.map(normalizeImageEntry).filter(Boolean)
-        : []
+      const existingImages = getNormalizedCoverImages(currentData)
 
       const remainingSlots = Math.max(0, MAX_COVER_IMAGES - existingImages.length)
       if (remainingSlots <= 0) {
@@ -282,35 +285,25 @@ export default function OutletInfo() {
         toast.info(`Only ${remainingSlots} image${remainingSlots === 1 ? "" : "s"} uploaded. Max ${MAX_COVER_IMAGES} allowed.`)
       }
 
-      const uploadResponse = await restaurantAPI.uploadCoverImages(filesToUpload)
-      const uploadedImages =
-        uploadResponse?.data?.data?.coverImages ||
-        uploadResponse?.data?.data?.images ||
-        uploadResponse?.data?.coverImages ||
-        uploadResponse?.data?.images ||
-        []
-      const uploadedImageData = (Array.isArray(uploadedImages) ? uploadedImages : [uploadedImages])
-        .map(normalizeImageEntry)
-        .filter(Boolean)
+      await restaurantAPI.uploadCoverImages(filesToUpload)
 
-      if (uploadedImageData.length > 0) {
-        const allImages = [...existingImages]
-        uploadedImageData.forEach(uploaded => {
-          if (!allImages.find(img => img.url === uploaded.url)) {
-            allImages.push(uploaded)
-          }
+      const refreshedResponse = await restaurantAPI.getCurrentRestaurant()
+      const refreshedRestaurant = refreshedResponse?.data?.data?.restaurant || refreshedResponse?.data?.restaurant
+      const refreshedImages = getNormalizedCoverImages(refreshedRestaurant).slice(0, MAX_COVER_IMAGES)
+
+      if (refreshedRestaurant) {
+        setRestaurantData(refreshedRestaurant)
+        syncRestaurantImages({
+          ...refreshedRestaurant,
+          coverImages: refreshedImages,
         })
+      }
 
-        try {
-          await restaurantAPI.updateProfile({ coverImages: allImages.slice(0, MAX_COVER_IMAGES) })
-          toast.success(`Successfully uploaded ${uploadedImageData.length} slider image${uploadedImageData.length === 1 ? "" : "s"}`)
-        } catch (updateError) {
-          toast.error("Images uploaded but failed to save.")
-        }
-
-        const nextImages = allImages.slice(0, MAX_COVER_IMAGES)
-        setCoverImages(nextImages)
-        if (nextImages.length > 0) setMainImage(nextImages[0].url)
+      const addedCount = Math.max(0, refreshedImages.length - existingImages.length)
+      if (refreshedImages.length > 0) {
+        toast.success(`Successfully uploaded ${addedCount || refreshedImages.length} slider image${(addedCount || refreshedImages.length) === 1 ? "" : "s"}`)
+      } else {
+        toast.error("Images uploaded but did not appear in restaurant profile.")
       }
 
     } catch (error) {
@@ -322,12 +315,21 @@ export default function OutletInfo() {
     }
   }
 
-  const handleImageClick = (type, ref, title, multiple = false) => {
-    if (isFlutterBridgeAvailable()) {
-      setActivePicker({ type, ref, title, multiple })
-    } else {
-      ref.current?.click()
+  const handleImageClick = async (type, ref, title, multiple = false) => {
+    if (type === "cover") {
+      try {
+        await openGallery({
+          onSelectFile: handleCoverImageAdd,
+          fileNamePrefix: "outlet-cover",
+          multiple,
+        })
+      } catch (error) {
+        toast.error("Failed to open gallery")
+      }
+      return
     }
+
+    setActivePicker({ type, ref, title, multiple })
   }
 
   // Handle cover image deletion
@@ -423,7 +425,10 @@ export default function OutletInfo() {
               accept="image/*"
               multiple
               className="hidden"
-              onChange={(e) => handleCoverImageAdd(Array.from(e.target.files || []))}
+              onChange={(e) => {
+                handleCoverImageAdd(Array.from(e.target.files || []))
+                e.target.value = ""
+              }}
             />
             <div className="absolute left-4 bottom-4 rounded-xl bg-black/30 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white backdrop-blur-sm">
               Up to {MAX_COVER_IMAGES} slider images
@@ -481,7 +486,10 @@ export default function OutletInfo() {
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) => handleProfileImageReplace(e.target.files?.[0])}
+                onChange={(e) => {
+                  handleProfileImageReplace(e.target.files?.[0])
+                  e.target.value = ""
+                }}
               />
             </div>
 
@@ -646,6 +654,7 @@ export default function OutletInfo() {
         description={`Choose how to upload your ${activePicker?.type} photo`}
         fileNamePrefix={`outlet-${activePicker?.type}`}
         galleryInputRef={activePicker?.ref}
+        multiple={activePicker?.multiple}
       />
     </>
   )

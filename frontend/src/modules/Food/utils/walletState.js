@@ -122,7 +122,7 @@ export const calculateBalances = (state) => {
 export const addTransaction = (transaction) => {
   const state = getWalletState()
   const newTransaction = {
-    id: Date.now(),
+    id: transaction.id || Date.now(),
     ...transaction,
     date: transaction.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
   }
@@ -205,6 +205,64 @@ export const addOrderPayment = (amount, orderId, description) => {
     orderId: orderId
   }
   
+  return addTransaction(transaction)
+}
+
+/**
+ * Add dining bill payout to restaurant wallet.
+ * Deduplicates by bookingId so repeated "pay" actions do not over-credit the wallet.
+ * @param {Object} payload
+ * @returns {Object} - Created or existing transaction
+ */
+export const addDiningBillPayment = ({
+  bookingId,
+  grossAmount,
+  commissionAmount = 0,
+  payoutAmount,
+  guestCount = 0,
+  restaurantName = "",
+  paidAt = new Date().toISOString(),
+}) => {
+  const normalizedBookingId = String(bookingId || "").trim()
+  if (!normalizedBookingId) return null
+
+  const state = getWalletState()
+  const existingTransaction = state.transactions.find(
+    (transaction) =>
+      transaction.type === "payment" &&
+      transaction.paymentSource === "dining" &&
+      String(transaction.bookingId || "") === normalizedBookingId,
+  )
+
+  if (existingTransaction) {
+    return existingTransaction
+  }
+
+  const gross = Number(grossAmount) || 0
+  const commission = Number(commissionAmount) || 0
+  const payout =
+    payoutAmount !== undefined && payoutAmount !== null
+      ? Number(payoutAmount) || 0
+      : Math.max(0, Number((gross - commission).toFixed(2)))
+
+  const createdAt = paidAt || new Date().toISOString()
+  const transaction = {
+    id: `dining-${normalizedBookingId}`,
+    amount: payout,
+    description:
+      guestCount > 0
+        ? `Dining payout${restaurantName ? ` from ${restaurantName}` : ""} for ${guestCount} guest${guestCount === 1 ? "" : "s"}`
+        : `Dining payout${restaurantName ? ` from ${restaurantName}` : ""}`,
+    status: "Completed",
+    type: "payment",
+    paymentSource: "dining",
+    bookingId: normalizedBookingId,
+    grossAmount: gross,
+    commissionAmount: commission,
+    createdAt,
+    date: new Date(createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+  }
+
   return addTransaction(transaction)
 }
 

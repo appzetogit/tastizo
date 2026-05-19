@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { Search, Download, ChevronDown, Eye, Settings, ArrowUpDown, Loader2, Star, Building2, User, FileText, Phone, Mail, MapPin, ShieldX, Trash2, ArrowRight, Plus } from "lucide-react"
-import { adminAPI } from "@food/api"
+import { Search, Download, ChevronDown, Eye, Settings, ArrowUpDown, Loader2, Star, Building2, User, FileText, Phone, Mail, MapPin, ShieldX, Trash2, ArrowRight, Plus, DollarSign, TrendingUp } from "lucide-react"
+import { adminAPI, diningAPI } from "@food/api"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { exportRestaurantsToPDF } from "@food/components/admin/restaurants/restaurantsExportUtils"
 const debugLog = (...args) => {}
@@ -43,6 +43,26 @@ export default function DiningList() {
     const [error, setError] = useState(null)
     const [isEditModalOpen, setIsEditModalOpen] = useState(false)
     const [editingRestaurant, setEditingRestaurant] = useState(null)
+    const [activeTab, setActiveTab] = useState("restaurants") // "restaurants", "ledger"
+    const [bookings, setBookings] = useState([])
+
+    useEffect(() => {
+        const fetchBookings = async () => {
+            try {
+                const response = await diningAPI.getBookings()
+                if (response.data.success) {
+                    setBookings(response.data.data)
+                }
+            } catch (err) {
+                // Fallback to local storage directly if API fails or mock database is active
+                const stored = localStorage.getItem("food_dining_bookings_v1")
+                if (stored) {
+                    setBookings(JSON.parse(stored))
+                }
+            }
+        }
+        fetchBookings()
+    }, [activeTab])
 
     // Fetch restaurants from backend API
     useEffect(() => {
@@ -217,6 +237,7 @@ export default function DiningList() {
             await adminAPI.updateRestaurantDiningSettings(restaurant._id, {
                 isEnabled: restaurant.diningSettings?.isEnabled === true,
                 maxGuests: guests,
+                commissionPct: restaurant.diningSettings?.commissionPct ?? 10,
                 categoryIds: restaurant.categoryIds || [],
                 primaryCategoryId: restaurant.primaryCategoryId || restaurant.categoryIds?.[0] || null,
             })
@@ -226,20 +247,71 @@ export default function DiningList() {
         }
     }
 
+    const handleCommissionPctUpdate = async (restaurant, newValue) => {
+        const pct = parseInt(newValue)
+        if (isNaN(pct) || pct < 0 || pct > 100) return
+
+        if (pct === (restaurant.diningSettings?.commissionPct ?? 10)) return
+
+        try {
+            // Optimistic update
+            setRestaurants(prev => prev.map(r =>
+                r.id === restaurant.id
+                    ? { ...r, diningSettings: { ...r.diningSettings, commissionPct: pct } }
+                    : r
+            ))
+
+            await adminAPI.updateRestaurantDiningSettings(restaurant._id, {
+                isEnabled: restaurant.diningSettings?.isEnabled === true,
+                maxGuests: restaurant.diningSettings?.maxGuests || 6,
+                commissionPct: pct,
+                categoryIds: restaurant.categoryIds || [],
+                primaryCategoryId: restaurant.primaryCategoryId || restaurant.categoryIds?.[0] || null,
+            })
+        } catch (error) {
+            debugError("Failed to update commission percentage", error)
+        }
+    }
+
     return (
         <div className="h-full overflow-y-auto bg-slate-50 p-4 lg:p-6">
             <div className="max-w-7xl mx-auto">
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
                         <div className="flex items-center gap-3">
-                            <h1 className="text-2xl font-bold text-slate-900">Dining List</h1>
+                            <h1 className="text-2xl font-bold text-slate-900">Dining Management</h1>
                         </div>
                     </div>
-                    <p className="text-slate-500">Manage restaurants available for dining.</p>
+                    <p className="text-slate-500 mb-6">Manage restaurants available for dining and track platform commissions.</p>
+                    
+                    {/* Tab Navigation Switcher */}
+                    <div className="flex border-b border-slate-200">
+                        <button
+                            onClick={() => setActiveTab("restaurants")}
+                            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors ${
+                                activeTab === "restaurants"
+                                    ? "border-indigo-600 text-indigo-600"
+                                    : "border-transparent text-slate-500 hover:text-slate-700"
+                            }`}
+                        >
+                            Registered Restaurants
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("ledger")}
+                            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors ${
+                                activeTab === "ledger"
+                                    ? "border-indigo-600 text-indigo-600"
+                                    : "border-transparent text-slate-500 hover:text-slate-700"
+                            }`}
+                        >
+                            Commissions Ledger
+                        </button>
+                    </div>
                 </div>
 
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                    {loading ? (
+                    {activeTab === "restaurants" ? (
+                        loading ? (
                         <div className="flex items-center justify-center py-20">
                             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                             <span className="ml-3 text-slate-600">Loading dining list...</span>
@@ -310,6 +382,7 @@ export default function DiningList() {
                                             <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Zone</th>
                                             <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Dining</th>
                                             <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Guests</th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Commission (%)</th>
                                             <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Rating</th>
                                             <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Status</th>
                                             <th className="px-6 py-4 text-right text-[10px] font-bold text-slate-700 uppercase tracking-wider">Actions</th>
@@ -318,7 +391,7 @@ export default function DiningList() {
                                     <tbody className="bg-white divide-y divide-slate-100">
                                         {filteredRestaurants.length === 0 ? (
                                             <tr>
-                                                <td colSpan={8} className="px-6 py-20 text-center">
+                                                <td colSpan={9} className="px-6 py-20 text-center">
                                                     <div className="flex flex-col items-center justify-center">
                                                         <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
                                                             <Search className="w-8 h-8 text-slate-300" />
@@ -384,6 +457,23 @@ export default function DiningList() {
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
+                                                        <div className="flex items-center gap-2">
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                defaultValue={restaurant.diningSettings?.commissionPct ?? 10}
+                                                                onBlur={(e) => handleCommissionPctUpdate(restaurant, e.target.value)}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter') {
+                                                                        e.currentTarget.blur()
+                                                                    }
+                                                                }}
+                                                                className="w-16 px-2 py-1 text-sm border border-slate-300 rounded focus:outline-none focus:border-blue-500 text-center"
+                                                            />
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
                                                         <span className="text-sm text-yellow-500 font-medium">{renderStars(restaurant.rating)}</span>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
@@ -409,8 +499,126 @@ export default function DiningList() {
                                 </table>
                             </div>
                         </>
-                    )}
-                </div>
+                    )
+                ) : (
+                    <div>
+                        {/* Stats Overview cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                            <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-indigo-100 flex flex-col justify-between h-36 border border-indigo-400/20">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-100">Total Platform Earnings</span>
+                                    <TrendingUp className="w-5 h-5 text-indigo-200" />
+                                </div>
+                                <div>
+                                    <h3 className="text-3xl font-black">
+                                        ₹{bookings
+                                            .filter(b => b.billStatus === "paid")
+                                            .reduce((sum, b) => sum + (b.commissionAmount ?? Number((b.billAmount * ((b.commissionPct ?? 10) / 100)).toFixed(2))), 0)
+                                            .toFixed(2)}
+                                    </h3>
+                                    <p className="text-[10px] text-indigo-200 mt-1">Admin Net Dining Commission (Default 10%)</p>
+                                </div>
+                            </div>
+
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between h-36">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Settled Volume</span>
+                                    <DollarSign className="w-5 h-5 text-slate-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-3xl font-black text-slate-800">
+                                        ₹{bookings
+                                            .filter(b => b.billStatus === "paid")
+                                            .reduce((sum, b) => sum + Number(b.billAmount), 0)
+                                            .toFixed(2)}
+                                    </h3>
+                                    <p className="text-[10px] text-slate-400 mt-1">Gross Dining Billing Handled</p>
+                                </div>
+                            </div>
+
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between h-36">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Paid Checkout Orders</span>
+                                    <FileText className="w-5 h-5 text-slate-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-3xl font-black text-slate-800">
+                                        {bookings.filter(b => b.billStatus === "paid").length} Settled
+                                    </h3>
+                                    <p className="text-[10px] text-slate-400 mt-1">Settle transactions completed via Razorpay</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Ledger Table */}
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-black text-slate-800">Settled Commissions History</h3>
+                            <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                Live Ledger Feed
+                            </span>
+                        </div>
+                        {bookings.filter(b => b.billStatus === "paid").length === 0 ? (
+                            <div className="text-center py-16 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                <p className="text-sm font-medium text-slate-500">No settled commission payouts tracked yet.</p>
+                                <p className="text-xs text-slate-400 mt-1">Complete a test Razorpay checkout from the dining guest bookings to populate.</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-sm">
+                                <table className="min-w-full divide-y divide-slate-200">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="px-6 py-3.5 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Date & Guest</th>
+                                            <th className="px-6 py-3.5 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Restaurant</th>
+                                            <th className="px-6 py-3.5 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Bill Amount</th>
+                                            <th className="px-6 py-3.5 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Comm %</th>
+                                            <th className="px-6 py-3.5 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Admin Earnings</th>
+                                            <th className="px-6 py-3.5 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Restaurant Payout</th>
+                                            <th className="px-6 py-3.5 text-center text-xs font-black text-slate-500 uppercase tracking-wider">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-slate-200">
+                                        {bookings
+                                            .filter(b => b.billStatus === "paid")
+                                            .map((b) => {
+                                                const commPct = b.commissionPct ?? 10
+                                                const commAmt = b.commissionAmount ?? Number((b.billAmount * (commPct / 100)).toFixed(2))
+                                                const restAmt = Number((b.billAmount - commAmt).toFixed(2))
+                                                return (
+                                                    <tr key={b._id} className="hover:bg-slate-50/50 transition-colors">
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="text-xs font-bold text-slate-800">{b.date} at {b.time}</div>
+                                                            <div className="text-[10px] text-slate-400 mt-0.5">{b.guestName || "Guest"} ({b.guests} guests)</div>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="text-xs font-black text-slate-800">{b.restaurant?.name || "Tastizo Restaurant"}</div>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="text-xs font-bold text-slate-800">₹{b.billAmount}</div>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="text-xs font-black text-indigo-600">{commPct}%</div>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="text-xs font-extrabold text-indigo-600 font-mono">₹{commAmt}</div>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="text-xs font-extrabold text-emerald-600 font-mono">₹{restAmt}</div>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                            <span className="inline-flex px-2.5 py-0.5 text-[9px] font-black uppercase bg-emerald-100 text-emerald-700 rounded-md tracking-wider">
+                                                                Settled
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
             </div>
 
             {/* Edit Modal */}
@@ -483,6 +691,22 @@ export default function DiningList() {
                                     ))}
                                 </select>
                             </div>
+
+                            {/* Platform Commission (%) */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-semibold text-slate-900">Platform Commission (%)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={editingRestaurant.diningSettings?.commissionPct ?? 10}
+                                    onChange={(e) => setEditingRestaurant(prev => ({
+                                        ...prev,
+                                        diningSettings: { ...prev.diningSettings, commissionPct: parseInt(e.target.value) ?? 10 }
+                                    }))}
+                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                            </div>
                         </div>
 
                         <div className="px-6 py-4 bg-slate-50 flex items-center justify-end gap-3">
@@ -499,6 +723,7 @@ export default function DiningList() {
                                         await adminAPI.updateRestaurantDiningSettings(editingRestaurant._id, {
                                             isEnabled: editingRestaurant.diningSettings?.isEnabled === true,
                                             maxGuests: editingRestaurant.diningSettings?.maxGuests || 6,
+                                            commissionPct: editingRestaurant.diningSettings?.commissionPct ?? 10,
                                             categoryIds: editingRestaurant.categoryIds || [],
                                             primaryCategoryId: editingRestaurant.primaryCategoryId || editingRestaurant.categoryIds?.[0] || null,
                                         })

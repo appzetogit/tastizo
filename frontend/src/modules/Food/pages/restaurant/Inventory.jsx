@@ -972,7 +972,7 @@ export default function Inventory() {
           })
           
           setCategories(withStockRules)
-          setExpandedCategories(withStockRules.map(c => c.id))
+          setExpandedCategories(["pending-approval-section", ...withStockRules.map(c => c.id)])
         } else {
           // Empty menu - start fresh
           setCategories([])
@@ -1449,8 +1449,40 @@ export default function Inventory() {
     })
   }, [addons, searchQuery, selectedFilter])
 
-  // When on Add-ons tab, keep the list empty (no items shown)
-  const listToRender = activeTab === "add-ons" ? [] : filteredCategories
+  // When on Add-ons tab, keep the list empty (no items shown).
+  // Otherwise, extract any pending items and present them in a virtual "Pending Approval" category at the top of the menu!
+  const listToRender = useMemo(() => {
+    if (activeTab === "add-ons") return []
+
+    // Collect all pending approval items across the currently filtered categories
+    const allPending = []
+    filteredCategories.forEach((category) => {
+      const items = category.items || []
+      items.forEach((item) => {
+        if (item.approvalStatus === "pending") {
+          allPending.push({
+            ...item,
+            originalCategoryId: category.id,
+            originalCategoryName: category.name,
+          })
+        }
+      })
+    })
+
+    if (allPending.length === 0) return filteredCategories
+
+    const pendingCategory = {
+      id: "pending-approval-section",
+      name: "Pending Approval",
+      description: "These items are currently pending admin approval and are not visible to customers yet.",
+      itemCount: allPending.length,
+      inStock: true,
+      items: allPending,
+      isPendingSection: true,
+    }
+
+    return [pendingCategory, ...filteredCategories]
+  }, [filteredCategories, activeTab])
 
   const activeFilterCount = activeTab === "add-ons"
     ? (addonFilterCounts[selectedFilter] || 0)
@@ -1518,6 +1550,16 @@ export default function Inventory() {
 
   // Handle toggle click
   const handleToggleChange = async (type, categoryId, itemId, nextChecked) => {
+    if (type === "item" && categoryId === "pending-approval-section") {
+      for (const cat of categories) {
+        const found = (cat.items || []).some(i => i.id === itemId)
+        if (found) {
+          categoryId = cat.id
+          break
+        }
+      }
+    }
+
     if (nextChecked) {
       const targetItemIds = getTargetItemIds(type, categoryId, itemId)
 
@@ -1706,15 +1748,26 @@ export default function Inventory() {
   // Update menu API when recommendation toggle changes
   // Handle item recommendation toggle
   const handleRecommendToggle = async (categoryId, itemId) => {
+    let resolvedCategoryId = categoryId
+    if (categoryId === "pending-approval-section") {
+      for (const cat of categories) {
+        const found = (cat.items || []).some(i => i.id === itemId)
+        if (found) {
+          resolvedCategoryId = cat.id
+          break
+        }
+      }
+    }
+
     // Find current recommendation status
-    const category = categories.find(cat => cat.id === categoryId)
+    const category = categories.find(cat => cat.id === resolvedCategoryId)
     const item = category?.items.find(i => i.id === itemId)
     const newRecommendationStatus = !item?.isRecommended
 
     // Update local state
     setCategories(prev =>
       prev.map(category => {
-        if (category.id !== categoryId) return category
+        if (category.id !== resolvedCategoryId) return category
         const updatedItems = category.items.map(item =>
           item.id === itemId ? { ...item, isRecommended: newRecommendationStatus } : item
         )
@@ -1750,18 +1803,22 @@ export default function Inventory() {
   const handleEditItem = (category, item) => {
     if (!item?.id) return
 
+    const resolvedCategory = item.originalCategoryId 
+      ? { id: item.originalCategoryId, name: item.originalCategoryName } 
+      : category
+
     navigate(`/food/restaurant/hub-menu/item/${item.id}`, {
       state: {
         backTo: "/food/restaurant/inventory",
         item: {
           ...item,
-          category: category?.name || "",
-          categoryId: category?.id || category?.categoryId || "",
+          category: resolvedCategory?.name || "",
+          categoryId: resolvedCategory?.id || resolvedCategory?.categoryId || "",
           isAvailable: item.inStock,
         },
-        category: category?.name || "",
-        categoryId: category?.id || category?.categoryId || "",
-        groupId: category?.id || category?.categoryId || "",
+        category: resolvedCategory?.name || "",
+        categoryId: resolvedCategory?.id || resolvedCategory?.categoryId || "",
+        groupId: resolvedCategory?.id || resolvedCategory?.categoryId || "",
       },
     })
   }
@@ -2234,7 +2291,11 @@ export default function Inventory() {
 
                 {/* Category Header - Clickable */}
                 <div
-                  className="cursor-pointer bg-[linear-gradient(135deg,#fafafa_0%,#ffffff_58%,#f4f4f5_100%)] p-5"
+                  className={`cursor-pointer p-5 transition-all duration-200 ${
+                    category.isPendingSection
+                      ? "bg-[linear-gradient(135deg,#fffbeb_0%,#ffffff_58%,#fef3c7_100%)] border-l-4 border-amber-500"
+                      : "bg-[linear-gradient(135deg,#fafafa_0%,#ffffff_58%,#f4f4f5_100%)]"
+                  }`}
                   onClick={() => toggleCategory(category.id)}
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -2243,51 +2304,69 @@ export default function Inventory() {
                         <h3 className="text-lg font-bold tracking-[-0.02em] text-slate-950">
                           {category.name}
                         </h3>
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
-                          {category.items?.length || category.itemCount || 0} items
-                        </span>
+                        {category.isPendingSection ? (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800 animate-pulse">
+                            {category.items?.length || category.itemCount || 0} Awaiting Action
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+                            {category.items?.length || category.itemCount || 0} items
+                          </span>
+                        )}
                         <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                          category.inStock
+                          category.isPendingSection
+                            ? "bg-amber-500 text-white"
+                            : category.inStock
                             ? "bg-zinc-100 text-zinc-800"
                             : "bg-zinc-200 text-zinc-700"
                         }`}>
-                          {category.inStock ? "Healthy" : "Needs attention"}
+                          {category.isPendingSection ? "Awaiting Admin" : (category.inStock ? "Healthy" : "Needs attention")}
                         </span>
                       </div>
                       {category.description ? (
                         <p className="text-sm leading-6 text-slate-500">{category.description}</p>
                       ) : null}
                       <div className="mt-4 flex items-center gap-2 flex-wrap">
-                        {category.inStock ? (
-                          <p className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-800">
-                            All visible items are in stock
+                        {category.isPendingSection ? (
+                          <p className="rounded-full bg-amber-50 text-amber-800 px-3 py-1 text-xs font-semibold border border-amber-200/50">
+                            These items will automatically appear in their normal categories once approved by administration.
                           </p>
                         ) : (
-                          <p className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
-                            {getOutOfStockCount(category)} out of {(category.items?.length || category.itemCount || 0)} item{(category.items?.length || category.itemCount || 0) !== 1 ? 's' : ''} out of stock
-                          </p>
+                          <>
+                            {category.inStock ? (
+                              <p className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-800">
+                                All visible items are in stock
+                              </p>
+                            ) : (
+                              <p className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
+                                {getOutOfStockCount(category)} out of {(category.items?.length || category.itemCount || 0)} item{(category.items?.length || category.itemCount || 0) !== 1 ? 's' : ''} out of stock
+                              </p>
+                            )}
+                            <p className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                              {(categoryItems.filter((item) => item.isRecommended).length)} recommended
+                            </p>
+                          </>
                         )}
-                        <p className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                          {(categoryItems.filter((item) => item.isRecommended).length)} recommended
-                        </p>
                       </div>
                     </div>
-
+ 
                     <div className="ml-2 flex flex-col items-center gap-3">
                       {/* Category Toggle Switch */}
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="rounded-full bg-slate-100 px-2 py-1 shadow-inner"
-                      >
-                        <Switch
-                          checked={category.inStock}
-                          onCheckedChange={(checked) =>
-                            handleToggleChange("category", category.id, null, checked)
-                          }
-                          className="data-[state=checked]:bg-[#111111]"
-                        />
-                      </div>
-
+                      {!category.isPendingSection && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="rounded-full bg-slate-100 px-2 py-1 shadow-inner"
+                        >
+                          <Switch
+                            checked={category.inStock}
+                            onCheckedChange={(checked) =>
+                              handleToggleChange("category", category.id, null, checked)
+                            }
+                            className="data-[state=checked]:bg-[#111111]"
+                          />
+                        </div>
+                      )}
+ 
                       {/* Expand/Collapse Button - Right of In stock */}
                       <button
                         onClick={(e) => {
@@ -2333,6 +2412,23 @@ export default function Inventory() {
                                   <div className={`h-2.5 w-2.5 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-500'
                                     }`} />
                                 </div>
+
+                                {/* Item Thumbnail Image */}
+                                <div className="h-14 w-14 rounded-xl overflow-hidden flex-shrink-0 border border-slate-200/60 bg-white flex items-center justify-center shadow-sm">
+                                  {item.image ? (
+                                    <img
+                                      src={item.image}
+                                      alt={item.name}
+                                      className="h-full w-full object-cover"
+                                      onError={(e) => {
+                                        e.currentTarget.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=120"
+                                      }}
+                                    />
+                                  ) : (
+                                    <Utensils className="h-5 w-5 text-slate-400" />
+                                  )}
+                                </div>
+
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <p className="line-clamp-2 text-sm font-semibold leading-5 text-slate-900">{item.name}</p>

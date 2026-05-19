@@ -21,6 +21,7 @@ export default function Coupons() {
   const [errors, setErrors] = useState({})
   const [formData, setFormData] = useState({
     couponCode: "",
+    couponType: "delivery",
     discountType: "percentage",
     discountValue: "",
     customerScope: "all",
@@ -163,6 +164,7 @@ export default function Coupons() {
   const resetForm = () => {
     setFormData({
       couponCode: "",
+      couponType: "delivery",
       discountType: "percentage",
       discountValue: "",
       customerScope: "all",
@@ -208,6 +210,7 @@ export default function Coupons() {
       setIsSubmitting(true)
       const payload = {
         couponCode: formData.couponCode.trim(),
+        couponType: formData.couponType,
         discountType: formData.discountType,
         discountValue: parsedDiscountValue,
         customerScope: formData.customerScope,
@@ -319,6 +322,18 @@ export default function Coupons() {
                     placeholder="e.g. NEWUSER50"
                     className="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Coupon Type</label>
+                  <select
+                    value={formData.couponType}
+                    onChange={(e) => handleFormChange("couponType", e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="delivery">Delivery</option>
+                    <option value="dining">Dining</option>
+                  </select>
                 </div>
 
                 <div>
@@ -552,6 +567,7 @@ export default function Coupons() {
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">Restaurant</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">Dish</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">Coupon Code</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">Type</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">Customer Scope</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">Discount</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">Price</th>
@@ -582,6 +598,15 @@ export default function Coupons() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-sm font-mono font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded whitespace-nowrap">
                           {offer.couponCode}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          (offer.couponType || 'delivery') === 'dining'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-sky-100 text-sky-700'
+                        }`}>
+                          {(offer.couponType || 'delivery') === 'dining' ? 'Dining' : 'Delivery'}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

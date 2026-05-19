@@ -90,13 +90,18 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
         .lean();
 
     const currentCycleOrders = currentTransactions.map((tx) => {
+        const isDining = tx.type === 'dining';
         const order = tx.orderId || {};
         const items = Array.isArray(order.items) ? order.items : [];
-        const foodNames = items.map((it) => it?.name).filter(Boolean).join(', ');
-        const orderTotalExclTax = Math.max(
-            0,
-            Number(order?.pricing?.total ?? 0) - Number(order?.pricing?.tax ?? 0) || 0
-        );
+        const foodNames = isDining
+            ? (tx.metadata?.foodNames || 'Dining bill')
+            : items.map((it) => it?.name).filter(Boolean).join(', ');
+        const orderTotalExclTax = isDining
+            ? (tx.amounts?.totalCustomerPaid || 0)
+            : Math.max(
+                0,
+                Number(order?.pricing?.total ?? 0) - Number(order?.pricing?.tax ?? 0) || 0
+            );
         return {
             orderId: order?.orderId || tx.orderReadableId,
             createdAt: tx.createdAt,
@@ -107,8 +112,11 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
             payout: tx.amounts?.restaurantShare || 0,
             commission: tx.amounts?.restaurantCommission || 0,
             paymentMethod: tx.paymentMethod || order?.payment?.method,
-            orderStatus: order?.orderStatus || order?.deliveryState?.currentPhase || order?.deliveryState?.status,
-            status: tx.status
+            orderStatus: isDining
+                ? 'Paid'
+                : (order?.orderStatus || order?.deliveryState?.currentPhase || order?.deliveryState?.status),
+            status: tx.status,
+            type: tx.type || 'delivery'
         };
     });
 
@@ -183,13 +191,18 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
             .lean();
 
         const pastCycleOrders = pastTransactions.map((tx) => {
+            const isDining = tx.type === 'dining';
             const order = tx.orderId || {};
             const items = Array.isArray(order.items) ? order.items : [];
-            const foodNames = items.map((it) => it?.name).filter(Boolean).join(', ');
-            const orderTotalExclTax = Math.max(
-                0,
-                Number(order?.pricing?.total ?? 0) - Number(order?.pricing?.tax ?? 0) || 0
-            );
+            const foodNames = isDining
+                ? (tx.metadata?.foodNames || 'Dining bill')
+                : items.map((it) => it?.name).filter(Boolean).join(', ');
+            const orderTotalExclTax = isDining
+                ? (tx.amounts?.totalCustomerPaid || 0)
+                : Math.max(
+                    0,
+                    Number(order?.pricing?.total ?? 0) - Number(order?.pricing?.tax ?? 0) || 0
+                );
 
             return {
                 orderId: order?.orderId || tx.orderReadableId,
@@ -201,8 +214,11 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
                 payout: tx.amounts?.restaurantShare || 0,
                 commission: tx.amounts?.restaurantCommission || 0,
                 paymentMethod: tx.paymentMethod || order?.payment?.method,
-                orderStatus: order?.orderStatus || order?.deliveryState?.currentPhase || order?.deliveryState?.status,
-                status: tx.status
+                orderStatus: isDining
+                    ? 'Paid'
+                    : (order?.orderStatus || order?.deliveryState?.currentPhase || order?.deliveryState?.status),
+                status: tx.status,
+                type: tx.type || 'delivery'
             };
         });
 
