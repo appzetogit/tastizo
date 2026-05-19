@@ -12,6 +12,7 @@ import { Loader } from '@googlemaps/js-api-loader'
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { formatAddressLine, getAddressId } from "@food/utils/address"
+import { isModuleAuthenticated } from "@food/utils/auth"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -668,6 +669,11 @@ export default function AddressSelectorPage() {
 
   const handleAddressFormSubmit = async (e) => {
     e.preventDefault()
+    if (!isModuleAuthenticated('user')) {
+      toast.error("Please login to save your address")
+      navigate('/user/auth/login', { state: { from: window.location.pathname } })
+      return
+    }
     if (!addressFormData.street || !addressFormData.city) {
       toast.error("Please fill required fields")
       return

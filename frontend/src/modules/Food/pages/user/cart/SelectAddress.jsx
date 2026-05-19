@@ -12,6 +12,7 @@ import { useProfile } from "@food/context/ProfileContext"
 import { useLocation } from "@food/hooks/useLocation"
 import { toast } from "sonner"
 import { formatAddressLine, getAddressId } from "@food/utils/address"
+import { isModuleAuthenticated } from "@food/utils/auth"
 
 const ORANGE = "#2A9C64"
 
@@ -84,6 +85,11 @@ export default function SelectAddress() {
 
   const onSave = async (e) => {
     e.preventDefault()
+    if (!isModuleAuthenticated('user')) {
+      toast.error("Please login to save your address")
+      navigate('/user/auth/login', { state: { from: window.location.pathname } })
+      return
+    }
     const street = String(form.street || "").trim()
     const city = String(form.city || "").trim()
     const state = String(form.state || "").trim()
