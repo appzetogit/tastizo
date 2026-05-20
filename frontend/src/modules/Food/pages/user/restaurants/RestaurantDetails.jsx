@@ -2702,7 +2702,12 @@ function RestaurantDetailsContent() {
                                     <div className="w-2 h-2 bg-red-600 rounded-full"></div>
                                   </div>
                                 )}
-                                {item.isSpicy && <span className="text-xs font-semibold text-red-500">Spicy</span>}
+                                {(item.isSpicy || item.spicy) && (
+                                  <span className="text-xs font-semibold text-red-500 flex items-center gap-1">
+                                    <span>🌶️</span>
+                                    <span>Spicy</span>
+                                  </span>
+                                )}
                               </div>
 
                               <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight">{item.name}</h3>
@@ -2928,7 +2933,12 @@ function RestaurantDetailsContent() {
                                               <div className="w-2 h-2 bg-[#2A9C64] rounded-full"></div>
                                             </div>
                                           )}
-                                          {item.isSpicy && <span className="text-xs font-semibold text-red-500">Spicy</span>}
+                                          {(item.isSpicy || item.spicy) && (
+                                            <span className="text-xs font-semibold text-red-500 flex items-center gap-1">
+                                              <span>🌶️</span>
+                                              <span>Spicy</span>
+                                            </span>
+                                          )}
                                         </div>
 
                                         <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight">{item.name}</h3>
@@ -3682,7 +3692,7 @@ function RestaurantDetailsContent() {
 
                         {/* Spicy Label */}
                         {(selectedItem.isSpicy || selectedItem.spicy || selectedItem.name?.toLowerCase().includes('spicy') || selectedItem.name?.toLowerCase().includes('manchurian') || selectedItem.tags?.includes('Spicy')) && (
-                          <div className="flex items-center gap-1 text-[#2A9C64] font-semibold text-xs bg-[#2A9C640F] dark:bg-[#2A9C64]/15 px-2 py-0.5 rounded border border-[#2A9C6430]">
+                          <div className="flex items-center gap-1 text-red-500 font-semibold text-xs">
                             <span>🌶️</span>
                             <span>Spicy</span>
                           </div>

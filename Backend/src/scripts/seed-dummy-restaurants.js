@@ -74,6 +74,7 @@ const restaurants = [
         image: image("natu_kodi_biryani_1.png"),
         foodType: "Non-Veg",
         preparationTime: "28 mins",
+        isSpicy: true,
       },
       {
         categoryName: "Starters",
@@ -130,6 +131,7 @@ const restaurants = [
         image: image("prawns_biryani_spicy.png"),
         foodType: "Non-Veg",
         preparationTime: "28 mins",
+        isSpicy: true,
       },
       {
         categoryName: "Rice",
@@ -148,6 +150,7 @@ const restaurants = [
         image: image("chicken_snack_chilly_1.png"),
         foodType: "Non-Veg",
         preparationTime: "14 mins",
+        isSpicy: true,
       },
     ],
   },
@@ -260,6 +263,7 @@ const restaurants = [
         image: image("kamju_biryani_1.png"),
         foodType: "Non-Veg",
         preparationTime: "24 mins",
+        isSpicy: true,
       },
       {
         categoryName: "Starters",
@@ -269,6 +273,7 @@ const restaurants = [
         image: image("chicken_snack_chilly_1.png"),
         foodType: "Non-Veg",
         preparationTime: "14 mins",
+        isSpicy: true,
       },
       {
         categoryName: "Rice",
@@ -325,6 +330,7 @@ const restaurants = [
         image: image("chicken_65_crispy.png"),
         foodType: "Non-Veg",
         preparationTime: "15 mins",
+        isSpicy: true,
       },
       {
         categoryName: "Veg",
@@ -430,6 +436,7 @@ async function seedFoodsForRestaurant(restaurant, foodSeeds) {
       foodType: item.foodType,
       preparationTime: item.preparationTime,
       isAvailable: true,
+      isSpicy: item.isSpicy || false,
       approvalStatus: "approved",
       approvedAt: new Date(),
       variants: [],

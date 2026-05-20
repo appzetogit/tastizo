@@ -74,6 +74,7 @@ const buildMenuFromFoods = async (foods = []) => {
             image: food.image || '',
             foodType: food.foodType || 'Non-Veg',
             isAvailable: food.isAvailable !== false,
+            isSpicy: food.isSpicy === true || food.isSpicy === 1 || String(food.isSpicy) === 'true',
             approvalStatus: food.approvalStatus || 'approved',
             rejectionReason: food.rejectionReason || '',
             requestedAt: food.requestedAt,
