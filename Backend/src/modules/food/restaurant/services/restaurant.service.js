@@ -1284,12 +1284,8 @@ export const listApprovedRestaurants = async (query = {}) => {
     console.log(`[listApprovedRestaurants] User Lat/Lng: ${lat}, ${lng}`);
     console.log(`[listApprovedRestaurants] User Matched ZoneId: ${resolvedZone?._id || 'None'}`);
 
-    if (!resolvedZone?._id) {
-        console.warn(`[listApprovedRestaurants] No zone resolved for query: ${JSON.stringify(query)}`);
-        return { restaurants: [], total: 0, page, limit };
-    }
-
-    const zoneIdRaw = String(resolvedZone._id);
+    const zoneIdRaw = resolvedZone?._id ? String(resolvedZone._id) : '';
+    const hasResolvedZone = Boolean(zoneIdRaw);
     filter.$and = [...(filter.$and || [])];
     // Accept both radiusKm (preferred) and maxDistance (legacy frontend param).
     const radiusKm = toFiniteNumber(query.radiusKm) ?? toFiniteNumber(query.maxDistance);
@@ -1332,7 +1328,7 @@ export const listApprovedRestaurants = async (query = {}) => {
     const wantsGeo = (effectiveRadiusKm !== null) || sortBy === 'nearest';
     
     let allDocs = [];
-    if (lat !== null && lng !== null && wantsGeo) {
+    if (lat !== null && lng !== null && wantsGeo && hasResolvedZone) {
         const geoNear = {
             $geoNear: {
                 near: { type: 'Point', coordinates: [lng, lat] },
@@ -1390,13 +1386,15 @@ export const listApprovedRestaurants = async (query = {}) => {
         console.log(`[listApprovedRestaurants] Non-geo path raw matches: ${allDocs.length}`);
     }
 
-    const filteredDocs = allDocs.filter((restaurant) => {
-        const match = restaurantMatchesResolvedZone(restaurant, resolvedZone);
-        if (!match) {
-            console.debug(`[listApprovedRestaurants] Restaurant ${restaurant.restaurantName} (${restaurant._id}) filtered out. RestaurantZone: ${restaurant.zoneId}, UserZone: ${resolvedZone._id}`);
-        }
-        return match;
-    });
+    const filteredDocs = hasResolvedZone
+        ? allDocs.filter((restaurant) => {
+            const match = restaurantMatchesResolvedZone(restaurant, resolvedZone);
+            if (!match) {
+                console.debug(`[listApprovedRestaurants] Restaurant ${restaurant.restaurantName} (${restaurant._id}) filtered out. RestaurantZone: ${restaurant.zoneId}, UserZone: ${resolvedZone._id}`);
+            }
+            return match;
+        })
+        : allDocs;
 
     const total = filteredDocs.length;
     console.log(`[listApprovedRestaurants] Final restaurants returned: ${total}`);
@@ -1422,7 +1420,7 @@ export const listApprovedRestaurants = async (query = {}) => {
         total, 
         page, 
         limit,
-        resolvedZoneId: resolvedZone?._id 
+        resolvedZoneId: resolvedZone?._id || null
     };
 };
 

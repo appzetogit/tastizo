@@ -87,6 +87,10 @@ export default function LandingPageManagement() {
   const [restaurantSearchQuery, setRestaurantSearchQuery] = useState("")
   const [linkingRestaurants, setLinkingRestaurants] = useState(false)
 
+  const festBannerVideoUrl = typeof settings.festBannerVideoUrl === "string"
+    ? settings.festBannerVideoUrl.trim()
+    : ""
+
   // Helper function to filter out token-related errors
   const setErrorSafely = (errorMessage) => {
     if (!errorMessage) {
@@ -1772,14 +1776,33 @@ export default function LandingPageManagement() {
                           type="button"
                           variant="outline"
                           onClick={() => setSettings((prev) => ({ ...prev, festBannerVideoUrl: "" }))}
-                          disabled={festBannerUploading || !settings.festBannerVideoUrl}
+                          disabled={festBannerUploading || !festBannerVideoUrl}
                         >
                           Remove Video
                         </Button>
                       </div>
-                      {settings.festBannerVideoUrl ? (
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 break-all">
-                          {settings.festBannerVideoUrl}
+                      {festBannerVideoUrl ? (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                          <div className="relative overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
+                            <video
+                              key={festBannerVideoUrl}
+                              src={festBannerVideoUrl}
+                              controls
+                              playsInline
+                              preload="metadata"
+                              className="aspect-video w-full bg-slate-950"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setSettings((prev) => ({ ...prev, festBannerVideoUrl: "" }))}
+                              disabled={festBannerUploading}
+                              className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-red-600 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Delete
+                            </button>
+                          </div>
+                          <p className="mt-2 break-all text-xs text-slate-500">{festBannerVideoUrl}</p>
                         </div>
                       ) : (
                         <p className="text-xs text-slate-500">No video uploaded.</p>

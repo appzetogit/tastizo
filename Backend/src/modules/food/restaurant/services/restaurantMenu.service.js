@@ -138,20 +138,34 @@ export async function getPublicApprovedRestaurantMenu(restaurantIdOrSlug, zoneQu
     const value = String(restaurantIdOrSlug || '').trim();
     const resolvedZone = await resolveZoneFromQuery(zoneQuery || {});
     if (!value) throw new ValidationError('Restaurant id is required');
-    if (!resolvedZone?._id) return null;
     let restaurant = null;
+
+    const formatRestaurant = (doc) => {
+        if (!doc?._id) return null;
+        if (resolvedZone?._id && !restaurantMatchesResolvedZone(doc, resolvedZone)) {
+            return null;
+        }
+        return doc;
+    };
+
     if (/^[0-9a-fA-F]{24}$/.test(value)) {
         restaurant = await FoodRestaurant.findOne(buildPublicVisibleRestaurantFilter({ _id: value }))
             .select('_id status isAdminApproved zoneId location')
             .lean();
     } else {
-        const normalized = value.trim().toLowerCase().replace(/-/g, ' ').replace(/\s+/g, ' ');
-        restaurant = await FoodRestaurant.findOne(buildPublicVisibleRestaurantFilter({ restaurantNameNormalized: normalized }))
+        restaurant = await FoodRestaurant.findOne(buildPublicVisibleRestaurantFilter({ slug: value }))
             .select('_id status isAdminApproved zoneId location')
             .lean();
+        if (!restaurant?._id) {
+            const normalized = value.trim().toLowerCase().replace(/-/g, ' ').replace(/\s+/g, ' ');
+            restaurant = await FoodRestaurant.findOne(buildPublicVisibleRestaurantFilter({ restaurantNameNormalized: normalized }))
+                .select('_id status isAdminApproved zoneId location')
+                .lean();
+        }
     }
 
-    if (!restaurant?._id || !restaurantMatchesResolvedZone(restaurant, resolvedZone)) {
+    restaurant = formatRestaurant(restaurant);
+    if (!restaurant?._id) {
         return null;
     }
     const foods = await FoodItem.find({ restaurantId: restaurant._id, approvalStatus: 'approved', isAvailable: true })

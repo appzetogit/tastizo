@@ -34,10 +34,10 @@ export default function RestaurantReviews() {
     
     const query = searchQuery.toLowerCase().trim()
     return reviews.filter(review =>
-      review.restaurant.toLowerCase().includes(query) ||
-      review.customer.toLowerCase().includes(query) ||
-      review.review.toLowerCase().includes(query) ||
-      (review.orderId && review.orderId.toLowerCase().includes(query))
+      String(review?.restaurant || "").toLowerCase().includes(query) ||
+      String(review?.customer || "").toLowerCase().includes(query) ||
+      String(review?.review || "").toLowerCase().includes(query) ||
+      String(review?.orderId || "").toLowerCase().includes(query)
     )
   }, [reviews, searchQuery])
 
@@ -104,6 +104,20 @@ export default function RestaurantReviews() {
       stars.push(<Star key={i} className="w-5 h-5 fill-amber-500 text-amber-500" />)
     }
     return stars
+  }
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A'
+    try {
+      const date = new Date(dateString)
+      const day = date.getDate().toString().padStart(2, '0')
+      const month = date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
+      const year = date.getFullYear()
+      const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+      return `${day} ${month} ${year}, ${time}`
+    } catch {
+      return 'Invalid Date'
+    }
   }
 
   useEffect(() => {
