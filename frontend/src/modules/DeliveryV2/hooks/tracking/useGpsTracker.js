@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTrackingStore } from './useTrackingStore';
 import { filterGpsSignal, resetGpsFilter } from '../../utils/gpsFiltering';
 import { toast } from 'sonner';
@@ -11,6 +11,16 @@ export const useGpsTracker = ({ isOnline, isSimMode, syncUsingFallbackLocation }
   const setRiderLocation = useTrackingStore(state => state.setRiderLocation);
   const gpsErrorToastShownRef = useRef(false);
   const rollingSpeedRef = useRef([]);
+
+  const [isVisible, setIsVisible] = useState(typeof document !== 'undefined' ? !document.hidden : true);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsVisible(!document.hidden);
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
     if (!isOnline) {
@@ -36,7 +46,9 @@ export const useGpsTracker = ({ isOnline, isSimMode, syncUsingFallbackLocation }
       const filterResult = filterGpsSignal(lat, lng, accuracy, timestamp);
       
       if (!filterResult.valid) {
-        console.warn(`[GPS] Point rejected: ${filterResult.reason}`);
+        if (filterResult.reason !== 'micro_movement_ignored') {
+          console.warn(`[GPS] Point rejected: ${filterResult.reason}`);
+        }
         return;
       }
 
@@ -72,7 +84,11 @@ export const useGpsTracker = ({ isOnline, isSimMode, syncUsingFallbackLocation }
       { enableHighAccuracy: false, maximumAge: 60000, timeout: 5000 }
     );
 
-    // Continuous watch
+    // Continuous watch with battery/visibility optimization
+    const options = isVisible 
+      ? { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 } // Hardware ping
+      : { enableHighAccuracy: false, maximumAge: 10000, timeout: 10000 }; // Battery saver
+
     const watchId = navigator.geolocation.watchPosition(
       handlePositionUpdate,
       (error) => {
@@ -89,11 +105,11 @@ export const useGpsTracker = ({ isOnline, isSimMode, syncUsingFallbackLocation }
         }
         toast.error('GPS Unavailable', { description: errorDescription });
       },
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+      options
     );
 
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [isOnline, isSimMode, setRiderLocation, syncUsingFallbackLocation]);
+  }, [isOnline, isSimMode, isVisible, setRiderLocation, syncUsingFallbackLocation]);
 };

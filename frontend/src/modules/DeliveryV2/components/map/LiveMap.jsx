@@ -8,6 +8,7 @@ import {
   useJsApiLoader,
   OverlayView
 } from '@react-google-maps/api';
+import { getHaversineDistance } from '../../utils/geo';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { useTrackingStore } from '@/modules/DeliveryV2/hooks/tracking/useTrackingStore';
 import { zoneAPI } from '@food/api';
@@ -146,6 +147,8 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
   const lastRiderLocationRef = useRef(null);
   const animatedRiderLocationRef = useRef(null);
 
+  const lastGpsTimeRef = useRef(performance.now());
+
   useEffect(() => {
     if (!parsedRiderLocation) return;
 
@@ -164,12 +167,36 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
       return;
     }
 
-    // Use ref (not state) as start so we don't add animatedRiderLocation to deps
     const startLocation = animatedRiderLocationRef.current || lastRiderLocationRef.current;
     const endLocation = parsedRiderLocation;
 
+    const now = performance.now();
+    const timeSinceLastUpdate = now - lastGpsTimeRef.current;
+    lastGpsTimeRef.current = now;
+
+    // Advanced Anti-Lag Engine
+    const distGap = getHaversineDistance(startLocation.lat, startLocation.lng, endLocation.lat, endLocation.lng);
+    
+    if (distGap > 100) {
+      // Teleportation (e.g., GPS recovered after long tunnel)
+      setAnimatedRiderLocation(endLocation);
+      lastRiderLocationRef.current = endLocation;
+      animatedRiderLocationRef.current = endLocation;
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+      return;
+    }
+
+    let duration = Math.max(500, Math.min(timeSinceLastUpdate, 1500));
+    
+    if (distGap > 15) {
+       // Catch-up Multiplier Logic (Fast forward if falling behind)
+       duration = duration * 0.6; // 40% faster
+    }
+
     const startTime = performance.now();
-    const duration = 2000; // 2 seconds smooth animation
 
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
 
@@ -210,16 +237,28 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
   const shouldUpdateRoute = useMemo(() => {
     const now = Date.now();
     if (!directions) return true;
-    let throttleMs = 20000;
+    let throttleMs = 60000; // Default: Recalculate only every 1 min
     if (parsedRiderLocation && targetLocation && window.google) {
       try {
         const p1 = new window.google.maps.LatLng(parsedRiderLocation.lat, parsedRiderLocation.lng);
         const p2 = new window.google.maps.LatLng(targetLocation.lat, targetLocation.lng);
-        const dist = window.google.maps.geometry.spherical.computeDistanceBetween(p1, p2);
-        if (dist > 2000) throttleMs = 60000;
-        else if (dist > 500) throttleMs = 20000;
-        else throttleMs = 5000;
-      } catch (e) {}
+        const distToTarget = window.google.maps.geometry.spherical.computeDistanceBetween(p1, p2);
+
+        let isOnRoute = true;
+        if (directions.routes && directions.routes[0]) {
+          const poly = new window.google.maps.Polyline({ path: directions.routes[0].overview_path });
+          // Tolerance: ~50m deviation (0.0005 degrees)
+          isOnRoute = window.google.maps.geometry.poly.isLocationOnEdge(p1, poly, 0.0005);
+        }
+
+        if (!isOnRoute) {
+          throttleMs = 5000; // Deviated! Recalculate quickly.
+        } else if (distToTarget < 500) {
+          throttleMs = 20000; // Nearing target, more frequent updates to be precise
+        }
+      } catch (e) {
+        console.warn('Geometry calculation failed', e);
+      }
     }
     return (now - lastDirectionsAt) >= throttleMs;
   }, [lastDirectionsAt, directions, parsedRiderLocation, targetLocation]);
@@ -392,16 +431,19 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
           </OverlayView>
         )}
 
-        {restaurantPoint && (
-          <Marker
-            position={restaurantPoint}
-            icon={{
-              url: restaurantMarkerUrl,
-              scaledSize: new window.google.maps.Size(44, 44),
-              anchor: new window.google.maps.Point(22, 22)
-            }}
-          />
-        )}
+        {(() => {
+          const isOrderPickedUp = ['PICKED_UP', 'REACHED_DROP', 'DELIVERED'].includes(tripStatus?.toUpperCase?.());
+          return !isOrderPickedUp && restaurantPoint && (
+            <Marker
+              position={restaurantPoint}
+              icon={{
+                url: restaurantMarkerUrl,
+                scaledSize: new window.google.maps.Size(44, 44),
+                anchor: new window.google.maps.Point(22, 22)
+              }}
+            />
+          );
+        })()}
 
         {customerPoint && (
           <Marker

@@ -19,7 +19,8 @@ import {
   CircleSlash,
   Loader2,
   Clock,
-  Calendar
+  Calendar,
+  MoreHorizontal
 } from "lucide-react"
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import { shareContent } from "@food/utils/share"
@@ -176,16 +177,16 @@ const DeliveryMap = memo(({ orderId, order, isVisible, fallbackCustomerCoords = 
   if (!isVisible || !orderId || !order || !effectiveRestaurantCoords || !effectiveCustomerCoords) {
     return (
       <div
-        className="relative min-h-[450px] bg-gradient-to-b from-gray-100 to-gray-200"
-        style={{ height: '450px' }}
+        className="relative min-h-[550px] bg-gradient-to-b from-gray-100 to-gray-200"
+        style={{ height: '550px' }}
       />
     );
   }
 
   return (
     <div
-      className="relative w-full min-h-[450px] overflow-visible"
-      style={{ height: '450px' }}
+      className="relative w-full min-h-[550px] overflow-visible"
+      style={{ height: '550px' }}
     >
       <DeliveryTrackingMap
         orderId={orderId}
@@ -1315,49 +1316,49 @@ export default function OrderTracking() {
   const statusConfig = {
     placed: {
       title: "Order Placed",
-      subtitle: "Waiting for restaurant to accept",
+      subtitle: "Waiting for restaurant to accept.",
       color: "bg-green-600",
       iconType: 'food'
     },
     confirmed: {
       title: "Order Confirmed",
-      subtitle: "Restaurant has accepted your order",
+      subtitle: "Restaurant has accepted your order.",
       color: "bg-green-600",
       iconType: 'food'
     },
     preparing: {
-      title: "Food is being prepared",
-      subtitle: typeof estimatedTime === 'number' ? `Arriving in ${estimatedTime} mins` : "Cooking your meal",
+      title: "Getting Ready",
+      subtitle: "Food cooking, we're on it.",
       color: "bg-green-600",
       iconType: 'food'
     },
     assigned: {
-      title: "Rider is arriving",
-      subtitle: "A delivery partner is arriving at the restaurant",
+      title: "Rider Assigned",
+      subtitle: "A delivery partner is arriving at the restaurant.",
       color: "bg-green-600",
       iconType: 'rider'
     },
     at_pickup: {
       title: "Rider at restaurant",
-      subtitle: "Rider is waiting for your order",
+      subtitle: "Rider is waiting for your order.",
       color: "bg-green-600",
       iconType: 'rider'
     },
     ready: {
       title: "Handover in progress",
-      subtitle: "Rider is picking up your order",
+      subtitle: "Rider is picking up your order.",
       color: "bg-green-600",
       iconType: 'rider'
     },
     on_way: {
-      title: "Out for delivery",
-      subtitle: typeof estimatedTime === 'number' ? `Arriving in ${estimatedTime} mins` : "Rider is out for delivery",
+      title: "On the way",
+      subtitle: "Rider is flying to you!",
       color: "bg-green-600",
       iconType: 'rider'
     },
     at_drop: {
       title: "Arrived at location",
-      subtitle: "Please come to the door",
+      subtitle: "Please come to the door.",
       color: "bg-green-600",
       iconType: 'rider'
     },
@@ -1369,7 +1370,7 @@ export default function OrderTracking() {
     },
     cancelled: {
       title: "Order cancelled",
-      subtitle: "This order has been cancelled",
+      subtitle: "This order has been cancelled.",
       color: "bg-red-600",
       iconType: 'cancelled'
     }
@@ -1454,131 +1455,66 @@ export default function OrderTracking() {
       </AnimatePresence>
 
       {/* Green Header */}
+      {/* Translucent Overlay Header */}
       <motion.div
-        className={`${currentStatus.color} text-white sticky top-0 z-40`}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        className="fixed inset-x-0 top-0 z-50 bg-gradient-to-b from-white via-white/80 to-transparent pt-4 pb-12 pointer-events-none"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
       >
-        {/* Navigation bar */}
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center justify-between px-4 pointer-events-auto">
           <Link to="/user/orders">
             <motion.button
-              className="w-10 h-10 flex items-center justify-center"
+              className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md border border-gray-100"
               whileTap={{ scale: 0.9 }}
             >
-              <ArrowLeft className="w-6 h-6" />
+              <ArrowLeft className="w-5 h-5 text-gray-800" />
             </motion.button>
           </Link>
-          <h2 className="font-semibold text-lg">{order.restaurant}</h2>
+          
+          <div className="flex flex-col items-center">
+            <h2 className="font-extrabold text-[16px] text-gray-900 leading-tight">
+              {order?.restaurantId?.name || order?.restaurantId?.restaurantName || order?.restaurant?.name || order?.restaurant || 'Restaurant'}
+            </h2>
+            <p className="text-[12px] text-gray-500 font-medium mt-0.5">
+              {order?.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''} {order?.items?.length ? `• ${order.items.length} items` : ''}
+            </p>
+          </div>
+
           <motion.button
-            className="w-10 h-10 flex items-center justify-center cursor-pointer"
+            className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md border border-gray-100 cursor-pointer"
             whileTap={{ scale: 0.9 }}
             onClick={handleShare}
           >
-            <Share2 className="w-5 h-5" />
+            <MoreHorizontal className="w-5 h-5 text-gray-800" />
           </motion.button>
         </div>
-
-        {/* Status section - hidden for success milestones as requested */}
-        {isScheduledOrder && ['placed', 'confirmed'].includes(orderStatus) ? (
-          <div className="px-4 pb-5 text-center">
-            <motion.div
-              className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-1.5 mb-3"
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-            >
-              <Clock className="w-4 h-4" />
-              <span className="text-sm font-semibold">Scheduled Order</span>
-            </motion.div>
-            <motion.h1
-              className="text-2xl font-bold mb-2"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              Order Scheduled
-            </motion.h1>
-            <motion.div
-              className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-5 py-2.5"
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.2 }}
-            >
-              <Calendar className="w-4 h-4" />
-              <span className="text-sm font-medium">{scheduledDateFormatted}</span>
-              <span className="w-1 h-1 rounded-full bg-white/60" />
-              <motion.button
-                onClick={handleRefresh}
-                className="ml-1"
-                animate={{ rotate: isRefreshing ? 360 : 0 }}
-                transition={{ duration: 0.5 }}
-              >
-                <RefreshCw className="w-4 h-4" />
-              </motion.button>
-            </motion.div>
-            <motion.p
-              className="text-xs mt-3 text-white/80"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-            >
-              The restaurant will start preparing your order closer to the scheduled time
-            </motion.p>
-          </div>
-        ) : !['at_pickup', 'ready', 'on_way', 'at_drop', 'delivered'].includes(orderStatus) && (
-          <div className="px-4 pb-4 text-center">
-            <motion.h1
-              className="text-2xl font-bold mb-3"
-              key={currentStatus.title}
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              {currentStatus.title}
-            </motion.h1>
-
-            {/* Status pill */}
-            <motion.div
-              className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-2"
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.2 }}
-            >
-              <span className="text-sm">{currentStatus.subtitle}</span>
-              {orderStatus === 'preparing' && (
-                <>
-                  <span className="w-1 h-1 rounded-full bg-white" />
-                  <span className="text-sm text-orange-200">On time</span>
-                </>
-              )}
-              <motion.button
-                onClick={handleRefresh}
-                className="ml-1"
-                animate={{ rotate: isRefreshing ? 360 : 0 }}
-                transition={{ duration: 0.5 }}
-              >
-              <RefreshCw className="w-4 h-4" />
-            </motion.button>
-          </motion.div>
-        </div>
-      )}
       </motion.div>
 
       {/* Map Section */}
       {!isDeliveredOrder && orderStatus !== 'cancelled' && !(isScheduledOrder && ['placed', 'confirmed'].includes(orderStatus)) && (
-        <MapErrorBoundary>
-          <DeliveryMap
-            orderId={orderId}
-            order={order}
-            isVisible={order !== null}
-            fallbackCustomerCoords={fallbackCustomerCoords}
-            userLiveCoords={userLiveCoords}
-            userLocationAccuracy={userLiveLocation?.accuracy ?? null}
-            onEtaUpdate={handleEtaUpdate}
-          />
-        </MapErrorBoundary>
+        <div className="relative">
+          <MapErrorBoundary>
+            <DeliveryMap
+              orderId={orderId}
+              order={order}
+              isVisible={order !== null}
+              fallbackCustomerCoords={fallbackCustomerCoords}
+              userLiveCoords={userLiveCoords}
+              userLocationAccuracy={userLiveLocation?.accuracy ?? null}
+              onEtaUpdate={handleEtaUpdate}
+            />
+          </MapErrorBoundary>
+          {/* Bottom Smoky Fade */}
+          <div className="absolute bottom-0 inset-x-0 h-32 bg-gradient-to-t from-gray-100 dark:from-[#0a0a0a] to-transparent pointer-events-none" />
+        </div>
       )}
 
       {/* Scrollable Content */}
-      <div className="max-w-4xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 space-y-4 md:space-y-6 pb-24 md:pb-32">
+      <div className={`max-w-4xl mx-auto px-4 md:px-6 lg:px-8 space-y-4 md:space-y-6 pb-24 md:pb-32 relative z-10 ${
+        (!isDeliveredOrder && orderStatus !== 'cancelled' && !(isScheduledOrder && ['placed', 'confirmed'].includes(orderStatus))) 
+          ? '-mt-24 py-4 md:py-6' 
+          : 'pt-24 pb-4 md:pb-6'
+      }`}>
         {/* Cancellation window removed as per user request to hide immediately after acceptance */}
 
         {customerDeliveryOtp && orderStatus !== 'delivered' && orderStatus !== 'cancelled' && (
@@ -1596,7 +1532,7 @@ export default function OrderTracking() {
 
         {/* Dynamic Status Card */}
         <motion.div
-          className="bg-white dark:bg-[#1a1a1a] rounded-xl p-4 shadow-sm"
+          className="bg-white dark:bg-[#1a1a1a] rounded-3xl p-5 shadow-sm"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
@@ -1617,71 +1553,109 @@ export default function OrderTracking() {
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm border border-gray-100 ${
-                currentStatus.iconType === 'rider' ? 'bg-blue-50' : 
-                currentStatus.iconType === 'cancelled' ? 'bg-red-50' : 
-                currentStatus.iconType === 'delivered' ? 'bg-green-50' : 
-                'bg-orange-50'
-              }`}>
-                {currentStatus.iconType === 'rider' ? (
-                  <div 
-                    dangerouslySetInnerHTML={{ __html: RIDER_BIKE_SVG.replace(/width="\d+"/, 'width="100%"').replace(/height="\d+"/, 'height="100%"') }} 
-                    className="w-full h-full" 
-                  />
-                ) : currentStatus.iconType === 'cancelled' ? (
-                  <div className="w-full h-full flex items-center justify-center p-2 text-red-500">
-                    <X className="w-full h-full" />
-                  </div>
-                ) : currentStatus.iconType === 'delivered' ? (
-                  <div className="w-full h-full flex items-center justify-center p-2 text-green-500">
-                    <Check className="w-full h-full" />
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col max-w-[70%]">
+                  <h2 className="text-[22px] font-extrabold text-gray-900 dark:text-gray-100 leading-tight tracking-tight">{currentStatus.title}</h2>
+                  <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1 leading-snug">{currentStatus.subtitle}</p>
+                </div>
+                {typeof estimatedTime === 'number' && ['preparing', 'ready', 'at_pickup', 'assigned', 'on_way'].includes(orderStatus) ? (
+                  <div className="w-[72px] h-[72px] rounded-2xl bg-[#0b7a2d] text-white flex flex-col items-center justify-center flex-shrink-0 shadow-sm">
+                    <span className="text-[28px] font-extrabold leading-none tracking-tight">{estimatedTime}</span>
+                    <span className="text-[13px] font-semibold mt-0.5 opacity-95">mins</span>
                   </div>
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center p-2 text-orange-500">
-                    <Receipt className="w-full h-full" />
+                  <div className={`w-14 h-14 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm border border-gray-100 ${
+                    currentStatus.iconType === 'rider' ? 'bg-blue-50' : 
+                    currentStatus.iconType === 'cancelled' ? 'bg-red-50' : 
+                    currentStatus.iconType === 'delivered' ? 'bg-green-50' : 
+                    'bg-orange-50'
+                  }`}>
+                    {currentStatus.iconType === 'rider' ? (
+                      <div 
+                        dangerouslySetInnerHTML={{ __html: RIDER_BIKE_SVG.replace(/width="\d+"/, 'width="100%"').replace(/height="\d+"/, 'height="100%"') }} 
+                        className="w-full h-full" 
+                      />
+                    ) : currentStatus.iconType === 'cancelled' ? (
+                      <div className="w-full h-full flex items-center justify-center p-2 text-red-500">
+                        <X className="w-full h-full" />
+                      </div>
+                    ) : currentStatus.iconType === 'delivered' ? (
+                      <div className="w-full h-full flex items-center justify-center p-2 text-green-500">
+                        <Check className="w-full h-full" />
+                      </div>
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center p-2 text-orange-500">
+                        <Receipt className="w-full h-full" />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-              <div className="flex-1">
-                <p className="font-semibold text-gray-900 dark:text-gray-100 leading-tight">{currentStatus.title}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 leading-snug">{currentStatus.subtitle}</p>
+              <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
+                 <button 
+                   onClick={() => {
+                     setDeliveryInstructions(order?.note || "");
+                     setIsInstructionsModalOpen(true);
+                   }}
+                   className="text-[14px] font-bold text-gray-700 dark:text-gray-300 hover:text-gray-900 flex items-center gap-1 transition-colors"
+                 >
+                   {order?.note ? 'Edit Delivery Instructions' : 'Add Delivery Instructions'} <ChevronRight className="w-4 h-4 mt-0.5" />
+                 </button>
               </div>
             </div>
           )}
         </motion.div>
 
         {/* Delivery Partner Info */}
-        {order?.deliveryPartnerId && (
-          <motion.div
-            className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm overflow-hidden"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.55 }}
-          >
-            <div className="flex items-center gap-3 p-4 border-b border-dashed border-gray-200 dark:border-gray-800">
-              <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/20 overflow-hidden flex items-center justify-center flex-shrink-0 border border-blue-100 dark:border-blue-900/30 p-1">
-                {order.deliveryPartner?.avatar ? (
-                  <img src={order.deliveryPartner.avatar} alt="Rider" className="w-full h-full object-cover" />
-                ) : (
-                  <div 
-                    dangerouslySetInnerHTML={{ __html: RIDER_BIKE_SVG.replace(/width="\d+"/, 'width="100%"').replace(/height="\d+"/, 'height="100%"') }} 
-                    className="w-full h-full p-1" 
-                  />
-                )}
+        {(() => {
+          // Robustly extract rider info from different backend population formats
+          let riderObj = null;
+          if (order?.dispatch?.deliveryPartnerId && typeof order.dispatch.deliveryPartnerId === 'object') {
+            riderObj = order.dispatch.deliveryPartnerId;
+          } else if (order?.deliveryPartnerId && typeof order.deliveryPartnerId === 'object') {
+            riderObj = order.deliveryPartnerId;
+          } else if (order?.deliveryPartner) {
+            riderObj = order.deliveryPartner;
+          }
+
+          const hasRider = Boolean(riderObj || order?.dispatch?.deliveryPartnerId || order?.deliveryPartnerId);
+
+          if (!hasRider) return null;
+
+          const riderName = riderObj?.name || riderObj?.fullName || 'Delivery Partner';
+          const riderAvatar = riderObj?.avatar || riderObj?.profileImage || riderObj?.profilePhoto || null;
+          
+          return (
+            <motion.div
+              className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm overflow-hidden"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.55 }}
+            >
+              <div className="flex items-center gap-3 p-4 border-b border-dashed border-gray-200 dark:border-gray-800">
+                <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/20 overflow-hidden flex items-center justify-center flex-shrink-0 border border-blue-100 dark:border-blue-900/30 p-1">
+                  {riderAvatar ? (
+                    <img src={riderAvatar} alt={riderName} className="w-full h-full object-cover rounded-full" />
+                  ) : (
+                    <div 
+                      dangerouslySetInnerHTML={{ __html: RIDER_BIKE_SVG.replace(/width="\d+"/, 'width="100%"').replace(/height="\d+"/, 'height="100%"') }} 
+                      className="w-full h-full p-1" 
+                    />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{riderName}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Your delivery partner is arriving</p>
+                </div>
+                <motion.button
+                  className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"
+                  onClick={handleCallRider}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <Phone className="w-5 h-5 text-blue-600" />
+                </motion.button>
               </div>
-              <div className="flex-1">
-                <p className="font-semibold text-gray-900 dark:text-gray-100">{order.deliveryPartner?.name || 'Delivery Partner'}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Your delivery partner is arriving</p>
-              </div>
-              <motion.button
-                className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"
-                onClick={handleCallRider}
-                whileTap={{ scale: 0.9 }}
-              >
-                <Phone className="w-5 h-5 text-blue-600" />
-              </motion.button>
-            </div>
             {order?.note && (
               <div className="bg-blue-50/50 dark:bg-blue-900/10 p-3 mx-4 mb-4 rounded-lg flex items-start gap-2 border border-blue-100 dark:border-blue-900/20">
                 <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
@@ -1692,7 +1666,8 @@ export default function OrderTracking() {
               </div>
             )}
           </motion.div>
-        )}
+          );
+        })()}
 
         {/* Delivery Partner Safety */}
         <motion.button

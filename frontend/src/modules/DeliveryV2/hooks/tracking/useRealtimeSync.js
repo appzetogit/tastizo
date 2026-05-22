@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTrackingStore } from './useTrackingStore';
 import { useDeliveryStore } from '../../store/useDeliveryStore';
 import { writeOrderTracking } from '@food/realtimeTracking';
@@ -28,6 +28,14 @@ export const useRealtimeSync = ({ isOnline, syncDeliveryZoneState, emitLocation 
     tripStatus,
   });
 
+  const [isVisible, setIsVisible] = useState(typeof document !== 'undefined' ? !document.hidden : true);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => setIsVisible(!document.hidden);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
   useEffect(() => {
     stateRef.current = { riderLocation, activePolyline, eta, activeOrder, tripStatus };
   }, [riderLocation, activePolyline, eta, activeOrder, tripStatus]);
@@ -43,15 +51,30 @@ export const useRealtimeSync = ({ isOnline, syncDeliveryZoneState, emitLocation 
       const now = Date.now();
       let shouldSync = false;
 
+      // Adaptive Sync Interval Logic
+      let dynamicSyncInterval = 2500; // Default: Fast sync (2.5s)
+      let dynamicMinDistance = 10; // Default: 10 meters
+
+      if (!isVisible) {
+        dynamicSyncInterval = 15000; // Tab hidden: 15s
+        dynamicMinDistance = 50;
+      } else if (loc.speed !== undefined && loc.speed < 1) {
+        dynamicSyncInterval = 10000; // Idle/Stationary: 10s
+        dynamicMinDistance = 15;
+      } else if (currentEta && currentEta.distanceValue > 2000) {
+        dynamicSyncInterval = 5000; // Far away (>2km): 5s
+        dynamicMinDistance = 20;
+      }
+
       // Sync if time interval passed OR moved significant distance
-      if (now - lastSyncTimeRef.current >= SYNC_INTERVAL_MS) {
+      if (now - lastSyncTimeRef.current >= dynamicSyncInterval) {
         shouldSync = true;
       } else if (lastSyncLocationRef.current) {
         const distMoved = getHaversineDistance(
           loc.lat, loc.lng,
           lastSyncLocationRef.current.lat, lastSyncLocationRef.current.lng
         );
-        if (distMoved >= MIN_DISTANCE_SYNC_M) {
+        if (distMoved >= dynamicMinDistance) {
           shouldSync = true;
         }
       } else {

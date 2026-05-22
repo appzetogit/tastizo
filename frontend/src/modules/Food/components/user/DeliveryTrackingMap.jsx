@@ -146,15 +146,37 @@ const DeliveryTrackingMap = ({
           heading: Number(data?.heading ?? data?.bearing ?? data?.location?.heading ?? 0)
         };
         const now = Date.now();
-        const delta = Math.max(300, Math.min(now - (lastUpdateAtRef.current || now), 4000));
+        const delta = Math.max(500, Math.min(now - (lastUpdateAtRef.current || now - 1000), 3000));
         lastUpdateAtRef.current = now;
+
+        const currentStart = interpStateRef.current.nextPos || nextPos;
+        
+        // Simple Haversine approximation inline to avoid import issues
+        const toRad = x => x * Math.PI / 180;
+        const R = 6371e3; // metres
+        const dLat = toRad(nextPos.lat - currentStart.lat);
+        const dLng = toRad(nextPos.lng - currentStart.lng);
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(toRad(currentStart.lat)) * Math.cos(toRad(nextPos.lat)) *
+                  Math.sin(dLng/2) * Math.sin(dLng/2);
+        const distGap = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+        let adjustedDuration = delta;
+        
+        if (distGap > 100) {
+          // Teleport, too far
+          adjustedDuration = 0;
+        } else if (distGap > 15) {
+          // Catch-up fast forward
+          adjustedDuration = delta * 0.6;
+        }
 
         // Trigger Smooth Interpolation
         interpStateRef.current = {
-          lastPos: interpStateRef.current.nextPos || nextPos,
+          lastPos: currentStart,
           nextPos: nextPos,
           startTime: now,
-          durationMs: delta
+          durationMs: adjustedDuration
         };
         
         setRiderLocation(nextPos);
@@ -173,10 +195,16 @@ const DeliveryTrackingMap = ({
     const update = () => {
       const { lastPos, nextPos, startTime, durationMs } = interpStateRef.current;
       if (lastPos && nextPos) {
-        const duration = Math.max(600, durationMs || 1500);
+        // If durationMs is explicitly 0, we snap instantly
+        const duration = durationMs === 0 ? 0 : Math.max(500, durationMs || 1500);
         const elapsed = Date.now() - startTime;
-        const raw = Math.min(elapsed / duration, 1);
-        const progress = raw * raw * (3 - 2 * raw); // easeInOut
+        let progress = 1;
+
+        let raw = 1;
+        if (duration > 0) {
+          raw = Math.min(elapsed / duration, 1);
+          progress = raw * raw * (3 - 2 * raw); // easeInOut
+        }
         
         // Linear Interpolation (LERP)
         const lat = lastPos.lat + (nextPos.lat - lastPos.lat) * progress;
@@ -302,10 +330,10 @@ const DeliveryTrackingMap = ({
         zoom={zoom}
         onLoad={setMap}
         options={{
-          disableDefaultUI: false,
-          zoomControl: true,
+          disableDefaultUI: true,
+          zoomControl: false,
           mapTypeControl: false,
-          scaleControl: true,
+          scaleControl: false,
           streetViewControl: false,
           rotateControl: false,
           fullscreenControl: false,
@@ -391,13 +419,13 @@ const DeliveryTrackingMap = ({
         )}
 
         {/* RESTAURANT PIN (OVERLAY VIEW FOR CUSTOM STLYE) */}
-        <OverlayView
-          position={restaurantCoords}
-          mapPaneName={OverlayView.MARKER_LAYER}
-        >
-          <div className="relative -translate-x-1/2 -translate-y-full mb-1 group">
-             {/* Pulsing ring if this is the active destination */}
-             {!isOrderPickedUp && (
+        {!isOrderPickedUp && (
+          <OverlayView
+            position={restaurantCoords}
+            mapPaneName={OverlayView.MARKER_LAYER}
+          >
+            <div className="relative -translate-x-1/2 -translate-y-full mb-1 group">
+               {/* Pulsing ring if this is the active destination */}
                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
                  <motion.div 
                    animate={{ scale: [1, 2], opacity: [0.5, 0] }}
@@ -405,19 +433,19 @@ const DeliveryTrackingMap = ({
                    className="w-16 h-16 rounded-full border-4 border-[#2A9C64]/50"
                  />
                </div>
-             )}
-             <div className="relative w-11 h-11 rounded-full p-1 bg-white shadow-xl border-2 border-[#2A9C64] overflow-hidden group-hover:scale-110 transition-transform">
-                <img 
-                  src={order?.restaurantLogo || order?.restaurantId?.logo || order?.restaurantId?.profileImage || `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(RESTAURANT_PIN_SVG)}`}
-                  alt="Restaurant"
-                  className="w-full h-full object-contain rounded-full bg-gray-50"
-                  onError={(e) => { e.target.src = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(RESTAURANT_PIN_SVG)}`; }}
-                />
-             </div>
-             {/* Pin Tip */}
-             <div className="absolute top-[100%] left-1/2 -translate-x-1/2 w-3 h-3 bg-[#2A9C64] clip-triangle rotate-180 -mt-1 shadow-sm" style={{ clipPath: 'polygon(50% 100%, 0 0, 100% 0)' }} />
-          </div>
-        </OverlayView>
+               <div className="relative w-11 h-11 rounded-full p-1 bg-white shadow-xl border-2 border-[#2A9C64] overflow-hidden group-hover:scale-110 transition-transform">
+                  <img 
+                    src={order?.restaurantLogo || order?.restaurantId?.logo || order?.restaurantId?.profileImage || `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(RESTAURANT_PIN_SVG)}`}
+                    alt="Restaurant"
+                    className="w-full h-full object-contain rounded-full bg-gray-50"
+                    onError={(e) => { e.target.src = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(RESTAURANT_PIN_SVG)}`; }}
+                  />
+               </div>
+               {/* Pin Tip */}
+               <div className="absolute top-[100%] left-1/2 -translate-x-1/2 w-3 h-3 bg-[#2A9C64] clip-triangle rotate-180 -mt-1 shadow-sm" style={{ clipPath: 'polygon(50% 100%, 0 0, 100% 0)' }} />
+            </div>
+          </OverlayView>
+        )}
 
         {/* CUSTOMER PIN (OVERLAY VIEW FOR CUSTOM STYLE) */}
         <OverlayView
