@@ -1031,7 +1031,7 @@ export default function OrderTracking() {
   // Post-checkout splash only — real status comes from API / poll / socket.
   useEffect(() => {
     if (!confirmed) return
-    const timer1 = setTimeout(() => setShowConfirmation(false), 3000)
+    const timer1 = setTimeout(() => setShowConfirmation(false), 1800)
     return () => clearTimeout(timer1)
   }, [confirmed])
 
@@ -1409,39 +1409,30 @@ export default function OrderTracking() {
               transition={{ delay: 0.2, type: "spring" }}
               className="text-center px-8"
             >
-              <AnimatedCheckmark delay={0.3} />
+              <AnimatedCheckmark delay={0.1} />
               <motion.h1
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.9 }}
+                transition={{ delay: 0.3 }}
                 className="text-2xl font-bold text-gray-900 mt-6"
               >
                 {isScheduledOrder ? "Order Scheduled!" : "Order Confirmed!"}
               </motion.h1>
               <motion.p
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 1.1 }}
+                transition={{ delay: 0.5 }}
                 className="text-gray-600 mt-2"
               >
                 {isScheduledOrder
                   ? `Scheduled for ${scheduledDateFormatted}`
                   : "Your order has been placed successfully"}
               </motion.p>
+              
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 1.5 }}
-                className="mt-8"
-              >
-                <div className="w-8 h-8 border-2 border-[#2A9C64] border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-sm text-gray-500 mt-3">Loading order details...</p>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 2.0 }}
+                transition={{ delay: 0.8 }}
                 className="mt-12 pt-8 border-t border-gray-100 dark:border-gray-800"
               >
                 <div className="flex items-center justify-center gap-2 text-[#2A9C64] dark:text-orange-400 font-medium cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate('/user/profile/report-safety-emergency')}>
@@ -1490,8 +1481,31 @@ export default function OrderTracking() {
         </div>
       </motion.div>
 
-      {/* Map Section */}
-      {!isDeliveredOrder && orderStatus !== 'cancelled' && !(isScheduledOrder && ['placed', 'confirmed'].includes(orderStatus)) && (
+      {/* Map Section or Delivered Illustration */}
+      {isDeliveredOrder ? (
+        <div className="relative w-full min-h-[550px] flex items-center justify-center bg-transparent overflow-hidden" style={{ height: '550px' }}>
+          {/* Top Smoky Fade */}
+          <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-gray-100 dark:from-[#0a0a0a] to-transparent pointer-events-none z-10" />
+          
+          <motion.div
+            initial={{ opacity: 0, scale: 0.5, y: 40 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
+            className="w-full h-full"
+          >
+            <motion.img 
+              animate={{ y: [0, -10, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              src="/tastizo_girl_bun.png" 
+              alt="Delivered successfully" 
+              className="w-full h-full object-cover mix-blend-multiply dark:mix-blend-normal" 
+            />
+          </motion.div>
+          
+          {/* Bottom Smoky Fade */}
+          <div className="absolute bottom-0 inset-x-0 h-40 bg-gradient-to-t from-gray-100 dark:from-[#0a0a0a] to-transparent pointer-events-none z-10" />
+        </div>
+      ) : orderStatus === 'cancelled' || (isScheduledOrder && ['placed', 'confirmed'].includes(orderStatus)) ? null : (
         <div className="relative">
           <MapErrorBoundary>
             <DeliveryMap
@@ -1560,9 +1574,12 @@ export default function OrderTracking() {
                   <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1 leading-snug">{currentStatus.subtitle}</p>
                 </div>
                 {typeof estimatedTime === 'number' && ['preparing', 'ready', 'at_pickup', 'assigned', 'on_way'].includes(orderStatus) ? (
-                  <div className="w-[72px] h-[72px] rounded-2xl bg-[#0b7a2d] text-white flex flex-col items-center justify-center flex-shrink-0 shadow-sm">
-                    <span className="text-[28px] font-extrabold leading-none tracking-tight">{estimatedTime}</span>
-                    <span className="text-[13px] font-semibold mt-0.5 opacity-95">mins</span>
+                  <div className="w-[72px] h-[72px] rounded-2xl bg-[#0b7a2d] text-white flex flex-col items-center justify-center flex-shrink-0 shadow-lg shadow-green-900/20 border-2 border-green-400">
+                    <span className="text-[10px] font-black tracking-widest uppercase opacity-90 mb-0.5">Arrival</span>
+                    <div className="flex items-baseline gap-0.5 leading-none">
+                      <span className="text-2xl font-black">{estimatedTime}</span>
+                      <span className="text-xs font-bold opacity-90">min</span>
+                    </div>
                   </div>
                 ) : (
                   <div className={`w-14 h-14 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm border border-gray-100 ${
@@ -1621,7 +1638,7 @@ export default function OrderTracking() {
 
           const hasRider = Boolean(riderObj || order?.dispatch?.deliveryPartnerId || order?.deliveryPartnerId);
 
-          if (!hasRider) return null;
+          if (!hasRider || isDeliveredOrder) return null;
 
           const riderName = riderObj?.name || riderObj?.fullName || 'Delivery Partner';
           const riderAvatar = riderObj?.avatar || riderObj?.profileImage || riderObj?.profilePhoto || null;

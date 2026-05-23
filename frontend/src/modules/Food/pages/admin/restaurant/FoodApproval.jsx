@@ -298,7 +298,7 @@ export default function FoodApproval() {
                             </span>
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-700 font-semibold">
-                            {request.price !== null && request.price !== undefined ? `Rs ${request.price}` : '-'}
+                            {request.price !== null && request.price !== undefined ? `₹${request.price}` : '-'}
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
                             {request.requestedAt ? new Date(request.requestedAt).toLocaleDateString() : '-'}

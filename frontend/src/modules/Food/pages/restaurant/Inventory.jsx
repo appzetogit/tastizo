@@ -2218,7 +2218,7 @@ export default function Inventory() {
                           {addon.description && (
                             <p className="mb-2 text-sm leading-6 text-slate-600">{addon.description}</p>
                           )}
-                          <p className="text-base font-bold text-slate-950">Rs. {addon.price}</p>
+                          <p className="text-base font-bold text-slate-950">₹{addon.price}</p>
                           {addon.approvalStatus === 'rejected' && addon.rejectionReason && (
                             <p className="mt-2 text-xs font-medium text-red-600">Reason: {addon.rejectionReason}</p>
                           )}

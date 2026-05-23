@@ -1957,7 +1957,7 @@ function RestaurantDetailsContent() {
     return null
   }
 
-  // Helper function to check if a section has any items under Rs 250
+  // Helper function to check if a section has any items under ₹250
   const sectionHasItemsUnder250 = (section) => {
     if (!showOnlyUnder250) return true; // If not filtering, show all sections
 
@@ -2495,6 +2495,24 @@ function RestaurantDetailsContent() {
                   <div className="h-3 w-3 rounded-full bg-red-600" />
                   Non-veg
                   {filters.vegNonVeg === "non-veg" && (
+                    <X className="h-3 w-3 text-gray-600 dark:text-gray-400" />
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`flex items-center gap-1.5 whitespace-nowrap border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] dark:text-white rounded-full ${filters.spicy ? "border-red-500 bg-red-50 text-red-600 dark:border-red-500 dark:bg-red-900/20 dark:text-red-400" : ""
+                    }`}
+                  onClick={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      spicy: !prev.spicy,
+                    }))
+                  }
+                >
+                  <span className="text-[12px] leading-none">🌶️</span>
+                  Spicy
+                  {filters.spicy && (
                     <X className="h-3 w-3 text-gray-600 dark:text-gray-400" />
                   )}
                 </Button>

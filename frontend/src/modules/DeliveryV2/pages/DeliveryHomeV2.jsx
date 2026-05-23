@@ -1683,7 +1683,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                             <div>
                                <h3 className="text-gray-950 text-2xl font-bold uppercase">Handover Drop</h3>
                                <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mt-1.5 ${isWithinRange ? 'text-green-600' : 'text-orange-500'}`}>
-                                 {isWithinRange ? 'Ready - Swipe to Arrive âˆš' : `${(distanceToTarget / 1000).toFixed(1)} km • ${eta || '--'} min Arrival`}
+                                 {isWithinRange ? 'Ready - Swipe to Arrive' : `${(distanceToTarget / 1000).toFixed(1)} km • ${eta || '--'} min Arrival`}
                                </p>
                             </div>
                           </div>

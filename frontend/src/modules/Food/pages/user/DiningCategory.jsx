@@ -88,7 +88,7 @@ export default function DiningCategory() {
                 Array.isArray(restaurant.cuisines) && restaurant.cuisines.length > 0
                   ? restaurant.cuisines.join(" • ")
                   : "Multi-cuisine",
-              price: restaurant.costForTwo ? `Rs ${restaurant.costForTwo} for two` : "Price on request",
+              price: restaurant.costForTwo ? `₹${restaurant.costForTwo} for two` : "Price on request",
               rating: Number(restaurant.rating || restaurant.avgRating || 0).toFixed(1),
               offer: restaurant.offer || "Pre-book tables and dining offers",
               featuredDish: restaurant.featuredDish || "Chef's special",

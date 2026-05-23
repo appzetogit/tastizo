@@ -503,32 +503,7 @@ const DeliveryTrackingMap = ({
         )}
       </GoogleMap>
 
-      {/* 4. LIVE ARRIVAL BADGE (Pro Orange) */}
-      <AnimatePresence>
-        {riderLocation && currentEta && (
-          <motion.div 
-            initial={{ x: -20, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            className="absolute top-4 left-4 z-[150] pointer-events-none"
-          >
-            <div className="bg-[#2A9C64]/95 backdrop-blur-xl rounded-2xl p-3 shadow-[0_10px_30px_rgba(249,115,22,0.4)] border border-orange-400/50 flex flex-col min-w-[90px] group overflow-hidden relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none" />
-              <div className="flex flex-col z-10">
-                <span className="text-[9px] text-white/80 font-black uppercase tracking-[0.2em] mb-0.5">Arrival</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xl font-black text-white leading-none tracking-tighter">
-                    {currentEta}
-                  </span>
-                  <div className="flex items-center gap-1.5 opacity-80">
-                     <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                     <Navigation className="w-3 h-3 text-white rotate-45" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
     </div>
   );
 };
