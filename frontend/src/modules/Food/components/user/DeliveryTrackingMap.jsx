@@ -36,6 +36,94 @@ const CUSTOMER_PIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="48" hei
 
 const debugLog = (...args) => console.log('[DeliveryTrackingMap]', ...args);
 
+// Atomic component to prevent GoogleMap from re-rendering at 60fps
+const AnimatedRiderOverlay = React.memo(({ targetLocation, iconUrl }) => {
+  const [animatedLoc, setAnimatedLoc] = useState(targetLocation);
+  const animRef = useRef(null);
+  const lastTargetRef = useRef(targetLocation);
+  const lastGpsTimeRef = useRef(performance.now());
+  const animatedLocRef = useRef(targetLocation);
+
+  useEffect(() => {
+    if (!targetLocation) return;
+    if (targetLocation.lat === lastTargetRef.current?.lat && targetLocation.lng === lastTargetRef.current?.lng) {
+      setAnimatedLoc(prev => prev ? { ...prev, heading: targetLocation.heading } : targetLocation);
+      return;
+    }
+
+    const startLoc = animatedLocRef.current || targetLocation;
+    const endLoc = targetLocation;
+
+    const now = performance.now();
+    const timeSinceLastUpdate = now - lastGpsTimeRef.current;
+    lastGpsTimeRef.current = now;
+
+    const toRad = x => x * Math.PI / 180;
+    const R = 6371e3;
+    const dLat = toRad(endLoc.lat - startLoc.lat);
+    const dLng = toRad(endLoc.lng - startLoc.lng);
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(toRad(startLoc.lat)) * Math.cos(toRad(endLoc.lat)) * Math.sin(dLng/2) * Math.sin(dLng/2);
+    const distGap = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    if (distGap > 100) {
+      setAnimatedLoc(endLoc);
+      animatedLocRef.current = endLoc;
+      lastTargetRef.current = endLoc;
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      return;
+    }
+
+    // Match animation duration dynamically up to 5000ms (max expected sync interval)
+    let duration = Math.max(500, Math.min(timeSinceLastUpdate, 5000));
+    if (distGap > 15) duration *= 0.6; // catch-up
+
+    const startTime = performance.now();
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+
+    const animate = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const raw = Math.min(elapsed / duration, 1);
+      const progress = raw * raw * (3 - 2 * raw); // easeInOut
+      
+      const lat = startLoc.lat + (endLoc.lat - startLoc.lat) * progress;
+      const lng = startLoc.lng + (endLoc.lng - startLoc.lng) * progress;
+      
+      let lastHead = startLoc.heading || 0;
+      let nextHead = endLoc.heading || 0;
+      if (Math.abs(nextHead - lastHead) > 180) {
+        if (nextHead > lastHead) lastHead += 360;
+        else nextHead += 360;
+      }
+      const heading = lastHead + (nextHead - lastHead) * progress;
+
+      const nextPos = { lat, lng, heading: heading % 360 };
+      animatedLocRef.current = nextPos;
+      
+      // Throttle React set state to ~30fps to keep CPU usage low while keeping visual smooth via css transition
+      if (currentTime % 33 < 16 || raw === 1) {
+          setAnimatedLoc(nextPos);
+      }
+
+      if (progress < 1) animRef.current = requestAnimationFrame(animate);
+      else { lastTargetRef.current = endLoc; animRef.current = null; }
+    };
+    animRef.current = requestAnimationFrame(animate);
+    lastTargetRef.current = endLoc;
+
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [targetLocation]);
+
+  if (!animatedLoc) return null;
+
+  return (
+    <OverlayView position={animatedLoc} mapPaneName={OverlayView.MARKER_LAYER}>
+      <div style={{ transform: `translate(-50%, -50%) rotate(${animatedLoc.heading || 0}deg)`, transition: 'transform 0.1s linear' }} className="relative w-[72px] h-[72px]">
+        <img src={iconUrl} alt="Rider" className="w-full h-full object-contain drop-shadow-2xl" onError={(e) => { e.target.src = bikeLogo; }} />
+      </div>
+    </OverlayView>
+  );
+});
+
 const DeliveryTrackingMap = ({
   orderId,
   orderTrackingIds = [],
@@ -51,11 +139,7 @@ const DeliveryTrackingMap = ({
   const [lastDirectionsAt, setLastDirectionsAt] = useState(0);
   const [currentEta, setCurrentEta] = useState(null);
   const [cloudPolyline, setCloudPolyline] = useState(null);
-  const [smoothLocation, setSmoothLocation] = useState(null);
   const socketRef = useRef(null);
-  const interpStateRef = useRef({ lastPos: null, nextPos: null, startTime: 0, durationMs: 1500 });
-  const lastUpdateAtRef = useRef(0);
-  const lastSmoothSetRef = useRef(0);
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
@@ -145,40 +229,6 @@ const DeliveryTrackingMap = ({
           lng,
           heading: Number(data?.heading ?? data?.bearing ?? data?.location?.heading ?? 0)
         };
-        const now = Date.now();
-        const delta = Math.max(500, Math.min(now - (lastUpdateAtRef.current || now - 1000), 3000));
-        lastUpdateAtRef.current = now;
-
-        const currentStart = interpStateRef.current.nextPos || nextPos;
-        
-        // Simple Haversine approximation inline to avoid import issues
-        const toRad = x => x * Math.PI / 180;
-        const R = 6371e3; // metres
-        const dLat = toRad(nextPos.lat - currentStart.lat);
-        const dLng = toRad(nextPos.lng - currentStart.lng);
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(toRad(currentStart.lat)) * Math.cos(toRad(nextPos.lat)) *
-                  Math.sin(dLng/2) * Math.sin(dLng/2);
-        const distGap = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-        let adjustedDuration = delta;
-        
-        if (distGap > 100) {
-          // Teleport, too far
-          adjustedDuration = 0;
-        } else if (distGap > 15) {
-          // Catch-up fast forward
-          adjustedDuration = delta * 0.6;
-        }
-
-        // Trigger Smooth Interpolation
-        interpStateRef.current = {
-          lastPos: currentStart,
-          nextPos: nextPos,
-          startTime: now,
-          durationMs: adjustedDuration
-        };
-        
         setRiderLocation(nextPos);
       }
     });
@@ -189,50 +239,8 @@ const DeliveryTrackingMap = ({
     };
   }, [trackingIds, backendUrl]);
 
-  // 3. Smooth Animation Loop (60 FPS Glide)
-  useEffect(() => {
-    let frame;
-    const update = () => {
-      const { lastPos, nextPos, startTime, durationMs } = interpStateRef.current;
-      if (lastPos && nextPos) {
-        // If durationMs is explicitly 0, we snap instantly
-        const duration = durationMs === 0 ? 0 : Math.max(500, durationMs || 1500);
-        const elapsed = Date.now() - startTime;
-        let progress = 1;
-
-        let raw = 1;
-        if (duration > 0) {
-          raw = Math.min(elapsed / duration, 1);
-          progress = raw * raw * (3 - 2 * raw); // easeInOut
-        }
-        
-        // Linear Interpolation (LERP)
-        const lat = lastPos.lat + (nextPos.lat - lastPos.lat) * progress;
-        const lng = lastPos.lng + (nextPos.lng - lastPos.lng) * progress;
-        
-        // Heading interpolation (shortest path)
-        let lastHead = lastPos.heading || 0;
-        let nextHead = nextPos.heading || 0;
-        if (Math.abs(nextHead - lastHead) > 180) {
-          if (nextHead > lastHead) lastHead += 360;
-          else nextHead += 360;
-        }
-        const heading = lastHead + (nextHead - lastHead) * progress;
-
-        const now = Date.now();
-        if (now - lastSmoothSetRef.current >= 33 || raw >= 1) {
-          lastSmoothSetRef.current = now;
-          setSmoothLocation({ lat, lng, heading: heading % 360 });
-        }
-      }
-      frame = requestAnimationFrame(update);
-    };
-    frame = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  // Use smooth location for sync if available
-  const displayRiderLocation = smoothLocation || riderLocation;
+  // Use raw location, AnimatedRiderOverlay handles its own smoothing
+  const displayRiderLocation = riderLocation;
 
   const tripStatus = order?.status || order?.orderStatus || 'pending';
   const isOrderPickedUp = ['picked_up', 'out_for_delivery', 'delivered'].includes(tripStatus.toLowerCase());
@@ -478,28 +486,10 @@ const DeliveryTrackingMap = ({
 
         {/* PRO RIDER (OVERLAY VIEW FOR SMOOTH ROTATION / GLIDE) */}
         {displayRiderLocation && (
-          <OverlayView
-            position={displayRiderLocation}
-            mapPaneName={OverlayView.MARKER_LAYER}
-          >
-            <div
-              style={{
-                transform: `translate(-50%, -50%) rotate(${displayRiderLocation.heading || 0}deg)`,
-                transition: 'transform 0.2s linear',
-                willChange: 'transform',
-              }}
-              className="relative w-16 h-16"
-            >
-              <img 
-                src="/tastizo_rider.png" 
-                alt="Rider" 
-                className="w-full h-full object-contain drop-shadow-2xl"
-                onError={(e) => {
-                  e.target.src = bikeLogo;
-                }}
-              />
-            </div>
-          </OverlayView>
+          <AnimatedRiderOverlay 
+            targetLocation={displayRiderLocation}
+            iconUrl="/tastizo_rider.png"
+          />
         )}
       </GoogleMap>
 

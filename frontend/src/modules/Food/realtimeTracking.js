@@ -1,4 +1,4 @@
-import { onValue, ref, set, update } from 'firebase/database';
+import { onValue, ref, set, update, get } from 'firebase/database';
 import { firebaseRealtimeDb, ensureFirebaseInitialized } from '@food/firebase';
 
 function sanitizeRealtimeKey(value) {
@@ -107,18 +107,32 @@ export async function writeDeliveryLocation({
 }) {
   if (!deliveryId) return false;
   ensureFirebaseInitialized({ enableAuth: false, enableRealtimeDb: true });
+  
+  const locRef = ref(firebaseRealtimeDb, getDeliveryLocationPath(deliveryId));
+  const incomingTimestamp = toFiniteNumber(timestamp) || Date.now();
+
+  try {
+    const snapshot = await get(locRef);
+    const currentData = snapshot.val();
+    if (currentData && currentData.timestamp && incomingTimestamp < currentData.timestamp) {
+      return false; // Reject stale packet
+    }
+  } catch (e) {
+    // Ignore read errors and proceed to write
+  }
+
   const payload = {
     lat: toFiniteNumber(lat),
     lng: toFiniteNumber(lng),
     heading: toFiniteNumber(heading) || 0,
     speed: toFiniteNumber(speed) || 0,
     accuracy: toFiniteNumber(accuracy),
-    timestamp: toFiniteNumber(timestamp) || Date.now(),
+    timestamp: incomingTimestamp,
     last_updated: Date.now(),
     isOnline: Boolean(isOnline),
     activeOrderId: activeOrderId ? String(activeOrderId) : null,
   };
-  await set(ref(firebaseRealtimeDb, getDeliveryLocationPath(deliveryId)), payload);
+  await set(locRef, payload);
   return true;
 }
 
@@ -130,16 +144,28 @@ export async function writeDeliveryLocation({
 export async function writeOrderTracking(orderId, payload = {}) {
   if (!orderId) return false;
   ensureFirebaseInitialized({ enableAuth: false, enableRealtimeDb: true });
+  
+  const orderRef = ref(firebaseRealtimeDb, getOrderTrackingPath(orderId));
+  const incomingTimestamp = toFiniteNumber(payload.timestamp) || Date.now();
+
+  try {
+    const snapshot = await get(orderRef);
+    const currentData = snapshot.val();
+    if (currentData && currentData.timestamp && incomingTimestamp < currentData.timestamp) {
+      return false; // Reject stale packet
+    }
+  } catch (e) {
+    // Proceed if read fails
+  }
+
   const toWrite = {
     ...payload,
     lat: toFiniteNumber(payload.lat),
     lng: toFiniteNumber(payload.lng),
     heading: toFiniteNumber(payload.heading ?? payload.bearing) || 0,
+    timestamp: incomingTimestamp,
     last_updated: Date.now(),
   };
-  if (payload.timestamp != null) {
-    toWrite.timestamp = toFiniteNumber(payload.timestamp) || Date.now();
-  }
-  await update(ref(firebaseRealtimeDb, getOrderTrackingPath(orderId)), toWrite);
+  await update(orderRef, toWrite);
   return true;
 }

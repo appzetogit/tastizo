@@ -43,6 +43,94 @@ const mapOptions = {
 };
 const LIBRARIES = ['places', 'geometry'];
 
+// Atomic component to prevent GoogleMap from re-rendering at 60fps
+const AnimatedRiderOverlay = React.memo(({ targetLocation, iconUrl }) => {
+  const [animatedLoc, setAnimatedLoc] = useState(targetLocation);
+  const animRef = useRef(null);
+  const lastTargetRef = useRef(targetLocation);
+  const lastGpsTimeRef = useRef(performance.now());
+  const animatedLocRef = useRef(targetLocation);
+
+  useEffect(() => {
+    if (!targetLocation) return;
+    if (targetLocation.lat === lastTargetRef.current?.lat && targetLocation.lng === lastTargetRef.current?.lng) {
+      setAnimatedLoc(prev => prev ? { ...prev, heading: targetLocation.heading } : targetLocation);
+      return;
+    }
+
+    const startLoc = animatedLocRef.current || targetLocation;
+    const endLoc = targetLocation;
+
+    const now = performance.now();
+    const timeSinceLastUpdate = now - lastGpsTimeRef.current;
+    lastGpsTimeRef.current = now;
+
+    const toRad = x => x * Math.PI / 180;
+    const R = 6371e3;
+    const dLat = toRad(endLoc.lat - startLoc.lat);
+    const dLng = toRad(endLoc.lng - startLoc.lng);
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(toRad(startLoc.lat)) * Math.cos(toRad(endLoc.lat)) * Math.sin(dLng/2) * Math.sin(dLng/2);
+    const distGap = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    if (distGap > 100) {
+      setAnimatedLoc(endLoc);
+      animatedLocRef.current = endLoc;
+      lastTargetRef.current = endLoc;
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      return;
+    }
+
+    // Match animation duration dynamically up to 5000ms (max expected sync interval)
+    let duration = Math.max(500, Math.min(timeSinceLastUpdate, 5000));
+    if (distGap > 15) duration *= 0.6; // catch-up
+
+    const startTime = performance.now();
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+
+    const animate = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const raw = Math.min(elapsed / duration, 1);
+      const progress = raw * raw * (3 - 2 * raw); // easeInOut
+      
+      const lat = startLoc.lat + (endLoc.lat - startLoc.lat) * progress;
+      const lng = startLoc.lng + (endLoc.lng - startLoc.lng) * progress;
+      
+      let lastHead = startLoc.heading || 0;
+      let nextHead = endLoc.heading || 0;
+      if (Math.abs(nextHead - lastHead) > 180) {
+        if (nextHead > lastHead) lastHead += 360;
+        else nextHead += 360;
+      }
+      const heading = lastHead + (nextHead - lastHead) * progress;
+
+      const nextPos = { lat, lng, heading: heading % 360 };
+      animatedLocRef.current = nextPos;
+      
+      // Throttle React set state to ~30fps to keep CPU usage low while keeping visual smooth via css transition
+      if (currentTime % 33 < 16 || raw === 1) {
+          setAnimatedLoc(nextPos);
+      }
+
+      if (progress < 1) animRef.current = requestAnimationFrame(animate);
+      else { lastTargetRef.current = endLoc; animRef.current = null; }
+    };
+    animRef.current = requestAnimationFrame(animate);
+    lastTargetRef.current = endLoc;
+
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [targetLocation]);
+
+  if (!animatedLoc) return null;
+
+  return (
+    <OverlayView position={animatedLoc} mapPaneName={OverlayView.MARKER_LAYER}>
+      <div style={{ transform: `translate(-50%, -50%) rotate(${animatedLoc.heading || 0}deg)`, transition: 'transform 0.1s linear' }} className="relative w-[72px] h-[72px]">
+        <img src={iconUrl} alt="Rider" className="w-full h-full object-contain" onError={(e) => { e.target.src = "/MapRider.png"; }} />
+      </div>
+    </OverlayView>
+  );
+});
+
 export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineReceived, zoom = 12 }) => {
   const { activeOrder, tripStatus } = useDeliveryStore();
   const riderLocation = useTrackingStore(state => state.riderLocation);
@@ -142,95 +230,7 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
     return (Number.isFinite(lat) && Number.isFinite(lng)) ? { lat, lng, heading: parseFloat(riderLocation.heading || 0) } : null;
   }, [riderLocation]);
 
-  const [animatedRiderLocation, setAnimatedRiderLocation] = useState(null);
-  const animationRef = useRef(null);
-  const lastRiderLocationRef = useRef(null);
-  const animatedRiderLocationRef = useRef(null);
-
-  const lastGpsTimeRef = useRef(performance.now());
-
-  useEffect(() => {
-    if (!parsedRiderLocation) return;
-
-    // First time — snap immediately, no animation needed
-    if (!lastRiderLocationRef.current) {
-      setAnimatedRiderLocation(parsedRiderLocation);
-      lastRiderLocationRef.current = parsedRiderLocation;
-      animatedRiderLocationRef.current = parsedRiderLocation;
-      return;
-    }
-
-    // Same position, just update heading
-    if (parsedRiderLocation.lat === lastRiderLocationRef.current.lat &&
-        parsedRiderLocation.lng === lastRiderLocationRef.current.lng) {
-      setAnimatedRiderLocation(prev => prev ? { ...prev, heading: parsedRiderLocation.heading } : parsedRiderLocation);
-      return;
-    }
-
-    const startLocation = animatedRiderLocationRef.current || lastRiderLocationRef.current;
-    const endLocation = parsedRiderLocation;
-
-    const now = performance.now();
-    const timeSinceLastUpdate = now - lastGpsTimeRef.current;
-    lastGpsTimeRef.current = now;
-
-    // Advanced Anti-Lag Engine
-    const distGap = getHaversineDistance(startLocation.lat, startLocation.lng, endLocation.lat, endLocation.lng);
-    
-    if (distGap > 100) {
-      // Teleportation (e.g., GPS recovered after long tunnel)
-      setAnimatedRiderLocation(endLocation);
-      lastRiderLocationRef.current = endLocation;
-      animatedRiderLocationRef.current = endLocation;
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
-      return;
-    }
-
-    let duration = Math.max(500, Math.min(timeSinceLastUpdate, 1500));
-    
-    if (distGap > 15) {
-       // Catch-up Multiplier Logic (Fast forward if falling behind)
-       duration = duration * 0.6; // 40% faster
-    }
-
-    const startTime = performance.now();
-
-    if (animationRef.current) cancelAnimationFrame(animationRef.current);
-
-    const animate = (currentTime) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-
-      const lat = startLocation.lat + (endLocation.lat - startLocation.lat) * progress;
-      const lng = startLocation.lng + (endLocation.lng - startLocation.lng) * progress;
-      const nextPos = { lat, lng, heading: endLocation.heading };
-
-      animatedRiderLocationRef.current = nextPos;
-      setAnimatedRiderLocation(nextPos);
-
-      if (progress < 1) {
-        animationRef.current = requestAnimationFrame(animate);
-      } else {
-        lastRiderLocationRef.current = endLocation;
-        animationRef.current = null;
-      }
-    };
-
-    animationRef.current = requestAnimationFrame(animate);
-    lastRiderLocationRef.current = parsedRiderLocation;
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
-    };
-  // Only re-run when GPS location changes — NOT when animatedRiderLocation changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parsedRiderLocation]);
+  // (Old local animation state removed to use AnimatedRiderOverlay)
 
   useEffect(() => { if (map) map.setZoom(zoom); }, [zoom, map]);
 
@@ -415,20 +415,11 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
           <Polyline path={remainingPath} options={{ strokeColor: '#22c55e', strokeOpacity: 0.98, strokeWeight: 7, zIndex: 12 }} />
         )}
 
-        {animatedRiderLocation && (
-          <OverlayView position={animatedRiderLocation} mapPaneName={OverlayView.MARKER_LAYER}>
-            <div style={{ transform: `translate(-50%, -50%) rotate(${animatedRiderLocation.heading || 0}deg)`, transition: 'transform 0.5s linear' }} className="relative w-[72px] h-[72px]">
-              <img 
-                src="/tastizo_rider.png" 
-                alt="Rider" 
-                className="w-full h-full object-contain"
-                onError={(e) => {
-                  console.error('Failed to load /tastizo_rider.png, falling back to /MapRider.png');
-                  e.target.src = "/MapRider.png";
-                }}
-              />
-            </div>
-          </OverlayView>
+        {parsedRiderLocation && (
+          <AnimatedRiderOverlay 
+            targetLocation={parsedRiderLocation} 
+            iconUrl="/tastizo_rider.png" 
+          />
         )}
 
         {(() => {

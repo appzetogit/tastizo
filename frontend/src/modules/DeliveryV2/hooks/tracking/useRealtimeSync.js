@@ -1,12 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTrackingStore } from './useTrackingStore';
 import { useDeliveryStore } from '../../store/useDeliveryStore';
 import { writeOrderTracking } from '@food/realtimeTracking';
 import { getHaversineDistance } from '../../utils/geo';
 import { saveToOfflineQueue } from '../../utils/batchQueue';
-
-const SYNC_INTERVAL_MS = 5000; // 5 seconds
-const MIN_DISTANCE_SYNC_M = 20; // 20 meters
 
 export const useRealtimeSync = ({ isOnline, syncDeliveryZoneState, emitLocation }) => {
   const riderLocation = useTrackingStore(state => state.riderLocation);
@@ -28,14 +25,6 @@ export const useRealtimeSync = ({ isOnline, syncDeliveryZoneState, emitLocation 
     tripStatus,
   });
 
-  const [isVisible, setIsVisible] = useState(typeof document !== 'undefined' ? !document.hidden : true);
-
-  useEffect(() => {
-    const handleVisibilityChange = () => setIsVisible(!document.hidden);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
-
   useEffect(() => {
     stateRef.current = { riderLocation, activePolyline, eta, activeOrder, tripStatus };
   }, [riderLocation, activePolyline, eta, activeOrder, tripStatus]);
@@ -51,19 +40,15 @@ export const useRealtimeSync = ({ isOnline, syncDeliveryZoneState, emitLocation 
       const now = Date.now();
       let shouldSync = false;
 
-      // Adaptive Sync Interval Logic
-      let dynamicSyncInterval = 2500; // Default: Fast sync (2.5s)
-      let dynamicMinDistance = 10; // Default: 10 meters
+      // Adaptive Sync Interval Logic (No hidden tab throttling)
+      let dynamicSyncInterval = 3000; // Default: Fast sync (3s)
+      let dynamicMinDistance = 15; // Default: 15 meters
 
-      if (!isVisible) {
-        dynamicSyncInterval = 15000; // Tab hidden: 15s
-        dynamicMinDistance = 50;
-      } else if (loc.speed !== undefined && loc.speed < 1) {
-        dynamicSyncInterval = 10000; // Idle/Stationary: 10s
-        dynamicMinDistance = 15;
+      if (loc.speed !== undefined && loc.speed < 1) {
+        dynamicSyncInterval = 5000; // Idle/Stationary: 5s
+        dynamicMinDistance = 10;
       } else if (currentEta && currentEta.distanceValue > 2000) {
-        dynamicSyncInterval = 5000; // Far away (>2km): 5s
-        dynamicMinDistance = 20;
+        dynamicSyncInterval = 4000; // Far away (>2km): 4s
       }
 
       // Sync if time interval passed OR moved significant distance
@@ -91,6 +76,7 @@ export const useRealtimeSync = ({ isOnline, syncDeliveryZoneState, emitLocation 
           heading: loc.heading || 0,
           speed: loc.speed || 0,
           accuracy: loc.accuracy || null,
+          timestamp: loc.timestamp || Date.now(), // Preserve exact capture time
           orderId: order?.orderId || order?._id,
           status: status,
           polyline: polyline,
