@@ -470,39 +470,28 @@ export default function Home() {
   const [isSwitchingOffVegMode, setIsSwitchingOffVegMode] = useState(false);
   const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0, triangleLeft: 0 });
   const vegModeToggleRef = useRef(null);
-  const [isStickyHeaderVisible, setIsStickyHeaderVisible] = useState(false);
-  const [showStickySearch, setShowStickySearch] = useState(false);
-  const lastScrollY = useRef(0);
+
+  const [isStuck, setIsStuck] = useState(false);
+  const [stickyHeight, setStickyHeight] = useState(0);
+  const placeholderRef = useRef(null);
+  const stickyContentRef = useRef(null);
 
   useEffect(() => {
     const handleScrollHeader = () => {
-      const currentScrollY = window.scrollY;
-      const categoriesSection = document.getElementById("categories-section");
-
-      if (!categoriesSection) return;
-
-      const rect = categoriesSection.getBoundingClientRect();
-
-      // Show stuck bar as soon as this section reaches the top of viewport
+      if (!placeholderRef.current) return;
+      const rect = placeholderRef.current.getBoundingClientRect();
       if (rect.top <= 0) {
-        setIsStickyHeaderVisible(true);
+        setIsStuck(true);
+        if (stickyContentRef.current) {
+          setStickyHeight(stickyContentRef.current.offsetHeight);
+        }
       } else {
-        setIsStickyHeaderVisible(false);
+        setIsStuck(false);
       }
-
-      // Track scroll direction for search bar visibility in sticky header
-      if (currentScrollY < lastScrollY.current) {
-        // Scrolling UP
-        setShowStickySearch(true);
-      } else {
-        // Scrolling DOWN
-        setShowStickySearch(false);
-      }
-
-      lastScrollY.current = currentScrollY;
     };
 
     window.addEventListener("scroll", handleScrollHeader, { passive: true });
+    handleScrollHeader();
     return () => window.removeEventListener("scroll", handleScrollHeader);
   }, []);
 
@@ -2742,121 +2731,39 @@ export default function Home() {
                   </div>
                 </div>
 
-                <AnimatePresence>
-                  {isStickyHeaderVisible && (
-                    <motion.div
-                      initial={{ y: -32, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: -32, opacity: 0 }}
-                      transition={{ duration: 0.22, ease: "easeOut" }}
-                      className="fixed top-0 left-0 right-0 z-[100] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md border-b border-gray-100 dark:border-white/5"
-                    >
-                      <div className="px-4 pt-8 pb-2 space-y-3 bg-white dark:bg-[#0a0a0a]">
-                        <div className="flex overflow-x-auto gap-1.5 pb-2 scrollbar-hide -mx-4 px-4 mask-edge-fade">
-                          {displayCategories.map((category, index) => (
-                            <Link
-                              key={`fixed-${category.id || index}`}
-                              to={`/food/user/category/${category.slug}`}
-                              className="flex-shrink-0 flex flex-col items-center gap-2.5 group w-[92px]"
-                            >
-                              <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-md border-2 border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] group-active:scale-95 transition-all duration-300">
-                                <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
-                                  <motion.div
-                                    animate={{ x: ['-200%', '200%'] }}
-                                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 + index * 0.5, ease: "easeInOut" }}
-                                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-20deg] w-[150%] h-full"
-                                  />
-                                </div>
-                                <OptimizedImage
-                                  src={category.image}
-                                  alt={category.name}
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                                />
-                              </div>
-                              <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300 text-center leading-tight line-clamp-1 w-full px-0.5">
-                                {category.name}
-                              </span>
-                            </Link>
-                          ))}
-                        </div>
-                      </div>
+                {/* Heading Section - outside the sticky container so it scrolls away naturally */}
+                <div className="px-4 pt-2.5 pb-2 flex items-center gap-2 min-w-0">
+                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white min-w-0 flex-shrink leading-tight pl-1">
+                    What's on your mind today?
+                  </h2>
+                  <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
+                  <Link
+                    to="/food/user/categories"
+                    className="text-sm font-bold text-gray-400 dark:text-gray-500 flex items-center gap-0.5 whitespace-nowrap shrink-0 pr-1"
+                  >
+                    View All <ArrowDownUp className="h-3 w-3 rotate-90" />
+                  </Link>
+                </div>
 
-                      <section className="pt-2.5 pb-3 px-4 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md transition-colors duration-300">
-                        <div
-                          className="flex items-center gap-2 overflow-x-auto scrollbar-hide px-4 py-0.5"
-                          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setIsFilterOpen(true)}
-                            className="h-9 px-4 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-bold transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 shadow-sm active:scale-95"
-                          >
-                            <SlidersHorizontal className="h-4 w-4 text-black" />
-                            <span className="text-xs font-bold text-black dark:text-white uppercase tracking-tight">
-                              Filters
-                            </span>
-                          </button>
+                {/* Scroll Placeholder element to prevent jumping when content goes fixed */}
+                <div ref={placeholderRef} style={{ height: isStuck ? `${stickyHeight}px` : "0px" }} />
 
-                          {[
-                            { id: "delivery-under-30", label: "Under 30 mins" },
-                            { id: "delivery-under-45", label: "Under 45 mins" },
-                            { id: "distance-under-1km", label: "Under 1km", icon: MapPin },
-                            { id: "distance-under-2km", label: "Under 2km", icon: MapPin },
-                          ].map((filter) => {
-                            const Icon = filter.icon;
-                            const isActive = activeFilters.has(filter.id);
-                            return (
-                              <button
-                                key={`fixed-filter-${filter.id}`}
-                                type="button"
-                                onClick={() => {
-                                  const nextFilters = new Set(activeFilters);
-                                  if (nextFilters.has(filter.id)) {
-                                    nextFilters.delete(filter.id);
-                                  } else {
-                                    nextFilters.add(filter.id);
-                                  }
-                                  setActiveFilters(nextFilters);
-                                  void applyFiltersAndRefetch(nextFilters, sortBy, selectedCuisine);
-                                }}
-                                className={`h-9 px-4 rounded-full flex items-center gap-2 whitespace-nowrap flex-shrink-0 transition-all font-bold shadow-sm active:scale-95 ${isActive
-                                  ? "bg-[#2A9C64] text-white border border-[#2A9C64] hover:bg-orange-700"
-                                  : "bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
-                                  }`}
-                              >
-                                {Icon && (
-                                  <Icon className={`h-3.5 w-3.5 ${isActive ? "fill-white" : ""}`} />
-                                )}
-                                <span className="text-xs font-bold tracking-tight">
-                                  {filter.label}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </section>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
+                {/* Sticky Categories & Filters Section */}
                 <div
+                  ref={stickyContentRef}
                   id="categories-section"
-                  className="sticky top-0 z-[40] -mx-4 w-[calc(100%+2rem)] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md transition-colors duration-300"
+                  className={isStuck 
+                    ? "fixed top-0 left-0 right-0 z-[100] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md border-b border-gray-100 dark:border-white/5 transition-all duration-300 pt-7 pb-3" 
+                    : "relative bg-white dark:bg-[#0a0a0a] transition-all duration-300 pt-2 pb-3"
+                  }
+                  style={{ willChange: "transform" }}
                 >
-                  {/* "What's on your mind today?" Section - Now with Sticky Logic */}
-                  <div className="px-2 pt-2.5 pb-2 space-y-3 bg-white dark:bg-[#0a0a0a]">
-                    {!isStickyHeaderVisible && (
-                      <div className="flex items-center gap-2 min-w-0 px-1 sm:px-2">
-                        <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white min-w-0 flex-shrink leading-tight pl-5">What's on your mind today?</h2>
-                        <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
-                        <Link to="/food/user/categories" className="text-sm font-bold text-gray-400 dark:text-gray-500 flex items-center gap-0.5 whitespace-nowrap shrink-0 pr-2">
-                          View All <ArrowDownUp className="h-3 w-3 rotate-90" />
-                        </Link>
-                      </div>
-                    )}
-
-                    {/* Categories Horizontal Slider */}
-                    <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-hide px-5 mask-edge-fade">
+                  {/* Categories Horizontal Slider */}
+                  <div className="px-4 py-2">
+                    <div
+                      className="flex overflow-x-auto gap-3 pb-1 scrollbar-hide mask-edge-fade"
+                      style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                    >
                       {displayCategories.map((category, index) => (
                         <Link
                           key={category.id || index}
@@ -2894,10 +2801,9 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Filters Sticky Sidebar Header */}
-                  <section className="pt-2.5 pb-3 px-0 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md transition-colors duration-300">
+                  {/* Filters Sticky Row */}
                   <div
-                    className="flex items-center gap-2.5 overflow-x-auto scrollbar-hide px-5 py-0.5"
+                    className="flex items-center gap-2 overflow-x-auto scrollbar-hide px-4 py-0.5"
                     style={{
                       scrollbarWidth: "none",
                       msOverflowStyle: "none",
@@ -2906,12 +2812,10 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => setIsFilterOpen(true)}
-                      className="h-9 px-4 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-bold transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 shadow-sm active:scale-95"
+                      className="h-9 px-4 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-bold transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 shadow-sm active:scale-95 text-xs text-black dark:text-white"
                     >
-                      <SlidersHorizontal className="h-4 w-4 text-black" />
-                      <span className="text-xs font-bold text-black dark:text-white uppercase tracking-tight">
-                        Filters
-                      </span>
+                      <SlidersHorizontal className="h-4 w-4" />
+                      <span>Filters</span>
                     </button>
 
                     {[
@@ -2957,7 +2861,6 @@ export default function Home() {
                       );
                     })}
                   </div>
-                  </section>
                 </div>
 
               </motion.div>
