@@ -345,8 +345,9 @@ export default function MyBookings() {
             const response = await diningAPI.createReview(reviewData)
             if (response.data.success) {
                 toast.success("Review submitted! Thank you for your feedback.")
-                // Update booking list to mark it as reviewed if we had a reviewed flag
-                // For now just close the modal
+                setBookings(prev => prev.map(b => 
+                    b._id === reviewData.bookingId ? { ...b, review: { rating: reviewData.rating, comment: reviewData.comment } } : b
+                ))
                 setSelectedBooking(null)
             }
         } catch (error) {
@@ -484,20 +485,20 @@ export default function MyBookings() {
     if (loading) return <Loader />
 
     return (
-        <AnimatedPage className="bg-slate-50 min-h-screen pb-10">
+        <AnimatedPage className="bg-white min-h-screen pb-10">
             {/* Header */}
-            <div className="bg-white p-4 flex items-center shadow-sm sticky top-0 z-10">
+            <div className="bg-white p-4 flex items-center border-b border-gray-50 sticky top-0 z-10">
                 <button onClick={() => navigate("/")}>
-                    <ArrowLeft className="w-6 h-6 text-gray-700 cursor-pointer" />
+                    <ArrowLeft className="w-6 h-6 text-gray-600 cursor-pointer" />
                 </button>
-                <h1 className="ml-4 text-xl font-semibold text-gray-800">My Table Bookings</h1>
+                <h1 className="ml-4 text-xl font-semibold text-gray-800 tracking-tight">My Table Bookings</h1>
             </div>
 
-            <div className="p-4 space-y-4">
+            <div className="px-2 sm:px-4 flex flex-col">
                 {bookings.length > 0 ? (
                     bookings.map((booking) => (
-                        <div key={booking._id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-start gap-4">
-                            <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-slate-100">
+                        <div key={booking._id} className="bg-white p-4 border-b border-gray-100 flex items-start gap-4 last:border-0 hover:bg-gray-50/50 transition-colors">
+                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden flex-shrink-0 bg-gray-50 border border-gray-100/50 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
                                 <img
                                     src={booking.restaurant?.image || booking.restaurant?.profileImage?.url || ""}
                                     className="w-full h-full object-cover"
@@ -523,17 +524,17 @@ export default function MyBookings() {
                                     </span>
                                 </p>
 
-                                <div className="flex items-center gap-4 mt-3">
-                                    <div className="flex items-center gap-1 text-[11px] font-bold text-gray-600 bg-slate-100 px-2 py-0.5 rounded-lg">
-                                        <Calendar className="w-3 h-3" />
+                                <div className="flex flex-wrap items-center gap-2 mt-3">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 bg-gray-50/80 border border-gray-100 px-2.5 py-1 rounded-full">
+                                        <Calendar className="w-3.5 h-3.5" />
                                         {new Date(booking.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
                                     </div>
-                                    <div className="flex items-center gap-1 text-[11px] font-bold text-gray-600 bg-slate-100 px-2 py-0.5 rounded-lg">
-                                        <Clock className="w-3 h-3" />
+                                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 bg-gray-50/80 border border-gray-100 px-2.5 py-1 rounded-full">
+                                        <Clock className="w-3.5 h-3.5" />
                                         {booking.timeSlot}
                                     </div>
-                                    <div className="flex items-center gap-1 text-[11px] font-bold text-gray-600 bg-slate-100 px-2 py-0.5 rounded-lg">
-                                        <Users className="w-3 h-3" />
+                                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 bg-gray-50/80 border border-gray-100 px-2.5 py-1 rounded-full">
+                                        <Users className="w-3.5 h-3.5" />
                                         {booking.guests} Guests
                                     </div>
                                 </div>
@@ -541,14 +542,14 @@ export default function MyBookings() {
                                 {booking.status === 'completed' && (
                                     <div className="flex flex-col gap-2 mt-3 border-t border-slate-100 pt-3">
                                         {booking.billAmount ? (
-                                            <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100 mb-2">
+                                            <div className="flex items-center justify-between bg-gray-50/50 p-3 rounded-2xl mb-3">
                                                 <div className="flex flex-col">
-                                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Dining Bill</span>
-                                                    <span className="text-sm font-black text-slate-800">₹{booking.billAmount}</span>
+                                                    <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Dining Bill</span>
+                                                    <span className="text-sm font-bold text-gray-800">₹{booking.billAmount}</span>
                                                 </div>
                                                 {booking.billStatus === 'paid' ? (
                                                     <div className="flex flex-col items-end gap-1.5">
-                                                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 font-bold uppercase py-1 px-2.5 rounded-lg text-[9px] tracking-wider border-none shadow-sm">
+                                                        <Badge className="bg-emerald-50 text-emerald-600 hover:bg-emerald-50 font-semibold uppercase py-1 px-3 rounded-full text-[9px] tracking-widest border border-emerald-100/50 shadow-none">
                                                             PAID
                                                         </Badge>
                                                     </div>
@@ -633,12 +634,19 @@ export default function MyBookings() {
                                                 Waiting for restaurant to upload bill...
                                             </span>
                                         )}
-                                        <button
-                                            onClick={() => setSelectedBooking(booking)}
-                                            className="w-full py-2 bg-red-50 text-red-600 text-[11px] font-bold rounded-lg border border-red-100 hover:bg-red-100 transition-colors"
-                                        >
-                                            RATE & REVIEW
-                                        </button>
+                                        {!booking.review ? (
+                                            <button
+                                                onClick={() => setSelectedBooking(booking)}
+                                                className="w-full py-2.5 bg-white text-gray-700 text-[12px] font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+                                            >
+                                                RATE & REVIEW
+                                            </button>
+                                        ) : (
+                                            <div className="w-full py-2.5 bg-gray-50 text-emerald-600 text-[12px] font-semibold rounded-xl border border-emerald-100/50 text-center flex items-center justify-center gap-1.5">
+                                                <Star className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
+                                                REVIEWED ({booking.review.rating || 5})
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

@@ -2683,8 +2683,40 @@ export const diningAPI = {
   getRestaurants: (params = {}) =>
     apiClient.get("/food/dining/restaurants/public", { params }),
   getHeroBanners: () => apiClient.get("/food/hero-banners/dining/public"),
-  getRestaurantBySlug: (slug) =>
-    apiClient.get(`/food/restaurant/restaurants/${String(slug)}`),
+  getRestaurantBySlug: async (slug) => {
+    try {
+      const res = await apiClient.get(`/food/restaurant/restaurants/${String(slug)}`);
+      const rest = res?.data?.data?.restaurant || res?.data?.data;
+      if (rest) {
+        const bookings = getStoredBookings();
+        const keys = collectRestaurantBookingKeys(rest);
+        const restName = String(rest.name || rest.restaurantName || "").toLowerCase().trim();
+        console.log("Mock Rating - Restaurant Keys:", keys, "Name:", restName);
+        const reviews = bookings.filter(b => {
+          const bKeys = collectRestaurantBookingKeys({
+            restaurantId: b?.restaurantId,
+            ...(b?.restaurant && typeof b.restaurant === "object" ? b.restaurant : {}),
+          });
+          const matchByKey = bKeys.some(k => keys.includes(k));
+          const bName = String(b?.restaurant?.name || b?.restaurant?.restaurantName || "").toLowerCase().trim();
+          const matchByName = (restName && bName && restName === bName);
+          const match = (matchByKey || matchByName) && b.review && typeof b.review.rating === 'number';
+          if (match) console.log("Mock Rating - Found Matching Review:", b.review);
+          return match;
+        });
+        if (reviews.length > 0) {
+          const sum = reviews.reduce((acc, b) => acc + b.review.rating, 0);
+          rest.rating = sum / reviews.length;
+          rest.reviewCount = reviews.length;
+          rest.totalRatings = reviews.length;
+          console.log("Mock Rating - Updated Rest:", rest.rating, rest.reviewCount);
+        }
+      }
+      return res;
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  },
   getOfferBanners: () => Promise.resolve({ data: { success: true, data: [] } }),
   getStories: () => Promise.resolve({ data: { success: true, data: [] } }),
   getBankOffers: () => Promise.resolve({ data: { success: true, data: [] } }),

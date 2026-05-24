@@ -1066,10 +1066,17 @@ function RestaurantDetailsContent() {
                   menuSections: finalMenuSections,
                 }))
 
-                // Set first 3 sections (Recommended, Starters, Main Course) as expanded by default
-                const defaultExpandedSections = new Set(
-                  Array.from({ length: Math.min(3, finalMenuSections.length) }, (_, idx) => idx)
-                )
+                // Set all sections and subsections as expanded by default
+                const allExpandedKeys = []
+                finalMenuSections.forEach((section, originalIndex) => {
+                  allExpandedKeys.push(originalIndex)
+                  if (section.subsections && section.subsections.length > 0) {
+                    section.subsections.forEach((_, subIndex) => {
+                      allExpandedKeys.push(`${originalIndex}-${subIndex}`)
+                    })
+                  }
+                })
+                const defaultExpandedSections = new Set(allExpandedKeys)
                 setExpandedSections(defaultExpandedSections)
 
                 debugLog('Fetched menu sections with recommended items:', finalMenuSections)
@@ -2842,11 +2849,7 @@ function RestaurantDetailsContent() {
                                   </button>
                                 </motion.div>
                               ) : (
-                                <motion.button
-                                  layoutId={`add-button-${item.id}`}
-                                  initial={{ opacity: 0, scale: 0.9 }}
-                                  animate={{ opacity: 1, scale: 1 }}
-                                  transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
+                                <button
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     if (!shouldShowGrayscale) {
@@ -2860,7 +2863,7 @@ function RestaurantDetailsContent() {
                                     }`}
                                 >
                                   ADD <Plus size={14} className="stroke-[3px]" />
-                                </motion.button>
+                                </button>
                               )}
                             </div>
                           </div>
@@ -3068,11 +3071,7 @@ function RestaurantDetailsContent() {
                                             </button>
                                           </motion.div>
                                         ) : (
-                                          <motion.button
-                                            layoutId={`add-button-sub-${item.id}`}
-                                            initial={{ opacity: 0, scale: 0.9 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
+                                          <button
                                             onClick={(e) => {
                                               e.stopPropagation()
                                               if (!shouldShowGrayscale) {
@@ -3086,7 +3085,7 @@ function RestaurantDetailsContent() {
                                               }`}
                                           >
                                             ADD <Plus size={14} className="stroke-[3px]" />
-                                          </motion.button>
+                                          </button>
                                         )}
                                       </div>
                                     </div>
