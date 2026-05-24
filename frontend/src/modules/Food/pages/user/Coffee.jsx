@@ -12,94 +12,7 @@ const coffeeBanner = "https://images.unsplash.com/photo-1509042239860-f550ce710b
 // Using placeholder for starbucks logo
 const starbucksLogo = "https://images.unsplash.com/photo-1511920170033-f8396924c348?w=200&h=200&fit=crop"
 
-const starbucksStores = [
-  {
-    id: 1,
-    name: "Starbucks",
-    rating: 4.4,
-    location: "YN Road, Indore",
-    distance: "1.3 km",
-    price: "₹900 for two",
-    offer: "Flat 25% OFF",
-    logo: starbucksLogo
-  },
-  {
-    id: 2,
-    name: "Starbucks",
-    rating: 2.8,
-    location: "YN Road, Indore",
-    distance: "1.3 km",
-    price: "₹600 for two",
-    offer: null,
-    logo: starbucksLogo
-  },
-  {
-    id: 3,
-    name: "Starbucks",
-    rating: 4.5,
-    location: "MG Road, Indore",
-    distance: "2.1 km",
-    price: "₹850 for two",
-    offer: "Flat 20% OFF",
-    logo: starbucksLogo
-  },
-  {
-    id: 4,
-    name: "Starbucks",
-    rating: 4.2,
-    location: "Vijay Nagar, Indore",
-    distance: "0.9 km",
-    price: "₹950 for two",
-    offer: "Flat 30% OFF",
-    logo: starbucksLogo
-  },
-]
 
-const cafeCoffeeDayStores = [
-  {
-    id: 5,
-    name: "Cafe Coffee Day",
-    rating: 4.3,
-    location: "Palasia, Indore",
-    distance: "1.5 km",
-    price: "₹500 for two",
-    offer: "Flat 15% OFF",
-    logo: null
-  },
-  {
-    id: 6,
-    name: "Cafe Coffee Day",
-    rating: 4.1,
-    location: "Scheme 54, Indore",
-    distance: "2.3 km",
-    price: "₹450 for two",
-    offer: null,
-    logo: null
-  },
-]
-
-const blueTokaiStores = [
-  {
-    id: 7,
-    name: "Blue Tokai",
-    rating: 4.6,
-    location: "Bhawarkua, Indore",
-    distance: "1.8 km",
-    price: "₹700 for two",
-    offer: "Buy 1 Get 1 Free",
-    logo: null
-  },
-  {
-    id: 8,
-    name: "Blue Tokai",
-    rating: 4.4,
-    location: "Press Complex, Indore",
-    distance: "2.5 km",
-    price: "₹650 for two",
-    offer: "Flat 20% OFF",
-    logo: null
-  },
-]
 
 export default function Coffee() {
   const navigate = useNavigate()
@@ -123,80 +36,86 @@ export default function Coffee() {
         </div>
 
         {/* Store List */}
-        <div className="space-y-0">
-          {stores.map((store, index) => {
-            const storeSlug = store.name.toLowerCase().replace(/\s+/g, "-")
-            const isHighRating = store.rating >= 4.0
+        {stores.length === 0 ? (
+          <div className="py-12 text-center text-gray-500 bg-gray-50 rounded-2xl border border-gray-100">
+            <p className="text-sm font-medium">No outlets found.</p>
+          </div>
+        ) : (
+          <div className="space-y-0">
+            {stores.map((store, index) => {
+              const storeSlug = store.name.toLowerCase().replace(/\s+/g, "-")
+              const isHighRating = store.rating >= 4.0
 
-            return (
-              <Link
-                key={store.id}
-                to={`/user/restaurants/${storeSlug}`}
-                className="block"
-              >
-                <div className={`flex items-start gap-4 py-4 ${index !== stores.length - 1 ? 'border-b border-gray-200' : ''}`}>
-                  {/* Logo - Circular */}
-                  <div className="flex-shrink-0">
-                    <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                      {store.logo ? (
-                        <img
-                          src={store.logo}
-                          alt={store.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.target.style.display = 'none'
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                          <span className="text-gray-400 text-xs font-semibold">
-                            {store.name.charAt(0)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Store Info */}
-                  <div className="flex-1 min-w-0">
-                    {/* Location Name */}
-                    <h4 className="text-base font-bold text-gray-900 mb-2">
-                      {store.location}
-                    </h4>
-
-                    {/* Rating Badge */}
-                    <div className="mb-2">
-                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded ${isHighRating
-                          ? 'bg-green-600 text-white'
-                          : 'bg-[#2A9C64] text-white'
-                        }`}>
-                        <span className="text-sm font-semibold">{store.rating}</span>
-                        <Star className={`h-3 w-3 ${isHighRating ? 'fill-white text-white' : 'fill-white text-white'}`} />
+              return (
+                <Link
+                  key={store.id}
+                  to={`/user/restaurants/${storeSlug}`}
+                  className="block"
+                >
+                  <div className={`flex items-start gap-4 py-4 ${index !== stores.length - 1 ? 'border-b border-gray-200' : ''}`}>
+                    {/* Logo - Circular */}
+                    <div className="flex-shrink-0">
+                      <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+                        {store.logo ? (
+                          <img
+                            src={store.logo}
+                            alt={store.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none'
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                            <span className="text-gray-400 text-xs font-semibold">
+                              {store.name.charAt(0)}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    {/* Distance */}
-                    <p className="text-sm text-gray-500 mb-1">
-                      {store.distance}
-                    </p>
+                    {/* Store Info */}
+                    <div className="flex-1 min-w-0">
+                      {/* Location Name */}
+                      <h4 className="text-base font-bold text-gray-900 mb-2">
+                        {store.location}
+                      </h4>
 
-                    {/* Price and Offer */}
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <p className="text-sm text-gray-700">
-                        {store.price}
+                      {/* Rating Badge */}
+                      <div className="mb-2">
+                        <div className={`inline-flex items-center gap-1 px-2 py-1 rounded ${isHighRating
+                            ? 'bg-green-600 text-white'
+                            : 'bg-[#2A9C64] text-white'
+                          }`}>
+                          <span className="text-sm font-semibold">{store.rating}</span>
+                          <Star className={`h-3 w-3 ${isHighRating ? 'fill-white text-white' : 'fill-white text-white'}`} />
+                        </div>
+                      </div>
+
+                      {/* Distance */}
+                      <p className="text-sm text-gray-500 mb-1">
+                        {store.distance}
                       </p>
-                      {store.offer && (
-                        <span className="text-sm font-medium text-[#2A9C64]">
-                          {store.offer}
-                        </span>
-                      )}
+
+                      {/* Price and Offer */}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <p className="text-sm text-gray-700">
+                          {store.price}
+                        </p>
+                        {store.offer && (
+                          <span className="text-sm font-medium text-[#2A9C64]">
+                            {store.offer}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Link>
-            )
-          })}
-        </div>
+                </Link>
+              )
+            })}
+          </div>
+        )}
       </div>
     )
   }
@@ -260,7 +179,7 @@ export default function Coffee() {
           </div>
 
           {/* Multiple Store Lists */}
-          {renderStoreList(starbucksStores, "DINING OUTLETS NEAR YOU")}
+          {renderStoreList([], "DINING OUTLETS NEAR YOU")}
         </div>
       </div>
     </AnimatedPage>

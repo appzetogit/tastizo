@@ -93,6 +93,7 @@ export default function DiningReservations() {
     const [activeView, setActiveView] = useState("priority")
     const [showMediaPanel, setShowMediaPanel] = useState(false)
     const [diningEnabled, setDiningEnabled] = useState(false)
+    const [totalSeatsLimit, setTotalSeatsLimit] = useState(30)
     const [maxGuestsLimit, setMaxGuestsLimit] = useState(6)
     const [savingDiningSettings, setSavingDiningSettings] = useState(false)
     const [diningSettingsMessage, setDiningSettingsMessage] = useState("")
@@ -107,6 +108,7 @@ export default function DiningReservations() {
         setRestaurantPhoto(coverImages[0]?.url || profileImage)
         setMenuPhotos(getMenuImages(restaurantData))
         setDiningEnabled(Boolean(restaurantData?.diningSettings?.isEnabled))
+        setTotalSeatsLimit(Math.max(1, parseInt(restaurantData?.diningSettings?.totalSeats, 10) || 30))
         setMaxGuestsLimit(Math.max(1, parseInt(restaurantData?.diningSettings?.maxGuests, 10) || 6))
         
         const rawDiningType = restaurantData?.diningSettings?.diningType
@@ -278,6 +280,7 @@ export default function DiningReservations() {
         }
 
         const nextMaxGuests = parseInt(maxGuestsLimit, 10) || 0
+        const nextTotalSeats = parseInt(totalSeatsLimit, 10) || 0
 
         if (diningEnabled && nextMaxGuests <= 0) {
             setDiningSettingsError("Guest limit must be at least 1 when dining is enabled")
@@ -287,6 +290,7 @@ export default function DiningReservations() {
 
         const nextDiningSettings = {
             isEnabled: Boolean(diningEnabled),
+            totalSeats: nextTotalSeats,
             maxGuests: nextMaxGuests,
             diningType: Array.isArray(diningType) ? [...new Set(diningType)] : [diningType],
         }
@@ -794,31 +798,60 @@ export default function DiningReservations() {
                         </div>
 
                         <div className="mt-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 border-t border-slate-100 pt-6">
-                            <div className="flex items-center gap-6">
-                                <div className="space-y-1">
-                                    <label className="block text-sm font-bold text-slate-900">Maximum Guest Limit</label>
-                                    <p className="text-xs text-slate-500 font-medium">Guests allowed per reservation</p>
+                            <div className="flex flex-col gap-5 w-full sm:w-auto">
+                                <div className="flex items-center justify-between gap-6 p-4 bg-slate-50 rounded-2xl border border-slate-100/50">
+                                    <div className="space-y-1.5">
+                                        <label className="block text-sm font-semibold text-slate-700">Total Restaurant Seats</label>
+                                        <p className="text-xs text-slate-500 font-medium">Overall capacity for reservations</p>
+                                    </div>
+                                    <div className="flex items-center gap-3 bg-white p-1 rounded-[14px] border border-slate-200 shadow-sm">
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                setTotalSeatsLimit(Math.max(0, totalSeatsLimit - 1))
+                                            }}
+                                            className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 active:scale-95 transition-all font-medium text-lg disabled:opacity-50"
+                                        >
+                                            -
+                                        </button>
+                                        <span className="w-8 text-center text-[15px] font-bold text-slate-700">{totalSeatsLimit}</span>
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                setTotalSeatsLimit(parseInt(totalSeatsLimit) + 1)
+                                            }}
+                                            className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 active:scale-95 transition-all font-medium text-lg disabled:opacity-50"
+                                        >
+                                            +
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-4 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
-                                    <button 
-                                        type="button"
-                                        onClick={() => {
-                                            setMaxGuestsLimit(Math.max(0, maxGuestsLimit - 1))
-                                        }}
-                                        className="w-10 h-10 flex items-center justify-center rounded-xl bg-white shadow-sm text-slate-600 hover:text-slate-900 active:scale-90 transition-all font-black text-xl disabled:opacity-50"
-                                    >
-                                        âˆ’
-                                    </button>
-                                    <span className="w-8 text-center text-lg font-black text-slate-800">{maxGuestsLimit}</span>
-                                    <button 
-                                        type="button"
-                                        onClick={() => {
-                                            setMaxGuestsLimit(parseInt(maxGuestsLimit) + 1)
-                                        }}
-                                        className="w-10 h-10 flex items-center justify-center rounded-xl bg-white shadow-sm text-slate-600 hover:text-slate-900 active:scale-90 transition-all font-black text-xl disabled:opacity-50"
-                                    >
-                                        +
-                                    </button>
+                                <div className="flex items-center justify-between gap-6 p-4 bg-slate-50 rounded-2xl border border-slate-100/50">
+                                    <div className="space-y-1.5">
+                                        <label className="block text-sm font-semibold text-slate-700">Maximum Guest Limit</label>
+                                        <p className="text-xs text-slate-500 font-medium">Guests allowed per reservation</p>
+                                    </div>
+                                    <div className="flex items-center gap-3 bg-white p-1 rounded-[14px] border border-slate-200 shadow-sm">
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                setMaxGuestsLimit(Math.max(0, maxGuestsLimit - 1))
+                                            }}
+                                            className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 active:scale-95 transition-all font-medium text-lg disabled:opacity-50"
+                                        >
+                                            -
+                                        </button>
+                                        <span className="w-8 text-center text-[15px] font-bold text-slate-700">{maxGuestsLimit}</span>
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                setMaxGuestsLimit(parseInt(maxGuestsLimit) + 1)
+                                            }}
+                                            className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 active:scale-95 transition-all font-medium text-lg disabled:opacity-50"
+                                        >
+                                            +
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 

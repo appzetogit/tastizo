@@ -191,7 +191,8 @@ export default function DiningRestaurantDetails() {
           .reduce((sum, b) => sum + (Number(b.guests) || 0), 0)
   }, [currentBookings])
 
-  const maxCapacity = restaurant?.diningSettings?.maxGuests || 6
+  const maxCapacity = restaurant?.diningSettings?.totalSeats || 30
+  const maxGuests = restaurant?.diningSettings?.maxGuests || 6
   const remainingSeats = Math.max(0, maxCapacity - occupiedSeats)
 
   if (loading) {
@@ -553,7 +554,7 @@ export default function DiningRestaurantDetails() {
 
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-xl font-black text-[#23180f] dark:text-slate-100">Select number of guests</h3>
+                <h3 className="text-xl font-black text-[#23180f] dark:text-slate-100">Select number of seats</h3>
                 <p className="mt-1 text-sm text-[#7b6651] dark:text-slate-400">
                     {remainingSeats > 0 
                         ? `Only ${remainingSeats} out of ${maxCapacity} seats available now.` 
@@ -571,32 +572,18 @@ export default function DiningRestaurantDetails() {
             <div className="grid grid-cols-4 gap-3">
               {Array.from({ length: maxCapacity }, (_, index) => {
                 const count = index + 1
-                const isBooked = count <= occupiedSeats
-                const isTooLarge = count > remainingSeats && !isBooked
 
                 return (
                     <button
                       key={`sheet-${count}`}
-                      disabled={isBooked || isTooLarge}
                       onClick={() => setSelectedGuests(count)}
                       className={`relative rounded-2xl border px-3 py-4 text-sm font-bold transition-all ${
                           selectedGuests === count
                             ? "border-[#2A9C64] bg-[#f2faf6] dark:bg-purple-950/30 text-[#2A9C64] scale-[1.02] shadow-sm"
-                            : isBooked
-                              ? "border-red-100 dark:border-red-900/30 bg-red-50 dark:bg-red-950/20 text-red-400 cursor-not-allowed opacity-70"
-                              : isTooLarge
-                                ? "border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-950 text-gray-300 dark:text-slate-600 cursor-not-allowed"
-                                : "border-[#ece7de] dark:border-slate-800 bg-white dark:bg-slate-800 text-[#23180f] dark:text-slate-100 hover:border-[#2A9C64]/30"
+                            : "border-[#ece7de] dark:border-slate-800 bg-white dark:bg-slate-800 text-[#23180f] dark:text-slate-100 hover:border-[#2A9C64]/30"
                       }`}
                     >
-                      {isBooked ? (
-                          <div className="flex flex-col items-center gap-0.5">
-                              <span className="text-[10px] uppercase font-black tracking-tighter opacity-60">Booked</span>
-                              <span>{count}</span>
-                          </div>
-                      ) : (
-                          count
-                      )}
+                      {count}
                     </button>
                 )
               })}

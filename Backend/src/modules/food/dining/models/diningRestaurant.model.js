@@ -23,6 +23,11 @@ const diningRestaurantSchema = new mongoose.Schema(
             type: Boolean,
             default: false
         },
+        totalSeats: {
+            type: Number,
+            default: 30,
+            min: 0
+        },
         maxGuests: {
             type: Number,
             default: 6,

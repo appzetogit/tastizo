@@ -29,7 +29,7 @@ const FoodAppWrapper = () => {
 const RedirectLegacyFoodRoute = () => {
   const location = useLocation()
   const normalizedPath = location.pathname.replace(/^\/food(?=\/|$)/, '') || '/user'
-  return <Navigate to={`${normalizedPath}${location.search}`} replace />
+  return <Navigate to={`${normalizedPath}${location.search}`} state={location.state} replace />
 }
 
 // const MasterLandingPage = lazy(() => import('./MasterLandingPage'))

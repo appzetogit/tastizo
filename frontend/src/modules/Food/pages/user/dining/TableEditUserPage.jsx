@@ -10,6 +10,7 @@ export default function TableEditUserPage() {
     
     const [name, setName] = useState(user?.name || "");
     const [phone, setPhone] = useState(user?.phone || "");
+    const [email, setEmail] = useState(user?.email || "");
 
     const handleSave = () => {
         // Go back to confirmation with updated user
@@ -21,7 +22,7 @@ export default function TableEditUserPage() {
                 timeSlot,
                 discount,
                 specialRequest,
-                user: { ...user, name, phone }
+                user: { ...user, name, phone, email }
             },
             replace: true
         });
@@ -41,60 +42,77 @@ export default function TableEditUserPage() {
 
             <div className="max-w-lg mx-auto px-4 py-8 space-y-8">
                 <div className="text-center space-y-2">
-                    <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-xl shadow-red-100">
-                        <User className="w-10 h-10" />
+                    <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-100 shadow-sm">
+                        <User className="w-8 h-8" />
                     </div>
-                    <h2 className="text-2xl font-black text-slate-900">Personalize Booking</h2>
-                    <p className="text-xs text-slate-400 font-bold uppercase tracking-[0.2em]">Contact details for the restaurant</p>
+                    <h2 className="text-xl font-bold text-slate-800">Personalize Booking</h2>
+                    <p className="text-sm text-slate-500 font-medium">Contact details for the restaurant</p>
                 </div>
 
-                <div className="space-y-6">
+                <div className="space-y-5">
                     {/* Name Input */}
-                    <div className="space-y-3">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Full Name</label>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-600 ml-1">Full Name</label>
                         <div className="relative">
                             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                                <User className="w-5 h-5" />
+                                <User className="w-4 h-4" />
                             </div>
                             <input 
                                 type="text"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 placeholder="Enter your full name"
-                                className="w-full h-14 pl-12 pr-4 bg-white border border-slate-100 rounded-2xl font-bold text-slate-900 focus:outline-none focus:ring-4 focus:ring-red-500/5 focus:border-red-500 transition-all placeholder:text-slate-300 shadow-sm"
+                                className="w-full h-12 pl-11 pr-4 bg-white border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all placeholder:text-slate-400"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Email Input */}
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-600 ml-1">Email Address</label>
+                        <div className="relative">
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                                <Mail className="w-4 h-4" />
+                            </div>
+                            <input 
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="Enter email address"
+                                className="w-full h-12 pl-11 pr-4 bg-white border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all placeholder:text-slate-400"
                             />
                         </div>
                     </div>
 
                     {/* Phone Input */}
-                    <div className="space-y-3">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Mobile Number</label>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-600 ml-1">Mobile Number</label>
                         <div className="relative">
                             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                                <Phone className="w-5 h-5" />
+                                <Phone className="w-4 h-4" />
                             </div>
                             <input 
                                 type="tel"
                                 value={phone}
                                 onChange={(e) => setPhone(e.target.value)}
                                 placeholder="Enter mobile number"
-                                className="w-full h-14 pl-12 pr-4 bg-white border border-slate-100 rounded-2xl font-bold text-slate-900 focus:outline-none focus:ring-4 focus:ring-red-500/5 focus:border-red-500 transition-all placeholder:text-slate-300 shadow-sm"
+                                className="w-full h-12 pl-11 pr-4 bg-white border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all placeholder:text-slate-400"
                             />
                         </div>
                     </div>
                 </div>
 
-                <div className="pt-10">
+                <div className="pt-8 space-y-3">
                     <button 
                         onClick={handleSave}
-                        className="w-full h-14 bg-red-500 text-white rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-red-200 active:scale-95 transition-all flex items-center justify-center gap-3"
+                        className="w-full h-12 bg-[#2A9C64] hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm shadow-md shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                     >
-                        <CheckCircle2 className="w-5 h-5" />
-                        Save Changes
+                        <CheckCircle2 className="w-4 h-4" />
+                        Save Details
                     </button>
                     <button 
                         onClick={() => navigate(-1)}
-                        className="w-full h-14 mt-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-sm active:scale-95 transition-all"
+                        className="w-full h-12 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all"
                     >
                         Cancel
                     </button>

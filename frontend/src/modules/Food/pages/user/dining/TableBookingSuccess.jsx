@@ -34,8 +34,13 @@ export default function TableBookingSuccess() {
         return () => clearInterval(interval)
     }, [])
 
+    useEffect(() => {
+        if (!booking) {
+            navigate("/food/user/dining")
+        }
+    }, [booking, navigate])
+
     if (!booking) {
-        navigate("/food/user/dining")
         return null
     }
 

@@ -35,7 +35,7 @@ export default function TableBookingConfirmation() {
     const [showPolicyModal, setShowPolicyModal] = useState(false)
     const [policyType, setPolicyType] = useState("") // 'modification' or 'cancellation'
     const [tempRequest, setTempRequest] = useState("")
-    const [tempUser, setTempUser] = useState({ name: "", phone: "" })
+    const [tempUser, setTempUser] = useState({ name: "", phone: "", email: "" })
     const [user, setUser] = useState(null)
     const [loading, setLoading] = useState(true)
     const [bookingInProgress, setBookingInProgress] = useState(false)
@@ -95,6 +95,11 @@ export default function TableBookingConfirmation() {
 
             if (response.data.success) {
                 toast.success("Table booked successfully!")
+                if (user?.email) {
+                    setTimeout(() => {
+                        toast.success(`Confirmation email sent to ${user.email} ✉️`)
+                    }, 800)
+                }
                 try {
                     sessionStorage.removeItem(BOOKING_DRAFT_KEY)
                 } catch {}
@@ -447,10 +452,20 @@ export default function TableBookingConfirmation() {
                                 />
                             </div>
                             <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Email Address</label>
+                                <input 
+                                    type="email"
+                                    value={tempUser.email || ""}
+                                    onChange={(e) => setTempUser({ ...tempUser, email: e.target.value })}
+                                    className="w-full h-12 px-4 rounded-xl bg-slate-50 border border-slate-100 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all"
+                                    placeholder="Enter email address"
+                                />
+                            </div>
+                            <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Phone Number</label>
                                 <input 
                                     type="tel"
-                                    value={tempUser.phone}
+                                    value={tempUser.phone || ""}
                                     onChange={(e) => setTempUser({ ...tempUser, phone: e.target.value })}
                                     className="w-full h-12 px-4 rounded-xl bg-slate-50 border border-slate-100 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all"
                                     placeholder="Enter phone number"
@@ -460,7 +475,7 @@ export default function TableBookingConfirmation() {
                                 <button onClick={() => setShowUserModal(false)} className="h-12 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm uppercase tracking-widest active:scale-95 transition-all">Cancel</button>
                                 <button 
                                     onClick={() => {
-                                        setUser({ ...user, name: tempUser.name, phone: tempUser.phone })
+                                        setUser({ ...user, name: tempUser.name, phone: tempUser.phone, email: tempUser.email })
                                         setShowUserModal(false)
                                     }}
                                     className="h-12 rounded-xl bg-red-500 text-white font-bold text-sm uppercase tracking-widest shadow-lg shadow-red-200 active:scale-95 transition-all"

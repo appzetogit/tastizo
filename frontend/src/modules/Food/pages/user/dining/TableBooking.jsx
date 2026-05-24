@@ -214,7 +214,8 @@ export default function TableBooking() {
         .reduce((sum, b) => sum + (Number(b.guests) || 0), 0)
   }, [currentBookings])
 
-  const maxCapacity = restaurant?.diningSettings?.maxGuests || 10
+  const maxCapacity = restaurant?.diningSettings?.totalSeats || 30
+  const maxGuests = restaurant?.diningSettings?.maxGuests || 6
   const remainingSeats = Math.max(0, maxCapacity - occupiedSeats)
 
   const dates = useMemo(() => buildDates(7), [])
@@ -352,27 +353,20 @@ export default function TableBooking() {
           </div>
           
           <div className="grid grid-cols-5 gap-2">
-            {Array.from({ length: maxCapacity }, (_, index) => {
+            {Array.from({ length: maxGuests }, (_, index) => {
               const count = index + 1
-              const isBooked = count <= occupiedSeats
-              const isTooLarge = count > remainingSeats && !isBooked
 
               return (
                 <button
                   key={count}
-                  disabled={isBooked || isTooLarge}
                   onClick={() => setSelectedGuests(count)}
                   className={`flex h-11 items-center justify-center rounded-xl border text-sm font-bold transition-all ${
                     selectedGuests === count
                       ? "border-[#ef8f98] bg-[#fffaf9] text-[#d64f63] shadow-sm"
-                      : isBooked
-                        ? "border-red-50 bg-red-50 text-red-200 cursor-not-allowed"
-                        : isTooLarge
-                          ? "border-gray-50 bg-gray-50 text-gray-200 cursor-not-allowed"
-                          : "border-[#ececf2] bg-white text-[#444b5f] hover:border-[#ef8f98]/30"
+                      : "border-[#ececf2] bg-white text-[#444b5f] hover:border-[#ef8f98]/30"
                   }`}
                 >
-                  {isBooked ? "X" : count}
+                  {count}
                 </button>
               )
             })}

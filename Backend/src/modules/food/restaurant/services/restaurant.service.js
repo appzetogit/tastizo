@@ -240,6 +240,7 @@ const toRestaurantProfile = (doc) => {
                 : null,
         diningSettings: {
             isEnabled: doc.diningSettings?.isEnabled !== false,
+            totalSeats: Math.max(1, parseInt(doc.diningSettings?.totalSeats, 10) || 30),
             maxGuests: Math.max(1, parseInt(doc.diningSettings?.maxGuests, 10) || 6),
             diningType: String(doc.diningSettings?.diningType || 'family-dining').trim() || 'family-dining'
         },
@@ -627,6 +628,10 @@ export const updateCurrentRestaurantDiningSettings = async (restaurantId, body =
         1,
         parseInt(body.maxGuests ?? currentDiningSettings.maxGuests ?? 6, 10) || 6
     );
+    const totalSeats = Math.max(
+        1,
+        parseInt(body.totalSeats ?? currentDiningSettings.totalSeats ?? 30, 10) || 30
+    );
     const diningType =
         String(body.diningType ?? currentDiningSettings.diningType ?? 'family-dining').trim() ||
         'family-dining';
@@ -639,6 +644,7 @@ export const updateCurrentRestaurantDiningSettings = async (restaurantId, body =
         {
             $set: {
                 isEnabled,
+                totalSeats,
                 maxGuests,
             }
         },
@@ -651,6 +657,7 @@ export const updateCurrentRestaurantDiningSettings = async (restaurantId, body =
             $set: buildApprovalPreservingUpdate(currentRestaurant, {
                 diningSettings: {
                     isEnabled,
+                    totalSeats,
                     maxGuests,
                     diningType
                 }
