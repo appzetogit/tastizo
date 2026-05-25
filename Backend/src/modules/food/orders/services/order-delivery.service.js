@@ -464,6 +464,7 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
         'cancelled_by_restaurant',
         'cancelled_by_admin',
       ],
+
     },
   };
 
@@ -474,7 +475,6 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
             'dispatch.status': { $in: ['unassigned', 'assigned'] },
             zoneId: partnerZoneId,
             orderStatus: { $in: ['confirmed', 'preparing', 'ready_for_pickup', 'ready'] },
-            'dispatch.offeredTo.partnerId': new mongoose.Types.ObjectId(deliveryPartnerId),
           },
           activeOwnOrderFilter,
         ],
@@ -564,13 +564,9 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
   const paymentMethod = String(existingOrder?.payment?.method || 'cash').toLowerCase();
   const isCashOrder = paymentMethod === 'cash';
   const orderAmount = Math.max(0, Number(existingOrder?.pricing?.total || 0));
-  const offeredEntry = (existingOrder?.dispatch?.offeredTo || []).find(
-    (entry) => String(entry?.partnerId || '') === String(deliveryPartnerId),
-  );
-  if (!offeredEntry) {
-    throw new ForbiddenError('Order was not offered to this delivery partner');
-  }
-  const canBypassCashLimit = Boolean(offeredEntry?.allowOverLimit);
+  
+  // Open pool: Skip offeredTo check since we allow anyone in the zone to accept
+  const canBypassCashLimit = false;
 
   const partnerCapacity = await getPartnerCashCapacity(deliveryPartnerId);
   const hasAmountCapacity = Number(partnerCapacity.availableCashLimit || 0) >= orderAmount;
@@ -582,7 +578,6 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
   if (!partnerCapacity.hasCapacity && !canBypassCashLimit) {
     throw new ValidationError('Cash limit reached. Please deposit your amount to get orders.');
   }
-
   const now = new Date();
   const acceptedStatuses = ['confirmed', 'preparing', 'ready_for_pickup', 'ready', 'picked_up'];
   const cancellableStatuses = [

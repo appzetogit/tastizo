@@ -333,7 +333,7 @@ export const updateDeliveryAvailability = async (userId, payload) => {
         throw new ValidationError('Delivery partner not found');
     }
     const { status, latitude, longitude } = payload || {};
-    let validStatus = 'offline';
+    let validStatus = partner.availabilityStatus || 'offline';
     if (status === 'online' || status === true) validStatus = 'online';
     else if (status === 'offline' || status === false) validStatus = 'offline';
 

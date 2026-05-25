@@ -1828,6 +1828,13 @@ export const deliveryAPI = {
       return p;
     };
   })(),
+  updateLocationOnly: (latitude, longitude) =>
+    apiClient.patch("/food/delivery/availability", { 
+      latitude: Number(latitude).toFixed(6), 
+      longitude: Number(longitude).toFixed(6) 
+    }, {
+      contextModule: "delivery",
+    }),
   updateLocation: (() => {
     let inFlight = new Map();
     let recent = new Map();

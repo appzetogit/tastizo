@@ -157,11 +157,11 @@ async function filterPartnersByCashLimit(partners = [], options = {}) {
     }));
 }
 
-async function listNearbyOnlineDeliveryPartners(
-  restaurantId,
+export async function listNearbyOnlineDeliveryPartners(
+  restaurantIdOrDoc,
   { maxKm = 15, limit = 25, requiredAmount = 0, allowOverLimitFallback = true, zoneId = null } = {},
 ) {
-  const rId = (restaurantId?._id || restaurantId).toString();
+  const rId = (restaurantIdOrDoc?._id || restaurantIdOrDoc).toString();
   const restaurant = await FoodRestaurant.findById(rId)
     .select("location zoneId")
     .lean();
@@ -513,16 +513,13 @@ export async function tryAutoAssign(orderId, options = {}) {
     const isCashOrder = paymentMethod === 'cash';
     const requiredAmount = isCashOrder ? Number(order?.pricing?.total || 0) : 0;
     
-    // RADIUS EXPANSION LOGIC
-    // Attempt 1: 15km, Attempt 2: 25km, Attempt 3: 40km, Attempt 4+: 60km
-    let maxKm = 15;
-    if (attempt === 2) maxKm = 25;
-    if (attempt === 3) maxKm = 40;
-    if (attempt >= 4) maxKm = 60;
+    // Open pool logic: notify every online rider in the zone.
+    // Disabling artificial maxKm and limit caps to cover the entire zone.
+    let maxKm = 9999;
 
     const searchOptions = {
       maxKm,
-      limit: 15,
+      limit: 5000,
       requiredAmount,
       allowOverLimitFallback: true,
     };

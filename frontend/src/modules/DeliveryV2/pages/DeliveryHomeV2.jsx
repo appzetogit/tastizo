@@ -359,6 +359,20 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     return () => window.removeEventListener('authRefreshFailed', onAuthFailure);
   }, [handleLogout]);
 
+  // One-time location ping on app open to update current zone
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const { latitude, longitude } = pos.coords;
+        // Ping availability endpoint with just coordinates to update the zone
+        // (the backend will preserve the online/offline status)
+        deliveryAPI.updateLocationOnly(latitude, longitude).catch(() => {});
+      }, () => {
+        // Silently ignore errors for background ping
+      }, { maximumAge: 60000, timeout: 10000 });
+    }
+  }, []);
+
   const handleAcceptOrder = useCallback(async (o) => {
     try {
       await acceptOrder(o);
