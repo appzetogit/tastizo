@@ -1098,13 +1098,24 @@ export async function cancelOrder(orderId, userId, reason, refundDestination = "
     : "";
   
   await notifyOwnersSafely(
-    [
-      { ownerType: "USER", ownerId: userId },
-      { ownerType: "RESTAURANT", ownerId: order.restaurantId },
-    ],
+    [{ ownerType: "USER", ownerId: userId }],
     {
       title: "Order Cancelled ❌",
       body: `Order #${order.order_id || order._id} has been cancelled successfully.${refundDetail}`,
+      image: "",
+      data: {
+        type: "order_cancelled",
+        orderId: String(order._id.toString()),
+        orderMongoId: String(order._id),
+      },
+    },
+  );
+
+  await notifyOwnersSafely(
+    [{ ownerType: "RESTAURANT", ownerId: order.restaurantId }],
+    {
+      title: "Order Cancelled ❌",
+      body: `Order #${order.order_id || order._id} was cancelled by the customer.`,
       image: "",
       data: {
         type: "order_cancelled",
@@ -1331,15 +1342,7 @@ export async function updateOrderStatusRestaurant(
       }
     }
 
-    const notifyList = [
-      { ownerType: "USER", ownerId: order.userId },
-      { ownerType: "RESTAURANT", ownerId: restaurantId },
-    ];
-
     const assignedRiderId = order.dispatch?.deliveryPartnerId;
-    if (assignedRiderId) {
-      notifyList.push({ ownerType: "DELIVERY_PARTNER", ownerId: assignedRiderId });
-    }
 
     let riderTitle = `Order #${order.order_id || order._id} updated`;
     let riderBody = `The order status is now ${String(orderStatus).replace(/_/g, " ")}.`;
@@ -1362,8 +1365,9 @@ export async function updateOrderStatusRestaurant(
       }
     }
 
+    // Notify User
     await notifyOwnersSafely(
-      notifyList,
+      [{ ownerType: "USER", ownerId: order.userId }],
       {
         title: title,
         body: body,
@@ -1377,6 +1381,25 @@ export async function updateOrderStatusRestaurant(
         },
       },
     );
+
+    // Notify Rider if assigned
+    if (assignedRiderId) {
+      await notifyOwnersSafely(
+        [{ ownerType: "DELIVERY_PARTNER", ownerId: assignedRiderId }],
+        {
+          title: riderTitle,
+          body: riderBody,
+          image: "",
+          data: {
+            type: "order_status_update",
+            orderId: order._id.toString(),
+            orderMongoId: order._id?.toString?.() || "",
+            orderStatus: String(orderStatus || ""),
+            link: `/food/delivery/orders/${order._id?.toString?.() || ""}`,
+          },
+        },
+      );
+    }
   } catch (err) {
     console.error("[DEBUG] Error emitting status update to restaurant:", err);
   }

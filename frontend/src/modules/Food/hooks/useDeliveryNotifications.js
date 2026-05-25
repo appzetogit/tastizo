@@ -733,6 +733,10 @@ export const useDeliveryNotifications = () => {
       return;
     }
 
+    if (!deliveryPartnerId) {
+      return;
+    }
+
     // IMPORTANT: Socket.IO server is on the origin (not /api/v1).
     // Our API baseURL is typically like: http://localhost:5000/api/v1
     // So for sockets we always connect to: http://localhost:5000
