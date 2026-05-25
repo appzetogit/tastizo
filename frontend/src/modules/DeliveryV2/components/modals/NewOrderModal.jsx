@@ -222,6 +222,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
 
   if (!order) return null;
 
+  const orderId = order.orderId || order._id || 'N/A';
   const earnings = resolveEstimatedEarning(order);
   const restaurantName = order.restaurantName || order.restaurant_name || (order.restaurantId?.name) || 'Restaurant';
   const restaurantAddress = order.restaurantAddress || order.restaurant_address || (order.restaurantId?.location?.address) || 'Address not available';
@@ -306,7 +307,9 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
           style={{ background: 'linear-gradient(33deg, #15498b 0%, #000000 100%)' }}
         >
           <div>
-            <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mb-1">Incoming Request</p>
+            <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mb-1">
+              Incoming Request {orderId !== 'N/A' && `• #${orderId}`}
+            </p>
             <h2 className="text-2xl sm:text-4xl font-bold tracking-tighter">{formatMoney(earnings)}</h2>
           </div>
           <div className="min-w-[72px] sm:min-w-[92px] min-h-[56px] sm:min-h-[68px] bg-white/20 border border-white/30 rounded-2xl sm:rounded-3xl px-3 sm:px-6 py-2 sm:py-3 text-white font-bold text-lg sm:text-2xl shadow-inner tabular-nums flex items-center justify-center leading-none text-center">
