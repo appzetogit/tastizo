@@ -525,8 +525,18 @@ export default function ItemDetailsPage() {
   }
 
   const handleSave = async () => {
+    if (!isNewItem && currentApprovalStatus === "pending") {
+      toast.error("Pending food items cannot be edited")
+      return
+    }
+
     if (!itemName.trim()) {
       toast.error("Please enter an item name")
+      return
+    }
+
+    if (images.length === 0 && imageFiles.size === 0) {
+      toast.error("Please add at least one food image")
       return
     }
 
@@ -1449,8 +1459,8 @@ export default function ItemDetailsPage() {
           )}
           <button
             onClick={handleSave}
-            disabled={uploadingImages}
-            className={`${isNewItem ? 'w-full' : 'flex-1'} py-3 px-4 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${!uploadingImages
+            disabled={uploadingImages || (!isNewItem && currentApprovalStatus === "pending")}
+            className={`${isNewItem ? 'w-full' : 'flex-1'} py-3 px-4 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${!(uploadingImages || (!isNewItem && currentApprovalStatus === "pending"))
               ? "bg-black text-white hover:bg-black"
               : "bg-gray-300 text-gray-500 cursor-not-allowed"
               }`}

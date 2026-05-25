@@ -1483,27 +1483,27 @@ export default function OrderTracking() {
 
       {/* Map Section or Delivered Illustration */}
       {isDeliveredOrder ? (
-        <div className="relative w-full min-h-[550px] flex items-center justify-center bg-transparent overflow-hidden" style={{ height: '550px' }}>
+        <div className="relative w-full min-h-[520px] flex items-center justify-center bg-transparent overflow-hidden" style={{ height: '520px' }}>
           {/* Top Smoky Fade */}
-          <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-gray-100 dark:from-[#0a0a0a] to-transparent pointer-events-none z-10" />
+          <div className="absolute top-0 inset-x-0 h-24 bg-gradient-to-b from-gray-100 dark:from-[#0a0a0a] to-transparent pointer-events-none z-10" />
           
           <motion.div
             initial={{ opacity: 0, scale: 0.5, y: 40 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
-            className="w-full h-full"
+            className="w-full h-full flex items-center justify-center pt-8 pb-4"
           >
             <motion.img 
               animate={{ y: [0, -10, 0] }}
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              src="/tastizo_girl_bun.png" 
+              src="/image-removebg-preview.png" 
               alt="Delivered successfully" 
-              className="w-full h-full object-cover mix-blend-multiply dark:mix-blend-normal" 
+              className="w-full h-full object-contain" 
             />
           </motion.div>
           
           {/* Bottom Smoky Fade */}
-          <div className="absolute bottom-0 inset-x-0 h-40 bg-gradient-to-t from-gray-100 dark:from-[#0a0a0a] to-transparent pointer-events-none z-10" />
+          <div className="absolute bottom-0 inset-x-0 h-24 bg-gradient-to-t from-gray-100 dark:from-[#0a0a0a] to-transparent pointer-events-none z-10" />
         </div>
       ) : orderStatus === 'cancelled' || (isScheduledOrder && ['placed', 'confirmed'].includes(orderStatus)) ? null : (
         <div className="relative">
