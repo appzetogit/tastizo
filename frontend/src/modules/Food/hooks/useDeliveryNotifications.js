@@ -802,7 +802,7 @@ export const useDeliveryNotifications = () => {
     });
 
     socketRef.current = io(socketUrl, {
-      path: '/socket.io/',
+      path: '/api/socket.io/',
       transports: ['polling', 'websocket'], // Allow both
       reconnection: true,
       reconnectionDelay: 1000,
@@ -817,7 +817,7 @@ export const useDeliveryNotifications = () => {
 
     debugLog('Socket.IO client created', {
       socketUrl,
-      path: '/socket.io/',
+      path: '/api/socket.io/',
       transports: ['polling', 'websocket'],
       tokenPresent: Boolean(token),
       tokenPreview,

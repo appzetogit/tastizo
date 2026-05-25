@@ -81,24 +81,24 @@ export const useUserNotifications = (options = {}) => {
     const token = localStorage.getItem('user_accessToken') || localStorage.getItem('accessToken');
     if (!token) return;
 
-    debugLog('ðŸ”Œ Connecting to User Socket.IO:', socketUrl);
+    debugLog('🔌 Connecting to User Socket.IO:', socketUrl);
 
     socketRef.current = io(socketUrl, {
-      path: '/socket.io/',
-      transports: ['websocket'],
+      path: '/api/socket.io/',
+      transports: ['polling', 'websocket'],
       reconnection: true,
       auth: { token }
     });
 
     socketRef.current.on('connect', () => {
-      debugLog('âœ… User Socket connected, userId:', userId);
+      debugLog('✅ User Socket connected, userId:', userId);
       setIsConnected(true);
       if (typeof window !== 'undefined') window.orderSocketConnected = true;
       // Backend auto-joins 'user:userId' room based on role/token in config/socket.js
     });
 
     socketRef.current.on('order_status_update', (data) => {
-      debugLog('ðŸ”” Order status update received:', data);
+      debugLog('🔔 Order status update received:', data);
       
       const title = data.title || `Order #${data.orderId || 'Update'}`;
       const message = data.message || `Your order status is now ${String(data.orderStatus || '').replace(/_/g, ' ')}`;

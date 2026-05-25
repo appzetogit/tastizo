@@ -109,6 +109,7 @@ function isAllowedSocketOrigin(origin) {
  */
 export const initSocket = async (server) => {
     io = new Server(server, {
+        path: '/api/socket.io/',
         cors: {
             origin: (origin, callback) => {
                 if (isAllowedSocketOrigin(origin)) {

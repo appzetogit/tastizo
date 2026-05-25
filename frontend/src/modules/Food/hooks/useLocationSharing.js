@@ -35,6 +35,7 @@ export const useLocationSharing = (orderId, enabled = false) => {
 
     if (!socketRef.current) {
       socketRef.current = io(backendUrl, {
+        path: '/api/socket.io/',
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,

@@ -208,6 +208,7 @@ const DeliveryTrackingMap = ({
     // B. SOCKET.IO REALTIME
     const token = localStorage.getItem('user_accessToken') || localStorage.getItem('accessToken') || '';
     socketRef.current = io(backendUrl, {
+      path: '/api/socket.io/',
       transports: ['websocket'],
       auth: { token }
     });

@@ -513,8 +513,8 @@ export const useRestaurantNotifications = () => {
     // Initialize socket connection (default namespace)
     // Use polling only to avoid repeated "WebSocket connection failed" when backend is down
     socketRef.current = io(socketUrl, {
-      path: '/socket.io/',
-      transports: ['polling'],
+      path: '/api/socket.io/',
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
