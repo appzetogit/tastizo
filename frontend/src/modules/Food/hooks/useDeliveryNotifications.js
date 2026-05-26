@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import io from 'socket.io-client';
 import { API_BASE_URL } from '@food/api/config';
 import { deliveryAPI } from '@food/api';
-const alertSound = '/alert.mp3';
+const alertSound = '/zomato_sms.mp3';
 const originalSound = '/original.mp3';
 import { dispatchNotificationInboxRefresh } from '@food/hooks/useNotificationInbox';
 
@@ -327,6 +327,14 @@ export const useDeliveryNotifications = () => {
           // On strict autoplay environments, we still keep vibration/native bridge path active.
           if (!error.message?.includes('user didn\'t interact') && !error.name?.includes('NotAllowedError')) {
             debugWarn('Error playing notification sound:', error);
+            // Fallback: try one-shot audio instance
+            try {
+              const fallbackAudio = new Audio(soundFile);
+              fallbackAudio.volume = 0.9;
+              fallbackAudio.play().catch(() => {});
+            } catch (fallbackError) {
+              debugWarn('Fallback audio playback failed:', fallbackError);
+            }
           }
         });
       }
