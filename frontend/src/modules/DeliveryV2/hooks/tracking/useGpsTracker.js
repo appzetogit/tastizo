@@ -14,15 +14,21 @@ export const useGpsTracker = ({ isOnline, isSimMode, syncUsingFallbackLocation }
   const rollingSpeedRef = useRef([]);
   const lastUpdateRef = useRef(Date.now());
   const watchIdRef = useRef(null);
+  const trackingStartTimeRef = useRef(null);
 
   useEffect(() => {
     if (!isOnline) {
       resetGpsFilter();
+      trackingStartTimeRef.current = null;
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
       return;
+    }
+
+    if (!trackingStartTimeRef.current) {
+      trackingStartTimeRef.current = Date.now();
     }
 
     if (!navigator.geolocation) {
@@ -40,10 +46,16 @@ export const useGpsTracker = ({ isOnline, isSimMode, syncUsingFallbackLocation }
       const timestamp = pos.timestamp || Date.now();
       lastUpdateRef.current = Date.now();
 
-      // Reject low accuracy immediately to avoid jumping
-      if (accuracy > 50) return;
+      // Dynamic Accuracy Threshold: 
+      // First 15 seconds: Accept up to 300m for fast initial load.
+      // After 15 seconds: Tighten strictly to 50m to stop jumping.
+      const elapsedMs = Date.now() - (trackingStartTimeRef.current || Date.now());
+      const maxAccuracy = elapsedMs < 15000 ? 300 : 50;
 
-      const filterResult = filterGpsSignal(lat, lng, accuracy, timestamp);
+      // Reject if worse than dynamic threshold
+      if (accuracy > maxAccuracy) return;
+
+      const filterResult = filterGpsSignal(lat, lng, accuracy, timestamp, maxAccuracy);
       
       if (!filterResult.valid) {
         return;
@@ -97,6 +109,16 @@ export const useGpsTracker = ({ isOnline, isSimMode, syncUsingFallbackLocation }
       options
     );
 
+    // Fast initial fallback timeout for initial connection hanging
+    const initialFallbackTimeout = setTimeout(() => {
+      if (Date.now() - lastUpdateRef.current > 4000) {
+        console.warn('[GPS Watchdog] Initial fast fallback triggered (GPS taking too long)');
+        if (typeof syncUsingFallbackLocation === 'function') {
+          syncUsingFallbackLocation('gps_fast_fallback');
+        }
+      }
+    }, 5000);
+
     // Watchdog to restart GPS if it completely freezes silently (browser bug)
     const watchdog = setInterval(() => {
       if (Date.now() - lastUpdateRef.current > 20000 && watchIdRef.current !== null) {
@@ -108,6 +130,7 @@ export const useGpsTracker = ({ isOnline, isSimMode, syncUsingFallbackLocation }
     }, 10000);
 
     return () => {
+      clearTimeout(initialFallbackTimeout);
       clearInterval(watchdog);
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);

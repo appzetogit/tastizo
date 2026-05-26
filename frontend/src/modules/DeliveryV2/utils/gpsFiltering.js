@@ -1,15 +1,14 @@
 import { KalmanFilter } from './kalmanFilter';
 import { getHaversineDistance } from './geo';
 
-const MAX_ACCURACY_METERS = 50; // Reject points with accuracy worse than 50m
 const MAX_SPEED_MPS = 45; // ~160 km/h, reject teleportation
 const MIN_DISTANCE_M = 3; // Ignore micro-movements under 3 meters
 const kalmanFilter = new KalmanFilter();
 
 let lastValidLocation = null;
 
-export const filterGpsSignal = (lat, lng, accuracy, timestamp) => {
-  if (accuracy > MAX_ACCURACY_METERS) {
+export const filterGpsSignal = (lat, lng, accuracy, timestamp, maxAccuracy = 50) => {
+  if (accuracy > maxAccuracy) {
     return { valid: false, reason: 'accuracy_too_low' };
   }
 
