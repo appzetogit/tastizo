@@ -152,6 +152,14 @@ export default function FeedNavbar({ className = "" }) {
     setIsOnline(next);
     showSingleToast(next);
 
+    // Notify React Native WebView about status change
+    if (window.ReactNativeWebView) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: "DELIVERY_STATUS",
+        status: next ? "online" : "offline"
+      }));
+    }
+
     // Update backend with location if available
     try {
       // Try to get current location from localStorage or geolocation
