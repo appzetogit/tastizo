@@ -20,7 +20,8 @@ import {
   Loader2,
   Clock,
   Calendar,
-  MoreHorizontal
+  MoreHorizontal,
+  Receipt
 } from "lucide-react"
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import { shareContent } from "@food/utils/share"
