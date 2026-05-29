@@ -644,6 +644,7 @@ export async function tryAutoAssign(orderId, options = {}) {
                 body: 'You have a new delivery request',
                 channelId: 'orders',
                 sound: 'zomato_sms',
+                dataOnly: true,
                 data: {
                   type: 'NEW_ORDER',
                   legacyType: 'new_order',
