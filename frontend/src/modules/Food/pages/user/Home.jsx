@@ -2841,7 +2841,7 @@ export default function Home() {
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                       />
                     </div>
-                    <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300 text-center leading-tight line-clamp-1 w-full px-0.5">
+                    <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300 text-center leading-tight line-clamp-1 w-full px-0.5">
                       {category.name}
                     </span>
                   </Link>
@@ -2860,7 +2860,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setIsFilterOpen(true)}
-                className="h-9 px-4 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-bold transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 shadow-sm active:scale-95 text-xs text-black dark:text-white"
+                className="h-9 px-4 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 shadow-sm active:scale-95 text-xs text-black dark:text-white"
               >
                 <SlidersHorizontal className="h-4 w-4" />
                 <span>Filters</span>
@@ -2892,7 +2892,7 @@ export default function Home() {
                         selectedCuisine,
                       );
                     }}
-                    className={`h-9 px-4 rounded-full flex items-center gap-2 whitespace-nowrap flex-shrink-0 transition-all font-bold shadow-sm active:scale-95 ${isActive
+                    className={`h-9 px-4 rounded-full flex items-center gap-2 whitespace-nowrap flex-shrink-0 transition-all font-medium shadow-sm active:scale-95 ${isActive
                       ? "bg-[#2A9C64] text-white border border-[#2A9C64] hover:bg-orange-700"
                       : "bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
                       }`}
@@ -2902,7 +2902,7 @@ export default function Home() {
                         className={`h-3.5 w-3.5 ${isActive ? "fill-white" : ""}`}
                       />
                     )}
-                    <span className="text-xs font-bold tracking-tight">
+                    <span className="text-xs font-medium tracking-tight">
                       {filter.label}
                     </span>
                   </button>
@@ -2957,7 +2957,7 @@ export default function Home() {
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                       />
                     </div>
-                    <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300 text-center leading-tight line-clamp-1 w-full px-0.5">
+                    <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300 text-center leading-tight line-clamp-1 w-full px-0.5">
                       {category.name}
                     </span>
                   </Link>
@@ -2976,7 +2976,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setIsFilterOpen(true)}
-                className="h-9 px-4 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-bold transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 shadow-sm active:scale-95 text-xs text-black dark:text-white"
+                className="h-9 px-4 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 shadow-sm active:scale-95 text-xs text-black dark:text-white"
               >
                 <SlidersHorizontal className="h-4 w-4" />
                 <span>Filters</span>
@@ -3008,7 +3008,7 @@ export default function Home() {
                         selectedCuisine,
                       );
                     }}
-                    className={`h-9 px-4 rounded-full flex items-center gap-2 whitespace-nowrap flex-shrink-0 transition-all font-bold shadow-sm active:scale-95 ${isActive
+                    className={`h-9 px-4 rounded-full flex items-center gap-2 whitespace-nowrap flex-shrink-0 transition-all font-medium shadow-sm active:scale-95 ${isActive
                       ? "bg-[#2A9C64] text-white border border-[#2A9C64] hover:bg-orange-700"
                       : "bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
                       }`}
@@ -3018,7 +3018,7 @@ export default function Home() {
                         className={`h-3.5 w-3.5 ${isActive ? "fill-white" : ""}`}
                       />
                     )}
-                    <span className="text-xs font-bold tracking-tight">
+                    <span className="text-xs font-medium tracking-tight">
                       {filter.label}
                     </span>
                   </button>
@@ -3372,7 +3372,7 @@ export default function Home() {
                               {/* Restaurant Name & Rating */}
                               <div className="flex items-start justify-between gap-2 mb-2 lg:mb-3">
                                 <div className="flex-1 min-w-0">
-                                  <h3 className="text-lg lg:text-2xl font-medium text-gray-950 dark:text-white line-clamp-1 leading-tight tracking-tight transition-colors duration-300 group-hover:text-[#ef4f5f]">
+                                  <h3 className="text-lg lg:text-2xl font-normal text-gray-800 dark:text-gray-200 line-clamp-1 leading-tight tracking-tight transition-colors duration-300 group-hover:text-[#ef4f5f]">
                                     {restaurant.name}
                                   </h3>
                                   <div className="flex flex-wrap items-center gap-2 mt-2">

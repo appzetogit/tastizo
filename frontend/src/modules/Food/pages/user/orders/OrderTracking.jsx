@@ -1484,27 +1484,27 @@ export default function OrderTracking() {
 
       {/* Map Section or Delivered Illustration */}
       {isDeliveredOrder ? (
-        <div className="relative w-full min-h-[520px] flex items-center justify-center bg-transparent overflow-hidden" style={{ height: '520px' }}>
+        <div className="relative w-full min-h-[380px] flex items-center justify-center bg-transparent overflow-hidden" style={{ height: '380px' }}>
           {/* Top Smoky Fade */}
-          <div className="absolute top-0 inset-x-0 h-24 bg-gradient-to-b from-gray-100 dark:from-[#0a0a0a] to-transparent pointer-events-none z-10" />
+          <div className="absolute top-0 inset-x-0 h-16 bg-gradient-to-b from-gray-100 dark:from-[#0a0a0a] to-transparent pointer-events-none z-10" />
           
           <motion.div
             initial={{ opacity: 0, scale: 0.5, y: 40 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
-            className="w-full h-full flex items-center justify-center pt-8 pb-4"
+            className="w-full h-full flex items-center justify-center pt-6 pb-2"
           >
             <motion.img 
-              animate={{ y: [0, -10, 0] }}
+              animate={{ y: [0, -8, 0] }}
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
               src="/image-removebg-preview.png" 
               alt="Delivered successfully" 
-              className="w-full h-full object-contain" 
+              className="w-64 h-64 md:w-72 md:h-72 object-contain mx-auto" 
             />
           </motion.div>
           
           {/* Bottom Smoky Fade */}
-          <div className="absolute bottom-0 inset-x-0 h-24 bg-gradient-to-t from-gray-100 dark:from-[#0a0a0a] to-transparent pointer-events-none z-10" />
+          <div className="absolute bottom-0 inset-x-0 h-16 bg-gradient-to-t from-gray-100 dark:from-[#0a0a0a] to-transparent pointer-events-none z-10" />
         </div>
       ) : orderStatus === 'cancelled' || (isScheduledOrder && ['placed', 'confirmed'].includes(orderStatus)) ? null : (
         <div className="relative">
@@ -1583,28 +1583,32 @@ export default function OrderTracking() {
                     </div>
                   </div>
                 ) : (
-                  <div className={`w-14 h-14 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm border border-gray-100 ${
-                    currentStatus.iconType === 'rider' ? 'bg-blue-50' : 
-                    currentStatus.iconType === 'cancelled' ? 'bg-red-50' : 
-                    currentStatus.iconType === 'delivered' ? 'bg-green-50' : 
-                    'bg-orange-50'
-                  }`}>
-                    {currentStatus.iconType === 'rider' ? (
-                      <div 
-                        dangerouslySetInnerHTML={{ __html: RIDER_BIKE_SVG.replace(/width="\d+"/, 'width="100%"').replace(/height="\d+"/, 'height="100%"') }} 
-                        className="w-full h-full" 
+                  <div className="w-14 h-14 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm border border-gray-100 bg-white">
+                    {order?.restaurantId?.image || order?.restaurant?.image || order?.restaurantId?.profileImage?.url || order?.restaurant?.profileImage?.url ? (
+                      <img 
+                        src={order?.restaurantId?.image || order?.restaurant?.image || order?.restaurantId?.profileImage?.url || order?.restaurant?.profileImage?.url} 
+                        alt={order?.restaurant || "Restaurant"} 
+                        className="w-full h-full object-cover" 
                       />
-                    ) : currentStatus.iconType === 'cancelled' ? (
-                      <div className="w-full h-full flex items-center justify-center p-2 text-red-500">
-                        <X className="w-full h-full" />
-                      </div>
-                    ) : currentStatus.iconType === 'delivered' ? (
-                      <div className="w-full h-full flex items-center justify-center p-2 text-green-500">
-                        <Check className="w-full h-full" />
-                      </div>
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center p-2 text-orange-500">
-                        <FileText className="w-full h-full" />
+                      <div className={`w-full h-full flex items-center justify-center ${
+                        currentStatus.iconType === 'rider' ? 'bg-blue-50 text-blue-500' : 
+                        currentStatus.iconType === 'cancelled' ? 'bg-red-50 text-red-500' : 
+                        currentStatus.iconType === 'delivered' ? 'bg-green-50 text-green-500' : 
+                        'bg-orange-50 text-orange-500'
+                      }`}>
+                        {currentStatus.iconType === 'rider' ? (
+                          <div 
+                            dangerouslySetInnerHTML={{ __html: RIDER_BIKE_SVG.replace(/width="\d+"/, 'width="100%"').replace(/height="\d+"/, 'height="100%"') }} 
+                            className="w-full h-full p-2" 
+                          />
+                        ) : currentStatus.iconType === 'cancelled' ? (
+                          <X className="w-6 h-6" />
+                        ) : currentStatus.iconType === 'delivered' ? (
+                          <Check className="w-6 h-6" />
+                        ) : (
+                          <FileText className="w-6 h-6" />
+                        )}
                       </div>
                     )}
                   </div>

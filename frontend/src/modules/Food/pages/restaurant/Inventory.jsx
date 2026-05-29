@@ -2801,20 +2801,30 @@ export default function Inventory() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsAddPopupOpen(false)}
-              className="fixed inset-0 bg-black/50 z-[70]"
+              className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[70]"
             />
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[71] max-h-[70vh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom)+5.5rem)]"
+              transition={{ type: "spring", damping: 25, stiffness: 280 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-[71] max-h-[75vh] flex flex-col pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="sticky top-0 bg-white px-4 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-bold text-gray-900 text-center">Add item</h2>
+              {/* Drag Indicator */}
+              <div className="mx-auto w-12 h-1 bg-gray-300 rounded-full mt-3 flex-shrink-0" />
+              
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 mt-1">
+                <h2 className="text-base font-bold text-gray-900">Add to menu</h2>
+                <button
+                  onClick={() => setIsAddPopupOpen(false)}
+                  className="p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-4 h-4 text-gray-600" />
+                </button>
               </div>
-              <div className="px-4 py-4 space-y-2">
+
+              <div className="p-5 space-y-3">
                 <button
                   onClick={() => {
                     setIsAddPopupOpen(false)
@@ -2824,9 +2834,22 @@ export default function Inventory() {
                       },
                     })
                   }}
-                  className="w-full py-3 px-4 text-left rounded-lg hover:bg-gray-50 transition-colors"
+                  className="w-full text-left rounded-2xl border-2 border-emerald-500 bg-emerald-50/20 p-4 shadow-sm transition-all hover:bg-emerald-50/40 active:scale-[0.99] flex items-center justify-between group"
                 >
-                  <span className="text-sm font-medium text-gray-900">Add item</span>
+                  <div className="flex items-center gap-4">
+                    <div className="w-11 h-11 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+                      <Plus className="w-6 h-6 stroke-[2.5]" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-emerald-950">Add food item</p>
+                      <p className="text-xs text-emerald-800/80 mt-0.5 font-medium">
+                        Create a new dish with options, pricing, and variants
+                      </p>
+                    </div>
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-emerald-100/50 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-100 transition-colors">
+                    <ChevronRight className="w-5 h-5" />
+                  </div>
                 </button>
               </div>
             </motion.div>

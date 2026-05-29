@@ -2341,7 +2341,7 @@ function RestaurantDetailsContent() {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
+                  <h1 className="text-2xl font-medium text-gray-900 dark:text-white truncate">
                     {restaurant?.name || "Unknown Restaurant"}
                   </h1>
                     <button 
@@ -2605,7 +2605,7 @@ function RestaurantDetailsContent() {
                   {/* Section Header */}
                   {isRecommended && (
                     <div className="flex items-center justify-between">
-                      <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                      <h2 className="text-lg font-medium text-gray-900 dark:text-white">
                         Recommended for you
                       </h2>
                       <button
@@ -2633,7 +2633,7 @@ function RestaurantDetailsContent() {
                   {!isRecommended && (
                     <div className="flex items-center justify-between">
                       <div className="space-y-1">
-                        <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                        <h2 className="text-lg font-medium text-gray-900 dark:text-white">
                           {(section?.name && typeof section.name === 'string' && section.name.trim())
                             ? section.name.trim()
                             : (section?.title && typeof section.title === 'string' && section.title.trim())
@@ -2729,7 +2729,7 @@ function RestaurantDetailsContent() {
                                 )}
                               </div>
 
-                              <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight">{item.name}</h3>
+                              <h3 className="font-medium text-gray-800 dark:text-white text-lg leading-tight">{item.name}</h3>
 
                               {/* Highly Reordered Progress Bar - Show if recommended */}
                               {isRecommendedItem(item) && (
@@ -2956,7 +2956,7 @@ function RestaurantDetailsContent() {
                                           )}
                                         </div>
 
-                                        <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight">{item.name}</h3>
+                                        <h3 className="font-medium text-gray-800 dark:text-white text-lg leading-tight">{item.name}</h3>
 
                                         {/* Highly Reordered Progress Bar - Show if recommended */}
                                         {isRecommendedItem(item) && (

@@ -14,7 +14,8 @@ import {
   ThumbsUp,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  Clock
 } from "lucide-react"
 import { Switch } from "@food/components/ui/switch"
 // Removed getAllFoods and saveFood - now using menu API
@@ -104,6 +105,7 @@ export default function ItemDetailsPage() {
   const [isItemSizePopupOpen, setIsItemSizePopupOpen] = useState(false)
   const [isGstPopupOpen, setIsGstPopupOpen] = useState(false)
   const [isTagsPopupOpen, setIsTagsPopupOpen] = useState(false)
+  const [isPrepTimePopupOpen, setIsPrepTimePopupOpen] = useState(false)
   const [categories, setCategories] = useState([])
   const [loadingCategories, setLoadingCategories] = useState(true)
   const [loadingItem, setLoadingItem] = useState(false)
@@ -1207,21 +1209,17 @@ export default function ItemDetailsPage() {
 
               {/* Preparation Time */}
               <div className="relative">
-                <label className="block text-xs text-gray-600 mb-1">Preparation Time</label>
-                <div className="relative">
-                  <select
-                    value={preparationTime}
-                    onChange={(e) => setPreparationTime(e.target.value)}
-                    className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
-                  >
-                    <option value="">Select timing</option>
-                    <option value="10-20 mins">10-20 mins</option>
-                    <option value="20-25 mins">20-25 mins</option>
-                    <option value="25-35 mins">25-35 mins</option>
-                    <option value="35-45 mins">35-45 mins</option>
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
-                </div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">Preparation Time</label>
+                <button
+                  type="button"
+                  onClick={() => setIsPrepTimePopupOpen(true)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg text-left flex items-center justify-between bg-white hover:bg-gray-50 transition-colors"
+                >
+                  <span className="text-sm text-gray-950 font-medium">
+                    {preparationTime || "Select timing"}
+                  </span>
+                  <ChevronDown className="w-5 h-5 text-gray-500" />
+                </button>
               </div>
               {/* <div>
                 <label className="block text-xs text-gray-600 mb-1">GST</label>
@@ -1385,6 +1383,93 @@ export default function ItemDetailsPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Preparation Time Popup */}
+      <AnimatePresence>
+        {isPrepTimePopupOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsPrepTimePopupOpen(false)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 280 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50 max-h-[80vh] flex flex-col pb-safe"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Drag Indicator */}
+              <div className="mx-auto w-12 h-1 bg-gray-300 rounded-full mt-3 flex-shrink-0" />
+              
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 mt-1">
+                <h2 className="text-base font-bold text-gray-900">Select preparation time</h2>
+                <button
+                  onClick={() => setIsPrepTimePopupOpen(false)}
+                  className="p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-4 h-4 text-gray-600" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {[
+                  { label: "Select timing", value: "", color: "text-gray-400 bg-gray-50 border-gray-200" },
+                  { label: "10-20 mins", value: "10-20 mins", color: "text-emerald-600 bg-emerald-50 border-emerald-100" },
+                  { label: "20-25 mins", value: "20-25 mins", color: "text-teal-600 bg-teal-50 border-teal-100" },
+                  { label: "25-35 mins", value: "25-35 mins", color: "text-amber-600 bg-amber-50 border-amber-100" },
+                  { label: "35-45 mins", value: "35-45 mins", color: "text-rose-600 bg-rose-50 border-rose-100" },
+                ].map((option) => {
+                  const isSelected = preparationTime === option.value
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setPreparationTime(option.value)
+                        setIsPrepTimePopupOpen(false)
+                      }}
+                      className={`w-full rounded-xl p-3.5 text-left border transition-all flex items-center justify-between group ${
+                        isSelected
+                          ? "border-emerald-600 bg-emerald-50/40 shadow-sm"
+                          : "border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50/60"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center border ${option.color} transition-transform group-active:scale-95`}>
+                          <Clock className="w-4.5 h-4.5" />
+                        </div>
+                        <span className={`text-sm font-semibold transition-colors ${isSelected ? 'text-emerald-950 font-bold' : 'text-gray-700'}`}>
+                          {option.label}
+                        </span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                          isSelected
+                            ? "border-emerald-600 bg-emerald-600"
+                            : "border-gray-300 bg-white"
+                        }`}>
+                          {isSelected && (
+                            <motion.div
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                              className="w-2 h-2 rounded-full bg-white"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </motion.div>
           </>

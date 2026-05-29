@@ -129,17 +129,43 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
 
     if (l.includes("food approval")) return badges.foodApprovals
     if (l === "foods") return badges.foods
-    if (l === "restaurants" || l.includes("new joining request")) return badges.restaurants
+    if (l === "restaurants" || p.includes("joining-request")) return badges.restaurants
     if (l.includes("restaurant complaints")) return badges.restaurantComplaints
     if (p.includes("orders/pending")) return badges.orders
     if (p.includes("offline-payments")) return badges.offlinePayments
     if (l.includes("support tickets")) return l.includes("delivery") ? badges.deliverySupportTickets : badges.userSupportTickets
-    if (l.includes("withdrawal")) return l.includes("delivery") ? badges.deliveryWithdrawals : badges.restaurantWithdrawals
+    if (l.includes("withdraw")) return l.includes("delivery") ? badges.deliveryWithdrawals : badges.restaurantWithdrawals
     if (l.includes("emergency help")) return badges.emergencyHelp
     if (l.includes("earning addon history")) return badges.earningAddons
     if (l.includes("safety emergency reports")) return badges.safetyReports
     if (l === "deliveryman" && !p.includes("join-request")) return badges.deliveryPartners // expandable parent
-    if (l.includes("join-request")) return badges.deliveryPartners
+    if (p.includes("join-request")) return badges.deliveryPartners
+    return 0
+  }
+
+  const getSectionBadgeCount = (sectionLabel) => {
+    const l = (sectionLabel || "").toLowerCase()
+    if (l === "food management") {
+      return (badges.foods || 0)
+    }
+    if (l === "restaurant management") {
+      return (badges.restaurants || 0) + (badges.restaurantComplaints || 0)
+    }
+    if (l === "order management") {
+      return (badges.orders || 0) + (badges.offlinePayments || 0)
+    }
+    if (l === "customer management") {
+      return (badges.userSupportTickets || 0)
+    }
+    if (l === "deliveryman management") {
+      return (badges.deliverySupportTickets || 0) + (badges.deliveryWithdrawals || 0) + (badges.deliveryPartners || 0) + (badges.earningAddons || 0) + (badges.emergencyHelp || 0)
+    }
+    if (l === "help & support") {
+      return (badges.safetyReports || 0)
+    }
+    if (l === "transaction management") {
+      return (badges.restaurantWithdrawals || 0)
+    }
     return 0
   }
   const [logoUrl, setLogoUrl] = useState(() => getCachedSettings()?.logo?.url || null)
@@ -750,10 +776,15 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
                     style={{ animationDelay: `${index * 0.1}s` }}
                   >
                     {!isCollapsed && (
-                      <div className="px-3 py-2 mb-2">
+                      <div className="px-3 py-2 mb-2 flex items-center gap-2">
                         <span className="text-neutral-400 font-bold text-sm uppercase tracking-wider text-left">
                           {item.label}
                         </span>
+                        {getSectionBadgeCount(item.label) > 0 && (
+                          <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shrink-0">
+                            {getSectionBadgeCount(item.label) > 99 ? "99+" : getSectionBadgeCount(item.label)}
+                          </span>
+                        )}
                       </div>
                     )}
                     <div className="space-y-1">

@@ -276,7 +276,7 @@ export default function HomeHeader({
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: -10, opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                className="absolute inset-0 text-sm font-bold text-gray-400 truncate flex items-center"
+                className="absolute inset-0 text-sm font-medium text-gray-400 truncate flex items-center"
               >
                 {placeholders?.[placeholderIndex] || 'Search'}
               </motion.span>

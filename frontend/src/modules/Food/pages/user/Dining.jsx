@@ -693,7 +693,7 @@ export default function Dining() {
               <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(235,89,14,0.05)_35%,transparent_70%)]" />
               <div className="absolute bottom-6 left-6 max-w-[70%]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[#b46f37]">Dining</p>
-                <h2 className="mt-2 text-2xl font-black text-[#2e1d11] sm:text-3xl">
+                <h2 className="mt-2 text-2xl font-semibold text-[#4a3219] sm:text-3xl">
                   {loading ? "Curating dining picks near you" : "Fresh dining picks near you"}
                 </h2>
                 <p className="mt-2 text-sm font-medium text-[#6d5744]">
@@ -777,7 +777,7 @@ export default function Dining() {
           <div className="mb-4 mt-2 sm:mt-4">
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4 px-1">
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white tracking-tight">
+              <h3 className="text-lg sm:text-xl font-semibold text-gray-700 dark:text-gray-200 tracking-tight">
                 Popular Restaurants Within 10km
               </h3>
               <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -814,7 +814,7 @@ export default function Dining() {
                   className="h-7 sm:h-8 px-2 sm:px-3 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
                 >
                   <SlidersHorizontal className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span className="text-xs sm:text-sm font-bold text-black dark:text-white">Filters</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Filters</span>
                 </Button>
 
                 {/* Filter Buttons */}
@@ -840,7 +840,7 @@ export default function Dining() {
                         }`}
                     >
                       {Icon && <Icon className={`h-3 w-3 sm:h-4 sm:w-4 ${isActive ? 'text-white fill-white' : 'text-current'}`} />}
-                      <span className={`text-xs sm:text-sm font-bold ${isActive ? 'text-white' : 'text-black dark:text-white'}`}>{filter.label}</span>
+                      <span className={`text-xs sm:text-sm font-medium ${isActive ? 'text-white' : 'text-gray-700 dark:text-gray-300'}`}>{filter.label}</span>
                     </Button>
                   )
                 })}
