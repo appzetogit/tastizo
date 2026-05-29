@@ -189,14 +189,17 @@ const buildMessagePayload = (payload = {}, token) => {
     }
 
     message.android = {
-        priority: 'high',
-        notification: {
+        priority: 'high'
+    };
+
+    if (!payload.dataOnly) {
+        message.android.notification = {
             channel_id: payload.channelId || payload.notification?.channelId || 'default',
             sound: payload.sound || payload.notification?.sound || 'default',
             default_vibrate_timings: true,
             default_light_settings: true
-        }
-    };
+        };
+    }
 
     message.webpush = {
         headers: {
