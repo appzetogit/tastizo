@@ -391,14 +391,39 @@ export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, pla
     // 💡 Clone the payload to avoid side-effects (e.g. adding multiple prefixes to the same object during broadcasting)
     const enrichedPayload = { ...payload };
 
+    let ownerName = '';
+    let tokens = [];
+
+    if (ownerType && ownerId) {
+        const model = getOwnerModel(ownerType);
+        if (model) {
+            const doc = await model.findById(ownerId).select('fcmTokens fcmTokenMobile name').lean();
+            if (doc) {
+                ownerName = doc.name ? doc.name.split(' ')[0] : '';
+                tokens = readTokensFromDoc(doc, platform);
+            }
+        }
+    }
+
     // 🏷️ Add Highlighter Prefix to the Title
     if (enrichedPayload && !enrichedPayload.skipHighlighter) {
         const typeKey = String(ownerType || '').toUpperCase();
-        const prefix = OWNER_APP_PREFIXES[typeKey] || '';
+        let prefix = OWNER_APP_PREFIXES[typeKey] || '';
+        
+        if (typeKey === 'DELIVERY_PARTNER' && ownerName) {
+            prefix = `🛵 [${ownerName}]`;
+        } else if (typeKey === 'USER' && ownerName) {
+            prefix = `👤 [${ownerName}]`;
+        }
         
         if (prefix) {
             // Get original title from any potential field
             let originalTitle = enrichedPayload.title || enrichedPayload.notification?.title || 'New notification';
+            
+            const genericPrefix = OWNER_APP_PREFIXES[typeKey];
+            if (genericPrefix && originalTitle.includes(genericPrefix)) {
+                 originalTitle = originalTitle.replace(genericPrefix, '').trim();
+            }
             
             // Safety: Ensure we don't ADD the prefix if it's already there (defensive check)
             if (!originalTitle.includes(prefix)) {
@@ -408,8 +433,6 @@ export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, pla
             }
         }
     }
-
-    const tokens = await listOwnerTokens({ ownerType, ownerId, platform });
     // Default behavior: send to latest active token only to avoid duplicate pushes
     // from stale token history on the same device/account.
     const shouldFanoutAllDevices = payload?.sendToAllDevices === true;
