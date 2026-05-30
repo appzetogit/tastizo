@@ -209,6 +209,11 @@ const toRestaurantProfile = (doc) => {
         ownerEmail: doc.ownerEmail || '',
         ownerPhone: doc.ownerPhone || '',
         primaryContactNumber: doc.primaryContactNumber || '',
+        contactNumbers: doc.contactNumbers || {
+            orderReminder1: '',
+            orderReminder2: '',
+            restaurantPage: ''
+        },
         panNumber: doc.panNumber || '',
         nameOnPan: doc.nameOnPan || '',
         panImage: doc.panImage ? { url: doc.panImage } : null,
@@ -483,6 +488,7 @@ export const getCurrentRestaurantProfile = async (restaurantId) => {
                 'ownerEmail',
                 'ownerPhone',
                 'primaryContactNumber',
+                'contactNumbers',
                 'accountNumber',
                 'ifscCode',
                 'accountHolderName',
@@ -1029,6 +1035,14 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
         update.fssaiImage = toUrl(body.fssaiImage) || '';
     }
 
+    if (body.contactNumbers !== undefined) {
+        update.contactNumbers = {
+            orderReminder1: String(body.contactNumbers.orderReminder1 || '').trim(),
+            orderReminder2: String(body.contactNumbers.orderReminder2 || '').trim(),
+            restaurantPage: String(body.contactNumbers.restaurantPage || '').trim()
+        };
+    }
+
     if (!Object.keys(update).length) {
         return getCurrentRestaurantProfile(restaurantId);
     }
@@ -1057,6 +1071,7 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
                     'ownerEmail',
                     'ownerPhone',
                     'primaryContactNumber',
+                    'contactNumbers',
                 'pureVegRestaurant',
                 'profileImage',
                 'coverImages',
