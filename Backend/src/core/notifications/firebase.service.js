@@ -391,10 +391,37 @@ export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, pla
     // 💡 Clone the payload to avoid side-effects (e.g. adding multiple prefixes to the same object during broadcasting)
     const enrichedPayload = { ...payload };
 
+    // Fetch the user to get name and tokens in one go
+    let ownerName = "";
+    let tokens = [];
+    if (ownerType && ownerId) {
+        const model = getOwnerModel(ownerType);
+        if (model) {
+            const doc = await model.findById(ownerId).select('fullName firstName name restaurantName fcmTokens fcmTokenMobile').lean();
+            if (doc) {
+                ownerName = doc.fullName || doc.firstName || doc.name || doc.restaurantName || "";
+                tokens = readTokensFromDoc(doc, platform);
+            }
+        }
+    }
+
     // 🏷️ Add Highlighter Prefix to the Title
     if (enrichedPayload && !enrichedPayload.skipHighlighter) {
         const typeKey = String(ownerType || '').toUpperCase();
-        const prefix = OWNER_APP_PREFIXES[typeKey] || '';
+        let prefix = OWNER_APP_PREFIXES[typeKey] || '';
+        
+        // Dynamically replace generic brackets with actual name
+        if (prefix && ownerName) {
+            if (typeKey === 'DELIVERY_PARTNER') {
+                prefix = prefix.replace('[Rider]', ownerName);
+            } else if (typeKey === 'USER') {
+                prefix = prefix.replace('[User]', ownerName);
+            } else if (typeKey === 'RESTAURANT') {
+                prefix = prefix.replace('[Shop]', ownerName);
+            } else if (typeKey === 'ADMIN') {
+                prefix = prefix.replace('[Admin]', ownerName);
+            }
+        }
         
         if (prefix) {
             // Get original title from any potential field
@@ -408,8 +435,6 @@ export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, pla
             }
         }
     }
-
-    const tokens = await listOwnerTokens({ ownerType, ownerId, platform });
     // Default behavior: send to latest active token only to avoid duplicate pushes
     // from stale token history on the same device/account.
     const shouldFanoutAllDevices = payload?.sendToAllDevices === true;
