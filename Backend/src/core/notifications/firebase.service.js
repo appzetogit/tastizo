@@ -399,7 +399,9 @@ export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, pla
         if (model) {
             const doc = await model.findById(ownerId).select('fullName firstName name restaurantName fcmTokens fcmTokenMobile').lean();
             if (doc) {
-                ownerName = doc.fullName || doc.firstName || doc.name || doc.restaurantName || "";
+                const fullName = doc.firstName || doc.fullName || doc.name || doc.restaurantName || "";
+                // Extract only the first name
+                ownerName = fullName.split(' ')[0];
                 tokens = readTokensFromDoc(doc, platform);
             }
         }
