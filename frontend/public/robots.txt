@@ -1,2 +1,13 @@
 User-agent: *
 Allow: /
+Disallow: /admin/*
+Disallow: /user/auth/*
+Disallow: /user/cart/*
+Disallow: /user/orders/*
+Disallow: /user/profile/*
+Disallow: /restaurant/orders/*
+Disallow: /delivery/pocket/*
+Disallow: /delivery/earnings/*
+
+Sitemap: https://www.tastizo.com/sitemap.xml
+

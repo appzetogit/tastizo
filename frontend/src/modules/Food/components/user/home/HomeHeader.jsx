@@ -288,6 +288,22 @@ export default function HomeHeader({
             <Mic className="h-4.5 w-4.5 text-[#2A9C64]" />
           </div>
         </div>
+
+        {/* Quick Navigation Links (SEO-rich internal linking) */}
+        <div className="flex items-center justify-center gap-4 pt-1.5 pb-0.5 text-[10px] sm:text-[11px] font-bold text-white/90">
+          <Link to="/user/offers" className="hover:text-yellow-300 transition-colors flex items-center gap-1">
+            <Gift className="h-3 w-3 text-yellow-300" />
+            <span>Offers</span>
+          </Link>
+          <div className="w-[1px] h-3 bg-white/25" />
+          <Link to="/restaurant/welcome" className="hover:text-yellow-300 transition-colors">
+            Register Restaurant
+          </Link>
+          <div className="w-[1px] h-3 bg-white/25" />
+          <Link to="/delivery/login" className="hover:text-yellow-300 transition-colors">
+            Rider Careers
+          </Link>
+        </div>
       </div>
     </div>
   );

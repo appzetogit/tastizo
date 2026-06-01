@@ -96,6 +96,8 @@ import HomeHeader from "@food/components/user/home/HomeHeader";
 import QuickSection from "@food/components/user/home/QuickSection";
 import PromoRow from "@food/components/user/home/PromoRow";
 import FestBanner from "@food/components/user/home/FestBanner";
+import SEOHead from "@/shared/components/SEOHead";
+import { getWebSiteSchema, getOrganizationSchema } from "@/shared/seo/schemas";
 
 // Explore More Icons
 import exploreOffers from "@food/assets/explore more icons/offers.png";
@@ -2573,8 +2575,13 @@ export default function Home() {
   }, [displayCategories, showCategorySkeleton, navigate]);
 
   return (
-
     <div className={`relative min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowOutOfZoneHome ? 'pb-6' : 'pb-16 md:pb-6'}`}>
+      <SEOHead
+        title="Tastizo — Order Food Online | Fast Delivery from Top Restaurants"
+        description="Tastizo is India's fastest food delivery platform. Order biryani, pizza, burgers & more from the best restaurants near you. Fast delivery, live tracking, great offers!"
+        canonical="/"
+        jsonLd={[getOrganizationSchema(), getWebSiteSchema()]}
+      />
 
 
       <div className="transition-all duration-300">
