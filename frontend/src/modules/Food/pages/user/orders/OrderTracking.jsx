@@ -1314,6 +1314,26 @@ export default function OrderTracking() {
     )
   }
 
+  const trackedRider = (() => {
+    if (order?.dispatch?.deliveryPartnerId && typeof order.dispatch.deliveryPartnerId === 'object') {
+      return order.dispatch.deliveryPartnerId;
+    } else if (order?.deliveryPartnerId && typeof order.deliveryPartnerId === 'object') {
+      return order.deliveryPartnerId;
+    } else if (order?.deliveryPartner) {
+      return order.deliveryPartner;
+    }
+    return null;
+  })();
+
+  const trackedRiderAvatar = trackedRider?.avatar || trackedRider?.profileImage || trackedRider?.profilePhoto || null;
+  const trackedRestaurantAvatar = order?.restaurantId?.image || order?.restaurant?.image || order?.restaurantId?.profileImage?.url || order?.restaurant?.profileImage?.url || null;
+
+  const isRiderPhase = ['assigned', 'at_pickup', 'ready', 'on_way', 'at_drop'].includes(orderStatus);
+  const suitableImageSrc = isRiderPhase ? (trackedRiderAvatar || trackedRestaurantAvatar) : trackedRestaurantAvatar;
+  const suitableImageAlt = isRiderPhase
+    ? (trackedRiderAvatar ? (trackedRider?.name || 'Rider') : (order?.restaurant || 'Restaurant'))
+    : (order?.restaurant || 'Restaurant');
+
   const statusConfig = {
     placed: {
       title: "Order Placed",
@@ -1584,10 +1604,10 @@ export default function OrderTracking() {
                   </div>
                 ) : (
                   <div className="w-14 h-14 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm border border-gray-100 bg-white">
-                    {order?.restaurantId?.image || order?.restaurant?.image || order?.restaurantId?.profileImage?.url || order?.restaurant?.profileImage?.url ? (
+                    {suitableImageSrc ? (
                       <img 
-                        src={order?.restaurantId?.image || order?.restaurant?.image || order?.restaurantId?.profileImage?.url || order?.restaurant?.profileImage?.url} 
-                        alt={order?.restaurant || "Restaurant"} 
+                        src={suitableImageSrc} 
+                        alt={suitableImageAlt} 
                         className="w-full h-full object-cover" 
                       />
                     ) : (
