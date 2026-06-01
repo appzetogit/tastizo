@@ -2551,8 +2551,8 @@ export default function Home() {
                     sizes="80px"
                   />
                 </div>
-                <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center pb-1">
-                  {category.name.length > 7 ? `${category.name.slice(0, 7)}...` : category.name}
+                <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center truncate max-w-[72px]">
+                  {category.name}
                 </span>
               </Link>
             ))
@@ -2848,7 +2848,7 @@ export default function Home() {
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                       />
                     </div>
-                    <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300 text-center leading-tight line-clamp-1 w-full px-0.5">
+                    <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center leading-tight line-clamp-1 w-full px-0.5">
                       {category.name}
                     </span>
                   </Link>
@@ -2964,7 +2964,7 @@ export default function Home() {
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                       />
                     </div>
-                    <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300 text-center leading-tight line-clamp-1 w-full px-0.5">
+                    <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center leading-tight line-clamp-1 w-full px-0.5">
                       {category.name}
                     </span>
                   </Link>
