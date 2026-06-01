@@ -30,10 +30,6 @@ export default function DepositPopup({ onSuccess, cashInHand = 0 }) {
       toast.error("Maximum deposit is \u20B95,00,000")
       return
     }
-    if (cashInHandNum > 0 && amt > cashInHandNum) {
-      toast.error(`Deposit amount cannot exceed cash in hand (${formatMoney(cashInHandNum)})`)
-      return
-    }
 
     try {
       setLoading(true)
@@ -119,11 +115,6 @@ export default function DepositPopup({ onSuccess, cashInHand = 0 }) {
             className="w-full pl-9 pr-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
           />
         </div>
-        {cashInHandNum > 0 && (
-          <p className="text-xs text-slate-500 mt-1">
-            Cash in hand: {formatMoney(cashInHandNum)}. Deposit cannot exceed this.
-          </p>
-        )}
       </div>
       <button
         type="button"

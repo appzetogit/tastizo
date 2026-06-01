@@ -117,8 +117,9 @@ async function getPartnerCashCapacity(deliveryPartnerId) {
 
   const grossCashCollected = Number(cashAgg?.[0]?.grossCashCollected || 0);
   const depositedCash = Number(depositsAgg?.[0]?.depositedCash || 0);
-  const cashInHand = Math.max(0, grossCashCollected - depositedCash);
-  const availableCashLimit = Math.max(0, totalCashLimit - cashInHand);
+  const netCashPending = grossCashCollected - depositedCash;
+  const cashInHand = Math.max(0, netCashPending);
+  const availableCashLimit = Math.max(0, totalCashLimit - netCashPending);
 
   return {
     totalCashLimit,

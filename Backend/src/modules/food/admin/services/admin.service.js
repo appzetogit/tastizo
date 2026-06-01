@@ -5120,7 +5120,8 @@ export async function getDeliveryWallets(query = {}) {
         const totalEarned = Number(wallet?.totalEarnings ?? earningsAgg?.[0]?.totalEarned) || 0;
         const grossCashCollected = Number(cashCollectedAgg?.[0]?.cashCollected) || 0;
         const totalDepositedCash = Number(cashDepositsAgg?.[0]?.depositedCash) || 0;
-        const calculatedCashInHand = Math.max(0, grossCashCollected - totalDepositedCash);
+        const netCashPending = grossCashCollected - totalDepositedCash;
+        const calculatedCashInHand = Math.max(0, netCashPending);
         const cashInHand = Number(wallet?.cashInHand ?? calculatedCashInHand) || 0;
         const totalBonus = Number(wallet?.totalBonus ?? bonusAgg?.[0]?.total) || 0;
         const totalWithdrawn = Number(wallet?.totalSettled ?? withdrawalAgg?.[0]?.totalWithdrawn) || 0;
@@ -5135,7 +5136,7 @@ export async function getDeliveryWallets(query = {}) {
             phone: p.phone || '',
             deliveryIdString: partnerIdstr,
             pocketBalance,
-            remainingCashLimit: Math.max(0, globalLimit - cashInHand),
+            remainingCashLimit: Math.max(0, globalLimit - netCashPending),
             cashCollected: grossCashCollected,
             totalEarning: totalEarned,
             bonus: totalBonus,
