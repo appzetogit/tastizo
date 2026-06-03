@@ -288,8 +288,8 @@ export default function UserOrderDetails() {
       const tableData = items.map(item => [
         item.variantName ? `${item.name || 'Item'} (${item.variantName})` : (item.name || 'Item'),
         String(item.quantity || item.qty || 1),
-        `${formatCurrency(item.price || 0, "₹").replace("₹ ", "₹")}`,
-        `${formatCurrency((item.price || 0) * (item.quantity || item.qty || 1), "₹").replace("₹ ", "₹")}`
+        `${formatCurrency(item.price || 0, "Rs.").replace("Rs. ", "Rs.")}`,
+        `${formatCurrency((item.price || 0) * (item.quantity || item.qty || 1), "Rs.").replace("Rs. ", "Rs.")}`
       ])
 
       autoTable(doc, {
@@ -314,7 +314,7 @@ export default function UserOrderDetails() {
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
       doc.text('Total:', 145, finalY + 10, { align: 'right' })
-      doc.text(formatCurrency(pricing.total || 0, "₹").replace("₹ ", "₹"), 195, finalY + 10, { align: "right" })
+      doc.text(formatCurrency(pricing.total || 0, "Rs.").replace("Rs. ", "Rs."), 195, finalY + 10, { align: "right" })
 
       // Save PDF instantly
       const fileName = `Order_Summary_${orderIdDisplay}_${Date.now()}.pdf`

@@ -242,8 +242,8 @@ const printOrderReceipt = async (order) => {
     const tableData = order.items.map((item) => [
       item.name || "Item",
       item.quantity || 1,
-      `₹${(item.price || 0).toFixed(2)}`,
-      `₹${((item.price || 0) * (item.quantity || 1)).toFixed(2)}`,
+      `Rs.${(item.price || 0).toFixed(2)}`,
+      `Rs.${((item.price || 0) * (item.quantity || 1)).toFixed(2)}`,
     ])
 
     autoTable(doc, {
@@ -269,7 +269,7 @@ const printOrderReceipt = async (order) => {
   }
 
   doc.setFontSize(12)
-  doc.text(`Total: ₹${(getOrderTotalValue(order) || 0).toFixed(2)}`, 20, yPos)
+  doc.text(`Total: Rs.${(getOrderTotalValue(order) || 0).toFixed(2)}`, 20, yPos)
 
   yPos += 10
   doc.setFontSize(10)

@@ -270,7 +270,7 @@ export const exportToPDF = async (orders, filename = "orders") => {
           order.deliveryBoyName || 'N/A',
           order.deliveryBoyNumber || 'N/A',
           order.status || 'N/A',
-          totalAmount > 0 ? `₹${totalAmount.toFixed(2)}` : 'N/A',
+          totalAmount > 0 ? `Rs.${totalAmount.toFixed(2)}` : 'N/A',
           paymentStatus
         ]
       })
@@ -289,7 +289,7 @@ export const exportToPDF = async (orders, filename = "orders") => {
           order.customerName || 'N/A',
           order.customerPhone || 'N/A',
           order.restaurant || 'N/A',
-          amount ? `₹${Number(amount).toFixed(2)}` : 'N/A',
+          amount ? `Rs.${Number(amount).toFixed(2)}` : 'N/A',
           order.paymentStatus || 'N/A',
           order.orderStatus || 'N/A',
           order.deliveryType || 'N/A'
