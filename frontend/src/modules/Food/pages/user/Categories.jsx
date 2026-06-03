@@ -133,7 +133,7 @@ export default function Categories() {
                         sizes="(max-width: 640px) 25vw, 15vw"
                       />
                     </div>
-                    <span className="text-[11px] font-bold text-neutral-700 text-center leading-tight">
+                    <span className="text-[11px] font-bold text-neutral-900 dark:text-neutral-100 text-center leading-tight">
                       {category.name}
                     </span>
                   </Link>
