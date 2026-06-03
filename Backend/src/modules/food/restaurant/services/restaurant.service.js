@@ -1579,3 +1579,30 @@ export const getRestaurantComplaints = async (restaurantId, query = {}) => {
     return getComplaintsInternal({ ...query, restaurantId });
 };
 
+export const deleteRestaurantProfile = async (restaurantId) => {
+    if (!restaurantId) {
+        throw new ValidationError('Invalid restaurant id');
+    }
+    // Delete the restaurant
+    const deleted = await FoodRestaurant.findByIdAndDelete(restaurantId).lean();
+    if (!deleted) {
+        throw new ValidationError('Restaurant not found');
+    }
+    // Delete dining settings
+    try {
+        const { FoodDiningRestaurant } = await import('../../dining/models/diningRestaurant.model.js');
+        await FoodDiningRestaurant.deleteOne({ restaurantId });
+    } catch (e) {
+        console.error('Failed to delete dining settings for restaurant:', e);
+    }
+    // Delete foods
+    try {
+        const { FoodItem } = await import('../../admin/models/food.model.js');
+        await FoodItem.deleteMany({ restaurantId });
+    } catch (e) {
+        console.error('Failed to delete foods for restaurant:', e);
+    }
+    return { id: restaurantId };
+};
+
+

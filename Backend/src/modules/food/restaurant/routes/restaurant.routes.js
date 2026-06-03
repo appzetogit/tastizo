@@ -15,7 +15,8 @@ import {
     uploadRestaurantMenuImagesController,
     getRestaurantComplaintsController,
     createDiningRequestController,
-    getPendingDiningRequestController
+    getPendingDiningRequestController,
+    deleteRestaurantProfileController
 } from '../controllers/restaurant.controller.js';
 import {
     createRestaurantSupportTicketController,
@@ -100,6 +101,11 @@ router.patch('/availability', authMiddleware, requireRestaurant, async (req, res
 }, updateRestaurantAcceptingOrdersController);
 router.patch('/profile', authMiddleware, requireRestaurant, updateRestaurantProfileController);
 router.patch('/availability', authMiddleware, requireRestaurant, updateRestaurantAcceptingOrdersController);
+router.delete('/profile', authMiddleware, requireRestaurant, async (req, res, next) => {
+    await invalidateCache('restaurants:*');
+    await invalidateCache('restaurant_detail:*');
+    next();
+}, deleteRestaurantProfileController);
 router.patch('/dining-settings', authMiddleware, requireRestaurant, updateCurrentRestaurantDiningSettingsController);
 router.post('/dining-settings/request', authMiddleware, requireRestaurant, createDiningRequestController);
 router.get('/dining-settings/pending', authMiddleware, requireRestaurant, getPendingDiningRequestController);
@@ -216,5 +222,3 @@ router.get('/download-menu-pdf/:id', authMiddleware, (req, res, next) => {
 });
 
 export default router;
-
-

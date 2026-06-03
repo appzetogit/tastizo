@@ -11,7 +11,8 @@ import {
     uploadRestaurantCoverImages,
     uploadRestaurantMenuImages,
     listPublicOffers,
-    getRestaurantComplaints
+    getRestaurantComplaints,
+    deleteRestaurantProfile
 } from '../services/restaurant.service.js';
 import {
     getPendingDiningRequest
@@ -163,6 +164,16 @@ export const getPendingDiningRequestController = async (req, res, next) => {
         const restaurantId = req.user?.userId;
         const request = await getPendingDiningRequest(restaurantId);
         return sendResponse(res, 200, 'Pending request fetched successfully', request);
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const deleteRestaurantProfileController = async (req, res, next) => {
+    try {
+        const restaurantId = req.user?.userId;
+        const result = await deleteRestaurantProfile(restaurantId);
+        return sendResponse(res, 200, 'Restaurant profile deleted successfully', result);
     } catch (error) {
         next(error);
     }

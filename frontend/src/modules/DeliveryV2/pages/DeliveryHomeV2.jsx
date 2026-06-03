@@ -32,7 +32,7 @@ import {
   Bell, HelpCircle, AlertTriangle, 
   Wallet, History, User as UserIcon, LayoutGrid,
   Plus, Minus, Navigation2, Target, CheckCircle2, Clock, ChevronDown,
-  Contact, Package, MapPin
+  Contact, Package, MapPin, Phone
 } from 'lucide-react';
 
 import { getHaversineDistance, calculateETA, calculateHeading } from '@/modules/DeliveryV2/utils/geo';
@@ -1701,6 +1701,31 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                                </p>
                             </div>
                           </div>
+                          {(() => {
+                            const cPhone = activeOrder?.userPhone || activeOrder?.customerPhone || activeOrder?.deliveryAddress?.phone || activeOrder?.userId?.phone || '';
+                            if (!cPhone) return null;
+                            return (
+                              <button
+                                onClick={(e) => {
+                                  if (e && e.stopPropagation) e.stopPropagation();
+                                  const cleanPhone = String(cPhone).replace(/[^\d+]/g, '');
+                                  try {
+                                    const link = document.createElement('a');
+                                    link.href = `tel:${cleanPhone}`;
+                                    link.setAttribute('target', '_self');
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                  } catch (err) {
+                                    window.location.href = `tel:${cleanPhone}`;
+                                  }
+                                }}
+                                className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 active:scale-95 transition-all shadow-md shrink-0"
+                              >
+                                <Phone className="w-5 h-5" />
+                              </button>
+                            );
+                          })()}
                         </div>
 
                         {/* Customer Instructions Panel */}
@@ -1755,10 +1780,23 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
            {emergencyOptions.map((opt, i) => (
              <button 
                key={i} 
-               onClick={() => {
+               onClick={(e) => {
+                 if (e && e.stopPropagation) e.stopPropagation();
                  const num = opt.phone?.replace(/\D/g, '');
-                 if (num) window.location.href = `tel:${num}`;
-                 else toast.error('Number not configured');
+                 if (num) {
+                   try {
+                     const link = document.createElement('a');
+                     link.href = `tel:${num}`;
+                     link.setAttribute('target', '_self');
+                     document.body.appendChild(link);
+                     link.click();
+                     document.body.removeChild(link);
+                   } catch (err) {
+                     window.location.href = `tel:${num}`;
+                   }
+                 } else {
+                   toast.error('Number not configured');
+                 }
                }}
                className="flex items-center gap-5 p-4 bg-gray-50 rounded-2xl hover:bg-gray-100 active:scale-95 transition-all text-left"
              >

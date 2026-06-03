@@ -29,6 +29,7 @@ import {
   Calendar,
   MapPin,
   LogOut,
+  Trash2,
 } from "lucide-react"
 import { Card, CardContent } from "@food/components/ui/card"
 import { DateRangeCalendar } from "@food/components/ui/date-range-calendar"
@@ -610,6 +611,46 @@ export default function ExploreMore() {
     }
   }
 
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleDeleteAccount = async () => {
+    if (isDeleting) return
+    setIsDeleting(true)
+    setProfileOpen(false)
+    try {
+      await restaurantAPI.deleteAccount()
+      try {
+        const { signOut } = await import("firebase/auth")
+        ensureFirebaseInitialized({ enableAuth: true, enableRealtimeDb: false })
+        const currentUser = firebaseAuth.currentUser
+        if (currentUser) {
+          await signOut(firebaseAuth)
+        }
+      } catch (firebaseError) {
+        debugWarn("Firebase logout failed, continuing with cleanup:", firebaseError)
+      }
+      clearModuleAuth("restaurant")
+      localStorage.removeItem("restaurant_owner_contact")
+      localStorage.removeItem("restaurant_onboarding")
+      localStorage.removeItem("restaurant_accessToken")
+      localStorage.removeItem("restaurant_authenticated")
+      localStorage.removeItem("restaurant_user")
+      localStorage.removeItem("restaurant_invited_users")
+      sessionStorage.removeItem("restaurantAuthData")
+      window.dispatchEvent(new Event("restaurantAuthChanged"))
+      setDeleteConfirmOpen(false)
+      setTimeout(() => {
+        navigate("/food/restaurant/welcome", { replace: true })
+      }, 300)
+    } catch (error) {
+      debugError("Error deleting account:", error)
+      alert(`Failed to delete account: ${error.response?.data?.message || error.message || "Please try again."}`)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const scheduleOffReasons = [
     "renovation or relocation of restaurant",
     "closed dur to festival",
@@ -700,7 +741,7 @@ export default function ExploreMore() {
 
   // Prevent body scroll when popup is open
   useEffect(() => {
-    if (profileOpen || scheduleOffOpen || dateTimePickerOpen || successPopupOpen || existingScheduleOpen || searchOpen) {
+    if (profileOpen || scheduleOffOpen || dateTimePickerOpen || successPopupOpen || existingScheduleOpen || searchOpen || deleteConfirmOpen) {
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = 'unset'
@@ -708,7 +749,7 @@ export default function ExploreMore() {
     return () => {
       document.body.style.overflow = 'unset'
     }
-  }, [profileOpen, scheduleOffOpen, dateTimePickerOpen, successPopupOpen, existingScheduleOpen, searchOpen])
+  }, [profileOpen, scheduleOffOpen, dateTimePickerOpen, successPopupOpen, existingScheduleOpen, searchOpen, deleteConfirmOpen])
 
   // Lenis smooth scrolling
   useEffect(() => {
@@ -1003,6 +1044,25 @@ export default function ExploreMore() {
           </div>
           <ChevronRight className="w-5 h-5 text-[#2A9C64]/40 shrink-0" />
         </motion.button>
+
+        <motion.button
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.55, duration: 0.25 }}
+          onClick={() => setDeleteConfirmOpen(true)}
+          className="w-full mt-3 flex items-center justify-between gap-3 rounded-2xl border border-red-600/20 bg-red-50/50 px-4 py-4 text-left hover:bg-red-50 transition-all active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-100">
+              <Trash2 className="w-5 h-5 text-red-600" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-base font-semibold text-red-600">Delete Account</p>
+              <p className="text-sm text-red-600/60 font-medium">Permanently delete your restaurant account</p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-red-600/40 shrink-0" />
+        </motion.button>
       </div>
 
       {/* Search Popup */}
@@ -1055,6 +1115,61 @@ export default function ExploreMore() {
                   className="rounded-2xl bg-[#2A9C64] px-4 py-3 text-sm font-bold text-white transition-all hover:bg-[#6a2f56] active:scale-95 disabled:opacity-50"
                 >
                   {isLoggingOut ? "Logging out..." : "Yes"}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+
+        {deleteConfirmOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black/50 z-[60]"
+              onClick={() => {
+                if (!isDeleting) setDeleteConfirmOpen(false)
+              }}
+            />
+
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 24 }}
+              transition={{ duration: 0.22 }}
+              className="fixed inset-x-4 bottom-28 z-[61] mx-auto w-auto max-w-md rounded-3xl bg-white p-5 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Delete Account?</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Are you sure you want to delete your account? All information associated with your account will be deleted, and you will lose access to your restaurant permanently. This action cannot be undone.
+                </p>
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                  disabled={isDeleting}
+                  className="rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleDeleteAccount()
+                  }}
+                  disabled={isDeleting}
+                  className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-red-700 active:scale-95 disabled:opacity-50"
+                >
+                  {isDeleting ? "Deleting..." : "Yes, Delete"}
                 </button>
               </div>
             </motion.div>
@@ -1293,6 +1408,16 @@ export default function ExploreMore() {
                   className="w-full bg-[#2A9C64]/10 text-[#2A9C64] border border-[#2A9C64]/20 hover:bg-[#2A9C64]/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed font-bold py-4 px-4 rounded-2xl transition-all"
                 >
                   {isLoggingOut ? "Logging out..." : "Logout from all devices"}
+                </button>
+
+                {/* Delete Account Button */}
+                <button
+                  onClick={() => setDeleteConfirmOpen(true)}
+                  disabled={isDeleting}
+                  className="w-full bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed font-bold py-4 px-4 rounded-2xl transition-all flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                  {isDeleting ? "Deleting..." : "Delete Account"}
                 </button>
               </div>
 
