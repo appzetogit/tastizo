@@ -371,11 +371,23 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
     total: apiOrder?.pricing?.total || previousOrder?.total || 0,
     // Backend canonical field is orderStatus; keep legacy `status` for UI compatibility.
     status: apiOrder?.orderStatus || apiOrder?.status || previousOrder?.status || 'pending',
-    deliveryPartner: apiOrder?.deliveryPartnerId ? {
-      name: apiOrder.deliveryPartnerId.name || apiOrder.deliveryPartnerId.fullName || 'Delivery Partner',
-      phone: apiOrder.deliveryPartnerId.phone || apiOrder.deliveryPartnerId.phoneNumber || '',
-      avatar: apiOrder.deliveryPartnerId.avatar || apiOrder.deliveryPartnerId.profilePicture || null
-    } : (previousOrder?.deliveryPartner || null),
+    deliveryPartner: (() => {
+      const partner = (apiOrder?.dispatch?.deliveryPartnerId && typeof apiOrder.dispatch.deliveryPartnerId === 'object')
+        ? apiOrder.dispatch.deliveryPartnerId
+        : (apiOrder?.deliveryPartnerId && typeof apiOrder.deliveryPartnerId === 'object')
+          ? apiOrder.deliveryPartnerId
+          : (apiOrder?.deliveryPartner && typeof apiOrder.deliveryPartner === 'object')
+            ? apiOrder.deliveryPartner
+            : null;
+      if (partner) {
+        return {
+          name: partner.name || partner.fullName || 'Delivery Partner',
+          phone: partner.phone || partner.phoneNumber || '',
+          avatar: partner.avatar || partner.profilePhoto || partner.profileImage || null
+        };
+      }
+      return previousOrder?.deliveryPartner || null;
+    })(),
     deliveryPartnerId: apiOrder?.deliveryPartnerId?._id || apiOrder?.deliveryPartnerId || apiOrder?.dispatch?.deliveryPartnerId?._id || apiOrder?.dispatch?.deliveryPartnerId || apiOrder?.assignmentInfo?.deliveryPartnerId || null,
     dispatch: apiOrder?.dispatch || previousOrder?.dispatch || null,
     assignmentInfo: apiOrder?.assignmentInfo || previousOrder?.assignmentInfo || null,
@@ -876,7 +888,11 @@ export default function OrderTracking() {
   const handleCallRider = (e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     
-    const rawPhone = order?.deliveryPartner?.phone || '';
+    const rawPhone =
+      order?.deliveryPartner?.phone ||
+      order?.dispatch?.deliveryPartnerId?.phone ||
+      order?.deliveryPartnerId?.phone ||
+      '';
     const cleanPhone = String(rawPhone).replace(/[^\d+]/g, '');
 
     if (!cleanPhone || cleanPhone.length < 5) {
