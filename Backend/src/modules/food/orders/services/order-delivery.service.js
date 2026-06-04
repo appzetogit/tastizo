@@ -117,8 +117,9 @@ async function getPartnerCashCapacity(deliveryPartnerId) {
 
   const grossCashCollected = Number(cashAgg?.[0]?.grossCashCollected || 0);
   const depositedCash = Number(depositsAgg?.[0]?.depositedCash || 0);
-  const cashInHand = Math.max(0, grossCashCollected - depositedCash);
-  const availableCashLimit = Math.max(0, totalCashLimit - cashInHand);
+  const netCashPending = grossCashCollected - depositedCash;
+  const cashInHand = Math.max(0, netCashPending);
+  const availableCashLimit = Math.max(0, totalCashLimit - netCashPending);
 
   return {
     totalCashLimit,
@@ -288,7 +289,7 @@ export async function getCurrentTripDelivery(deliveryPartnerId) {
   })
     .populate({
       path: 'restaurantId',
-      select: 'restaurantName name phone location addressLine1 area city state profileImage',
+      select: 'restaurantName name phone location addressLine1 area city state profileImage ownerPhone primaryContactNumber',
     })
     .populate({ path: 'userId', select: 'name phone' })
     .sort({ updatedAt: -1 })
@@ -329,7 +330,7 @@ export async function getOrderByRefDelivery(deliveryPartnerId, orderRef) {
   const order = await FoodOrder.findOne(identity)
     .populate({
       path: 'restaurantId',
-      select: 'restaurantName name phone location addressLine1 area city state profileImage',
+      select: 'restaurantName name phone location addressLine1 area city state profileImage ownerPhone primaryContactNumber',
     })
     .populate({ path: 'userId', select: 'name phone' })
     .lean();
@@ -489,7 +490,7 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
       .populate('userId', 'name phone email')
       .populate(
         'restaurantId',
-        'restaurantName name address phone ownerPhone location profileImage',
+        'restaurantName name address phone ownerPhone primaryContactNumber location profileImage',
       )
       .lean(),
     FoodOrder.countDocuments(filter),

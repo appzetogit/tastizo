@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeft, Edit, Phone, Users, ChevronDown, X } from "lucide-react"
+import { ArrowLeft, Edit, Phone, ChevronDown, X, Loader2 } from "lucide-react"
+import { restaurantAPI } from "@food/api"
 
 export default function PhoneNumbersPage() {
   const navigate = useNavigate()
@@ -14,31 +15,66 @@ export default function PhoneNumbersPage() {
   const [showOtpPopup, setShowOtpPopup] = useState(false)
   const [otp, setOtp] = useState(["", "", "", "", "", ""])
   const [pendingPhoneData, setPendingPhoneData] = useState(null) // Store phone data to save after OTP verification
+  const [loading, setLoading] = useState(true)
 
   // Phone numbers data - only mobile now
   const [phoneData, setPhoneData] = useState({
-    orderReminder1: "+91-9981127415",
-    orderReminder2: "+91-9981127415",
-    restaurantPage: "+91-9981127415"
+    orderReminder1: "",
+    orderReminder2: "",
+    restaurantPage: ""
   })
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const data = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (data) {
+          const rawRestaurantPage = data.contactNumbers?.restaurantPage || data.primaryContactNumber || data.ownerPhone || ""
+          const formattedRestaurantPage = rawRestaurantPage && !rawRestaurantPage.includes("-")
+            ? `+91-${rawRestaurantPage}`
+            : rawRestaurantPage
+
+          setPhoneData({
+            orderReminder1: data.contactNumbers?.orderReminder1 || "",
+            orderReminder2: data.contactNumbers?.orderReminder2 || "",
+            restaurantPage: formattedRestaurantPage
+          })
+        }
+      } catch (error) {
+        console.error("Failed to fetch restaurant profile", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchProfile()
+  }, [])
 
   // Country codes
   const countryCodes = [
-    { code: "+91", country: "India", flag: "ðŸ‡®ðŸ‡³" },
-    { code: "+1", country: "USA", flag: "ðŸ‡ºðŸ‡¸" },
-    { code: "+44", country: "UK", flag: "ðŸ‡¬ðŸ‡§" },
-    { code: "+971", country: "UAE", flag: "ðŸ‡¦ðŸ‡ª" },
-    { code: "+65", country: "Singapore", flag: "ðŸ‡¸ðŸ‡¬" },
-    { code: "+86", country: "China", flag: "ðŸ‡¨ðŸ‡³" },
-    { code: "+81", country: "Japan", flag: "ðŸ‡¯ðŸ‡µ" },
-    { code: "+61", country: "Australia", flag: "ðŸ‡¦ðŸ‡º" },
+    { code: "+91", country: "India", flag: "🇮🇳" },
+    { code: "+1", country: "USA", flag: "🇺🇸" },
+    { code: "+44", country: "UK", flag: "🇬🇧" },
+    { code: "+971", country: "UAE", flag: "🇦🇪" },
+    { code: "+65", country: "Singapore", flag: "🇸🇬" },
+    { code: "+86", country: "China", flag: "🇨🇳" },
+    { code: "+81", country: "Japan", flag: "🇯🇵" },
+    { code: "+61", country: "Australia", flag: "🇦🇺" },
   ]
 
   const handleEditClick = (type) => {
-    const currentNumber = phoneData[type]
-    const parts = currentNumber.split('-')
-    setCountryCode(parts[0] || "+91")
-    setPhoneNumber(parts[1] || "")
+    const currentNumber = phoneData[type] || ""
+    if (currentNumber.includes('-')) {
+      const parts = currentNumber.split('-')
+      setCountryCode(parts[0] || "+91")
+      setPhoneNumber(parts[1] || "")
+    } else if (currentNumber.trim() !== "") {
+      setCountryCode("+91")
+      setPhoneNumber(currentNumber.trim())
+    } else {
+      setCountryCode("+91")
+      setPhoneNumber("")
+    }
     setEditingNumber(type)
   }
 
@@ -87,26 +123,32 @@ export default function PhoneNumbersPage() {
     }
   }
 
-  const handleVerifyOtp = () => {
+  const handleVerifyOtp = async () => {
     const otpString = otp.join("")
     
     // For demo purposes, accept any 6-digit OTP
     // In production, this would verify against the backend
     if (otpString.length === 6) {
-      // Save the phone number
       if (pendingPhoneData) {
-        setPhoneData(prev => ({
-          ...prev,
+        const newPhoneData = {
+          ...phoneData,
           [pendingPhoneData.type]: pendingPhoneData.value
-        }))
+        }
+        
+        try {
+          await restaurantAPI.updateProfile({ contactNumbers: newPhoneData })
+          
+          setPhoneData(newPhoneData)
+          setShowOtpPopup(false)
+          setPendingPhoneData(null)
+          setOtp(["", "", "", "", "", ""])
+          setCountryCode("+91")
+          setPhoneNumber("")
+        } catch (error) {
+          console.error("Failed to update phone number", error)
+          alert("Failed to update phone number. Please try again.")
+        }
       }
-      
-      // Close OTP popup and reset
-      setShowOtpPopup(false)
-      setPendingPhoneData(null)
-      setOtp(["", "", "", "", "", ""])
-      setCountryCode("+91")
-      setPhoneNumber("")
     }
   }
 
@@ -124,6 +166,14 @@ export default function PhoneNumbersPage() {
 
   const getDisplayNumber = (type) => {
     return phoneData[type] || ""
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -144,50 +194,6 @@ export default function PhoneNumbersPage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
 
-        {/* Order reminder numbers */}
-        <div className="bg-white rounded-lg p-4 mb-4">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-              <Users className="w-5 h-5 text-gray-700" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-base font-bold text-gray-900">Order reminder numbers</h2>
-              <p className="text-xs text-gray-600 mt-1">
-                Should always be available for Zomato to reach out for live order support and order reminders.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {/* Order reminder number #1 */}
-            <div className="flex items-center justify-between py-2">
-              <div className="flex-1">
-                <p className="text-sm text-gray-700 mb-1">Order reminder number #1</p>
-                <p className="text-base font-semibold text-gray-900">{getDisplayNumber("orderReminder1")}</p>
-              </div>
-              <button
-                onClick={() => handleEditClick("orderReminder1")}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Edit className="w-4 h-4 text-blue-600" />
-              </button>
-            </div>
-
-            {/* Order reminder number #2 */}
-            <div className="flex items-center justify-between py-2 border-t border-gray-100">
-              <div className="flex-1">
-                <p className="text-sm text-gray-700 mb-1">Order reminder number #2</p>
-                <p className="text-base font-semibold text-gray-900">{getDisplayNumber("orderReminder2")}</p>
-              </div>
-              <button
-                onClick={() => handleEditClick("orderReminder2")}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Edit className="w-4 h-4 text-blue-600" />
-              </button>
-            </div>
-          </div>
-        </div>
 
         {/* Restaurant page number */}
         <div className="bg-white rounded-lg p-4 mb-6">
@@ -262,7 +268,7 @@ export default function PhoneNumbersPage() {
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-lg">
-                          {countryCodes.find(c => c.code === countryCode)?.flag || "ðŸ‡®ðŸ‡³"}
+                          {countryCodes.find(c => c.code === countryCode)?.flag || "🇮🇳"}
                         </span>
                         <span className="text-sm text-gray-900">{countryCode}</span>
                       </div>
@@ -278,7 +284,8 @@ export default function PhoneNumbersPage() {
                     <input
                       type="tel"
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                      maxLength={10}
+                      onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
                       placeholder="Enter phone number"
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
@@ -294,9 +301,9 @@ export default function PhoneNumbersPage() {
                 </button>
                 <button
                   onClick={handleSaveEdit}
-                  disabled={!phoneNumber.trim()}
+                  disabled={phoneNumber.trim().length !== 10}
                   className={`flex-1 py-3 px-4 rounded-lg text-sm font-semibold transition-colors ${
-                    phoneNumber.trim()
+                    phoneNumber.trim().length === 10
                       ? "bg-black text-white hover:bg-gray-800"
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}

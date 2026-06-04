@@ -76,9 +76,9 @@ export const PickupActionModal = ({
   const isAtPickup = status === 'REACHED_PICKUP';
   const isPickupOtpVerified = !!order?.deliveryVerification?.pickupOtp?.verified;
   const needsPickupOtp = !!order?.deliveryVerification?.pickupOtp?.required;
-  const restaurantName = order.restaurantName || order.restaurant_name || 'Restaurant';
-  const restaurantAddress = order.restaurantAddress || order.restaurant_address || order.restaurantLocation?.address || 'Address not available';
-  const restaurantPhone = order.restaurantPhone || order.restaurant_phone || order.restaurantId?.phone || '';
+  const restaurantName = order.restaurantName || order.restaurant_name || order.restaurantId?.restaurantName || order.restaurantId?.name || 'Restaurant';
+  const restaurantAddress = order.restaurantAddress || order.restaurant_address || order.restaurantLocation?.address || order.restaurantId?.location?.address || order.restaurantId?.addressLine1 || 'Address not available';
+  const restaurantPhone = order.restaurantPhone || order.restaurant_phone || order.restaurantId?.phone || order.restaurantId?.primaryContactNumber || order.restaurantId?.ownerPhone || '';
   const items = order.items || [];
   const restaurantLogo = order.restaurantImage || order.restaurant?.logo || order.restaurant?.profileImage || 'https://cdn-icons-png.flaticon.com/512/3170/3170733.png';
 
@@ -138,7 +138,20 @@ export const PickupActionModal = ({
           <div className="flex gap-2">
             {restaurantPhone && (
               <button
-                onClick={() => window.location.href = `tel:${restaurantPhone}`}
+                onClick={(e) => {
+                  if (e && e.stopPropagation) e.stopPropagation();
+                  const cleanPhone = String(restaurantPhone).replace(/[^\d+]/g, '');
+                  try {
+                    const link = document.createElement('a');
+                    link.href = `tel:${cleanPhone}`;
+                    link.setAttribute('target', '_self');
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  } catch (err) {
+                    window.location.href = `tel:${cleanPhone}`;
+                  }
+                }}
                 className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100"
               >
                 <Phone className="w-5 h-5" />

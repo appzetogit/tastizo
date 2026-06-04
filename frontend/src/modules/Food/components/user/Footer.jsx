@@ -62,17 +62,16 @@ export default function Footer() {
       { name: "Favorites", href: "/user/profile/favorites" },
       { name: "Offers", href: "/user/offers" },
     ],
-    restaurants: [
-      { name: "Partner With Us", href: "/user/help" },
-      { name: "Restaurant Login", href: "/restaurant" },
-      { name: "Delivery", href: "/delivery" },
-    ],
+    partners: [
+      { name: "Register Restaurant", href: "/restaurant/welcome" },
+      { name: "Deliver with Tastizo", href: "/delivery/login" },
+    ]
   }
 
   return (
     <footer className="hidden md:block bg-zinc-900 text-white mt-auto">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-8 mb-8">
           {/* Brand Section */}
           <div className="lg:col-span-2 space-y-4">
             <div
@@ -185,6 +184,22 @@ export default function Footer() {
             <h3 className="font-bold text-lg mb-4 text-yellow-400">For You</h3>
             <ul className="space-y-2">
               {footerLinks.user.map((link, index) => (
+                <li key={index}>
+                  <Link
+                    to={link.href}
+                  >
+                    {link.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Partner Links */}
+          <div>
+            <h3 className="font-bold text-lg mb-4 text-yellow-400">Partners</h3>
+            <ul className="space-y-2">
+              {footerLinks.partners.map((link, index) => (
                 <li key={index}>
                   <Link
                     to={link.href}

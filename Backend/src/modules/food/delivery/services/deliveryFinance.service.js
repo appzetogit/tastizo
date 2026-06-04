@@ -84,7 +84,8 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
     const totalEarned = Number(earningsAgg?.[0]?.totalEarned) || 0;
     const grossCashCollected = Number(cashCollectedAgg?.[0]?.cashCollected) || 0;
     const totalDepositedCash = Number(cashDepositsAgg?.[0]?.depositedCash) || 0;
-    const cashInHand = Math.max(0, grossCashCollected - totalDepositedCash);
+    const netCashPending = grossCashCollected - totalDepositedCash;
+    const cashInHand = Math.max(0, netCashPending);
     const totalBonus = Number(bonusAgg?.[0]?.total) || 0;
     const totalWithdrawn = Number(withdrawalAgg?.[0]?.totalWithdrawn) || 0;
     const pendingWithdrawals = Number(withdrawalAgg?.[0]?.pendingWithdrawals) || 0;
@@ -146,7 +147,7 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
         totalEarned,
         totalBonus,
         totalCashLimit,
-        availableCashLimit: Math.max(0, totalCashLimit - cashInHand),
+        availableCashLimit: Math.max(0, totalCashLimit - netCashPending),
         deliveryWithdrawalLimit,
         transactions: transactions.slice(0, 50)
     };
@@ -199,9 +200,6 @@ export const createDeliveryCashDepositOrder = async (deliveryPartnerId, amountIn
     }
 
     const wallet = await getDeliveryPartnerWalletEnhanced(deliveryPartnerId);
-    if (amount > wallet.cashInHand) {
-        throw new ValidationError('Deposit amount cannot exceed cash in hand');
-    }
 
     const amountPaise = Math.round(amount * 100);
     const receipt = `cash_deposit_${String(deliveryPartnerId).slice(-8)}_${Date.now()}`;
@@ -252,9 +250,6 @@ export const verifyDeliveryCashDepositPayment = async (deliveryPartnerId, payloa
     }
 
     const wallet = await getDeliveryPartnerWalletEnhanced(deliveryPartnerId);
-    if (amount > wallet.cashInHand) {
-        throw new ValidationError('Deposit amount cannot exceed cash in hand');
-    }
 
     const isValid = isRazorpayConfigured()
         ? verifyPaymentSignature(orderId, paymentId, signature)

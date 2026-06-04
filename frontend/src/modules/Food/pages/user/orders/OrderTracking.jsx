@@ -371,11 +371,23 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
     total: apiOrder?.pricing?.total || previousOrder?.total || 0,
     // Backend canonical field is orderStatus; keep legacy `status` for UI compatibility.
     status: apiOrder?.orderStatus || apiOrder?.status || previousOrder?.status || 'pending',
-    deliveryPartner: apiOrder?.deliveryPartnerId ? {
-      name: apiOrder.deliveryPartnerId.name || apiOrder.deliveryPartnerId.fullName || 'Delivery Partner',
-      phone: apiOrder.deliveryPartnerId.phone || apiOrder.deliveryPartnerId.phoneNumber || '',
-      avatar: apiOrder.deliveryPartnerId.avatar || apiOrder.deliveryPartnerId.profilePicture || null
-    } : (previousOrder?.deliveryPartner || null),
+    deliveryPartner: (() => {
+      const partner = (apiOrder?.dispatch?.deliveryPartnerId && typeof apiOrder.dispatch.deliveryPartnerId === 'object')
+        ? apiOrder.dispatch.deliveryPartnerId
+        : (apiOrder?.deliveryPartnerId && typeof apiOrder.deliveryPartnerId === 'object')
+          ? apiOrder.deliveryPartnerId
+          : (apiOrder?.deliveryPartner && typeof apiOrder.deliveryPartner === 'object')
+            ? apiOrder.deliveryPartner
+            : null;
+      if (partner) {
+        return {
+          name: partner.name || partner.fullName || 'Delivery Partner',
+          phone: partner.phone || partner.phoneNumber || '',
+          avatar: partner.avatar || partner.profilePhoto || partner.profileImage || null
+        };
+      }
+      return previousOrder?.deliveryPartner || null;
+    })(),
     deliveryPartnerId: apiOrder?.deliveryPartnerId?._id || apiOrder?.deliveryPartnerId || apiOrder?.dispatch?.deliveryPartnerId?._id || apiOrder?.dispatch?.deliveryPartnerId || apiOrder?.assignmentInfo?.deliveryPartnerId || null,
     dispatch: apiOrder?.dispatch || previousOrder?.dispatch || null,
     assignmentInfo: apiOrder?.assignmentInfo || previousOrder?.assignmentInfo || null,
@@ -876,7 +888,11 @@ export default function OrderTracking() {
   const handleCallRider = (e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     
-    const rawPhone = order?.deliveryPartner?.phone || '';
+    const rawPhone =
+      order?.deliveryPartner?.phone ||
+      order?.dispatch?.deliveryPartnerId?.phone ||
+      order?.deliveryPartnerId?.phone ||
+      '';
     const cleanPhone = String(rawPhone).replace(/[^\d+]/g, '');
 
     if (!cleanPhone || cleanPhone.length < 5) {
@@ -1314,6 +1330,26 @@ export default function OrderTracking() {
     )
   }
 
+  const trackedRider = (() => {
+    if (order?.dispatch?.deliveryPartnerId && typeof order.dispatch.deliveryPartnerId === 'object') {
+      return order.dispatch.deliveryPartnerId;
+    } else if (order?.deliveryPartnerId && typeof order.deliveryPartnerId === 'object') {
+      return order.deliveryPartnerId;
+    } else if (order?.deliveryPartner) {
+      return order.deliveryPartner;
+    }
+    return null;
+  })();
+
+  const trackedRiderAvatar = trackedRider?.avatar || trackedRider?.profileImage || trackedRider?.profilePhoto || null;
+  const trackedRestaurantAvatar = order?.restaurantId?.image || order?.restaurant?.image || order?.restaurantId?.profileImage?.url || order?.restaurant?.profileImage?.url || null;
+
+  const isRiderPhase = ['assigned', 'at_pickup', 'ready', 'on_way', 'at_drop'].includes(orderStatus);
+  const suitableImageSrc = isRiderPhase ? (trackedRiderAvatar || trackedRestaurantAvatar) : trackedRestaurantAvatar;
+  const suitableImageAlt = isRiderPhase
+    ? (trackedRiderAvatar ? (trackedRider?.name || 'Rider') : (order?.restaurant || 'Restaurant'))
+    : (order?.restaurant || 'Restaurant');
+
   const statusConfig = {
     placed: {
       title: "Order Placed",
@@ -1584,10 +1620,10 @@ export default function OrderTracking() {
                   </div>
                 ) : (
                   <div className="w-14 h-14 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm border border-gray-100 bg-white">
-                    {order?.restaurantId?.image || order?.restaurant?.image || order?.restaurantId?.profileImage?.url || order?.restaurant?.profileImage?.url ? (
+                    {suitableImageSrc ? (
                       <img 
-                        src={order?.restaurantId?.image || order?.restaurant?.image || order?.restaurantId?.profileImage?.url || order?.restaurant?.profileImage?.url} 
-                        alt={order?.restaurant || "Restaurant"} 
+                        src={suitableImageSrc} 
+                        alt={suitableImageAlt} 
                         className="w-full h-full object-cover" 
                       />
                     ) : (

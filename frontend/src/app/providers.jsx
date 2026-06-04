@@ -2,6 +2,7 @@ import { BrowserRouter, HashRouter } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { StrictMode } from 'react'
 import { Provider as ReduxProvider } from 'react-redux'
+import { HelmetProvider } from 'react-helmet-async'
 import { store } from './store'
 
 function shouldUseHashRouter() {
@@ -25,11 +26,14 @@ export function AppProviders({ children }) {
   return (
     <StrictMode>
       <ReduxProvider store={store}>
-        <Router>
-          {children}
-          <Toaster position="top-center" richColors offset="80px" />
-        </Router>
+        <HelmetProvider>
+          <Router>
+            {children}
+            <Toaster position="top-center" richColors offset="80px" />
+          </Router>
+        </HelmetProvider>
       </ReduxProvider>
     </StrictMode>
   )
 }
+

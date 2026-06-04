@@ -394,15 +394,17 @@ export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, pla
     // 💡 Clone the payload to avoid side-effects (e.g. adding multiple prefixes to the same object during broadcasting)
     const enrichedPayload = { ...payload };
 
-    let ownerName = '';
+    // Fetch the user to get name and tokens in one go
+    let ownerName = "";
     let tokens = [];
-
     if (ownerType && ownerId) {
         const model = getOwnerModel(ownerType);
         if (model) {
-            const doc = await model.findById(ownerId).select('fcmTokens fcmTokenMobile name').lean();
+            const doc = await model.findById(ownerId).select('fullName firstName name restaurantName fcmTokens fcmTokenMobile').lean();
             if (doc) {
-                ownerName = doc.name ? doc.name.split(' ')[0] : '';
+                const fullName = doc.firstName || doc.fullName || doc.name || doc.restaurantName || "";
+                // Extract only the first name
+                ownerName = fullName.split(' ')[0];
                 tokens = readTokensFromDoc(doc, platform);
             }
         }
@@ -413,10 +415,17 @@ export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, pla
         const typeKey = String(ownerType || '').toUpperCase();
         let prefix = OWNER_APP_PREFIXES[typeKey] || '';
         
-        if (typeKey === 'DELIVERY_PARTNER' && ownerName) {
-            prefix = `🛵 [${ownerName}]`;
-        } else if (typeKey === 'USER' && ownerName) {
-            prefix = `👤 [${ownerName}]`;
+        // Dynamically replace generic brackets with actual name
+        if (prefix && ownerName) {
+            if (typeKey === 'DELIVERY_PARTNER') {
+                prefix = prefix.replace('[Rider]', ownerName);
+            } else if (typeKey === 'USER') {
+                prefix = prefix.replace('[User]', ownerName);
+            } else if (typeKey === 'RESTAURANT') {
+                prefix = prefix.replace('[Shop]', ownerName);
+            } else if (typeKey === 'ADMIN') {
+                prefix = prefix.replace('[Admin]', ownerName);
+            }
         }
         
         if (prefix) {

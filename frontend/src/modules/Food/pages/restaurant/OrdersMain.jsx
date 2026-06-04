@@ -2200,8 +2200,8 @@ export default function OrdersMain() {
         const tableData = orderToPrint.items.map((item) => [
           item.name || "Item",
           item.quantity || 1,
-          `₹${(item.price || 0).toFixed(2)}`,
-          `₹${((item.price || 0) * (item.quantity || 1)).toFixed(2)}`,
+          `Rs.${(item.price || 0).toFixed(2)}`,
+          `Rs.${((item.price || 0) * (item.quantity || 1)).toFixed(2)}`,
         ]);
 
         autoTable(doc, {
@@ -2228,7 +2228,7 @@ export default function OrdersMain() {
 
       // Total
       doc.setFontSize(12);
-      doc.text(`Total: ₹${(orderToPrint.total || 0).toFixed(2)}`, 20, yPos);
+      doc.text(`Total: Rs.${(orderToPrint.total || 0).toFixed(2)}`, 20, yPos);
 
       // Payment status
       yPos += 10;

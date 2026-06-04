@@ -62,6 +62,7 @@ export default function FeedNavbar({ className = "" }) {
   const companyName = useCompanyName()
   const navigate = useNavigate();
   const [logoUrl, setLogoUrl] = useState(null)
+  const [riderName, setRiderName] = useState("");
 
   // Load logo for branding
   useEffect(() => {
@@ -106,8 +107,17 @@ export default function FeedNavbar({ className = "" }) {
       localStorage.setItem(LS_KEY, JSON.stringify(isOnline));
       // Dispatch custom event for same-tab sync (storage event only works across tabs)
       window.dispatchEvent(new CustomEvent('onlineStatusChanged'));
+      
+      // Notify React Native WebView about initial/updated status
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: "DELIVERY_STATUS",
+          status: isOnline ? "online" : "offline",
+          riderName: riderName
+        }));
+      }
     } catch {}
-  }, [isOnline]);
+  }, [isOnline, riderName]);
 
   // 3) Optional: sync across tabs/windows
   useEffect(() => {
@@ -156,7 +166,8 @@ export default function FeedNavbar({ className = "" }) {
     if (window.ReactNativeWebView) {
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: "DELIVERY_STATUS",
-        status: next ? "online" : "offline"
+        status: next ? "online" : "offline",
+        riderName: riderName
       }));
     }
 
@@ -381,6 +392,9 @@ export default function FeedNavbar({ className = "" }) {
         const response = await deliveryAPI.getProfile();
         if (response?.data?.success && response?.data?.data?.profile) {
           const profile = response.data.data.profile;
+          if (profile.fullName || profile.firstName) {
+            setRiderName(profile.fullName || profile.firstName);
+          }
           // Use profileImage.url first, fallback to documents.photo
           const imageUrl = profile.profileImage?.url || profile.documents?.photo;
           if (imageUrl) {
@@ -593,4 +607,3 @@ export default function FeedNavbar({ className = "" }) {
     </>
   );
 }
-

@@ -45,6 +45,10 @@ const firstText = (...values) => {
 const formatMoney = (value) => `₹${Number(value || 0).toFixed(2)}`
 const formatDiscount = (value) => `-₹${Math.abs(Number(value || 0)).toFixed(2)}`
 
+// PDF-specific money format to avoid rupee encoding corruption
+const formatMoneyPDF = (value) => `Rs.${Number(value || 0).toFixed(2)}`
+const formatDiscountPDF = (value) => `-Rs.${Math.abs(Number(value || 0)).toFixed(2)}`
+
 
 export default function OrderDetails() {
   const navigate = useNavigate()
@@ -422,7 +426,7 @@ export default function OrderDetails() {
       `${item.quantity}x`,
       item.name,
       item.type || "-",
-      formatMoney(item.price)
+      formatMoneyPDF(item.price)
     ])
 
     // Use autoTable with the doc instance
@@ -459,26 +463,26 @@ export default function OrderDetails() {
     doc.setFontSize(10)
     doc.setFont("helvetica", "normal")
     const billRows = [
-      ["Item Subtotal:", formatMoney(orderData.billing.itemSubtotal)],
-      ["Taxes:", formatMoney(orderData.billing.taxes)],
+      ["Item Subtotal:", formatMoneyPDF(orderData.billing.itemSubtotal)],
+      ["Taxes:", formatMoneyPDF(orderData.billing.taxes)],
     ]
     if (Number(orderData.billing.packagingFee) > 0) {
-      billRows.push(["Packaging Fee:", formatMoney(orderData.billing.packagingFee)])
+      billRows.push(["Packaging Fee:", formatMoneyPDF(orderData.billing.packagingFee)])
     }
     if (Number(orderData.billing.deliveryFee) > 0) {
-      billRows.push(["Delivery Fee:", formatMoney(orderData.billing.deliveryFee)])
+      billRows.push(["Delivery Fee:", formatMoneyPDF(orderData.billing.deliveryFee)])
     }
     if (Number(orderData.billing.platformFee) > 0) {
-      billRows.push(["Platform Fee:", formatMoney(orderData.billing.platformFee)])
+      billRows.push(["Platform Fee:", formatMoneyPDF(orderData.billing.platformFee)])
     }
     if (Number(orderData.billing.discount) > 0) {
-      billRows.push(["Discount:", formatDiscount(orderData.billing.discount)])
+      billRows.push(["Discount:", formatDiscountPDF(orderData.billing.discount)])
     }
     if (Number(orderData.billing.couponDiscount) > 0) {
-      billRows.push(["Coupon Discount:", formatDiscount(orderData.billing.couponDiscount)])
+      billRows.push(["Coupon Discount:", formatDiscountPDF(orderData.billing.couponDiscount)])
     }
     if (Number(orderData.billing.referralDiscount) > 0) {
-      billRows.push(["Referral Discount:", formatDiscount(orderData.billing.referralDiscount)])
+      billRows.push(["Referral Discount:", formatDiscountPDF(orderData.billing.referralDiscount)])
     }
     billRows.forEach(([label, value]) => {
       doc.text(label, 15, yPosition)
@@ -495,13 +499,13 @@ export default function OrderDetails() {
     doc.setFont("helvetica", "bold")
     doc.setFontSize(11)
     doc.text("Total Bill:", leftMargin, yPosition)
-    doc.text(formatMoney(orderData.billing.total), pageWidth - rightMargin, yPosition, { align: "right" })
+    doc.text(formatMoneyPDF(orderData.billing.total), pageWidth - rightMargin, yPosition, { align: "right" })
     yPosition += 6
     if (Number(orderData.billing.paidAmount) > 0) {
       doc.setFont("helvetica", "normal")
       doc.setFontSize(10)
       doc.text("Amount Paid:", leftMargin, yPosition)
-      doc.text(formatMoney(orderData.billing.paidAmount), pageWidth - rightMargin, yPosition, { align: "right" })
+      doc.text(formatMoneyPDF(orderData.billing.paidAmount), pageWidth - rightMargin, yPosition, { align: "right" })
       yPosition += 6
     }
 

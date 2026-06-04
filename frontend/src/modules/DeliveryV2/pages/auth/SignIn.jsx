@@ -9,6 +9,8 @@ import { toast } from "sonner"
 import { deliveryAPI } from "@food/api"
 import { clearModuleAuth } from "@food/utils/auth"
 import deliveryImage from "@/assets/delivery.jpeg"
+import SEOHead from "@/shared/components/SEOHead"
+import { getDeliveryServiceSchema, getDeliveryFAQSchema, getBreadcrumbSchema } from "@/shared/seo/schemas"
 
 const REMEMBER_LOGIN_KEY = "delivery_login_phone"
 const DEFAULT_COUNTRY_CODE = "+91"
@@ -126,6 +128,19 @@ export default function DeliverySignIn() {
       className="min-h-screen flex items-start justify-center overflow-hidden"
       style={{ backgroundColor: "#ffffff" }}
     >
+      <SEOHead
+        title="Tastizo Delivery — Fast Online Food Delivery App | Order Food Online"
+        description="Tastizo Delivery brings food to your door in minutes. Order from top restaurants, track live, and pay with cash or online. Download the Tastizo food delivery app today!"
+        canonical="/delivery"
+        jsonLd={[
+          getDeliveryServiceSchema(),
+          getDeliveryFAQSchema(),
+          getBreadcrumbSchema([
+            { name: "Home", item: "/" },
+            { name: "Delivery Partner", item: "/delivery" }
+          ])
+        ]}
+      />
       <div className="mx-auto flex min-h-screen w-full sm:max-w-[400px] flex-col overflow-hidden">
         <div className="flex flex-1 flex-col bg-white">
           <div>

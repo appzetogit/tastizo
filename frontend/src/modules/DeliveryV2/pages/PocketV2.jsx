@@ -106,11 +106,6 @@ export const PocketV2 = () => {
       toast.error(`Enter a valid amount (minimum ${INR_SYMBOL}1)`);
       return;
     }
-    
-    if (amt > walletState.cashInHand) {
-       toast.error(`Deposit amount cannot exceed cash in hand (${INR_SYMBOL}${walletState.cashInHand})`);
-       return;
-    }
 
     try {
       setDepositing(true);

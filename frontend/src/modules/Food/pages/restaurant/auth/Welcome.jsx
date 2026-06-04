@@ -7,6 +7,8 @@ import loginBanner2 from "@food/assets/restaurant/loginbanner2.png"
 import loginBanner3 from "@food/assets/restaurant/loginbanner3.png"
 import loginBanner4 from "@food/assets/restaurant/loginbanner4.png"
 import { useCompanyName } from "@food/hooks/useCompanyName"
+import SEOHead from "@/shared/components/SEOHead"
+import { getRestaurantPartnerSchema, getRestaurantFAQSchema, getBreadcrumbSchema } from "@/shared/seo/schemas"
 
 // Carousel data with images and taglines
 const carouselData = [
@@ -181,6 +183,19 @@ export default function RestaurantWelcome() {
 
   return (
     <div className="h-screen w-full flex flex-col bg-black overflow-hidden">
+      <SEOHead
+        title="Tastizo Restaurant Partner — Grow Your Restaurant Business Online"
+        description="Partner with Tastizo to grow your restaurant. Get more orders, manage your menu, track earnings, and reach thousands of hungry customers. Register your restaurant on Tastizo today!"
+        canonical="/restaurant/welcome"
+        jsonLd={[
+          getRestaurantPartnerSchema(),
+          getRestaurantFAQSchema(),
+          getBreadcrumbSchema([
+            { name: "Home", item: "/" },
+            { name: "Restaurant Partner", item: "/restaurant/welcome" }
+          ])
+        ]}
+      />
       {/* Carousel Section - 70% height */}
       <div
         ref={carouselRef}

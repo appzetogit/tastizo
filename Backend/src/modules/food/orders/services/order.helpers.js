@@ -62,6 +62,22 @@ export function sanitizeOrderForExternal(orderDoc) {
   o.orderMongoId = (o._id || orderDoc?._id || "").toString();
   // Ensure orderId field for UI always contains the pretty ID
   o.orderId = o.order_id || o.orderMongoId; 
+
+  // Flatten restaurant details to ensure frontend compatibility
+  if (o.restaurantId) {
+    o.restaurantName = o.restaurantName || o.restaurantId.restaurantName || o.restaurantId.name || "";
+    o.restaurantAddress = o.restaurantAddress || o.restaurantId.location?.address || o.restaurantId.addressLine1 || "";
+    o.restaurantPhone = o.restaurantPhone || o.restaurantId.primaryContactNumber || o.restaurantId.ownerPhone || o.restaurantId.phone || "";
+  }
+
+  // Flatten user details to ensure frontend compatibility
+  if (o.userId) {
+    o.customerName = o.customerName || o.userId.name || "";
+    o.customerPhone = o.customerPhone || o.userId.phone || "";
+    o.userName = o.userName || o.userId.name || "";
+    o.userPhone = o.userPhone || o.userId.phone || "";
+  }
+
   return o;
 }
 
@@ -241,7 +257,7 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
       restaurantLocation?.formattedAddress ||
       restaurant?.addressLine1 ||
       "",
-    restaurantPhone: restaurant?.phone || "",
+    restaurantPhone: restaurant?.phone || restaurant?.primaryContactNumber || restaurant?.ownerPhone || "",
     restaurantLocation: {
       latitude: restaurantLocation?.latitude,
       longitude: restaurantLocation?.longitude,

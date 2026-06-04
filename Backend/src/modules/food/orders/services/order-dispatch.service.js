@@ -124,8 +124,9 @@ async function filterPartnersByCashLimit(partners = [], options = {}) {
     if (!partnerId) return null;
     const grossCash = grossCashByPartner.get(partnerId) || 0;
     const depositedCash = depositedByPartner.get(partnerId) || 0;
-    const cashInHand = Math.max(0, grossCash - depositedCash);
-    const availableCashLimit = Math.max(0, totalCashLimit - cashInHand);
+    const netCashPending = grossCash - depositedCash;
+    const cashInHand = Math.max(0, netCashPending);
+    const availableCashLimit = Math.max(0, totalCashLimit - netCashPending);
     return {
       ...p,
       availableCashLimit,

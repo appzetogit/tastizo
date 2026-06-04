@@ -313,6 +313,11 @@ const restaurantSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    contactNumbers: {
+      orderReminder1: { type: String, trim: true },
+      orderReminder2: { type: String, trim: true },
+      restaurantPage: { type: String, trim: true },
+    },
     fcmTokenMobile: {
       type: [String],
       default: [],

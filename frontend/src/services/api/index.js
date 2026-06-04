@@ -1461,6 +1461,10 @@ export const restaurantAPI = {
       params,
       contextModule: "restaurant",
     }),
+  deleteAccount: () =>
+    apiClient.delete("/food/restaurant/profile", {
+      contextModule: "restaurant",
+    }),
 };
 
 function stableStringify(value) {
