@@ -1227,6 +1227,10 @@ export const restaurantAPI = {
     apiClient.patch(`/food/restaurant/foods/${String(id)}`, body ?? {}, {
       contextModule: "restaurant",
     }),
+  deleteFood: (id) =>
+    apiClient.delete(`/food/restaurant/foods/${String(id)}`, {
+      contextModule: "restaurant",
+    }),
   /** Orders (restaurant dashboard) */
   getOrders: (() => {
     // Single-flight de-dupe to avoid duplicate GETs in React StrictMode / double-mount.
