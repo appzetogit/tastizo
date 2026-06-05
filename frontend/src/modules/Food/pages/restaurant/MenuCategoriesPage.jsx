@@ -88,7 +88,7 @@ export default function MenuCategoriesPage() {
       const list = response?.data?.data?.categories || []
       setCategories(Array.isArray(list) ? list : [])
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to load categories")
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to load categories")
       setCategories([])
     } finally {
       setLoading(false)
@@ -190,7 +190,7 @@ export default function MenuCategoriesPage() {
       resetModal()
       fetchCategories()
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to save category")
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to save category")
     } finally {
       setUploadingImage(false)
     }
@@ -208,7 +208,7 @@ export default function MenuCategoriesPage() {
       toast.success("Category deleted successfully")
       fetchCategories()
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to delete category")
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to delete category")
     }
   }
 
@@ -224,7 +224,7 @@ export default function MenuCategoriesPage() {
       toast.success("Category updated and sent for admin approval")
       fetchCategories()
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to update category")
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to update category")
     }
   }
 

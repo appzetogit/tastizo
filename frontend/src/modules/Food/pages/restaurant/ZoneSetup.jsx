@@ -186,7 +186,7 @@ export default function ZoneSetup() {
       debugLog("?? Loading Google Maps with Loader...")
       const loader = new Loader({
         apiKey,
-        version: "weekly",
+        version: "3.64",
         libraries: ["places"]
       })
 

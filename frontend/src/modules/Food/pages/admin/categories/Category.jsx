@@ -142,7 +142,7 @@ export default function Category() {
       } else if (error?.code === "ERR_NETWORK" || error?.message === "Network Error") {
         toast.error("Cannot connect to server. Please check if backend is running on " + API_BASE_URL.replace("/api", ""))
       } else {
-        toast.error(error?.response?.data?.message || "Failed to load categories")
+        toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to load categories")
       }
       setCategories([])
     } finally {
@@ -217,7 +217,7 @@ export default function Category() {
         fetchCategories()
       }
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to update category status")
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to update category status")
     }
   }
 
@@ -229,7 +229,7 @@ export default function Category() {
         fetchCategories()
       }
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to approve category")
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to approve category")
     }
   }
 
@@ -248,7 +248,7 @@ export default function Category() {
         fetchCategories()
       }
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to reject category")
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to reject category")
     }
   }
 
@@ -262,7 +262,7 @@ export default function Category() {
         fetchCategories()
       }
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to make category global")
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to make category global")
     }
   }
 
@@ -277,7 +277,7 @@ export default function Category() {
         fetchCategories()
       }
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to delete category")
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to delete category")
     }
   }
 
@@ -360,7 +360,7 @@ export default function Category() {
       if (error?.code === "ERR_NETWORK" || error?.message === "Network Error") {
         toast.error("Cannot connect to server. Please check if backend is running on " + API_BASE_URL.replace("/api", ""))
       } else {
-        toast.error(error?.response?.data?.message || "Failed to save category")
+        toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to save category")
       }
     } finally {
       setUploadingImage(false)

@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useState, useEffect } from "react"
 import { ArrowLeft, Receipt, Loader2 } from "lucide-react"
 import { motion } from "framer-motion"
@@ -11,6 +11,7 @@ import { API_ENDPOINTS } from "@food/api/config"
 export default function Refund() {
   const navigate = useNavigate()
   const goBack = useAppBackNavigation()
+  const location = useLocation()
   const [loading, setLoading] = useState(true)
   const [refundData, setRefundData] = useState({
     title: 'Refund Policy',
@@ -36,7 +37,9 @@ export default function Refund() {
   }
 
   const handleBack = () => {
-    if (window.history.length > 2) {
+    if (location.state?.from) {
+      navigate(location.state.from)
+    } else if (window.history.length > 2) {
       goBack()
     } else {
       navigate('/food/user')

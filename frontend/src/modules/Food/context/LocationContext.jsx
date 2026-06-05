@@ -402,7 +402,7 @@ const loadGoogleMapsNamespace = async () => {
       if (!apiKey) {
         throw new Error("Google Maps API key unavailable")
       }
-      const loader = new Loader({ apiKey, version: "weekly" })
+      const loader = new Loader({ apiKey, version: "3.64" })
       return loader.load()
     })().catch((error) => {
       googleMapsNamespacePromise = null

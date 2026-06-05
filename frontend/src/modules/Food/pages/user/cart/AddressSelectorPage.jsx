@@ -332,7 +332,7 @@ export default function AddressSelectorPage() {
 
     const initializeGoogleMap = async () => {
       try {
-        const loader = new Loader({ apiKey: GOOGLE_MAPS_API_KEY, version: "weekly" })
+        const loader = new Loader({ apiKey: GOOGLE_MAPS_API_KEY, version: "3.64" })
         const google = await loader.load()
         if (!isMounted || !mapContainerRef.current) return
 

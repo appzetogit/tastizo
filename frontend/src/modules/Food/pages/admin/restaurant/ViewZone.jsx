@@ -87,7 +87,7 @@ const coordinatesLength = useMemo(() => zone?.coordinates?.length || 0, [zone?.c
         debugLog("Loading Google Maps with Loader...")
         const loader = new Loader({
           apiKey: apiKey,
-          version: "weekly",
+          version: "3.64",
           libraries: ["geometry"],
         })
 

@@ -4,9 +4,9 @@ import { MapPin, ArrowLeft, Save, X, Hand, Shapes, Search } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { Loader } from "@googlemaps/js-api-loader"
-const debugLog = (...args) => {}
-const debugWarn = (...args) => {}
-const debugError = (...args) => {}
+const debugLog = (...args) => console.log("[AddZone]", ...args)
+const debugWarn = (...args) => console.warn("[AddZone]", ...args)
+const debugError = (...args) => console.error("[AddZone]", ...args)
 
 
 export default function AddZone() {
@@ -142,35 +142,66 @@ export default function AddZone() {
 
   const loadGoogleMaps = async () => {
     try {
+      debugLog("loadGoogleMaps started")
       const apiKey = await getGoogleMapsApiKey()
+      debugLog("Google Maps API Key retrieval result:", apiKey ? "Found key" : "No key found")
       setGoogleMapsApiKey(apiKey || "loaded")
       
       // Wait for Google Maps to be loaded from main.jsx if it's loading
       let retries = 0
       const maxRetries = 50 // Wait up to 5 seconds (50 * 100ms)
       
+      debugLog("Checking if window.google is defined...")
       while (!window.google && retries < maxRetries) {
         await new Promise(resolve => setTimeout(resolve, 100))
         retries++
       }
+      debugLog("After wait, window.google exists:", !!window.google, "retries:", retries)
 
-      // If Google Maps is already loaded (from main.jsx), use it directly
+      // If Google Maps is already loaded, check if drawing library is available
       if (window.google && window.google.maps) {
-        initializeMap(window.google)
-        return
+        debugLog("window.google.maps is available. checking drawing library...")
+        if (window.google.maps.drawing) {
+          debugLog("drawing library is already available, initializing map...")
+          initializeMap(window.google)
+          return
+        }
+
+        // Try importing the drawing library dynamically (modern official way)
+        if (typeof window.google.maps.importLibrary === "function") {
+          try {
+            debugLog("Trying to import drawing library via window.google.maps.importLibrary...")
+            await window.google.maps.importLibrary("drawing")
+            if (window.google.maps.drawing) {
+              debugLog("Imported drawing library successfully, initializing map...")
+              initializeMap(window.google)
+              return
+            } else {
+              debugWarn("window.google.maps.drawing is still undefined after importLibrary")
+            }
+          } catch (importError) {
+            debugError("Failed to import drawing library via importLibrary:", importError)
+          }
+        } else {
+          debugWarn("window.google.maps.importLibrary is not a function")
+        }
+
       }
 
       // If Google Maps is not loaded yet and we have an API key, use Loader as fallback
       if (apiKey) {
+        debugLog("Using js-api-loader as fallback...")
         const loader = new Loader({
           apiKey: apiKey,
-          version: "weekly",
+          version: "3.64",
           libraries: ["places", "drawing", "geometry"]
         })
 
         const google = await loader.load()
+        debugLog("js-api-loader loaded Google Maps, initializing map...")
         initializeMap(google)
       } else {
+        debugWarn("No API key and google maps not loaded, cannot proceed.")
         setMapLoading(false)
       }
     } catch (error) {
@@ -180,12 +211,17 @@ export default function AddZone() {
   }
 
   const initializeMap = (google) => {
-    if (!mapRef.current) return
+    debugLog("initializeMap called with google maps object:", !!google)
+    if (!mapRef.current) {
+      debugWarn("initializeMap: mapRef.current is null")
+      return
+    }
 
     // Initial location (India center)
     const initialLocation = { lat: 20.5937, lng: 78.9629 }
 
     // Create map
+    debugLog("Creating map instance...")
     const map = new google.maps.Map(mapRef.current, {
       center: initialLocation,
       zoom: 5,
@@ -204,8 +240,10 @@ export default function AddZone() {
     })
 
     mapInstanceRef.current = map
+    debugLog("Map instance created and stored in mapInstanceRef")
 
     // Initialize Drawing Manager
+    debugLog("Initializing Drawing Manager...")
     const drawingManager = new google.maps.drawing.DrawingManager({
       drawingMode: null,
       drawingControl: true, // Enable drawing controls
@@ -226,6 +264,7 @@ export default function AddZone() {
 
     drawingManager.setMap(map)
     drawingManagerRef.current = drawingManager
+    debugLog("DrawingManager created and set on map:", drawingManagerRef.current)
 
     // Track polygon path changes to show markers
     let currentPolygonPath = null
@@ -578,13 +617,24 @@ export default function AddZone() {
   }
 
   const toggleDrawingMode = () => {
-    if (!drawingManagerRef.current) return
+    debugLog("toggleDrawingMode: 'Start/Stop Drawing' button clicked")
+    debugLog("toggleDrawingMode: Current isDrawing status =", isDrawing)
+    debugLog("toggleDrawingMode: drawingManagerRef.current =", drawingManagerRef.current)
+    
+    if (!drawingManagerRef.current) {
+      debugWarn("toggleDrawingMode: drawingManagerRef.current is not set! Drawing Manager is not initialized.")
+      alert("Drawing Manager is not initialized yet. Please make sure Google Maps loaded successfully.")
+      return
+    }
     
     if (isDrawing) {
+      debugLog("toggleDrawingMode: Stopping drawing mode (setting drawingMode to null)")
       drawingManagerRef.current.setDrawingMode(null)
       setIsDrawing(false)
     } else {
-      drawingManagerRef.current.setDrawingMode(window.google?.maps?.drawing?.OverlayType?.POLYGON || "polygon")
+      const polygonMode = window.google?.maps?.drawing?.OverlayType?.POLYGON || "polygon"
+      debugLog("toggleDrawingMode: Starting drawing mode with mode:", polygonMode)
+      drawingManagerRef.current.setDrawingMode(polygonMode)
       setIsDrawing(true)
     }
   }

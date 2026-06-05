@@ -141,6 +141,17 @@ export default function UserLayout() {
 
   const isUnder250 = normalizedPath === "/under-250" || normalizedPath === "/user/under-250"
 
+  const disableLocationPrompt =
+    normalizedPath.includes("/profile/terms") ||
+    normalizedPath.includes("/profile/privacy") ||
+    normalizedPath.includes("/profile/refund") ||
+    normalizedPath.includes("/profile/shipping") ||
+    normalizedPath.includes("/profile/cancellation") ||
+    normalizedPath.includes("/data-deletion") ||
+    normalizedPath.includes("/help") ||
+    normalizedPath.includes("/auth/") ||
+    normalizedPath.includes("/login")
+
   return (
     <div className="min-h-screen bg-white dark:bg-[#0a0a0a] transition-colors duration-200">
       <CartProvider>
@@ -154,7 +165,7 @@ export default function UserLayout() {
                   <div className="hidden md:block">
                     {showBottomNav && <DesktopNavbar showLogo={!isUnder250} />}
                   </div>
-                  <LocationPrompt />
+                  {!disableLocationPrompt && <LocationPrompt />}
                   <main className={`page-content ${showBottomNav ? "mobile-has-bottom-nav md:pt-40" : ""}`}>
                     <Outlet />
                   </main>

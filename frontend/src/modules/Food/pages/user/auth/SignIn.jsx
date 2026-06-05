@@ -284,15 +284,15 @@ export default function SignIn() {
               <div className="text-center text-[0.78rem] leading-5 text-[#67635f]">
                 <p>By continuing, you agree to our</p>
                 <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5">
-                  <Link to="/profile/terms" className="underline underline-offset-2 hover:text-black transition-colors">
+                  <Link to="/profile/terms" state={{ from: "/user/auth/login" }} className="underline underline-offset-2 hover:text-black transition-colors">
                     Terms of Service
                   </Link>
                   <span>•</span>
-                  <Link to="/profile/privacy" className="underline underline-offset-2 hover:text-black transition-colors">
+                  <Link to="/profile/privacy" state={{ from: "/user/auth/login" }} className="underline underline-offset-2 hover:text-black transition-colors">
                     Privacy Policy
                   </Link>
                   <span>•</span>
-                  <Link to="/profile/refund" className="underline underline-offset-2 hover:text-black transition-colors">
+                  <Link to="/profile/refund" state={{ from: "/user/auth/login" }} className="underline underline-offset-2 hover:text-black transition-colors">
                     Content Policy
                   </Link>
                 </div>
@@ -451,15 +451,15 @@ export default function SignIn() {
             <div className="text-center text-[0.78rem] leading-5 text-[#67635f]">
               <p>By continuing, you agree to our</p>
               <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5">
-                <Link to="/profile/terms" className="underline underline-offset-2 hover:text-black transition-colors">
+                <Link to="/profile/terms" state={{ from: "/user/auth/login" }} className="underline underline-offset-2 hover:text-black transition-colors">
                   Terms of Service
                 </Link>
                 <span>•</span>
-                <Link to="/profile/privacy" className="underline underline-offset-2 hover:text-black transition-colors">
+                <Link to="/profile/privacy" state={{ from: "/user/auth/login" }} className="underline underline-offset-2 hover:text-black transition-colors">
                   Privacy Policy
                 </Link>
                 <span>•</span>
-                <Link to="/profile/refund" className="underline underline-offset-2 hover:text-black transition-colors">
+                <Link to="/profile/refund" state={{ from: "/user/auth/login" }} className="underline underline-offset-2 hover:text-black transition-colors">
                   Content Policy
                 </Link>
               </div>
