@@ -72,6 +72,7 @@ router.patch('/restaurants/:id/location', adminController.updateRestaurantLocati
 router.patch('/restaurants/:id/menu', adminController.updateRestaurantMenuById);
 router.patch('/restaurants/:id/approve', adminController.approveRestaurant);
 router.patch('/restaurants/:id/reject', adminController.rejectRestaurant);
+router.delete('/restaurants/:id', adminController.deleteRestaurantById);
 
 // ----- Restaurant Commission -----
 router.get('/restaurant-commissions/bootstrap', adminController.getRestaurantCommissionBootstrap);

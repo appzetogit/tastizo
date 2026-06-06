@@ -293,7 +293,7 @@ export default function SignIn() {
                   </Link>
                   <span>•</span>
                   <Link to="/profile/refund" state={{ from: "/user/auth/login" }} className="underline underline-offset-2 hover:text-black transition-colors">
-                    Content Policy
+                    Refund Policy
                   </Link>
                 </div>
               </div>
@@ -460,7 +460,7 @@ export default function SignIn() {
                 </Link>
                 <span>•</span>
                 <Link to="/profile/refund" state={{ from: "/user/auth/login" }} className="underline underline-offset-2 hover:text-black transition-colors">
-                  Content Policy
+                  Refund Policy
                 </Link>
               </div>
             </div>

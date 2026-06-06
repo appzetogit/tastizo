@@ -8,6 +8,39 @@ import api from "@food/api"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { API_ENDPOINTS } from "@food/api/config"
 
+const DEFAULT_TERMS = `
+<h2><strong>1. Introduction</strong></h2>
+<p>These Terms of Service govern your use of the Tastizo platform. By accessing or using our services, you agree to be bound by these terms.</p>
+<h2><strong>2. User Obligations</strong></h2>
+<ul>
+  <li>Provide accurate information during registration.</li>
+  <li>Comply with all applicable laws.</li>
+  <li>Do not misuse the platform for illegal activities.</li>
+</ul>
+<h2><strong>3. Order Processing</strong></h2>
+<p>All orders are subject to acceptance by the restaurant partner. Prices, availability, and delivery times may vary.</p>
+<h2><strong>4. Intellectual Property</strong></h2>
+<p>All content, logos, and trademarks on Tastizo are owned by Tastizo or its licensors.</p>
+<h2><strong>5. Limitation of Liability</strong></h2>
+<p>Tastizo is not liable for any indirect, incidental, or consequential damages arising from use of the platform.</p>
+<h2><strong>6. Governing Law</strong></h2>
+<p>These terms are governed by the laws of India, and any disputes shall be resolved in Indian courts.</p>
+<p>Last updated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+`;
+
+const DEFAULT_REFUND = `
+<h2><strong>Refund Policy</strong></h2>
+<p>Refunds are provided only for prepaid orders that are cancelled within 60 seconds of placement. After this window, the order is considered finalized and no refund will be issued.</p>
+<h2><strong>Eligibility</strong></h2>
+<ul>
+  <li>Order must be cancelled within 60 seconds.</li>
+  <li>Order must not have been accepted by the restaurant.</li>
+</ul>
+<h2><strong>Process</strong></h2>
+<p>Refunds will be processed to the original payment method within 5-7 business days.</p>
+<p>If you have any issues, contact support at <strong>support@tastizo.com</strong>.</p>
+`;
+
 export default function Terms() {
   const navigate = useNavigate()
   const goBack = useAppBackNavigation()
@@ -93,7 +126,7 @@ export default function Terms() {
                 prose-strong:text-gray-900 dark:prose-strong:text-white
                 prose-a:text-[#CB202D] dark:prose-a:text-[#2A9C64]
                 prose-li:text-gray-600 dark:prose-li:text-gray-400"
-              dangerouslySetInnerHTML={{ __html: termsData.content }}
+              dangerouslySetInnerHTML={{ __html: termsData.content || DEFAULT_TERMS }}
             />
           ) : (
             <div className="text-center py-20">

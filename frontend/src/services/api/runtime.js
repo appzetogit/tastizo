@@ -6,8 +6,17 @@ export const resolveApiBaseUrl = () => {
       ? sanitizeBaseUrl(import.meta.env.VITE_API_BASE_URL)
       : "";
 
-  if (explicitBaseUrl) {
+  const isLocalhostExplicit = explicitBaseUrl.includes("localhost") || explicitBaseUrl.includes("127.0.0.1");
+
+  if (explicitBaseUrl && !(import.meta.env?.PROD && isLocalhostExplicit)) {
     return explicitBaseUrl;
+  }
+
+  if (typeof window !== "undefined" && typeof window.location?.hostname === "string") {
+    const hostname = window.location.hostname;
+    if (hostname === "tastizo.com" || hostname === "www.tastizo.com" || hostname.endsWith(".tastizo.com")) {
+      return "https://api.tastizo.com/api/v1";
+    }
   }
 
   // In production, prefer the current origin so deployed frontend + backend on the

@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useState, useEffect } from "react"
 import { ArrowLeft, XCircle, Loader2 } from "lucide-react"
 import { motion } from "framer-motion"
@@ -8,8 +8,29 @@ import api from "@food/api"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { API_ENDPOINTS } from "@food/api/config"
 
+const DEFAULT_CANCELLATION_POLICY = `
+<h2><strong>1. Order Cancellation Policy</strong></h2>
+<p>At Tastizo, we strive to deliver your orders as quickly as possible. Once an order is placed, it is sent immediately to our restaurant partner for preparation. Because of this, the following cancellation rules apply:</p>
+<ul>
+  <li><strong>Cancellation within 60 seconds:</strong> You may cancel your order within 60 seconds of placing it without any cancellation fee. You will receive a 100% refund for prepaid orders.</li>
+  <li><strong>Cancellation after 60 seconds:</strong> Once 60 seconds have passed or the restaurant has accepted and started preparing your order, cancellation is not permitted. If you choose to cancel, a cancellation fee of up to 100% of the order value will be charged to compensate our restaurant and delivery partners.</li>
+  <li><strong>Failure to deliver:</strong> If our delivery partner is unable to contact you or deliver the order due to incorrect address or lack of response at the door, the order will be cancelled, and no refund will be issued.</li>
+</ul>
+
+<h2><strong>2. Table Booking Cancellation Policy</strong></h2>
+<p>If you book a dining table at any of our partner restaurants via Tastizo:</p>
+<ul>
+  <li><strong>Free Cancellation:</strong> You can cancel your table reservation up to 2 hours before your scheduled booking slot without any charges.</li>
+  <li><strong>Late Cancellations & No-Shows:</strong> If you cancel within 2 hours of your slot or fail to arrive within 15 minutes of your scheduled time (no-show), your booking will be cancelled automatically, and any reservation fee paid will be non-refundable.</li>
+</ul>
+
+<h2><strong>3. Contact Us</strong></h2>
+<p>If you have any questions regarding cancellations, please reach out to our customer support team at <strong>support@tastizo.com</strong> or via the Help Center in the app.</p>
+`;
+
 export default function Cancellation() {
   const navigate = useNavigate()
+  const location = useLocation()
   const goBack = useAppBackNavigation()
   const [loading, setLoading] = useState(true)
   const [cancellationData, setCancellationData] = useState({
@@ -84,32 +105,22 @@ export default function Cancellation() {
           animate={{ opacity: 1, y: 0 }}
           className="bg-white dark:bg-[#111] rounded-[2rem] p-6 md:p-10 shadow-sm border border-gray-50 dark:border-gray-900"
         >
-          {cancellationData.content ? (
-            <div
-              className="prose prose-slate dark:prose-invert max-w-none
-                prose-headings:font-black prose-headings:text-gray-900 dark:prose-headings:text-white
-                prose-p:text-gray-600 dark:prose-p:text-gray-400 prose-p:leading-relaxed
-                prose-strong:text-gray-900 dark:prose-strong:text-white
-                prose-a:text-[#CB202D] dark:prose-a:text-[#2A9C64]
-                prose-li:text-gray-600 dark:prose-li:text-gray-400"
-              dangerouslySetInnerHTML={{ __html: cancellationData.content }}
-            />
-          ) : (
-            <div className="text-center py-20">
-               <XCircle className="w-16 h-16 text-gray-100 dark:text-gray-800 mx-auto mb-4" />
-               <p className="text-gray-400 font-medium">No content available at the moment.</p>
-            </div>
-          )}
+          <div
+            className="prose prose-slate dark:prose-invert max-w-none
+              prose-headings:font-black prose-headings:text-gray-900 dark:prose-headings:text-white
+              prose-p:text-gray-600 dark:prose-p:text-gray-400 prose-p:leading-relaxed
+              prose-strong:text-gray-900 dark:prose-strong:text-white
+              prose-a:text-[#CB202D] dark:prose-a:text-[#2A9C64]
+              prose-li:text-gray-600 dark:prose-li:text-gray-400"
+            dangerouslySetInnerHTML={{ __html: cancellationData.content || DEFAULT_CANCELLATION_POLICY }}
+          />
         </motion.div>
 
         <p className="text-center mt-10 text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] leading-relaxed">
           Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} <br />
-          Â© {new Date().getFullYear()} Tastizo. All Rights Reserved.
+          © {new Date().getFullYear()} Tastizo. All Rights Reserved.
         </p>
       </div>
     </AnimatedPage>
   )
 }
-
-
-

@@ -8,6 +8,29 @@ import api from "@food/api"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { API_ENDPOINTS } from "@food/api/config"
 
+const DEFAULT_REFUND = `
+<h2><strong>Refund Policy</strong></h2>
+<p>Refunds are provided only for prepaid orders that are cancelled within 60 seconds of placement. After this window, the order is considered finalized and no refund will be issued.</p>
+<h2><strong>Eligibility</strong></h2>
+<ul>
+  <li>Order must be cancelled within 60 seconds.</li>
+  <li>Order must not have been accepted by the restaurant.</li>
+</ul>
+<h2><strong>Process</strong></h2>
+<p>Refunds will be processed to the original payment method within 5-7 business days.</p>
+<p>If you have any issues, contact support at <strong>support@tastizo.com</strong>.</p>
+`;
+
+const DEFAULT_SHIPPING = `
+<h2><strong>Shipping Policy</strong></h2>
+<p>All food deliveries are performed by our partner delivery personnel. Delivery times are estimates and may vary based on traffic, weather, and restaurant preparation times.</p>
+<h2><strong>Charges</strong></h2>
+<p>Shipping fees are displayed at checkout and are non-refundable once the order is placed.</p>
+<h2><strong>Responsibility</strong></h2>
+<p>Tastizo is not responsible for delays caused by external factors. If an order is undeliverable due to an incorrect address, additional charges may apply.</p>
+<p>For any concerns, reach out to <strong>support@tastizo.com</strong>.</p>
+`;
+
 export default function Refund() {
   const navigate = useNavigate()
   const goBack = useAppBackNavigation()
@@ -93,7 +116,7 @@ export default function Refund() {
                 prose-strong:text-gray-900 dark:prose-strong:text-white
                 prose-a:text-[#CB202D] dark:prose-a:text-[#2A9C64]
                 prose-li:text-gray-600 dark:prose-li:text-gray-400"
-              dangerouslySetInnerHTML={{ __html: refundData.content }}
+              dangerouslySetInnerHTML={{ __html: refundData.content || DEFAULT_REFUND }}
             />
           ) : (
             <div className="text-center py-20">

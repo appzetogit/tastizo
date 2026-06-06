@@ -439,6 +439,20 @@ export async function updateRestaurantLocation(req, res, next) {
     }
 }
 
+export async function deleteRestaurantById(req, res, next) {
+    try {
+        const { id } = req.params;
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid restaurant id' });
+        }
+        const { deleteRestaurantProfile } = await import('../../restaurant/services/restaurant.service.js');
+        const result = await deleteRestaurantProfile(id);
+        res.status(200).json({ success: true, message: 'Restaurant deleted successfully', data: result });
+    } catch (error) {
+        next(error);
+    }
+}
+
 // ----- Foods -----
 export async function getFoods(req, res, next) {
     try {

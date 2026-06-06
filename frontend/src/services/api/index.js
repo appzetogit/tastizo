@@ -1538,13 +1538,30 @@ export const publicGetOnce = (url, config = {}) => {
   );
 };
 
+const filterDummyRestaurants = (res) => {
+  if (!res || !res.data) return res;
+  
+  if (res.data.data && Array.isArray(res.data.data.restaurants)) {
+    res.data.data.restaurants = res.data.data.restaurants.filter(r => {
+      const name = String(r.restaurantName || r.name || "").toLowerCase();
+      return !name.includes("dummy");
+    });
+  } else if (Array.isArray(res.data.restaurants)) {
+    res.data.restaurants = res.data.restaurants.filter(r => {
+      const name = String(r.restaurantName || r.name || "").toLowerCase();
+      return !name.includes("dummy");
+    });
+  }
+  return res;
+};
+
 const getPublicRestaurantsOnce = (params = {}, config = {}) => {
   const { noCache, ...axiosConfig } = config || {};
   if (noCache) {
     return apiClient.get("/food/restaurant/restaurants", {
       params: { limit: 1000, ...params },
       ...axiosConfig,
-    });
+    }).then(filterDummyRestaurants);
   }
   const keyParams = { limit: 1000, ...params };
   // `_ts` is an explicit cache-buster in many call sites; ignore it for dedupe purposes.
@@ -1556,7 +1573,7 @@ const getPublicRestaurantsOnce = (params = {}, config = {}) => {
     apiClient.get("/food/restaurant/restaurants", {
       params: { limit: 1000, ...params },
       ...axiosConfig,
-    }),
+    }).then(filterDummyRestaurants)
   );
 };
 
@@ -2696,7 +2713,7 @@ export const diningAPI = {
   getCategories: (params = {}) =>
     apiClient.get("/food/dining/categories/public", { params }),
   getRestaurants: (params = {}) =>
-    apiClient.get("/food/dining/restaurants/public", { params }),
+    apiClient.get("/food/dining/restaurants/public", { params }).then(filterDummyRestaurants),
   getHeroBanners: () => apiClient.get("/food/hero-banners/dining/public"),
   getRestaurantBySlug: async (slug) => {
     try {

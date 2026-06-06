@@ -8,6 +8,16 @@ import api from "@food/api"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { API_ENDPOINTS } from "@food/api/config"
 
+const DEFAULT_SHIPPING = `
+<h2><strong>Shipping Policy</strong></h2>
+<p>All food deliveries are performed by our partner delivery personnel. Delivery times are estimates and may vary based on traffic, weather, and restaurant preparation times.</p>
+<h2><strong>Charges</strong></h2>
+<p>Shipping fees are displayed at checkout and are non-refundable once the order is placed.</p>
+<h2><strong>Responsibility</strong></h2>
+<p>Tastizo is not responsible for delays caused by external factors. If an order is undeliverable due to an incorrect address, additional charges may apply.</p>
+<p>For any concerns, reach out to <strong>support@tastizo.com</strong>.</p>
+`;
+
 export default function Shipping() {
   const navigate = useNavigate()
   const goBack = useAppBackNavigation()
@@ -90,7 +100,7 @@ export default function Shipping() {
                 prose-strong:text-gray-900 dark:prose-strong:text-white
                 prose-a:text-[#CB202D] dark:prose-a:text-[#2A9C64]
                 prose-li:text-gray-600 dark:prose-li:text-gray-400"
-              dangerouslySetInnerHTML={{ __html: shippingData.content }}
+              dangerouslySetInnerHTML={{ __html: shippingData.content || DEFAULT_SHIPPING }}
             />
           ) : (
             <div className="text-center py-20">
