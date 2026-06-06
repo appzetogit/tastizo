@@ -93,6 +93,7 @@ import { API_BASE_URL } from "@food/api/config";
 import OptimizedImage from "@food/components/OptimizedImage";
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability";
 import HomeHeader from "@food/components/user/home/HomeHeader";
+import DesktopHomeView from "@food/components/user/home/DesktopHomeView";
 import QuickSection from "@food/components/user/home/QuickSection";
 import PromoRow from "@food/components/user/home/PromoRow";
 import FestBanner from "@food/components/user/home/FestBanner";
@@ -2711,6 +2712,23 @@ export default function Home() {
         `}</style>
         </div>
 
+        <DesktopHomeView
+          filteredRestaurants={filteredRestaurants}
+          finalExploreItems={finalExploreItems}
+          displayCategories={displayCategories}
+          exploreMoreHeading={exploreMoreHeading}
+          showExploreSkeleton={showExploreSkeleton}
+          showRestaurantSkeleton={showRestaurantSkeleton}
+          showCategorySkeleton={showCategorySkeleton}
+          openSearch={openSearch}
+          searchValue={searchValue}
+          setSearchValue={setSearchValue}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          festBannerVideoUrl={festBannerVideoUrl}
+          festVideoActive={festVideoActive}
+        />
+
         <div className="md:hidden relative bg-white dark:bg-[#0a0a0a]">
           {/* Brand Top Section (Dark) */}
           <div className="relative overflow-hidden bg-gradient-to-b from-[#3a142c] to-[#1a0a14] rounded-b-[2rem] shadow-lg mb-2">
@@ -3036,7 +3054,7 @@ export default function Home() {
 
         {!shouldShowOutOfZoneHome && recommendedForYouRestaurants.length > 0 && (
           <motion.section
-            className="content-auto pt-1 sm:pt-2"
+            className="md:hidden content-auto pt-1 sm:pt-2"
             initial={false}
             animate={{ opacity: 1, y: 0 }}>
             <h2 className="text-xs sm:text-sm lg:text-base font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-2 sm:mb-3 px-4">
@@ -3089,7 +3107,7 @@ export default function Home() {
 
         {!shouldShowOutOfZoneHome && (
           <motion.section
-            className="content-auto pt-2 sm:pt-3 lg:pt-4"
+            className="md:hidden content-auto pt-2 sm:pt-3 lg:pt-4"
             initial={false}
             animate={{ opacity: 1, y: 0 }}>
             <div className="px-4 mb-6 flex items-center gap-2">
@@ -3162,7 +3180,7 @@ export default function Home() {
 
         {/* Restaurants - Enhanced with Animations */}
         <motion.section
-          className={`content-auto space-y-0 pt-3 sm:pt-4 lg:pt-6 ${shouldShowOutOfZoneHome ? "pb-0" : "pb-8 md:pb-10"}`}
+          className={`md:hidden content-auto space-y-0 pt-3 sm:pt-4 lg:pt-6 ${shouldShowOutOfZoneHome ? "pb-0" : "pb-8 md:pb-10"}`}
           initial={false}
           animate={{ opacity: 1 }}>
           <div className="px-4 mb-3 lg:mb-4">
