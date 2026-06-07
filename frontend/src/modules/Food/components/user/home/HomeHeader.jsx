@@ -163,7 +163,7 @@ export default function HomeHeader({
   };
 
   return (
-    <div className="relative pt-7 pb-0 px-4 transition-all duration-700 overflow-hidden bg-transparent shadow-none">
+    <div className="relative pt-7 pb-3 px-4 transition-all duration-700 overflow-hidden bg-transparent shadow-none">
       {/* Subtle Artistic Glows - Adds depth without being 'boring' */}
       <div className="absolute top-[-20%] right-[-10%] w-48 h-48 bg-[#2A9C64]/5 blur-[80px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-20%] left-[-10%] w-48 h-48 bg-[#48c479]/5 blur-[80px] rounded-full pointer-events-none" />
@@ -289,21 +289,7 @@ export default function HomeHeader({
           </div>
         </div>
 
-        {/* Quick Navigation Links (SEO-rich internal linking) */}
-        <div className="flex items-center justify-center gap-4 pt-1.5 pb-0.5 text-[10px] sm:text-[11px] font-bold text-white/90">
-          <Link to="/user/offers" className="hover:text-yellow-300 transition-colors flex items-center gap-1">
-            <Gift className="h-3 w-3 text-yellow-300" />
-            <span>Offers</span>
-          </Link>
-          <div className="w-[1px] h-3 bg-white/25" />
-          <Link to="/restaurant/welcome" className="hover:text-yellow-300 transition-colors">
-            Register Restaurant
-          </Link>
-          <div className="w-[1px] h-3 bg-white/25" />
-          <Link to="/delivery/login" className="hover:text-yellow-300 transition-colors">
-            Rider Careers
-          </Link>
-        </div>
+
       </div>
     </div>
   );
