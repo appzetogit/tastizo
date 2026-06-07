@@ -149,7 +149,7 @@ export default function DesktopHomeView({
                   className="flex-shrink-0"
                 >
                   <Link
-                    to={`/food/user/category/${category.slug}`}
+                    to={`/user/category/${category.slug}`}
                     className="flex flex-col items-center gap-4 group"
                   >
                     <div className="relative w-32 h-32 rounded-[2rem] overflow-hidden bg-white dark:bg-[#1a1a1a] shadow-[0_8px_20px_rgb(0,0,0,0.06)] group-hover:shadow-[0_15px_30px_rgb(0,0,0,0.12)] border border-gray-100 dark:border-gray-800 transition-all duration-300 group-hover:border-green-200 dark:group-hover:border-green-800/50">
@@ -221,7 +221,7 @@ export default function DesktopHomeView({
                     transition={{ duration: 0.5, delay: (index % 4) * 0.1 }}
                   >
                     <Link
-                      to={`/food/user/restaurant/${restaurant.slug}`}
+                      to={`/user/restaurants/${restaurant.slug}`}
                       className="group block h-full bg-white dark:bg-[#121212] rounded-[2rem] p-3 shadow-[0_8px_20px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.12)] dark:shadow-none dark:border dark:border-gray-800 dark:hover:border-green-800/50 transition-all duration-300"
                     >
                       {/* Image Container */}
