@@ -391,7 +391,7 @@ export default function Cart() {
       phone: userProfile?.phone || "",
       location: {
         type: "Point",
-        coordinates: [loc.longitude, loc.latitude], // [lng, lat]
+        coordinates: [Number(loc.longitude) || 0, Number(loc.latitude) || 0], // [lng, lat]
       },
     }
   }, [
@@ -630,8 +630,8 @@ export default function Cart() {
     : null
 
   const checkoutRestaurantObjectId = useMemo(
-    () => getRestaurantObjectId(restaurantData) || cartRestaurantObjectId || null,
-    [restaurantData, cartRestaurantObjectId],
+    () => getRestaurantObjectId(restaurantData) || getRestaurantPublicId(restaurantData) || cartRestaurantObjectId || cartRestaurantPublicId || null,
+    [restaurantData, cartRestaurantObjectId, cartRestaurantPublicId],
   )
 
   // Stable restaurant ID for addons fetch (memoized to prevent dependency array issues)
@@ -1037,13 +1037,13 @@ export default function Cart() {
       try {
         setLoadingPricing(true)
         const items = cart.map(item => ({
-          itemId: item.itemId || item.id,
-          name: item.name,
-          price: item.price, // Price should already be in INR
+          itemId: String(item.itemId || item.id || item._id || ''),
+          name: String(item.name || item.itemName || 'Item'),
+          price: Number(item.price) || 0, // Price should already be in INR
           variantId: item.variantId || undefined,
           variantName: item.variantName || undefined,
-          variantPrice: item.variantPrice || item.price,
-          quantity: item.quantity || 1,
+          variantPrice: item.variantPrice ? Number(item.variantPrice) : Number(item.price) || 0,
+          quantity: Number(item.quantity) || 1,
           image: item.image,
           description: item.description,
           isVeg: item.isVeg !== false
@@ -1079,6 +1079,7 @@ export default function Cart() {
         // Network errors or 404 errors - silently handle, fallback to frontend calculation
         if (error.code !== 'ERR_NETWORK' && error.response?.status !== 404) {
           debugError("Error calculating pricing:", error)
+          console.error("Calculate Pricing Error Response:", error.response?.data)
         }
         // Fallback to frontend calculation if backend fails
         setPricing(null)
@@ -1447,13 +1448,13 @@ export default function Cart() {
     if (cart.length > 0 && hasSavedAddress) {
       try {
         const items = cart.map(item => ({
-          itemId: item.itemId || item.id,
-          name: item.name,
-          price: item.price,
+          itemId: String(item.itemId || item.id || item._id || ''),
+          name: String(item.name || item.itemName || 'Item'),
+          price: Number(item.price) || 0,
           variantId: item.variantId || undefined,
           variantName: item.variantName || undefined,
-          variantPrice: item.variantPrice || item.price,
-          quantity: item.quantity || 1,
+          variantPrice: item.variantPrice ? Number(item.variantPrice) : Number(item.price) || 0,
+          quantity: Number(item.quantity) || 1,
           image: item.image,
           description: item.description,
           isVeg: item.isVeg !== false
@@ -1508,13 +1509,13 @@ export default function Cart() {
 
     try {
       const items = cart.map(item => ({
-        itemId: item.itemId || item.id,
-        name: item.name,
-        price: item.price,
+        itemId: String(item.itemId || item.id || item._id || ''),
+        name: String(item.name || item.itemName || 'Item'),
+        price: Number(item.price) || 0,
         variantId: item.variantId || undefined,
         variantName: item.variantName || undefined,
-        variantPrice: item.variantPrice || item.price,
-        quantity: item.quantity || 1,
+        variantPrice: item.variantPrice ? Number(item.variantPrice) : Number(item.price) || 0,
+        quantity: Number(item.quantity) || 1,
         image: item.image,
         description: item.description,
         isVeg: item.isVeg !== false
@@ -1567,13 +1568,13 @@ export default function Cart() {
     if (cart.length > 0 && hasSavedAddress) {
       try {
         const items = cart.map(item => ({
-          itemId: item.itemId || item.id,
-          name: item.name,
-          price: item.price,
+          itemId: String(item.itemId || item.id || item._id || ''),
+          name: String(item.name || item.itemName || 'Item'),
+          price: Number(item.price) || 0,
           variantId: item.variantId || undefined,
           variantName: item.variantName || undefined,
-          variantPrice: item.variantPrice || item.price,
-          quantity: item.quantity || 1,
+          variantPrice: item.variantPrice ? Number(item.variantPrice) : Number(item.price) || 0,
+          quantity: Number(item.quantity) || 1,
           image: item.image,
           description: item.description,
           isVeg: item.isVeg !== false
@@ -1627,7 +1628,7 @@ export default function Cart() {
 
     try {
       const resolveRestaurantForCheckout = async () => {
-        const currentObjectId = getRestaurantObjectId(restaurantData) || cartRestaurantObjectId
+        const currentObjectId = getRestaurantObjectId(restaurantData) || getRestaurantPublicId(restaurantData) || cartRestaurantObjectId || cartRestaurantPublicId
         if (currentObjectId) {
           return {
             restaurant: restaurantData,
@@ -1685,13 +1686,13 @@ export default function Cart() {
       // Include all cart items (main items + addons)
       // Note: Addons are added as separate cart items when user clicks the + button
       const orderItems = cart.map(item => ({
-        itemId: item.itemId || item.id,
-        name: item.name,
-        price: item.price,
+        itemId: String(item.itemId || item.id || item._id || ''),
+        name: String(item.name || item.itemName || 'Item'),
+        price: Number(item.price) || 0,
         variantId: item.variantId || undefined,
         variantName: item.variantName || undefined,
-        variantPrice: item.variantPrice || item.price,
-        quantity: item.quantity || 1,
+        variantPrice: item.variantPrice ? Number(item.variantPrice) : Number(item.price) || 0,
+        quantity: Number(item.quantity) || 1,
         image: item.image || "",
         description: item.description || "",
         isVeg: item.isVeg !== false,
@@ -2383,7 +2384,7 @@ export default function Cart() {
                                 }
 
                                 addToCart({
-                                  id: addon.id,
+                                  id: String(addon.id || addon._id || addon.itemId || ''),
                                   name: addon.name,
                                   price: addon.price,
                                   image: addon.image || (addon.images && addon.images[0]) || "",

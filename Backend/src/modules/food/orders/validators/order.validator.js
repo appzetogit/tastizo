@@ -64,6 +64,7 @@ export function validateCalculateOrderDto(body) {
     });
     const result = schema.safeParse(body);
     if (!result.success) {
+        console.error('validateCalculateOrderDto error:', JSON.stringify(result.error.errors, null, 2));
         const first = result.error.issues?.[0];
         const path = first?.path?.length ? first.path.join('.') : '';
         const msg = path ? `${path}: ${first?.message || 'Validation failed'}` : first?.message || 'Validation failed';
@@ -91,6 +92,7 @@ export function validateCreateOrderDto(body) {
     });
     const result = schema.safeParse(body);
     if (!result.success) {
+        console.error('validateCreateOrderDto error:', JSON.stringify(result.error.errors, null, 2));
         const msg = result.error.errors?.[0]?.message || 'Validation failed';
         throw new ValidationError(msg);
     }

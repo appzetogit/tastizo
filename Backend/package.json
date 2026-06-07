@@ -16,7 +16,7 @@
     "migrate:fcm-tokens": "node scripts/migrate-fcm-tokens-to-profile-models.js",
     "migrate:order-payments": "node scripts/migrate-orders-to-transactions.js",
     "cleanup:legacy-collections": "node scripts/cleanup-legacy-collections.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",
@@ -46,6 +46,9 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "nodemon": "^3.1.2"
+    "mongodb-memory-server": "^11.2.0",
+    "nodemon": "^3.1.2",
+    "supertest": "^7.2.2",
+    "vitest": "^4.1.8"
   }
 }
