@@ -135,7 +135,10 @@ export default function DesktopHomeView({
             >
             {showCategorySkeleton ? (
               Array(8).fill(0).map((_, i) => (
-                <div key={i} className="flex-shrink-0 w-32 h-36 bg-white dark:bg-[#1a1a1a] rounded-2xl animate-pulse shadow-sm" />
+                <div key={i} className="flex-shrink-0 flex flex-col items-center gap-4">
+                  <div className="w-32 h-32 bg-white dark:bg-[#1a1a1a] rounded-full animate-pulse shadow-sm" />
+                  <div className="w-20 h-4 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" />
+                </div>
               ))
             ) : (
               displayCategories.map((category, index) => (
@@ -152,7 +155,7 @@ export default function DesktopHomeView({
                     to={`/user/category/${category.slug}`}
                     className="flex flex-col items-center gap-4 group"
                   >
-                    <div className="relative w-32 h-32 rounded-[2rem] overflow-hidden bg-white dark:bg-[#1a1a1a] shadow-[0_8px_20px_rgb(0,0,0,0.06)] group-hover:shadow-[0_15px_30px_rgb(0,0,0,0.12)] border border-gray-100 dark:border-gray-800 transition-all duration-300 group-hover:border-green-200 dark:group-hover:border-green-800/50">
+                    <div className="relative w-32 h-32 rounded-full overflow-hidden bg-white dark:bg-[#1a1a1a] shadow-[0_8px_20px_rgb(0,0,0,0.06)] group-hover:shadow-[0_15px_30px_rgb(0,0,0,0.12)] border border-gray-100 dark:border-gray-800 transition-all duration-300 group-hover:border-green-200 dark:group-hover:border-green-800/50">
                       <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10" />
                       <OptimizedImage
                         src={category.image || category.imageUrl}
