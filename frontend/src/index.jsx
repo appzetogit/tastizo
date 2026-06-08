@@ -75,6 +75,35 @@ function bootstrapNativeHashRoute() {
 
 bootstrapNativeHashRoute()
 
+import { toast } from 'sonner'
+import React from 'react'
+
+window.alert = (message) => {
+  toast.custom((t) => (
+    <div className="bg-white dark:bg-[#1a1a1a] p-5 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 flex flex-col gap-3 min-w-[320px] pointer-events-auto">
+      <div className="flex gap-3 items-start">
+        <div className="h-10 w-10 rounded-full bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+           <svg className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+           </svg>
+        </div>
+        <div className="flex-1">
+          <h3 className="text-gray-900 dark:text-white font-bold text-base mb-1">Message</h3>
+          <p className="text-gray-600 dark:text-gray-300 text-sm">{message}</p>
+        </div>
+      </div>
+      <div className="flex justify-end mt-1">
+        <button 
+          className="px-5 py-2 text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded-xl transition-colors shadow-sm"
+          onClick={() => toast.dismiss(t)}
+        >
+          Okay
+        </button>
+      </div>
+    </div>
+  ), { duration: 5000, position: 'top-center' })
+}
+
 // ─── Suppress known non-critical errors ──────────────────────────────────────
 
 const originalError = console.error

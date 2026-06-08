@@ -3,6 +3,7 @@ import { uploadImageBuffer, uploadFileBuffer } from '../../../../services/cloudi
 import { ValidationError } from '../../../../core/auth/errors.js';
 import mongoose from 'mongoose';
 import { FoodZone } from '../../admin/models/zone.model.js';
+import { FoodRestaurantCommission } from '../../admin/models/restaurantCommission.model.js';
 import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FoodDiningRestaurant } from '../../dining/models/diningRestaurant.model.js';
 import { resolveZoneFromAddressLike, resolveZoneFromQuery, restaurantBelongsToResolvedZone } from '../../shared/zoneResolver.js';
@@ -443,6 +444,20 @@ export const registerRestaurant = async (payload, files) => {
             ...images
         });
         console.log(`[registerRestaurant] Saved Restaurant ZoneId: ${restaurant.zoneId}`);
+
+        try {
+            await FoodRestaurantCommission.create({
+                restaurantId: restaurant._id,
+                defaultCommission: {
+                    type: 'percentage',
+                    value: 20
+                },
+                status: true
+            });
+            console.log(`[registerRestaurant] Applied default 20% commission for ${restaurant._id}`);
+        } catch (e) {
+            console.error('Failed to set default commission:', e);
+        }
 
         try {
             const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');

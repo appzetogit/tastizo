@@ -3438,6 +3438,21 @@ export async function createRestaurantByAdmin(body) {
     }
 
     const restaurant = await FoodRestaurant.create(doc);
+
+    try {
+        await FoodRestaurantCommission.create({
+            restaurantId: restaurant._id,
+            defaultCommission: {
+                type: 'percentage',
+                value: 20
+            },
+            status: true
+        });
+        console.log(`[createRestaurantByAdmin] Applied default 20% commission for ${restaurant._id}`);
+    } catch (e) {
+        console.error('Failed to set default commission:', e);
+    }
+
     return restaurant.toObject();
 }
 

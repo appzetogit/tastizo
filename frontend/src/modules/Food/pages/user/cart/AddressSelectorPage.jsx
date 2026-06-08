@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
-import { ChevronLeft, ChevronRight, Plus, MapPin, MoreHorizontal, Navigation, Home, Building2, Briefcase, Phone, X, Crosshair, Search } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, MapPin, MoreHorizontal, Navigation, Home, Building2, Briefcase, Phone, X, Crosshair, Search, Trash2 } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
@@ -210,7 +210,7 @@ export default function AddressSelectorPage() {
     deliveryAddressMode,
     selectedAddressId,
   } = useGeoLocation()
-  const { addresses = [], userProfile } = useProfile()
+  const { addresses = [], userProfile, deleteAddress } = useProfile()
   const [showAddressForm, setShowAddressForm] = useState(false)
   const [mapPosition, setMapPosition] = useState([22.7196, 75.8577]) // Default Indore coordinates [lat, lng]
   const [addressFormData, setAddressFormData] = useState({
@@ -478,6 +478,45 @@ export default function AddressSelectorPage() {
       toast.success("Address selected")
       handleBack()
     }
+  }
+
+  const handleDeleteAddress = (addrId) => {
+    if (!addrId) return
+    toast.custom((t) => (
+      <div className="bg-white dark:bg-[#1a1a1a] p-5 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 flex flex-col gap-4 min-w-[320px] pointer-events-auto">
+        <div className="flex gap-3 items-start">
+          <div className="h-10 w-10 rounded-full bg-red-50 dark:bg-red-500/10 flex items-center justify-center flex-shrink-0">
+            <Trash2 className="h-5 w-5 text-red-500" />
+          </div>
+          <div>
+            <h3 className="text-gray-900 dark:text-white font-bold text-base mb-1">Delete Address?</h3>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">Are you sure you want to delete this address? This action cannot be undone.</p>
+          </div>
+        </div>
+        <div className="flex gap-3 justify-end mt-2">
+          <button 
+            className="px-5 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors"
+            onClick={() => toast.dismiss(t)}
+          >
+            Cancel
+          </button>
+          <button 
+            className="px-5 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors shadow-sm"
+            onClick={async () => {
+              toast.dismiss(t)
+              try {
+                await deleteAddress(addrId)
+                toast.success("Address deleted successfully")
+              } catch (error) {
+                toast.error("Failed to delete address")
+              }
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    ), { duration: Infinity, position: 'top-center' })
   }
 
   const handleAddAddressClick = () => {
@@ -1071,17 +1110,37 @@ export default function AddressSelectorPage() {
                       </p>
                     </div>
                     {isActive ? (
-                      <div
-                        className="h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 mt-1"
-                        style={{ background: '#2A9C64' }}
-                      >
-                        <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
+                      <div className="flex flex-col items-center gap-2 mt-1">
+                        <div
+                          className="h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0"
+                          style={{ background: '#2A9C64' }}
+                        >
+                          <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteAddress(addrId); }}
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                          title="Delete address"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     ) : (
-                      <div className="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-700 mt-1 flex items-center justify-center flex-shrink-0">
-                        <ChevronRight className="h-3 w-3 text-gray-400" />
+                      <div className="flex flex-col items-center gap-2 mt-1">
+                        <div className="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center flex-shrink-0">
+                          <ChevronRight className="h-3 w-3 text-gray-400" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteAddress(addrId); }}
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                          title="Delete address"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     )}
                   </button>
