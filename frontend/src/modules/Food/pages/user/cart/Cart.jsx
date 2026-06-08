@@ -2122,7 +2122,7 @@ export default function Cart() {
       // Handle other axios errors
       else if (error.response) {
         // Server responded with error status
-        errorMessage = error.response.data?.message || `Server error: ${error.response.status}`
+        errorMessage = error.response.data?.message || error.response.data?.error || `Server error: ${error.response.status}`
       }
       // Handle other errors
       else if (error.message) {
@@ -2951,7 +2951,7 @@ export default function Cart() {
             {/* Place Order Button */}
             <button
               onClick={handlePlaceOrder}
-              disabled={isPlacingOrder || (selectedPaymentMethod === "wallet" && walletBalance < total)}
+              disabled={isPlacingOrder || (selectedPaymentMethod === "wallet" && walletBalance < total) || (deliveryAddressMode !== "current" && restaurantZoneId && zoneMatchedAddresses.length === 0)}
               className="w-full bg-gradient-to-r from-[#2A9C64] to-[#1E7A4A] hover:from-[#1E7A4A] hover:to-[#0A2B1D] text-white px-6 h-12 md:h-14 rounded-2xl font-bold shadow-lg shadow-[#2A9C64]/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between transition-transform active:scale-[0.98]"
             >
               {(selectedPaymentMethod === "razorpay" || selectedPaymentMethod === "wallet" || selectedPaymentMethod === "cash") && (

@@ -99,12 +99,13 @@ export async function createInitialTransaction(order) {
     // Restaurant payout must be based only on food base price (subtotal).
     // Platform fee, packaging fee, GST, and delivery fee should never increase restaurant share.
     const restaurantNet = (order.pricing?.subtotal || 0) - restaurantCommission;
-    const platformNetProfit =
+    const platformNetProfitRaw =
         (order.pricing?.platformFee || 0) +
         (order.pricing?.packagingFee || 0) +
         (order.pricing?.deliveryFee || 0) +
         restaurantCommission -
         riderShare;
+    const platformNetProfit = Math.max(0, platformNetProfitRaw);
 
     const transaction = new FoodTransaction({
         orderId: order._id,
