@@ -14,7 +14,7 @@ const foodDeliveryCashDepositSchema = new mongoose.Schema({
     },
     paymentMethod: {
         type: String,
-        enum: ['cash', 'razorpay', 'upi', 'bank_transfer'],
+        enum: ['cash', 'razorpay', 'upi', 'bank_transfer', 'wallet'],
         default: 'cash'
     },
     status: {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle, ArrowRight, Wallet, History, Star } from 'lucide-react';
+import { CheckCircle, ArrowRight, Wallet, Star } from 'lucide-react';
 import { formatCurrency } from '@food/utils/currency';
 
 /**
@@ -22,7 +22,7 @@ export const OrderSummaryModal = ({ order, onDone }) => {
     formatCurrency(Number(value) || 0, "\u20B9").replace("\u20B9 ", "\u20B9");
 
   return (
-    <div className="fixed inset-0 z-160 bg-green-500 overflow-y-auto">
+    <div className="fixed inset-0 z-[2000] bg-[#22c55e] overflow-y-auto">
       <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 text-center">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
@@ -31,7 +31,7 @@ export const OrderSummaryModal = ({ order, onDone }) => {
         >
           {/* Success Icon (White Style) */}
           <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 sm:mb-8 shadow-2xl animate-bounce">
-            <CheckCircle className="w-14 h-14 sm:w-16 sm:h-16 text-green-500" />
+            <CheckCircle className="w-14 h-14 sm:w-16 sm:h-16 text-[#22c55e]" />
           </div>
           
           <h1 className="text-white text-4xl sm:text-5xl font-bold mb-2 tracking-tight">Well Done!</h1>
@@ -46,7 +46,7 @@ export const OrderSummaryModal = ({ order, onDone }) => {
             
             <p className="text-gray-950 text-5xl sm:text-6xl font-bold mb-5 sm:mb-6 tracking-tighter">{formatMoney(earnings)}</p>
             
-            <div className="flex items-center justify-center gap-3 py-3 bg-green-50 rounded-2xl text-green-700 text-sm font-bold border border-green-100">
+            <div className="flex items-center justify-center gap-3 py-3 bg-[#f0fdf4] rounded-2xl text-[#15803d] text-sm font-bold border border-[#dcfce7]">
               <Wallet className="w-5 h-5" />
               <span>Transferred to Wallet</span>
             </div>
@@ -54,7 +54,7 @@ export const OrderSummaryModal = ({ order, onDone }) => {
 
           <button 
             onClick={onDone}
-            className="w-full h-14 sm:h-16 bg-white text-green-600 font-bold text-lg sm:text-xl rounded-2xl flex items-center justify-center gap-3 hover:bg-gray-50 active:scale-95 transition-all shadow-xl shadow-black/10"
+            className="w-full h-14 sm:h-16 bg-white text-[#16a34a] font-bold text-lg sm:text-xl rounded-2xl flex items-center justify-center gap-3 hover:bg-gray-50 active:scale-95 transition-all shadow-xl shadow-black/10"
           >
             Go Back Home <ArrowRight className="w-6 h-6" />
           </button>
@@ -67,3 +67,5 @@ export const OrderSummaryModal = ({ order, onDone }) => {
     </div>
   );
 };
+
+export default OrderSummaryModal;

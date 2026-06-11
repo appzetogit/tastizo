@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { registerDeliveryPartner, updateDeliveryPartnerProfile, updateDeliveryPartnerBankDetails, listSupportTicketsByPartner, createSupportTicket, getSupportTicketByIdAndPartner, updateDeliveryPartnerDetails, updateDeliveryPartnerProfilePhotoBase64, updateDeliveryAvailability, getDeliveryPartnerWallet, getDeliveryPartnerEarnings, getDeliveryPartnerTripHistory, getDeliveryPocketDetails, getActiveEarningAddonsForPartner } from '../services/delivery.service.js';
-import { createDeliveryCashDepositOrder, getDeliveryPartnerWalletEnhanced, requestDeliveryWithdrawal, verifyDeliveryCashDepositPayment } from '../services/deliveryFinance.service.js';
+import { createDeliveryCashDepositOrder, getDeliveryPartnerWalletEnhanced, requestDeliveryWithdrawal, verifyDeliveryCashDepositPayment, settleCashLimitWithEarnings } from '../services/deliveryFinance.service.js';
 import { getDeliveryCashLimitSettings, getDeliveryEmergencyHelp } from '../../admin/services/admin.service.js';
 import { DeliveryBonusTransaction } from '../../admin/models/deliveryBonusTransaction.model.js';
 import { validateDeliveryRegisterDto, validateDeliveryProfileUpdateDto, validateDeliveryBankDetailsDto } from '../validators/delivery.validator.js';
@@ -277,3 +277,13 @@ export const getDeliveryReferralStatsController = async (req, res, next) => {
     }
 };
 
+export const settleCashLimitController = async (req, res, next) => {
+    try {
+        const deliveryPartnerId = req.user?.userId;
+        const amount = req.body?.amount;
+        const data = await settleCashLimitWithEarnings(deliveryPartnerId, amount);
+        return sendResponse(res, 200, 'Cash limit settled using earnings successfully', data);
+    } catch (error) {
+        next(error);
+    }
+};

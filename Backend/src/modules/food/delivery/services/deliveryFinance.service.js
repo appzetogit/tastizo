@@ -287,3 +287,57 @@ export const verifyDeliveryCashDepositPayment = async (deliveryPartnerId, payloa
         wallet: await getDeliveryPartnerWalletEnhanced(deliveryPartnerId)
     };
 };
+
+export const settleCashLimitWithEarnings = async (deliveryPartnerId, amount) => {
+    const amountToSettle = Number(amount);
+    if (!Number.isFinite(amountToSettle) || amountToSettle <= 0) {
+        throw new ValidationError('Invalid settlement amount');
+    }
+
+    const wallet = await getDeliveryPartnerWalletEnhanced(deliveryPartnerId);
+
+    // Check if delivery boy actually has enough cash in hand to settle
+    if (wallet.cashInHand <= 0) {
+        throw new ValidationError('No cash in hand balance to settle');
+    }
+
+    // Limit the settlement amount to the cash in hand
+    const finalSettleAmount = Math.min(amountToSettle, wallet.cashInHand);
+
+    // Check if delivery boy has enough pocket balance (earnings)
+    if (wallet.pocketBalance < finalSettleAmount) {
+        throw new ValidationError(`Insufficient earnings balance. Available pocket balance: ₹${wallet.pocketBalance}`);
+    }
+
+    // 1. Create a Completed cash deposit entry (reduces cashInHand)
+    const deposit = await FoodDeliveryCashDeposit.create({
+        deliveryPartnerId,
+        amount: finalSettleAmount,
+        paymentMethod: 'wallet',
+        status: 'Completed',
+        adminNote: 'Settled using pocket earnings balance'
+    });
+
+    try {
+        // 2. Create an Approved withdrawal entry (reduces pocketBalance)
+        await FoodDeliveryWithdrawal.create({
+            deliveryPartnerId,
+            amount: finalSettleAmount,
+            paymentMethod: 'cash_settlement',
+            status: 'approved',
+            adminNote: 'Used to settle cash in hand limit',
+            processedAt: new Date()
+        });
+
+        // Get the updated wallet
+        const updatedWallet = await getDeliveryPartnerWalletEnhanced(deliveryPartnerId);
+        return {
+            settledAmount: finalSettleAmount,
+            wallet: updatedWallet
+        };
+    } catch (error) {
+        // Rollback deposit if withdrawal fails
+        await FoodDeliveryCashDeposit.deleteOne({ _id: deposit._id });
+        throw error;
+    }
+};

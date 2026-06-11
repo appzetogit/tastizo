@@ -2727,6 +2727,13 @@ export default function Home() {
           setActiveTab={setActiveTab}
           festBannerVideoUrl={festBannerVideoUrl}
           festVideoActive={festVideoActive}
+          isFavorite={isFavorite}
+          addFavorite={addFavorite}
+          setSelectedRestaurantSlug={setSelectedRestaurantSlug}
+          setShowManageCollections={setShowManageCollections}
+          setShowToast={setShowToast}
+          isOutOfService={isOutOfService}
+          BACKEND_ORIGIN={BACKEND_ORIGIN}
         />
 
         <div className="md:hidden relative bg-white dark:bg-[#0a0a0a]">

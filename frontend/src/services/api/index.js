@@ -2198,6 +2198,10 @@ export const deliveryAPI = {
     apiClient.post("/food/delivery/wallet/deposit/verify", body ?? {}, {
       contextModule: "delivery"
     }),
+  settleCashLimitWithEarnings: (amount) =>
+    apiClient.post("/food/delivery/wallet/settle-cash-limit", { amount }, {
+      contextModule: "delivery"
+    }),
   /** Wallet transactions - from wallet response (no separate backend endpoint) */
   getWalletTransactions: (params) =>
     apiClient

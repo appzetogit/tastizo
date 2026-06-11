@@ -47,6 +47,7 @@ export const PocketV2 = () => {
   const [showDepositPopup, setShowDepositPopup] = useState(false);
   const [depositAmount, setDepositAmount] = useState("");
   const [depositing, setDepositing] = useState(false);
+  const [settling, setSettling] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -162,6 +163,42 @@ export const PocketV2 = () => {
     } catch (err) {
       setDepositing(false);
       toast.error("Deposit failed to start");
+    }
+  };
+
+  const handleSettleFromEarnings = async () => {
+    const amt = parseFloat(depositAmount);
+    if (!depositAmount || isNaN(amt) || amt < 1) {
+      toast.error(`Enter a valid amount (minimum ${INR_SYMBOL}1)`);
+      return;
+    }
+
+    if (amt > walletState.totalBalance) {
+      toast.error(`Insufficient pocket balance (${INR_SYMBOL}${walletState.totalBalance.toFixed(2)})`);
+      return;
+    }
+
+    if (amt > walletState.cashInHand) {
+      toast.error(`Settle amount cannot exceed your Cash in Hand (${INR_SYMBOL}${walletState.cashInHand.toFixed(2)})`);
+      return;
+    }
+
+    try {
+      setSettling(true);
+      const res = await deliveryAPI.settleCashLimitWithEarnings(amt);
+      if (res?.data?.success) {
+        toast.success("Settlement successful");
+        setShowDepositPopup(false);
+        setDepositAmount("");
+        window.location.reload();
+      } else {
+        toast.error(res?.data?.message || "Settlement failed");
+      }
+    } catch (err) {
+      console.error("Settlement error:", err);
+      toast.error(err?.response?.data?.message || "Failed to settle cash limit");
+    } finally {
+      setSettling(false);
     }
   };
 
@@ -393,30 +430,44 @@ export const PocketV2 = () => {
                    </div>
                    
                    <div className="bg-gray-50 rounded-2xl p-6 mb-8 border border-gray-100">
-                      <div className="flex justify-between items-center mb-4">
+                      <div className="flex justify-between items-center mb-3">
                          <span className="text-xs font-bold text-gray-400 uppercase">Cash in your hand</span>
-                         <span className="text-base font-black text-black">{INR_SYMBOL}{walletState.cashInHand}</span>
+                         <span className="text-base font-black text-black">{INR_SYMBOL}{walletState.cashInHand.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center mb-4 border-t border-gray-200/50 pt-3">
+                         <span className="text-xs font-bold text-gray-400 uppercase">Available earnings (pocket)</span>
+                         <span className="text-base font-black text-emerald-600">{INR_SYMBOL}{walletState.totalBalance.toFixed(2)}</span>
                       </div>
                       <div className="relative">
                          <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                          <input 
                             type="number" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)}
-                            placeholder="Enter amount to deposit"
+                            placeholder="Enter amount"
                             className="w-full bg-white border border-gray-200 rounded-xl py-4 pl-12 pr-4 text-xl font-bold focus:border-[#ff8100] focus:ring-4 focus:ring-orange-500/10 outline-none transition-all"
                          />
                       </div>
-                      <p className="text-[10px] font-bold text-gray-400 mt-3 text-center uppercase tracking-tight">{`Minimum deposit ${INR_SYMBOL}1 - Instant limit update`}</p>
+                      <p className="text-[10px] font-bold text-gray-400 mt-3 text-center uppercase tracking-tight">{`Minimum amount ${INR_SYMBOL}1`}</p>
                    </div>
                    
                    <div className="space-y-3">
                       <button 
+                         onClick={handleSettleFromEarnings}
+                         disabled={depositing || settling}
+                         className="w-full py-5 bg-black hover:bg-gray-950 text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 disabled:bg-gray-300 disabled:shadow-none"
+                      >
+                         {settling ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                         {settling ? 'Settling Dues...' : 'Settle from Earnings'}
+                      </button>
+
+                      <button 
                          onClick={handleDeposit}
-                         disabled={depositing}
-                         className="w-full py-5 bg-[#ff8100] text-white rounded-2xl font-black text-sm shadow-xl shadow-orange-500/20 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:bg-gray-300 disabled:shadow-none"
+                         disabled={depositing || settling}
+                         className="w-full py-5 bg-[#ff8100] hover:bg-orange-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-orange-500/10 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:bg-gray-300 disabled:shadow-none"
                       >
                          {depositing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
-                         {depositing ? 'Securely Processing...' : 'Proceed to Pay'}
+                         {depositing ? 'Securely Processing...' : 'Deposit via Razorpay'}
                       </button>
+                      
                       <button onClick={() => setShowDepositPopup(false)} className="w-full py-3 text-gray-400 font-bold text-xs uppercase tracking-widest">Maybe Later</button>
                    </div>
                 </motion.div>

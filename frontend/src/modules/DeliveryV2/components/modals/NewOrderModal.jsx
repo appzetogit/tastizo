@@ -8,7 +8,7 @@ import { useTrackingStore } from '@/modules/DeliveryV2/hooks/tracking/useTrackin
 import { getHaversineDistance } from '@/modules/DeliveryV2/utils/geo';
 import { formatCurrency } from '@food/utils/currency';
 
-const DELIVERY_OFFER_TTL_SECONDS = 30;
+const DELIVERY_OFFER_TTL_SECONDS = 60;
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
