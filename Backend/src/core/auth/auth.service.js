@@ -906,9 +906,14 @@ export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) 
     };
   }
 
+  const sessionToken = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+  deliveryPartner.activeSessionToken = sessionToken;
+  await deliveryPartner.save();
+
   const payload = {
     userId: deliveryPartner._id.toString(),
     role: ROLES.DELIVERY_PARTNER,
+    sessionToken,
   };
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
@@ -1345,9 +1350,22 @@ export const refreshAccessToken = async (token) => {
     }
   }
 
+  let sessionToken = payload?.sessionToken || null;
+  if (payload?.role === "DELIVERY_PARTNER") {
+    const partner = await FoodDeliveryPartner.findById(payload.userId).select("status activeSessionToken").lean();
+    if (!partner || String(partner.status || '').toLowerCase() !== 'approved') {
+      throw new AuthError("Delivery account is not approved");
+    }
+    if (partner.activeSessionToken && payload.sessionToken !== partner.activeSessionToken) {
+      throw new AuthError("Session expired. Logged in from another device.");
+    }
+    sessionToken = partner.activeSessionToken || sessionToken;
+  }
+
   const newAccessToken = signAccessToken({
     userId: payload.userId,
     role: payload.role,
+    sessionToken,
   });
 
   return { accessToken: newAccessToken, refreshToken: token };

@@ -53,11 +53,14 @@ export const authMiddleware = (req, res, next) => {
         }
         if (decoded.role === 'DELIVERY_PARTNER') {
             FoodDeliveryPartner.findById(decoded.userId)
-                .select('status')
+                .select('status activeSessionToken')
                 .lean()
                 .then((doc) => {
                     if (!doc || String(doc.status || '').toLowerCase() !== 'approved') {
                         return sendError(res, 401, 'Delivery account is not approved');
+                    }
+                    if (doc.activeSessionToken && decoded.sessionToken !== doc.activeSessionToken) {
+                        return sendError(res, 401, 'Session expired. Logged in from another device.');
                     }
                     next();
                 })
