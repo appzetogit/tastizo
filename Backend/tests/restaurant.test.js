@@ -47,9 +47,9 @@ describe('Restaurant API', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(Array.isArray(res.body.data)).toBe(true);
-      expect(res.body.data.length).toBeGreaterThan(0);
-      expect(res.body.data[0].restaurantName).toBe('Test Automation Cafe');
+      expect(Array.isArray(res.body.data.restaurants)).toBe(true);
+      expect(res.body.data.restaurants.length).toBeGreaterThan(0);
+      expect(res.body.data.restaurants[0].restaurantName).toBe('Test Automation Cafe');
     });
 
     it('should return empty list if coordinates are out of zone', async () => {
@@ -59,8 +59,8 @@ describe('Restaurant API', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(Array.isArray(res.body.data)).toBe(true);
-      expect(res.body.data.length).toBe(0);
+      expect(Array.isArray(res.body.data.restaurants)).toBe(true);
+      expect(res.body.data.restaurants.length).toBe(0);
     });
   });
 });

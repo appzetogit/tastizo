@@ -1423,14 +1423,16 @@ export const listApprovedRestaurants = async (query = {}) => {
         console.log(`[listApprovedRestaurants] Non-geo path raw matches: ${allDocs.length}`);
     }
 
-    const filteredDocs = hasResolvedZone
-        ? allDocs.filter((restaurant) => {
-            const match = restaurantMatchesResolvedZone(restaurant, resolvedZone);
-            if (!match) {
-                console.debug(`[listApprovedRestaurants] Restaurant ${restaurant.restaurantName} (${restaurant._id}) filtered out. RestaurantZone: ${restaurant.zoneId}, UserZone: ${resolvedZone._id}`);
-            }
-            return match;
-        })
+    const filteredDocs = (lat !== null && lng !== null)
+        ? (hasResolvedZone
+            ? allDocs.filter((restaurant) => {
+                const match = restaurantMatchesResolvedZone(restaurant, resolvedZone);
+                if (!match) {
+                    console.debug(`[listApprovedRestaurants] Restaurant ${restaurant.restaurantName} (${restaurant._id}) filtered out. RestaurantZone: ${restaurant.zoneId}, UserZone: ${resolvedZone._id}`);
+                }
+                return match;
+            })
+            : [])
         : allDocs;
 
     const total = filteredDocs.length;

@@ -169,7 +169,12 @@ const buildMessagePayload = (payload = {}, token) => {
         title: sanitizeString(payload.title || payload.notification?.title || 'New notification'),
         body: sanitizeString(payload.body || payload.notification?.body || '')
     };
-    const data = normalizeDataMap(payload.data || {});
+    const rawData = { ...payload.data };
+    if (payload.dataOnly) {
+        if (!rawData.title) rawData.title = notification.title;
+        if (!rawData.body) rawData.body = notification.body;
+    }
+    const data = normalizeDataMap(rawData);
     const image =
         sanitizeString(payload.icon || payload.notification?.image || payload.notification?.icon || data.image || data.imageUrl);
 
@@ -301,7 +306,9 @@ export const upsertFirebaseDeviceToken = async ({ ownerType, ownerId, token, pla
     const existingTokens = Array.isArray(doc[field]) ? doc[field] : [];
     console.log(`[FCM-DEBUG] upsert - Current tokens in DB count: ${existingTokens.length}`);
     
-    const tokens = normalizeTokenList([...existingTokens, normalizedToken]);
+    const tokens = ownerType === 'DELIVERY_PARTNER'
+        ? [normalizedToken]
+        : normalizeTokenList([...existingTokens, normalizedToken]);
     doc[field] = tokens;
     
     await doc.save();

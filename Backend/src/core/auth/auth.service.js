@@ -883,23 +883,12 @@ export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) 
   // Update FCM token if provided - CRITICAL: do this BEFORE returning pendingApproval
   // so we can notify them when approved.
   if (fcmToken) {
-    let isModified = false;
     if (platform === "mobile") {
-      if (!deliveryPartner.fcmTokenMobile) deliveryPartner.fcmTokenMobile = [];
-      if (!deliveryPartner.fcmTokenMobile.includes(fcmToken)) {
-        deliveryPartner.fcmTokenMobile.push(fcmToken);
-        isModified = true;
-      }
+      deliveryPartner.fcmTokenMobile = [fcmToken];
     } else {
-      if (!deliveryPartner.fcmTokens) deliveryPartner.fcmTokens = [];
-      if (!deliveryPartner.fcmTokens.includes(fcmToken)) {
-        deliveryPartner.fcmTokens.push(fcmToken);
-        isModified = true;
-      }
+      deliveryPartner.fcmTokens = [fcmToken];
     }
-    if (isModified) {
-      await deliveryPartner.save();
-    }
+    await deliveryPartner.save();
   }
 
   if (deliveryPartner.status && deliveryPartner.status !== "approved") {
@@ -925,6 +914,9 @@ export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) 
   const refreshToken = signRefreshToken(payload);
   const ttlMs = ms(config.jwtRefreshExpiresIn || "7d");
   const expiresAt = new Date(Date.now() + ttlMs);
+
+  // Delete any existing active refresh token sessions for this delivery boy to log out other devices
+  await FoodRefreshToken.deleteMany({ userId: deliveryPartner._id });
 
   await FoodRefreshToken.create({
     userId: deliveryPartner._id,

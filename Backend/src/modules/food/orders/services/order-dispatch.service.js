@@ -626,6 +626,8 @@ export async function tryAutoAssign(orderId, options = {}) {
         eligible.map(async (partner) => {
           const partnerId = String(partner.partnerId || '');
           const orderMongoId = order._id.toString();
+          const prettyOrderId = order.order_id || order.orderId || orderMongoId;
+          const targetUrl = `/food/delivery/feed?orderId=${encodeURIComponent(prettyOrderId)}`;
           try {
             const tokens = await listOwnerTokens({
               ownerType: 'DELIVERY_PARTNER',
@@ -641,13 +643,17 @@ export async function tryAutoAssign(orderId, options = {}) {
             const response = await notifyOwnerSafely(
               { ownerType: 'DELIVERY_PARTNER', ownerId: partner.partnerId },
               {
-                title: 'New Order',
+                title: `New Order #${prettyOrderId}`,
                 body: 'You have a new delivery request',
+                dataOnly: true,
                 data: {
                   type: 'NEW_ORDER',
                   legacyType: 'new_order',
-                  orderId: orderMongoId,
+                  orderId: prettyOrderId,
+                  orderMongoId: orderMongoId,
                   orderZoneId: String(order.zoneId || ''),
+                  link: targetUrl,
+                  targetUrl: targetUrl,
                 },
               },
             );
