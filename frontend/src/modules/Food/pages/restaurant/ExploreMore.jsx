@@ -551,9 +551,9 @@ export default function ExploreMore() {
     setProfileOpen(false)
 
     try {
-      // Call backend logout API to invalidate refresh token
+      // Call backend logout API to invalidate refresh token across all devices
       try {
-        await restaurantAPI.logout()
+        await restaurantAPI.logoutAllDevices()
       } catch (apiError) {
         // Continue with logout even if API call fails (network issues, etc.)
         debugWarn("Logout API call failed, continuing with local cleanup:", apiError)
@@ -1040,6 +1040,28 @@ export default function ExploreMore() {
             <div className="min-w-0">
               <p className="text-base font-semibold text-[#2A9C64]">Logout</p>
               <p className="text-sm text-[#2A9C64]/60 font-medium">Tap to sign out from this device</p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-[#2A9C64]/40 shrink-0" />
+        </motion.button>
+
+        <motion.button
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.52, duration: 0.25 }}
+          onClick={handleLogoutAllDevices}
+          disabled={isLoggingOut}
+          className="w-full mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[#2A9C64]/20 bg-[#2A9C64]/5 px-4 py-4 text-left hover:bg-[#2A9C64]/10 transition-all active:scale-[0.99] disabled:opacity-50"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#2A9C64]/10">
+              <LogOut className="w-5 h-5 text-[#2A9C64]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-base font-semibold text-[#2A9C64]">Logout from all devices</p>
+              <p className="text-sm text-[#2A9C64]/60 font-medium">
+                {isLoggingOut ? "Logging out..." : "Sign out from all logged-in devices"}
+              </p>
             </div>
           </div>
           <ChevronRight className="w-5 h-5 text-[#2A9C64]/40 shrink-0" />

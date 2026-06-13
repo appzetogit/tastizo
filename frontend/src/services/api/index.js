@@ -1408,6 +1408,13 @@ export const restaurantAPI = {
     const fcmToken = typeof localStorage !== "undefined" ? localStorage.getItem("fcm_web_registered_token_restaurant") : null;
     return authService.logout(token, fcmToken, "web");
   },
+  logoutAllDevices: () => {
+    restaurantCurrentInFlight = null;
+    restaurantCurrentCached = null;
+    restaurantCurrentCacheTime = 0;
+    const fcmToken = typeof localStorage !== "undefined" ? localStorage.getItem("fcm_web_registered_token_restaurant") : null;
+    return authService.logoutAllDevices(fcmToken, "web");
+  },
   /** Backend has no email/password login; use phone OTP only. */
   login: (_email, _password) =>
     Promise.reject(new Error("Please use phone number and OTP to sign in.")),

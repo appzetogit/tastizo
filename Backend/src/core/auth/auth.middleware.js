@@ -40,11 +40,14 @@ export const authMiddleware = (req, res, next) => {
         }
         if (decoded.role === 'RESTAURANT') {
             FoodRestaurant.findById(decoded.userId)
-                .select('status isAdminApproved approvedAt rejectedAt')
+                .select('status isAdminApproved approvedAt rejectedAt activeSessionToken')
                 .lean()
                 .then((doc) => {
                     if (!doc || getEffectiveRestaurantStatus(doc) !== 'approved') {
                         return sendError(res, 401, 'Restaurant account is not approved');
+                    }
+                    if (doc.activeSessionToken && decoded.sessionToken !== doc.activeSessionToken) {
+                        return sendError(res, 401, 'Session expired. Logged in from another device.');
                     }
                     next();
                 })

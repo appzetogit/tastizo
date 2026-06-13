@@ -776,11 +776,22 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
     };
   }
 
-  const payload = { userId: restaurant._id.toString(), role: ROLES.RESTAURANT };
+  const sessionToken = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+  restaurant.activeSessionToken = sessionToken;
+  await restaurant.save();
+
+  const payload = {
+    userId: restaurant._id.toString(),
+    role: ROLES.RESTAURANT,
+    sessionToken,
+  };
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
   const ttlMs = ms(config.jwtRefreshExpiresIn || "7d");
   const expiresAt = new Date(Date.now() + ttlMs);
+
+  // Delete any existing active refresh token sessions for this restaurant to log out other devices
+  await FoodRefreshToken.deleteMany({ userId: restaurant._id });
 
   await FoodRefreshToken.create({
     userId: restaurant._id,
@@ -969,6 +980,49 @@ export const logout = async (refreshToken, fcmToken, platform) => {
   // 2. Invalidate the refresh token (standard logout procedure)
   const deleted = await FoodRefreshToken.deleteOne({ token: refreshToken });
   return { invalidated: deleted.deletedCount > 0 };
+};
+
+export const logoutAllDevices = async (userId, role, fcmToken, platform) => {
+  if (!userId) {
+    throw new ValidationError("User ID is required");
+  }
+
+  // 1. Remove specific FCM token from ALL collections if provided
+  if (fcmToken) {
+    const field = platform === "mobile" ? "fcmTokenMobile" : "fcmTokens";
+    const models = [FoodUser, FoodRestaurant, FoodDeliveryPartner, FoodAdmin];
+    try {
+      await Promise.all(
+        models.map((model) =>
+          model.updateMany(
+            { [field]: fcmToken },
+            { $pull: { [field]: fcmToken } },
+          ),
+        ),
+      );
+    } catch (err) {
+      logger.warn({ err }, "Failed to remove FCM token from all collections during logoutAllDevices");
+    }
+  }
+
+  // 2. Delete all refresh tokens for this user
+  await FoodRefreshToken.deleteMany({ userId: new mongoose.Types.ObjectId(userId) });
+
+  // 3. Rotate activeSessionToken for RESTAURANT and DELIVERY_PARTNER
+  const newSessionToken = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+  if (role === "RESTAURANT") {
+    await FoodRestaurant.updateOne(
+      { _id: userId },
+      { $set: { activeSessionToken: newSessionToken } }
+    );
+  } else if (role === "DELIVERY_PARTNER") {
+    await FoodDeliveryPartner.updateOne(
+      { _id: userId },
+      { $set: { activeSessionToken: newSessionToken } }
+    );
+  }
+
+  return { success: true };
 };
 
 export const getProfile = async (userId, role) => {
@@ -1360,6 +1414,16 @@ export const refreshAccessToken = async (token) => {
       throw new AuthError("Session expired. Logged in from another device.");
     }
     sessionToken = partner.activeSessionToken || sessionToken;
+  }
+  if (payload?.role === "RESTAURANT") {
+    const doc = await FoodRestaurant.findById(payload.userId).select("status activeSessionToken isAdminApproved").lean();
+    if (!doc || getEffectiveRestaurantStatus(doc) !== "approved") {
+      throw new AuthError("Restaurant account is not approved");
+    }
+    if (doc.activeSessionToken && payload.sessionToken !== doc.activeSessionToken) {
+      throw new AuthError("Session expired. Logged in from another device.");
+    }
+    sessionToken = doc.activeSessionToken || sessionToken;
   }
 
   const newAccessToken = signAccessToken({

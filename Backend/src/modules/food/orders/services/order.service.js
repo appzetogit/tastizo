@@ -541,7 +541,7 @@ export async function verifyPayment(userId, dto) {
   pushStatusHistory(order, {
     byRole: "USER",
     byId: userId,
-    from: order.orderStatus,
+    from: previousStatus,
     to: "created",
     note: "Payment verified",
   });
@@ -1408,30 +1408,14 @@ export async function updateOrderStatusRestaurant(
   try {
     const io = getIO();
     if (io) {
-      // On accept (confirmed or preparing) -> request delivery partners via central logic
-      if (
-        (String(orderStatus) === "preparing" || String(orderStatus) === "confirmed") && 
-        (String(from) !== "preparing" && String(from) !== "confirmed")
-      ) {
-        console.log(
-          `[DEBUG] Order ${order._id.toString()} status changed to '${orderStatus}'. Triggering central delivery dispatch.`,
-        );
-        
-        try {
-            await tryAutoAssign(order._id);
-            // Refresh local order state after assignment search
-            order = await FoodOrder.findById(order._id); 
-        } catch (err) {
-            console.error(`[DEBUG] Auto-assign in updateOrderStatusRestaurant failed:`, err);
-        }
-      }
 
-            // When ready for pickup -> ping assigned delivery partner.
+            // When ready for pickup -> ping assigned delivery partner or auto-assign if not accepted yet.
             if (String(orderStatus) === 'ready_for_pickup' && String(from) !== 'ready_for_pickup') {
                 console.log(`[DEBUG] Order ${order._id.toString()} changed to 'ready_for_pickup'.`);
                 const assignedId = order.dispatch?.deliveryPartnerId?.toString?.() || order.dispatch?.deliveryPartnerId;
-                if (assignedId) {
-                    console.log(`[DEBUG] Notifying assigned partner ${assignedId} that order is ready.`);
+                const isAccepted = order.dispatch?.status === 'accepted';
+                if (assignedId && isAccepted) {
+                    console.log(`[DEBUG] Notifying accepted partner ${assignedId} that order is ready.`);
                     const restaurant = await FoodRestaurant.findById(order.restaurantId).select('restaurantName location addressLine1 area city state').lean();
                     const payload = buildDeliverySocketPayload(order, restaurant);
                     logger.info(
@@ -1439,7 +1423,14 @@ export async function updateOrderStatusRestaurant(
                     );
                     io.to(rooms.delivery(assignedId)).emit('order_ready', payload);
                 } else {
-                    console.log(`[DEBUG] Order ${order._id.toString()} is ready but no partner assigned.`);
+                    console.log(`[DEBUG] Order ${order._id.toString()} is ready but no partner has accepted yet. Triggering central delivery dispatch.`);
+                    try {
+                        await tryAutoAssign(order._id);
+                        // Refresh local order state after assignment search
+                        order = await FoodOrder.findById(order._id);
+                    } catch (err) {
+                        console.error(`[DEBUG] Auto-assign on ready in updateOrderStatusRestaurant failed:`, err);
+                    }
                 }
             }
         }

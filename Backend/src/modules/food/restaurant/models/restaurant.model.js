@@ -392,6 +392,10 @@ const restaurantSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    activeSessionToken: {
+      type: String,
+      default: null,
+    },
   },
   {
     collection: "food_restaurants",

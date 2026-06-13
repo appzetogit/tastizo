@@ -11,6 +11,7 @@ import {
     requestDeliveryOtpController,
     verifyDeliveryOtpController,
     logoutController,
+    logoutAllDevicesController,
     getMeController,
     updateAdminProfileController,
     changeAdminPasswordController,
@@ -53,6 +54,9 @@ router.post('/refresh-token', refreshTokenController);
 
 // Logout (invalidates refresh token)
 router.post('/logout', logoutController);
+
+// Logout from all devices (invalidates all sessions)
+router.post('/logout-all-devices', authMiddleware, logoutAllDevicesController);
 
 // Authenticated user profile (requires Bearer token)
 router.get('/me', authMiddleware, getMeController);
