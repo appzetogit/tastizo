@@ -10,6 +10,7 @@ import {
   requestDeliveryOtp,
   verifyDeliveryOtpAndLogin,
   logout,
+  logoutAllDevices,
   getProfile,
   updateAdminProfile,
   changeAdminPassword,
@@ -192,6 +193,17 @@ export const logoutController = async (req, res, next) => {
       result.invalidated ? "Logged out successfully" : "Token already invalid",
       result,
     );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const logoutAllDevicesController = async (req, res, next) => {
+  try {
+    const { userId, role } = req.user;
+    const { fcmToken, platform } = req.body || {};
+    const result = await logoutAllDevices(userId, role, fcmToken, platform);
+    return sendResponse(res, 200, "Logged out from all devices successfully", result);
   } catch (error) {
     next(error);
   }

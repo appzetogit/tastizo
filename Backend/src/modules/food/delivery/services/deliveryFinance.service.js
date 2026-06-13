@@ -296,23 +296,15 @@ export const settleCashLimitWithEarnings = async (deliveryPartnerId, amount) => 
 
     const wallet = await getDeliveryPartnerWalletEnhanced(deliveryPartnerId);
 
-    // Check if delivery boy actually has enough cash in hand to settle
-    if (wallet.cashInHand <= 0) {
-        throw new ValidationError('No cash in hand balance to settle');
-    }
-
-    // Limit the settlement amount to the cash in hand
-    const finalSettleAmount = Math.min(amountToSettle, wallet.cashInHand);
-
     // Check if delivery boy has enough pocket balance (earnings)
-    if (wallet.pocketBalance < finalSettleAmount) {
+    if (wallet.pocketBalance < amountToSettle) {
         throw new ValidationError(`Insufficient earnings balance. Available pocket balance: ₹${wallet.pocketBalance}`);
     }
 
-    // 1. Create a Completed cash deposit entry (reduces cashInHand)
+    // 1. Create a Completed cash deposit entry (increases totalDepositedCash, which increases available cash limit)
     const deposit = await FoodDeliveryCashDeposit.create({
         deliveryPartnerId,
-        amount: finalSettleAmount,
+        amount: amountToSettle,
         paymentMethod: 'wallet',
         status: 'Completed',
         adminNote: 'Settled using pocket earnings balance'
@@ -322,7 +314,7 @@ export const settleCashLimitWithEarnings = async (deliveryPartnerId, amount) => 
         // 2. Create an Approved withdrawal entry (reduces pocketBalance)
         await FoodDeliveryWithdrawal.create({
             deliveryPartnerId,
-            amount: finalSettleAmount,
+            amount: amountToSettle,
             paymentMethod: 'cash_settlement',
             status: 'approved',
             adminNote: 'Used to settle cash in hand limit',
@@ -332,7 +324,7 @@ export const settleCashLimitWithEarnings = async (deliveryPartnerId, amount) => 
         // Get the updated wallet
         const updatedWallet = await getDeliveryPartnerWalletEnhanced(deliveryPartnerId);
         return {
-            settledAmount: finalSettleAmount,
+            settledAmount: amountToSettle,
             wallet: updatedWallet
         };
     } catch (error) {

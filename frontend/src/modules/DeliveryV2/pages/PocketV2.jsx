@@ -178,11 +178,6 @@ export const PocketV2 = () => {
       return;
     }
 
-    if (amt > walletState.cashInHand) {
-      toast.error(`Settle amount cannot exceed your Cash in Hand (${INR_SYMBOL}${walletState.cashInHand.toFixed(2)})`);
-      return;
-    }
-
     try {
       setSettling(true);
       const res = await deliveryAPI.settleCashLimitWithEarnings(amt);

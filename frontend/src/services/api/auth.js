@@ -17,6 +17,7 @@ const AUTH = {
   DELIVERY_VERIFY_OTP: "/food/auth/delivery/verify-otp",
   REFRESH_TOKEN: "/food/auth/refresh-token",
   LOGOUT: "/food/auth/logout",
+  LOGOUT_ALL: "/food/auth/logout-all-devices",
   ME: "/food/auth/me",
 };
 
@@ -168,6 +169,17 @@ export function logout(refreshToken, fcmToken = null, platform = "web") {
 
   clearMeCache();
   return apiClient.post(AUTH.LOGOUT, payload);
+}
+
+export function logoutAllDevices(fcmToken = null, platform = "web") {
+  const payload = {};
+  if (fcmToken) {
+    payload.fcmToken = fcmToken;
+    payload.platform = platform;
+  }
+
+  clearMeCache();
+  return apiClient.post(AUTH.LOGOUT_ALL, payload);
 }
 
 /** 
